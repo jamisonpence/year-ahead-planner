@@ -17,6 +17,7 @@ export type InsertUser = typeof users.$inferInsert;
 // ── EVENTS (existing, extended) ───────────────────────────────────────────────
 export const events = sqliteTable("events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   date: text("date").notNull(),
   endDate: text("end_date"),
@@ -41,6 +42,7 @@ export const tasks = sqliteTable("tasks", {
 // status: "backlog" | "current" | "paused" | "finished"
 export const books = sqliteTable("books", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   author: text("author"),
   series: text("series"),
@@ -76,6 +78,7 @@ export const readingSessions = sqliteTable("reading_sessions", {
 // workoutType: "full_body" | "upper" | "lower" | "push" | "pull" | "legs" | "strength" | "custom"
 export const workoutTemplates = sqliteTable("workout_templates", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   workoutType: text("workout_type").notNull().default("custom"),
   scheduledDay: text("scheduled_day"),  // "monday" | "tuesday" etc, or null
@@ -89,6 +92,7 @@ export const workoutTemplates = sqliteTable("workout_templates", {
 // ── WORKOUT LOGS (actual completed sessions) ───────────────────────────────────
 export const workoutLogs = sqliteTable("workout_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   templateId: integer("template_id"),  // null = ad-hoc
   date: text("date").notNull(),
   name: text("name").notNull(),
@@ -105,6 +109,7 @@ export const workoutLogs = sqliteTable("workout_logs", {
 // Goals are stored separately from events for richer linking
 export const goals = sqliteTable("goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   category: text("category").notNull().default("general"),
   // progressType: "percent" | "count" | "sessions" | "pages" | "books" | "weight" | "boolean"
@@ -124,6 +129,7 @@ export const goals = sqliteTable("goals", {
 // status: "not_started" | "in_progress" | "done" | "blocked"
 export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   goalId: integer("goal_id"),  // nullable — null means standalone project
   title: text("title").notNull(),
   status: text("status").notNull().default("not_started"),
@@ -147,6 +153,7 @@ export const projectTasks = sqliteTable("project_tasks", {
 // ── RECIPES ─────────────────────────────────────────────────────
 export const recipes = sqliteTable("recipes", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   emoji: text("emoji").notNull().default("🍽️"),
   category: text("category"),
@@ -159,6 +166,7 @@ export const recipes = sqliteTable("recipes", {
 
 export const weekPlan = sqliteTable("week_plan", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   // 0=Sun, 1=Mon ... 6=Sat
   dayIndex: integer("day_index").notNull(),
   recipeId: integer("recipe_id").notNull(),
@@ -167,6 +175,7 @@ export const weekPlan = sqliteTable("week_plan", {
 
 export const groceryChecks = sqliteTable("grocery_checks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   weekStart: text("week_start").notNull(),
   itemKey: text("item_key").notNull(), // "ingredient_name" lowercase
   checked: integer("checked", { mode: "boolean" }).notNull().default(false),
@@ -189,6 +198,7 @@ export type RecipeIngredient = { name: string; qty: string };
 // ── RELATIONSHIP GROUPS ─────────────────────────────────────────────────────
 export const relationshipGroups = sqliteTable("relationship_groups", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   name: text("name").notNull(),          // "Daycare", "Hometown", "Austin"
   color: text("color"),                   // optional accent color
   sortOrder: integer("sort_order").notNull().default(0),
@@ -197,6 +207,7 @@ export const relationshipGroups = sqliteTable("relationship_groups", {
 // ── PEOPLE ───────────────────────────────────────────────────────────────────
 export const people = sqliteTable("people", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   groupId: integer("group_id"),           // nullable — can be ungrouped
   firstName: text("first_name").notNull(),
   lastName: text("last_name"),
@@ -213,6 +224,7 @@ export const people = sqliteTable("people", {
 // ── GENERAL TASKS (standalone — not linked to any project or goal) ────────────
 export const generalTasks = sqliteTable("general_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   completed: integer("completed", { mode: "boolean" }).notNull().default(false),
   dueDate: text("due_date"),
@@ -236,6 +248,7 @@ export const goalTasks = sqliteTable("goal_tasks", {
 // status: "backlog" | "watching" | "watched"
 export const movies = sqliteTable("movies", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   year: integer("year"),
   director: text("director"),
@@ -259,6 +272,7 @@ export type Movie = typeof movies.$inferSelect;
 // Budget categories for organizing expenses
 export const budgetCategories = sqliteTable("budget_categories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   color: text("color"),
   icon: text("icon"),   // emoji or lucide icon name
@@ -269,6 +283,7 @@ export const budgetCategories = sqliteTable("budget_categories", {
 // Individual income/expense transactions
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   title: text("title").notNull(),
   amount: real("amount").notNull(),   // positive = income, negative = expense
   type: text("type").notNull().default("expense"),  // income | expense
@@ -282,6 +297,7 @@ export const transactions = sqliteTable("transactions", {
 // Subscriptions with renewal tracking
 export const subscriptions = sqliteTable("subscriptions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   amount: real("amount").notNull(),
   billingCycle: text("billing_cycle").notNull().default("monthly"), // monthly | yearly | weekly | quarterly
@@ -308,6 +324,7 @@ export type Subscription = typeof subscriptions.$inferSelect;
 // ── RECEIPTS ─────────────────────────────────────────────────────────────────
 export const receipts = sqliteTable("receipts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   filename: text("filename").notNull(),       // stored filename on disk
   originalName: text("original_name").notNull(), // user's original filename
   mimeType: text("mime_type").notNull(),
@@ -329,6 +346,7 @@ export type Receipt = typeof receipts.$inferSelect;
 // Stores user's tab order and visibility as a single JSON row
 export const navPrefs = sqliteTable("nav_prefs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"),
   // JSON: [{path, hidden}] — ordered list
   prefsJson: text("prefs_json").notNull().default("[]"),
 });

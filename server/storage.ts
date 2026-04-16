@@ -32,6 +32,7 @@ const db = drizzle(sqlite);
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     date TEXT NOT NULL,
     end_date TEXT,
@@ -51,6 +52,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS books (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     author TEXT,
     series TEXT,
@@ -80,6 +82,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS workout_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     name TEXT NOT NULL,
     workout_type TEXT NOT NULL DEFAULT 'custom',
     scheduled_day TEXT,
@@ -90,6 +93,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS workout_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     template_id INTEGER,
     date TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -102,6 +106,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'general',
     progress_type TEXT NOT NULL DEFAULT 'percent',
@@ -130,6 +135,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS recipes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     name TEXT NOT NULL,
     emoji TEXT NOT NULL DEFAULT '🍽️',
     category TEXT,
@@ -140,12 +146,14 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS week_plan (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     day_index INTEGER NOT NULL,
     recipe_id INTEGER NOT NULL,
     week_start TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS grocery_checks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     week_start TEXT NOT NULL,
     item_key TEXT NOT NULL,
     checked INTEGER NOT NULL DEFAULT 0
@@ -156,12 +164,14 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS relationship_groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     name TEXT NOT NULL,
     color TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS people (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     group_id INTEGER,
     first_name TEXT NOT NULL,
     last_name TEXT,
@@ -178,6 +188,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS general_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     completed INTEGER NOT NULL DEFAULT 0,
     due_date TEXT,
@@ -190,6 +201,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     goal_id INTEGER,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'not_started',
@@ -213,6 +225,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS movies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     year INTEGER,
     director TEXT,
@@ -231,6 +244,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS budget_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     name TEXT NOT NULL,
     color TEXT,
     icon TEXT,
@@ -239,6 +253,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     amount REAL NOT NULL,
     type TEXT NOT NULL DEFAULT 'expense',
@@ -249,6 +264,7 @@ sqlite.exec(`
   );
   CREATE TABLE IF NOT EXISTS subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     name TEXT NOT NULL,
     amount REAL NOT NULL,
     billing_cycle TEXT NOT NULL DEFAULT 'monthly',
@@ -265,6 +281,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS receipts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     filename TEXT NOT NULL,
     original_name TEXT NOT NULL,
     mime_type TEXT NOT NULL,
@@ -283,6 +300,7 @@ sqlite.exec(`
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS nav_prefs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     prefs_json TEXT NOT NULL DEFAULT '[]'
   );
 `);
@@ -302,14 +320,32 @@ sqlite.exec(`
 // Safe migrations for existing DBs
 const migrations = [
   `ALTER TABLE events ADD COLUMN recurring TEXT NOT NULL DEFAULT 'none'`,
+  `ALTER TABLE events ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE books ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE workout_templates ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE workout_logs ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE goals ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE projects ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE general_tasks ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE recipes ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE week_plan ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE grocery_checks ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE relationship_groups ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE people ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE movies ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE budget_categories ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE transactions ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE subscriptions ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE receipts ADD COLUMN user_id INTEGER`,
+  `ALTER TABLE nav_prefs ADD COLUMN user_id INTEGER`,
 ];
 migrations.forEach((sql) => { try { sqlite.exec(sql); } catch {} });
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
 export interface IStorage {
   // Events
-  getAllEventsWithTasks(): EventWithTasks[];
-  createEvent(data: InsertEvent): Event;
+  getAllEventsWithTasks(userId: number): EventWithTasks[];
+  createEvent(data: InsertEvent, userId: number): Event;
   updateEvent(id: number, data: Partial<InsertEvent>): Event | undefined;
   deleteEvent(id: number): boolean;
   // Tasks
@@ -317,9 +353,9 @@ export interface IStorage {
   updateTask(id: number, data: Partial<InsertTask>): Task | undefined;
   deleteTask(id: number): boolean;
   // Books
-  getAllBooks(): Book[];
-  getAllBooksWithSessions(): BookWithSessions[];
-  createBook(data: InsertBook): Book;
+  getAllBooks(userId: number): Book[];
+  getAllBooksWithSessions(userId: number): BookWithSessions[];
+  createBook(data: InsertBook, userId: number): Book;
   updateBook(id: number, data: Partial<InsertBook>): Book | undefined;
   deleteBook(id: number): boolean;
   // Reading Sessions
@@ -328,19 +364,19 @@ export interface IStorage {
   updateReadingSession(id: number, data: Partial<InsertReadingSession>): ReadingSession | undefined;
   deleteReadingSession(id: number): boolean;
   // Workout Templates
-  getAllWorkoutTemplates(): WorkoutTemplate[];
-  createWorkoutTemplate(data: InsertWorkoutTemplate): WorkoutTemplate;
+  getAllWorkoutTemplates(userId: number): WorkoutTemplate[];
+  createWorkoutTemplate(data: InsertWorkoutTemplate, userId: number): WorkoutTemplate;
   updateWorkoutTemplate(id: number, data: Partial<InsertWorkoutTemplate>): WorkoutTemplate | undefined;
   deleteWorkoutTemplate(id: number): boolean;
   // Workout Logs
-  getAllWorkoutLogs(): WorkoutLog[];
-  createWorkoutLog(data: InsertWorkoutLog): WorkoutLog;
+  getAllWorkoutLogs(userId: number): WorkoutLog[];
+  createWorkoutLog(data: InsertWorkoutLog, userId: number): WorkoutLog;
   updateWorkoutLog(id: number, data: Partial<InsertWorkoutLog>): WorkoutLog | undefined;
   deleteWorkoutLog(id: number): boolean;
   // Goals
-  getAllGoalsWithProjects(): GoalWithProjects[];
-  getAllGoalsWithTasks(): GoalWithTasks[]; // legacy
-  createGoal(data: InsertGoal): Goal;
+  getAllGoalsWithProjects(userId: number): GoalWithProjects[];
+  getAllGoalsWithTasks(userId: number): GoalWithTasks[]; // legacy
+  createGoal(data: InsertGoal, userId: number): Goal;
   updateGoal(id: number, data: Partial<InsertGoal>): Goal | undefined;
   deleteGoal(id: number): boolean;
   // Goal Tasks (legacy)
@@ -349,8 +385,8 @@ export interface IStorage {
   deleteGoalTask(id: number): boolean;
   // Projects
   getProjectsForGoal(goalId: number): ProjectWithTasks[];
-  getStandaloneProjects(): ProjectWithTasks[];
-  createProject(data: InsertProject): Project;
+  getStandaloneProjects(userId: number): ProjectWithTasks[];
+  createProject(data: InsertProject, userId: number): Project;
   updateProject(id: number, data: Partial<InsertProject>): Project | undefined;
   deleteProject(id: number): boolean;
   // Project Tasks
@@ -358,60 +394,60 @@ export interface IStorage {
   updateProjectTask(id: number, data: Partial<InsertProjectTask>): ProjectTask | undefined;
   deleteProjectTask(id: number): boolean;
   // General Tasks
-  getAllGeneralTasks(): GeneralTask[];
-  createGeneralTask(data: InsertGeneralTask): GeneralTask;
+  getAllGeneralTasks(userId: number): GeneralTask[];
+  createGeneralTask(data: InsertGeneralTask, userId: number): GeneralTask;
   updateGeneralTask(id: number, data: Partial<InsertGeneralTask>): GeneralTask | undefined;
   deleteGeneralTask(id: number): boolean;
   // Recipes
-  getAllRecipes(): Recipe[];
-  createRecipe(data: InsertRecipe): Recipe;
+  getAllRecipes(userId: number): Recipe[];
+  createRecipe(data: InsertRecipe, userId: number): Recipe;
   updateRecipe(id: number, data: Partial<InsertRecipe>): Recipe | undefined;
   deleteRecipe(id: number): boolean;
   // Week Plan
-  getWeekPlan(weekStart: string): WeekPlan[];
-  assignRecipe(data: InsertWeekPlan): WeekPlan;
+  getWeekPlan(weekStart: string, userId: number): WeekPlan[];
+  assignRecipe(data: InsertWeekPlan, userId: number): WeekPlan;
   removeWeekAssignment(id: number): boolean;
   // Grocery Checks
-  getGroceryChecks(weekStart: string): GroceryCheck[];
-  upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean): GroceryCheck;
+  getGroceryChecks(weekStart: string, userId: number): GroceryCheck[];
+  upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean, userId: number): GroceryCheck;
   // Relationship Groups
-  getAllGroups(): RelationshipGroup[];
-  createGroup(data: InsertRelationshipGroup): RelationshipGroup;
+  getAllGroups(userId: number): RelationshipGroup[];
+  createGroup(data: InsertRelationshipGroup, userId: number): RelationshipGroup;
   updateGroup(id: number, data: Partial<InsertRelationshipGroup>): RelationshipGroup | undefined;
   deleteGroup(id: number): boolean;
   // People
-  getAllPeople(): PersonWithSpouse[];
-  createPerson(data: InsertPerson): Person;
+  getAllPeople(userId: number): PersonWithSpouse[];
+  createPerson(data: InsertPerson, userId: number): Person;
   updatePerson(id: number, data: Partial<InsertPerson>): Person | undefined;
   deletePerson(id: number): boolean;
   // Movies
-  getAllMovies(): Movie[];
-  createMovie(data: InsertMovie): Movie;
+  getAllMovies(userId: number): Movie[];
+  createMovie(data: InsertMovie, userId: number): Movie;
   updateMovie(id: number, data: Partial<InsertMovie>): Movie | undefined;
   deleteMovie(id: number): boolean;
   // Budget Categories
-  getAllBudgetCategories(): BudgetCategory[];
-  createBudgetCategory(data: InsertBudgetCategory): BudgetCategory;
+  getAllBudgetCategories(userId: number): BudgetCategory[];
+  createBudgetCategory(data: InsertBudgetCategory, userId: number): BudgetCategory;
   updateBudgetCategory(id: number, data: Partial<InsertBudgetCategory>): BudgetCategory | undefined;
   deleteBudgetCategory(id: number): boolean;
   // Transactions
-  getAllTransactions(): Transaction[];
-  createTransaction(data: InsertTransaction): Transaction;
+  getAllTransactions(userId: number): Transaction[];
+  createTransaction(data: InsertTransaction, userId: number): Transaction;
   updateTransaction(id: number, data: Partial<InsertTransaction>): Transaction | undefined;
   deleteTransaction(id: number): boolean;
   // Subscriptions
-  getAllSubscriptions(): Subscription[];
-  createSubscription(data: InsertSubscription): Subscription;
+  getAllSubscriptions(userId: number): Subscription[];
+  createSubscription(data: InsertSubscription, userId: number): Subscription;
   updateSubscription(id: number, data: Partial<InsertSubscription>): Subscription | undefined;
   deleteSubscription(id: number): boolean;
   // Receipts
-  getAllReceipts(): Receipt[];
-  createReceiptRecord(data: InsertReceipt): Receipt;
+  getAllReceipts(userId: number): Receipt[];
+  createReceiptRecord(data: InsertReceipt, userId: number): Receipt;
   updateReceiptRecord(id: number, data: Partial<InsertReceipt>): Receipt | undefined;
   deleteReceiptRecord(id: number): boolean;
   // Nav Prefs
-  getNavPrefs(): NavPref[];
-  saveNavPrefs(prefs: NavPref[]): void;
+  getNavPrefs(userId: number): NavPref[];
+  saveNavPrefs(userId: number, prefs: NavPref[]): void;
   // Users
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): User;
   getUserById(id: number): User | undefined;
@@ -419,12 +455,12 @@ export interface IStorage {
 
 export const storage: IStorage = {
   // ── Events ──────────────────────────────────────────────────────────────────
-  getAllEventsWithTasks() {
-    const evs = db.select().from(events).orderBy(asc(events.date)).all();
+  getAllEventsWithTasks(userId: number) {
+    const evs = db.select().from(events).where(eq(events.userId, userId)).orderBy(asc(events.date)).all();
     const tks = db.select().from(tasks).orderBy(asc(tasks.sortOrder)).all();
     return evs.map((e) => ({ ...e, tasks: tks.filter((t) => t.eventId === e.id) }));
   },
-  createEvent(data) { return db.insert(events).values(data).returning().get(); },
+  createEvent(data, userId) { return db.insert(events).values({ ...data, userId }).returning().get(); },
   updateEvent(id, data) {
     if (!db.select().from(events).where(eq(events.id, id)).get()) return undefined;
     return db.update(events).set(data).where(eq(events.id, id)).returning().get();
@@ -443,13 +479,13 @@ export const storage: IStorage = {
   deleteTask(id) { return db.delete(tasks).where(eq(tasks.id, id)).run().changes > 0; },
 
   // ── Books ────────────────────────────────────────────────────────────────────
-  getAllBooks() { return db.select().from(books).orderBy(asc(books.title)).all(); },
-  getAllBooksWithSessions() {
-    const bs = db.select().from(books).orderBy(asc(books.title)).all();
+  getAllBooks(userId: number) { return db.select().from(books).where(eq(books.userId, userId)).orderBy(asc(books.title)).all(); },
+  getAllBooksWithSessions(userId: number) {
+    const bs = db.select().from(books).where(eq(books.userId, userId)).orderBy(asc(books.title)).all();
     const ss = db.select().from(readingSessions).orderBy(desc(readingSessions.date)).all();
     return bs.map((b) => ({ ...b, sessions: ss.filter((s) => s.bookId === b.id) }));
   },
-  createBook(data) { return db.insert(books).values(data).returning().get(); },
+  createBook(data, userId) { return db.insert(books).values({ ...data, userId }).returning().get(); },
   updateBook(id, data) {
     if (!db.select().from(books).where(eq(books.id, id)).get()) return undefined;
     return db.update(books).set(data).where(eq(books.id, id)).returning().get();
@@ -469,8 +505,8 @@ export const storage: IStorage = {
   deleteReadingSession(id) { return db.delete(readingSessions).where(eq(readingSessions.id, id)).run().changes > 0; },
 
   // ── Workout Templates ─────────────────────────────────────────────────────────
-  getAllWorkoutTemplates() { return db.select().from(workoutTemplates).orderBy(asc(workoutTemplates.name)).all(); },
-  createWorkoutTemplate(data) { return db.insert(workoutTemplates).values(data).returning().get(); },
+  getAllWorkoutTemplates(userId: number) { return db.select().from(workoutTemplates).where(eq(workoutTemplates.userId, userId)).orderBy(asc(workoutTemplates.name)).all(); },
+  createWorkoutTemplate(data, userId) { return db.insert(workoutTemplates).values({ ...data, userId }).returning().get(); },
   updateWorkoutTemplate(id, data) {
     if (!db.select().from(workoutTemplates).where(eq(workoutTemplates.id, id)).get()) return undefined;
     return db.update(workoutTemplates).set(data).where(eq(workoutTemplates.id, id)).returning().get();
@@ -478,8 +514,8 @@ export const storage: IStorage = {
   deleteWorkoutTemplate(id) { return db.delete(workoutTemplates).where(eq(workoutTemplates.id, id)).run().changes > 0; },
 
   // ── Workout Logs ──────────────────────────────────────────────────────────────
-  getAllWorkoutLogs() { return db.select().from(workoutLogs).orderBy(desc(workoutLogs.date)).all(); },
-  createWorkoutLog(data) { return db.insert(workoutLogs).values(data).returning().get(); },
+  getAllWorkoutLogs(userId: number) { return db.select().from(workoutLogs).where(eq(workoutLogs.userId, userId)).orderBy(desc(workoutLogs.date)).all(); },
+  createWorkoutLog(data, userId) { return db.insert(workoutLogs).values({ ...data, userId }).returning().get(); },
   updateWorkoutLog(id, data) {
     if (!db.select().from(workoutLogs).where(eq(workoutLogs.id, id)).get()) return undefined;
     return db.update(workoutLogs).set(data).where(eq(workoutLogs.id, id)).returning().get();
@@ -487,10 +523,10 @@ export const storage: IStorage = {
   deleteWorkoutLog(id) { return db.delete(workoutLogs).where(eq(workoutLogs.id, id)).run().changes > 0; },
 
   // ── Goals ─────────────────────────────────────────────────────────────────────
-  getAllGoalsWithProjects() {
-    const gs = db.select().from(goals).orderBy(asc(goals.title)).all();
-    // Only include goal-linked projects (goalId != null)
-    const ps = db.select().from(projects).orderBy(asc(projects.sortOrder)).all().filter((p) => p.goalId != null);
+  getAllGoalsWithProjects(userId: number) {
+    const gs = db.select().from(goals).where(eq(goals.userId, userId)).orderBy(asc(goals.title)).all();
+    // Projects already filtered by userId, so only include goal-linked projects (goalId != null)
+    const ps = db.select().from(projects).where(eq(projects.userId, userId)).orderBy(asc(projects.sortOrder)).all().filter((p) => p.goalId != null);
     const pts = db.select().from(projectTasks).orderBy(asc(projectTasks.sortOrder)).all();
     return gs.map((g) => ({
       ...g,
@@ -499,12 +535,12 @@ export const storage: IStorage = {
         .map((p) => ({ ...p, tasks: pts.filter((t) => t.projectId === p.id) })),
     }));
   },
-  getAllGoalsWithTasks() {
-    const gs = db.select().from(goals).orderBy(asc(goals.title)).all();
+  getAllGoalsWithTasks(userId: number) {
+    const gs = db.select().from(goals).where(eq(goals.userId, userId)).orderBy(asc(goals.title)).all();
     const gts = db.select().from(goalTasks).orderBy(asc(goalTasks.sortOrder)).all();
     return gs.map((g) => ({ ...g, tasks: gts.filter((t) => t.goalId === g.id) }));
   },
-  createGoal(data) { return db.insert(goals).values(data).returning().get(); },
+  createGoal(data, userId) { return db.insert(goals).values({ ...data, userId }).returning().get(); },
   updateGoal(id, data) {
     if (!db.select().from(goals).where(eq(goals.id, id)).get()) return undefined;
     return db.update(goals).set(data).where(eq(goals.id, id)).returning().get();
@@ -531,14 +567,14 @@ export const storage: IStorage = {
     const pts = db.select().from(projectTasks).orderBy(asc(projectTasks.sortOrder)).all();
     return ps.map((p) => ({ ...p, tasks: pts.filter((t) => t.projectId === p.id) }));
   },
-  getStandaloneProjects() {
-    // goalId IS NULL — filter in JS since drizzle isNull may vary by version
-    const ps = db.select().from(projects).orderBy(asc(projects.sortOrder)).all().filter((p) => p.goalId == null);
+  getStandaloneProjects(userId: number) {
+    // goalId IS NULL and userId matches — filter in JS since drizzle isNull may vary by version
+    const ps = db.select().from(projects).where(eq(projects.userId, userId)).orderBy(asc(projects.sortOrder)).all().filter((p) => p.goalId == null);
     ps.sort((a, b) => a.sortOrder - b.sortOrder);
     const pts = db.select().from(projectTasks).orderBy(asc(projectTasks.sortOrder)).all();
     return ps.map((p) => ({ ...p, tasks: pts.filter((t) => t.projectId === p.id) }));
   },
-  createProject(data) { return db.insert(projects).values(data).returning().get(); },
+  createProject(data, userId) { return db.insert(projects).values({ ...data, userId }).returning().get(); },
   updateProject(id, data) {
     if (!db.select().from(projects).where(eq(projects.id, id)).get()) return undefined;
     return db.update(projects).set(data).where(eq(projects.id, id)).returning().get();
@@ -557,17 +593,17 @@ export const storage: IStorage = {
   deleteProjectTask(id) { return db.delete(projectTasks).where(eq(projectTasks.id, id)).run().changes > 0; },
 
   // ── General Tasks ──────────────────────────────────────────────────────────────
-  getAllGeneralTasks() { return db.select().from(generalTasks).orderBy(asc(generalTasks.sortOrder)).all(); },
-  createGeneralTask(data) { return db.insert(generalTasks).values(data).returning().get(); },
+  getAllGeneralTasks(userId: number) { return db.select().from(generalTasks).where(eq(generalTasks.userId, userId)).orderBy(asc(generalTasks.sortOrder)).all(); },
+  createGeneralTask(data, userId) { return db.insert(generalTasks).values({ ...data, userId }).returning().get(); },
   updateGeneralTask(id, data) {
     if (!db.select().from(generalTasks).where(eq(generalTasks.id, id)).get()) return undefined;
     return db.update(generalTasks).set(data).where(eq(generalTasks.id, id)).returning().get();
   },
   deleteGeneralTask(id) { return db.delete(generalTasks).where(eq(generalTasks.id, id)).run().changes > 0; },
 
-  // ── Recipes ──────────────────────────────────────────────────────────────────
-  getAllRecipes() { return db.select().from(recipes).orderBy(asc(recipes.name)).all(); },
-  createRecipe(data: InsertRecipe) { return db.insert(recipes).values(data).returning().get(); },
+  // ── Recipes ──────────────────────────────────────────────────────────────
+  getAllRecipes(userId: number) { return db.select().from(recipes).where(eq(recipes.userId, userId)).orderBy(asc(recipes.name)).all(); },
+  createRecipe(data: InsertRecipe, userId: number) { return db.insert(recipes).values({ ...data, userId }).returning().get(); },
   updateRecipe(id: number, data: Partial<InsertRecipe>) {
     if (!db.select().from(recipes).where(eq(recipes.id, id)).get()) return undefined;
     return db.update(recipes).set(data).where(eq(recipes.id, id)).returning().get();
@@ -577,31 +613,32 @@ export const storage: IStorage = {
     return db.delete(recipes).where(eq(recipes.id, id)).run().changes > 0;
   },
 
-  // ── Week Plan ─────────────────────────────────────────────────────────────
-  getWeekPlan(weekStart: string) {
-    return db.select().from(weekPlan).where(eq(weekPlan.weekStart, weekStart)).all();
+  // ── Week Plan ─────────────────────────────────────────────────────────
+  getWeekPlan(weekStart: string, userId: number) {
+    return db.select().from(weekPlan).where(eq(weekPlan.weekStart, weekStart)).where(eq(weekPlan.userId, userId)).all();
   },
-  assignRecipe(data: InsertWeekPlan) { return db.insert(weekPlan).values(data).returning().get(); },
+  assignRecipe(data: InsertWeekPlan, userId: number) { return db.insert(weekPlan).values({ ...data, userId }).returning().get(); },
   removeWeekAssignment(id: number) { return db.delete(weekPlan).where(eq(weekPlan.id, id)).run().changes > 0; },
 
   // ── Grocery Checks ────────────────────────────────────────────────────────
-  getGroceryChecks(weekStart: string) {
-    return db.select().from(groceryChecks).where(eq(groceryChecks.weekStart, weekStart)).all();
+  getGroceryChecks(weekStart: string, userId: number) {
+    return db.select().from(groceryChecks).where(eq(groceryChecks.weekStart, weekStart)).where(eq(groceryChecks.userId, userId)).all();
   },
-  upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean) {
+  upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean, userId: number) {
     const existing = db.select().from(groceryChecks)
-      .where(eq(groceryChecks.weekStart, weekStart)).all()
+      .where(eq(groceryChecks.weekStart, weekStart))
+      .where(eq(groceryChecks.userId, userId)).all()
       .find(g => g.itemKey === itemKey);
     if (existing) {
       return db.update(groceryChecks).set({ checked })
         .where(eq(groceryChecks.id, existing.id)).returning().get();
     }
-    return db.insert(groceryChecks).values({ weekStart, itemKey, checked }).returning().get();
+    return db.insert(groceryChecks).values({ weekStart, itemKey, checked, userId }).returning().get();
   },
 
   // ── Relationship Groups ───────────────────────────────────────────────────────
-  getAllGroups() { return db.select().from(relationshipGroups).orderBy(asc(relationshipGroups.sortOrder)).all(); },
-  createGroup(data) { return db.insert(relationshipGroups).values(data).returning().get(); },
+  getAllGroups(userId: number) { return db.select().from(relationshipGroups).where(eq(relationshipGroups.userId, userId)).orderBy(asc(relationshipGroups.sortOrder)).all(); },
+  createGroup(data, userId) { return db.insert(relationshipGroups).values({ ...data, userId }).returning().get(); },
   updateGroup(id, data) {
     if (!db.select().from(relationshipGroups).where(eq(relationshipGroups.id, id)).get()) return undefined;
     return db.update(relationshipGroups).set(data).where(eq(relationshipGroups.id, id)).returning().get();
@@ -613,15 +650,15 @@ export const storage: IStorage = {
   },
 
   // ── People ────────────────────────────────────────────────────────────────────
-  getAllPeople(): PersonWithSpouse[] {
-    const ps = db.select().from(people).orderBy(asc(people.sortOrder)).all();
+  getAllPeople(userId: number): PersonWithSpouse[] {
+    const ps = db.select().from(people).where(eq(people.userId, userId)).orderBy(asc(people.sortOrder)).all();
     // Attach spouse details
     return ps.map((p) => ({
       ...p,
       spouse: p.spouseId ? (ps.find((s) => s.id === p.spouseId) ?? null) : null,
     }));
   },
-  createPerson(data) { return db.insert(people).values(data).returning().get(); },
+  createPerson(data, userId) { return db.insert(people).values({ ...data, userId }).returning().get(); },
   updatePerson(id, data) {
     if (!db.select().from(people).where(eq(people.id, id)).get()) return undefined;
     return db.update(people).set(data).where(eq(people.id, id)).returning().get();
@@ -639,8 +676,8 @@ export const storage: IStorage = {
   },
 
   // ── Movies ────────────────────────────────────────────────────────────────────────
-  getAllMovies() { return db.select().from(movies).orderBy(asc(movies.title)).all(); },
-  createMovie(data) { return db.insert(movies).values(data).returning().get(); },
+  getAllMovies(userId: number) { return db.select().from(movies).where(eq(movies.userId, userId)).orderBy(asc(movies.title)).all(); },
+  createMovie(data, userId) { return db.insert(movies).values({ ...data, userId }).returning().get(); },
   updateMovie(id, data) {
     if (!db.select().from(movies).where(eq(movies.id, id)).get()) return undefined;
     return db.update(movies).set(data).where(eq(movies.id, id)).returning().get();
@@ -648,8 +685,8 @@ export const storage: IStorage = {
   deleteMovie(id) { return db.delete(movies).where(eq(movies.id, id)).run().changes > 0; },
 
   // ── Budget Categories ──────────────────────────────────────────────────────────
-  getAllBudgetCategories() { return db.select().from(budgetCategories).orderBy(asc(budgetCategories.sortOrder)).all(); },
-  createBudgetCategory(data) { return db.insert(budgetCategories).values(data).returning().get(); },
+  getAllBudgetCategories(userId: number) { return db.select().from(budgetCategories).where(eq(budgetCategories.userId, userId)).orderBy(asc(budgetCategories.sortOrder)).all(); },
+  createBudgetCategory(data, userId) { return db.insert(budgetCategories).values({ ...data, userId }).returning().get(); },
   updateBudgetCategory(id, data) {
     if (!db.select().from(budgetCategories).where(eq(budgetCategories.id, id)).get()) return undefined;
     return db.update(budgetCategories).set(data).where(eq(budgetCategories.id, id)).returning().get();
@@ -657,8 +694,8 @@ export const storage: IStorage = {
   deleteBudgetCategory(id) { return db.delete(budgetCategories).where(eq(budgetCategories.id, id)).run().changes > 0; },
 
   // ── Transactions ───────────────────────────────────────────────────────────────────
-  getAllTransactions() { return db.select().from(transactions).orderBy(desc(transactions.date)).all(); },
-  createTransaction(data) { return db.insert(transactions).values(data).returning().get(); },
+  getAllTransactions(userId: number) { return db.select().from(transactions).where(eq(transactions.userId, userId)).orderBy(desc(transactions.date)).all(); },
+  createTransaction(data, userId) { return db.insert(transactions).values({ ...data, userId }).returning().get(); },
   updateTransaction(id, data) {
     if (!db.select().from(transactions).where(eq(transactions.id, id)).get()) return undefined;
     return db.update(transactions).set(data).where(eq(transactions.id, id)).returning().get();
@@ -666,8 +703,8 @@ export const storage: IStorage = {
   deleteTransaction(id) { return db.delete(transactions).where(eq(transactions.id, id)).run().changes > 0; },
 
   // ── Subscriptions ──────────────────────────────────────────────────────────────────
-  getAllSubscriptions() { return db.select().from(subscriptions).orderBy(asc(subscriptions.name)).all(); },
-  createSubscription(data) { return db.insert(subscriptions).values(data).returning().get(); },
+  getAllSubscriptions(userId: number) { return db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(asc(subscriptions.name)).all(); },
+  createSubscription(data, userId) { return db.insert(subscriptions).values({ ...data, userId }).returning().get(); },
   updateSubscription(id, data) {
     if (!db.select().from(subscriptions).where(eq(subscriptions.id, id)).get()) return undefined;
     return db.update(subscriptions).set(data).where(eq(subscriptions.id, id)).returning().get();
@@ -675,8 +712,8 @@ export const storage: IStorage = {
   deleteSubscription(id) { return db.delete(subscriptions).where(eq(subscriptions.id, id)).run().changes > 0; },
 
   // ── Receipts ────────────────────────────────────────────────────────────────────────
-  getAllReceipts() { return db.select().from(receipts).orderBy(desc(receipts.uploadDate)).all(); },
-  createReceiptRecord(data) { return db.insert(receipts).values(data).returning().get(); },
+  getAllReceipts(userId: number) { return db.select().from(receipts).where(eq(receipts.userId, userId)).orderBy(desc(receipts.uploadDate)).all(); },
+  createReceiptRecord(data, userId) { return db.insert(receipts).values({ ...data, userId }).returning().get(); },
   updateReceiptRecord(id, data) {
     if (!db.select().from(receipts).where(eq(receipts.id, id)).get()) return undefined;
     return db.update(receipts).set(data).where(eq(receipts.id, id)).returning().get();
@@ -684,22 +721,22 @@ export const storage: IStorage = {
   deleteReceiptRecord(id) { return db.delete(receipts).where(eq(receipts.id, id)).run().changes > 0; },
 
   // ── Nav Prefs ───────────────────────────────────────────────────────────────────────
-  getNavPrefs(): NavPref[] {
-    const row = db.select().from(navPrefs).limit(1).get();
+  getNavPrefs(userId: number): NavPref[] {
+    const row = db.select().from(navPrefs).where(eq(navPrefs.userId, userId)).limit(1).get();
     if (!row) return [];
     try { return JSON.parse(row.prefsJson) as NavPref[]; } catch { return []; }
   },
-  saveNavPrefs(prefs: NavPref[]) {
-    const row = db.select().from(navPrefs).limit(1).get();
+  saveNavPrefs(userId: number, prefs: NavPref[]) {
+    const row = db.select().from(navPrefs).where(eq(navPrefs.userId, userId)).limit(1).get();
     const json = JSON.stringify(prefs);
     if (row) {
       db.update(navPrefs).set({ prefsJson: json }).where(eq(navPrefs.id, row.id)).run();
     } else {
-      db.insert(navPrefs).values({ prefsJson: json }).run();
+      db.insert(navPrefs).values({ prefsJson: json, userId }).run();
     }
   },
 
-  // ── Users ────────────────────────────────────────────────────────────────────
+  // ── Users ────────────────────────────────────────────────────────────────
   upsertUser({ googleId, email, name, avatarUrl }) {
     const existing = db.select().from(users).where(eq(users.googleId, googleId)).get();
     if (existing) {
