@@ -1,10 +1,10 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, real, serial, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ── USERS ─────────────────────────────────────────────────────────────────────
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   googleId: text("google_id").notNull().unique(),
   email: text("email").notNull(),
   name: text("name").notNull(),
@@ -15,8 +15,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ── EVENTS (existing, extended) ───────────────────────────────────────────────
-export const events = sqliteTable("events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const events = pgTable("events", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
   date: text("date").notNull(),
@@ -28,11 +28,11 @@ export const events = sqliteTable("events", {
 });
 
 // ── TASKS (existing, unchanged) ────────────────────────────────────────────────
-export const tasks = sqliteTable("tasks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),
   title: text("title").notNull(),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   dueDate: text("due_date"),
   notes: text("notes"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -40,8 +40,8 @@ export const tasks = sqliteTable("tasks", {
 
 // ── BOOKS ─────────────────────────────────────────────────────────────────────
 // status: "backlog" | "current" | "paused" | "finished"
-export const books = sqliteTable("books", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const books = pgTable("books", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
   author: text("author"),
@@ -61,23 +61,23 @@ export const books = sqliteTable("books", {
 });
 
 // ── READING SESSIONS ──────────────────────────────────────────────────────────
-export const readingSessions = sqliteTable("reading_sessions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const readingSessions = pgTable("reading_sessions", {
+  id: serial("id").primaryKey(),
   bookId: integer("book_id").notNull(),
   date: text("date").notNull(),
   pagesRead: integer("pages_read").notNull().default(0),
   durationMinutes: integer("duration_minutes"),
   notes: text("notes"),
   // for calendar scheduling (planned vs completed)
-  planned: integer("planned", { mode: "boolean" }).notNull().default(false),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  planned: boolean("planned").notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   recurring: text("recurring").notNull().default("none"),
 });
 
 // ── WORKOUT TEMPLATES ─────────────────────────────────────────────────────────
 // workoutType: "full_body" | "upper" | "lower" | "push" | "pull" | "legs" | "strength" | "custom"
-export const workoutTemplates = sqliteTable("workout_templates", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const workoutTemplates = pgTable("workout_templates", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),
   workoutType: text("workout_type").notNull().default("custom"),
@@ -90,8 +90,8 @@ export const workoutTemplates = sqliteTable("workout_templates", {
 });
 
 // ── WORKOUT LOGS (actual completed sessions) ───────────────────────────────────
-export const workoutLogs = sqliteTable("workout_logs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const workoutLogs = pgTable("workout_logs", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   templateId: integer("template_id"),  // null = ad-hoc
   date: text("date").notNull(),
@@ -99,7 +99,7 @@ export const workoutLogs = sqliteTable("workout_logs", {
   workoutType: text("workout_type").notNull().default("custom"),
   durationMinutes: integer("duration_minutes"),
   notes: text("notes"),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   // logged exercises: [{name, sets:[{reps,weight,rpe}], isPR, notes}]
   exercisesJson: text("exercises_json").notNull().default("[]"),
   linkedGoalId: integer("linked_goal_id"),
@@ -107,8 +107,8 @@ export const workoutLogs = sqliteTable("workout_logs", {
 
 // ── GOALS (extended from events, now standalone) ───────────────────────────────
 // Goals are stored separately from events for richer linking
-export const goals = sqliteTable("goals", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const goals = pgTable("goals", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
   category: text("category").notNull().default("general"),
@@ -127,8 +127,8 @@ export const goals = sqliteTable("goals", {
 
 // ── PROJECTS (optionally linked to a Goal) ──────────────────────────────────
 // status: "not_started" | "in_progress" | "done" | "blocked"
-export const projects = sqliteTable("projects", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   goalId: integer("goal_id"),  // nullable — null means standalone project
   title: text("title").notNull(),
@@ -139,11 +139,11 @@ export const projects = sqliteTable("projects", {
 });
 
 // ── PROJECT TASKS (children of Projects) ──────────────────────────────────────
-export const projectTasks = sqliteTable("project_tasks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const projectTasks = pgTable("project_tasks", {
+  id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),  // always linked to a project
   title: text("title").notNull(),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   dueDate: text("due_date"),
   priority: text("priority").notNull().default("medium"),
   notes: text("notes"),
@@ -151,8 +151,8 @@ export const projectTasks = sqliteTable("project_tasks", {
 });
 
 // ── RECIPES ─────────────────────────────────────────────────────
-export const recipes = sqliteTable("recipes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const recipes = pgTable("recipes", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),
   emoji: text("emoji").notNull().default("🍽️"),
@@ -164,8 +164,8 @@ export const recipes = sqliteTable("recipes", {
   instructions: text("instructions"),
 });
 
-export const weekPlan = sqliteTable("week_plan", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const weekPlan = pgTable("week_plan", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   // 0=Sun, 1=Mon ... 6=Sat
   dayIndex: integer("day_index").notNull(),
@@ -173,12 +173,12 @@ export const weekPlan = sqliteTable("week_plan", {
   weekStart: text("week_start").notNull(), // ISO "YYYY-MM-DD" of the Monday
 });
 
-export const groceryChecks = sqliteTable("grocery_checks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const groceryChecks = pgTable("grocery_checks", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   weekStart: text("week_start").notNull(),
   itemKey: text("item_key").notNull(), // "ingredient_name" lowercase
-  checked: integer("checked", { mode: "boolean" }).notNull().default(false),
+  checked: boolean("checked").notNull().default(false),
 });
 
 export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true });
@@ -196,8 +196,8 @@ export type GroceryCheck = typeof groceryChecks.$inferSelect;
 export type RecipeIngredient = { name: string; qty: string };
 
 // ── RELATIONSHIP GROUPS ─────────────────────────────────────────────────────
-export const relationshipGroups = sqliteTable("relationship_groups", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const relationshipGroups = pgTable("relationship_groups", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),          // "Daycare", "Hometown", "Austin"
   color: text("color"),                   // optional accent color
@@ -205,8 +205,8 @@ export const relationshipGroups = sqliteTable("relationship_groups", {
 });
 
 // ── PEOPLE ───────────────────────────────────────────────────────────────────
-export const people = sqliteTable("people", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const people = pgTable("people", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   groupId: integer("group_id"),           // nullable — can be ungrouped
   firstName: text("first_name").notNull(),
@@ -222,11 +222,11 @@ export const people = sqliteTable("people", {
 });
 
 // ── GENERAL TASKS (standalone — not linked to any project or goal) ────────────
-export const generalTasks = sqliteTable("general_tasks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const generalTasks = pgTable("general_tasks", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   dueDate: text("due_date"),
   priority: text("priority").notNull().default("medium"),
   notes: text("notes"),
@@ -234,11 +234,11 @@ export const generalTasks = sqliteTable("general_tasks", {
 });
 
 // ── GOAL TASKS (legacy — keep for migration, now unused in UI) ─────────────────
-export const goalTasks = sqliteTable("goal_tasks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const goalTasks = pgTable("goal_tasks", {
+  id: serial("id").primaryKey(),
   goalId: integer("goal_id").notNull(),
   title: text("title").notNull(),
-  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  completed: boolean("completed").notNull().default(false),
   dueDate: text("due_date"),
   notes: text("notes"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -246,8 +246,8 @@ export const goalTasks = sqliteTable("goal_tasks", {
 
 // ── MOVIES ───────────────────────────────────────────────────────────────────
 // status: "backlog" | "watching" | "watched"
-export const movies = sqliteTable("movies", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const movies = pgTable("movies", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
   year: integer("year"),
@@ -259,7 +259,7 @@ export const movies = sqliteTable("movies", {
   notes: text("notes"),
   // JSON array of custom list names: ["Date Night", "Watch with Kids"]
   listsJson: text("lists_json").notNull().default("[]"),
-  isFavorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
+  isFavorite: boolean("is_favorite").notNull().default(false),
   posterColor: text("poster_color"),   // accent color for card
   streamingOn: text("streaming_on"),  // "Netflix", "HBO", etc.
 });
@@ -270,8 +270,8 @@ export type Movie = typeof movies.$inferSelect;
 
 // ── BUDGET ────────────────────────────────────────────────────────────────────
 // Budget categories for organizing expenses
-export const budgetCategories = sqliteTable("budget_categories", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const budgetCategories = pgTable("budget_categories", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),
   color: text("color"),
@@ -281,8 +281,8 @@ export const budgetCategories = sqliteTable("budget_categories", {
 });
 
 // Individual income/expense transactions
-export const transactions = sqliteTable("transactions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   title: text("title").notNull(),
   amount: real("amount").notNull(),   // positive = income, negative = expense
@@ -295,8 +295,8 @@ export const transactions = sqliteTable("transactions", {
 });
 
 // Subscriptions with renewal tracking
-export const subscriptions = sqliteTable("subscriptions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   name: text("name").notNull(),
   amount: real("amount").notNull(),
@@ -304,7 +304,7 @@ export const subscriptions = sqliteTable("subscriptions", {
   nextRenewal: text("next_renewal").notNull(),   // ISO date
   categoryId: integer("category_id"),
   notes: text("notes"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
   color: text("color"),
   icon: text("icon"),  // emoji
 });
@@ -322,8 +322,8 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 
 // ── RECEIPTS ─────────────────────────────────────────────────────────────────
-export const receipts = sqliteTable("receipts", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const receipts = pgTable("receipts", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   filename: text("filename").notNull(),       // stored filename on disk
   originalName: text("original_name").notNull(), // user's original filename
@@ -344,8 +344,8 @@ export type Receipt = typeof receipts.$inferSelect;
 
 // ── NAV PREFERENCES ───────────────────────────────────────────────────────────
 // Stores user's tab order and visibility as a single JSON row
-export const navPrefs = sqliteTable("nav_prefs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const navPrefs = pgTable("nav_prefs", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id"),
   // JSON: [{path, hidden}] — ordered list
   prefsJson: text("prefs_json").notNull().default("[]"),

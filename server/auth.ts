@@ -1,17 +1,17 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
-import createMemoryStore from "memorystore";
-import { storage } from "./storage";
+import connectPgSimple from "connect-pg-simple";
+import { storage, pool } from "./storage";
 import type { User } from "@shared/schema";
 
-const MemoryStore = createMemoryStore(session);
+const PgSession = connectPgSimple(session);
 
 export const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || "dev-secret-please-change",
   resave: false,
   saveUninitialized: false,
-  store: new MemoryStore({ checkPeriod: 86400000 }), // prune expired entries every 24h
+  store: new PgSession({ pool, createTableIfMissing: true }),
   cookie: {
     secure: false, // Railway handles TLS at proxy level; keep false to avoid cookie rejection
     sameSite: "lax",
@@ -26,9 +26,9 @@ passport.use(
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       callbackURL: process.env.GOOGLE_CALLBACK_URL || "/auth/google/callback",
     },
-    (_accessToken, _refreshToken, profile, done) => {
+    async (_accessToken, _refreshToken, profile, done) => {
       try {
-        const user = storage.upsertUser({
+        const user = await storage.upsertUser({
           googleId: profile.id,
           email: profile.emails?.[0]?.value ?? "",
           name: profile.displayName,
@@ -46,9 +46,9 @@ passport.serializeUser((user: Express.User, done) => {
   done(null, (user as User).id);
 });
 
-passport.deserializeUser((id: number, done) => {
+passport.deserializeUser(async (id: number, done) => {
   try {
-    const user = storage.getUserById(id);
+    const user = await storage.getUserById(id);
     done(null, user ?? false);
   } catch (e) {
     done(e);

@@ -32,7 +32,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Unauthorized" });
 }
 
-export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
+export async function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
@@ -59,284 +59,283 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
   app.use("/api", requireAuth);
 
   // ── Events ──────────────────────────────────────────────────────────────────
-  app.get("/api/events", (req, res) => {
+  app.get("/api/events", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllEventsWithTasks(uid));
+      res.json(await storage.getAllEventsWithTasks(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/events", (req, res) => {
+  app.post("/api/events", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createEvent(insertEventSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createEvent(insertEventSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/events/:id", (req, res) => {
+  app.patch("/api/events/:id", async (req, res) => {
     try {
-      const r = storage.updateEvent(+req.params.id, insertEventSchema.partial().parse(req.body));
+      const r = await storage.updateEvent(+req.params.id, insertEventSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/events/:id", (req, res) => {
-    storage.deleteEvent(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/events/:id", async (req, res) => {
+    (await storage.deleteEvent(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Tasks ────────────────────────────────────────────────────────────────────
-  app.post("/api/events/:eventId/tasks", (req, res) => {
-    try { res.status(201).json(storage.createTask(insertTaskSchema.parse({ ...req.body, eventId: +req.params.eventId }))); }
+  app.post("/api/events/:eventId/tasks", async (req, res) => {
+    try { res.status(201).json(await storage.createTask(insertTaskSchema.parse({ ...req.body, eventId: +req.params.eventId }))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/tasks/:id", (req, res) => {
+  app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      const r = storage.updateTask(+req.params.id, insertTaskSchema.partial().parse(req.body));
+      const r = await storage.updateTask(+req.params.id, insertTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/tasks/:id", (req, res) => {
-    storage.deleteTask(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/tasks/:id", async (req, res) => {
+    (await storage.deleteTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Books ────────────────────────────────────────────────────────────────────
-  app.get("/api/books", (req, res) => {
+  app.get("/api/books", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllBooksWithSessions(uid));
+      res.json(await storage.getAllBooksWithSessions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/books", (req, res) => {
+  app.post("/api/books", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createBook(insertBookSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createBook(insertBookSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/books/:id", (req, res) => {
+  app.patch("/api/books/:id", async (req, res) => {
     try {
-      const r = storage.updateBook(+req.params.id, insertBookSchema.partial().parse(req.body));
+      const r = await storage.updateBook(+req.params.id, insertBookSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/books/:id", (req, res) => {
-    storage.deleteBook(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/books/:id", async (req, res) => {
+    (await storage.deleteBook(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Reading Sessions ──────────────────────────────────────────────────────────
-  app.get("/api/reading-sessions", (_req, res) => {
-    try { res.json(storage.getAllReadingSessions()); } catch (e) { handleError(res, e); }
+  app.get("/api/reading-sessions", async (_req, res) => {
+    try { res.json(await storage.getAllReadingSessions()); } catch (e) { handleError(res, e); }
   });
-  app.post("/api/reading-sessions", (req, res) => {
-    try { res.status(201).json(storage.createReadingSession(insertReadingSessionSchema.parse(req.body))); }
+  app.post("/api/reading-sessions", async (req, res) => {
+    try { res.status(201).json(await storage.createReadingSession(insertReadingSessionSchema.parse(req.body))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/reading-sessions/:id", (req, res) => {
+  app.patch("/api/reading-sessions/:id", async (req, res) => {
     try {
-      const r = storage.updateReadingSession(+req.params.id, insertReadingSessionSchema.partial().parse(req.body));
+      const r = await storage.updateReadingSession(+req.params.id, insertReadingSessionSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/reading-sessions/:id", (req, res) => {
-    storage.deleteReadingSession(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/reading-sessions/:id", async (req, res) => {
+    (await storage.deleteReadingSession(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Workout Templates ─────────────────────────────────────────────────────────
-  app.get("/api/workout-templates", (req, res) => {
+  app.get("/api/workout-templates", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllWorkoutTemplates(uid));
+      res.json(await storage.getAllWorkoutTemplates(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/workout-templates", (req, res) => {
+  app.post("/api/workout-templates", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createWorkoutTemplate(insertWorkoutTemplateSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createWorkoutTemplate(insertWorkoutTemplateSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/workout-templates/:id", (req, res) => {
+  app.patch("/api/workout-templates/:id", async (req, res) => {
     try {
-      const r = storage.updateWorkoutTemplate(+req.params.id, insertWorkoutTemplateSchema.partial().parse(req.body));
+      const r = await storage.updateWorkoutTemplate(+req.params.id, insertWorkoutTemplateSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/workout-templates/:id", (req, res) => {
-    storage.deleteWorkoutTemplate(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/workout-templates/:id", async (req, res) => {
+    (await storage.deleteWorkoutTemplate(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Workout Logs ──────────────────────────────────────────────────────────────
-  app.get("/api/workout-logs", (req, res) => {
+  app.get("/api/workout-logs", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllWorkoutLogs(uid));
+      res.json(await storage.getAllWorkoutLogs(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/workout-logs", (req, res) => {
+  app.post("/api/workout-logs", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/workout-logs/:id", (req, res) => {
+  app.patch("/api/workout-logs/:id", async (req, res) => {
     try {
-      const r = storage.updateWorkoutLog(+req.params.id, insertWorkoutLogSchema.partial().parse(req.body));
+      const r = await storage.updateWorkoutLog(+req.params.id, insertWorkoutLogSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/workout-logs/:id", (req, res) => {
-    storage.deleteWorkoutLog(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/workout-logs/:id", async (req, res) => {
+    (await storage.deleteWorkoutLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goals ─────────────────────────────────────────────────────────────────────
-  app.get("/api/goals", (req, res) => {
+  app.get("/api/goals", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllGoalsWithProjects(uid));
+      res.json(await storage.getAllGoalsWithProjects(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/goals", (req, res) => {
+  app.post("/api/goals", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createGoal(insertGoalSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createGoal(insertGoalSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/goals/:id", (req, res) => {
+  app.patch("/api/goals/:id", async (req, res) => {
     try {
-      const r = storage.updateGoal(+req.params.id, insertGoalSchema.partial().parse(req.body));
+      const r = await storage.updateGoal(+req.params.id, insertGoalSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/goals/:id", (req, res) => {
-    storage.deleteGoal(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/goals/:id", async (req, res) => {
+    (await storage.deleteGoal(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goal Tasks (legacy) ──────────────────────────────────────────────────────
-  app.post("/api/goals/:goalId/tasks", (req, res) => {
-    try { res.status(201).json(storage.createGoalTask(insertGoalTaskSchema.parse({ ...req.body, goalId: +req.params.goalId }))); }
+  app.post("/api/goals/:goalId/tasks", async (req, res) => {
+    try { res.status(201).json(await storage.createGoalTask(insertGoalTaskSchema.parse({ ...req.body, goalId: +req.params.goalId }))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/goal-tasks/:id", (req, res) => {
+  app.patch("/api/goal-tasks/:id", async (req, res) => {
     try {
-      const r = storage.updateGoalTask(+req.params.id, insertGoalTaskSchema.partial().parse(req.body));
+      const r = await storage.updateGoalTask(+req.params.id, insertGoalTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/goal-tasks/:id", (req, res) => {
-    storage.deleteGoalTask(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/goal-tasks/:id", async (req, res) => {
+    (await storage.deleteGoalTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Projects ──────────────────────────────────────────────────────────────────
-  app.post("/api/goals/:goalId/projects", (req, res) => {
+  app.post("/api/goals/:goalId/projects", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: +req.params.goalId }), uid));
+      res.status(201).json(await storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: +req.params.goalId }), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/projects/:id", (req, res) => {
+  app.patch("/api/projects/:id", async (req, res) => {
     try {
-      const r = storage.updateProject(+req.params.id, insertProjectSchema.partial().parse(req.body));
+      const r = await storage.updateProject(+req.params.id, insertProjectSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/projects/:id", (req, res) => {
-    storage.deleteProject(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/projects/:id", async (req, res) => {
+    (await storage.deleteProject(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Project Tasks ─────────────────────────────────────────────────────────────
-  app.post("/api/projects/:projectId/tasks", (req, res) => {
-    try { res.status(201).json(storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }))); }
+  app.post("/api/projects/:projectId/tasks", async (req, res) => {
+    try { res.status(201).json(await storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/project-tasks/:id", (req, res) => {
+  app.patch("/api/project-tasks/:id", async (req, res) => {
     try {
-      const r = storage.updateProjectTask(+req.params.id, insertProjectTaskSchema.partial().parse(req.body));
+      const r = await storage.updateProjectTask(+req.params.id, insertProjectTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/project-tasks/:id", (req, res) => {
-    storage.deleteProjectTask(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/project-tasks/:id", async (req, res) => {
+    (await storage.deleteProjectTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Standalone Projects (no goal) ────────────────────────────────────────────
-  app.get("/api/projects/standalone", (req, res) => {
+  app.get("/api/projects/standalone", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getStandaloneProjects(uid));
+      res.json(await storage.getStandaloneProjects(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/projects/standalone", (req, res) => {
+  app.post("/api/projects/standalone", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: null }), uid));
+      res.status(201).json(await storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: null }), uid));
     }
     catch (e) { handleError(res, e); }
   });
 
   // ── General Tasks ─────────────────────────────────────────────────────────────
-  app.get("/api/general-tasks", (req, res) => {
+  app.get("/api/general-tasks", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllGeneralTasks(uid));
+      res.json(await storage.getAllGeneralTasks(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/general-tasks", (req, res) => {
+  app.post("/api/general-tasks", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createGeneralTask(insertGeneralTaskSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createGeneralTask(insertGeneralTaskSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/general-tasks/:id", (req, res) => {
+  app.patch("/api/general-tasks/:id", async (req, res) => {
     try {
-      const r = storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body));
+      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/general-tasks/:id", (req, res) => {
-    storage.deleteGeneralTask(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/general-tasks/:id", async (req, res) => {
+    (await storage.deleteGeneralTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Relationship Groups ───────────────────────────────────────────────────────
-  app.get("/api/groups", (req, res) => {
+  app.get("/api/groups", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllGroups(uid));
+      res.json(await storage.getAllGroups(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/groups", (req, res) => {
+  app.post("/api/groups", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createGroup(insertRelationshipGroupSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createGroup(insertRelationshipGroupSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/groups/:id", (req, res) => {
+  app.patch("/api/groups/:id", async (req, res) => {
     try {
-      const r = storage.updateGroup(+req.params.id, insertRelationshipGroupSchema.partial().parse(req.body));
+      const r = await storage.updateGroup(+req.params.id, insertRelationshipGroupSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/groups/:id", (req, res) => {
-    storage.deleteGroup(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/groups/:id", async (req, res) => {
+    (await storage.deleteGroup(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── People ────────────────────────────────────────────────────────────────────
-  app.get("/api/people", (req, res) => {
+  app.get("/api/people", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllPeople(uid));
+      res.json(await storage.getAllPeople(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/people", (req, res) => {
+  app.post("/api/people", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      const person = storage.createPerson(insertPersonSchema.parse(req.body), uid);
-      // Auto-create a yearly recurring birthday event if birthday provided
+      const person = await storage.createPerson(insertPersonSchema.parse(req.body), uid);
       if (person.birthday) {
         const name = [person.firstName, person.lastName].filter(Boolean).join(" ");
-        const event = storage.createEvent({
+        const event = await storage.createEvent({
           title: `${name}'s Birthday`,
           date: person.birthday,
           endDate: null,
@@ -345,32 +344,30 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
           description: null,
           color: null,
         }, uid);
-        storage.updatePerson(person.id, { birthdayEventId: event.id });
+        await storage.updatePerson(person.id, { birthdayEventId: event.id });
         person.birthdayEventId = event.id;
       }
       res.status(201).json(person);
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/people/:id", (req, res) => {
+  app.patch("/api/people/:id", async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const data = insertPersonSchema.partial().parse(req.body);
-      const existing = storage.getAllPeople(uid).find(p => p.id === +req.params.id);
+      const all = await storage.getAllPeople(uid);
+      const existing = all.find(p => p.id === +req.params.id);
       if (!existing) return res.status(404).json({ error: "Not found" });
 
-      // If birthday changed, update the linked event
       if (data.birthday !== undefined && data.birthday !== existing.birthday) {
         const name = [data.firstName ?? existing.firstName, data.lastName ?? existing.lastName].filter(Boolean).join(" ");
         if (existing.birthdayEventId) {
-          // Update existing event
-          storage.updateEvent(existing.birthdayEventId, {
+          await storage.updateEvent(existing.birthdayEventId, {
             title: `${name}'s Birthday`,
             date: data.birthday || existing.birthday || "",
             recurring: "yearly",
           });
         } else if (data.birthday) {
-          // Create new event
-          const event = storage.createEvent({
+          const event = await storage.createEvent({
             title: `${name}'s Birthday`,
             date: data.birthday,
             endDate: null,
@@ -383,39 +380,35 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
         }
       }
 
-      const r = storage.updatePerson(+req.params.id, data);
+      const r = await storage.updatePerson(+req.params.id, data);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/people/:id", (req, res) => {
-    storage.deletePerson(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/people/:id", async (req, res) => {
+    (await storage.deletePerson(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
-  // Link spouse bidirectionally in one atomic call
-  app.post("/api/people/:id/link-spouse", (req, res) => {
+  app.post("/api/people/:id/link-spouse", async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const id = +req.params.id;
       const { spouseId } = req.body as { spouseId: number | null };
 
-      // Get current person to find old spouse (for unlinking)
-      const current = storage.getAllPeople(uid).find(p => p.id === id);
+      const all = await storage.getAllPeople(uid);
+      const current = all.find(p => p.id === id);
       if (!current) return res.status(404).json({ error: "Not found" });
 
-      // Unlink old spouse if changing
       if (current.spouseId && current.spouseId !== spouseId) {
-        storage.updatePerson(current.spouseId, { spouseId: null });
+        await storage.updatePerson(current.spouseId, { spouseId: null });
       }
 
-      // Link both directions
-      storage.updatePerson(id, { spouseId: spouseId ?? null });
+      await storage.updatePerson(id, { spouseId: spouseId ?? null });
       if (spouseId) {
-        // Unlink new spouse's old spouse first
-        const newSpouse = storage.getAllPeople(uid).find(p => p.id === spouseId);
+        const newSpouse = all.find(p => p.id === spouseId);
         if (newSpouse?.spouseId && newSpouse.spouseId !== id) {
-          storage.updatePerson(newSpouse.spouseId, { spouseId: null });
+          await storage.updatePerson(newSpouse.spouseId, { spouseId: null });
         }
-        storage.updatePerson(spouseId, { spouseId: id });
+        await storage.updatePerson(spouseId, { spouseId: id });
       }
 
       res.json({ ok: true });
@@ -423,169 +416,169 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
   });
 
   // ── Recipes ────────────────────────────────────────────────────────────────
-  app.get("/api/recipes", (req, res) => {
+  app.get("/api/recipes", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllRecipes(uid));
+      res.json(await storage.getAllRecipes(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/recipes", (req, res) => {
+  app.post("/api/recipes", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createRecipe(insertRecipeSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createRecipe(insertRecipeSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/recipes/:id", (req, res) => {
+  app.patch("/api/recipes/:id", async (req, res) => {
     try {
-      const r = storage.updateRecipe(+req.params.id, insertRecipeSchema.partial().parse(req.body));
+      const r = await storage.updateRecipe(+req.params.id, insertRecipeSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/recipes/:id", (req, res) => {
-    storage.deleteRecipe(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/recipes/:id", async (req, res) => {
+    (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Week Plan ───────────────────────────────────────────────────────────────
-  app.get("/api/week-plan/:weekStart", (req, res) => {
+  app.get("/api/week-plan/:weekStart", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getWeekPlan(req.params.weekStart, uid));
+      res.json(await storage.getWeekPlan(req.params.weekStart, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/week-plan", (req, res) => {
+  app.post("/api/week-plan", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.assignRecipe(insertWeekPlanSchema.parse(req.body), uid));
+      res.status(201).json(await storage.assignRecipe(insertWeekPlanSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.delete("/api/week-plan/:id", (req, res) => {
-    storage.removeWeekAssignment(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/week-plan/:id", async (req, res) => {
+    (await storage.removeWeekAssignment(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Grocery Checks ──────────────────────────────────────────────────────────
-  app.get("/api/grocery-checks/:weekStart", (req, res) => {
+  app.get("/api/grocery-checks/:weekStart", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getGroceryChecks(req.params.weekStart, uid));
+      res.json(await storage.getGroceryChecks(req.params.weekStart, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/grocery-checks", (req, res) => {
+  app.patch("/api/grocery-checks", async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const { weekStart, itemKey, checked } = req.body;
-      res.json(storage.upsertGroceryCheck(weekStart, itemKey, checked, uid));
+      res.json(await storage.upsertGroceryCheck(weekStart, itemKey, checked, uid));
     } catch (e) { handleError(res, e); }
   });
 
   // ── Movies ────────────────────────────────────────────────────────────────────
-  app.get("/api/movies", (req, res) => {
+  app.get("/api/movies", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllMovies(uid));
+      res.json(await storage.getAllMovies(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/movies", (req, res) => {
+  app.post("/api/movies", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createMovie(insertMovieSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createMovie(insertMovieSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/movies/:id", (req, res) => {
+  app.patch("/api/movies/:id", async (req, res) => {
     try {
-      const updated = storage.updateMovie(+req.params.id, req.body);
+      const updated = await storage.updateMovie(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/movies/:id", (req, res) => {
-    storage.deleteMovie(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/movies/:id", async (req, res) => {
+    (await storage.deleteMovie(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Budget Categories ───────────────────────────────────────────────────────
-  app.get("/api/budget-categories", (req, res) => {
+  app.get("/api/budget-categories", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllBudgetCategories(uid));
+      res.json(await storage.getAllBudgetCategories(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/budget-categories", (req, res) => {
+  app.post("/api/budget-categories", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createBudgetCategory(insertBudgetCategorySchema.parse(req.body), uid));
+      res.status(201).json(await storage.createBudgetCategory(insertBudgetCategorySchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/budget-categories/:id", (req, res) => {
+  app.patch("/api/budget-categories/:id", async (req, res) => {
     try {
-      const updated = storage.updateBudgetCategory(+req.params.id, req.body);
+      const updated = await storage.updateBudgetCategory(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/budget-categories/:id", (req, res) => {
-    storage.deleteBudgetCategory(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/budget-categories/:id", async (req, res) => {
+    (await storage.deleteBudgetCategory(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Transactions ─────────────────────────────────────────────────────────────────
-  app.get("/api/transactions", (req, res) => {
+  app.get("/api/transactions", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllTransactions(uid));
+      res.json(await storage.getAllTransactions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/transactions", (req, res) => {
+  app.post("/api/transactions", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createTransaction(insertTransactionSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createTransaction(insertTransactionSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/transactions/:id", (req, res) => {
+  app.patch("/api/transactions/:id", async (req, res) => {
     try {
-      const updated = storage.updateTransaction(+req.params.id, req.body);
+      const updated = await storage.updateTransaction(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/transactions/:id", (req, res) => {
-    storage.deleteTransaction(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/transactions/:id", async (req, res) => {
+    (await storage.deleteTransaction(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Subscriptions ────────────────────────────────────────────────────────────────
-  app.get("/api/subscriptions", (req, res) => {
+  app.get("/api/subscriptions", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllSubscriptions(uid));
+      res.json(await storage.getAllSubscriptions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/subscriptions", (req, res) => {
+  app.post("/api/subscriptions", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(storage.createSubscription(insertSubscriptionSchema.parse(req.body), uid));
+      res.status(201).json(await storage.createSubscription(insertSubscriptionSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/subscriptions/:id", (req, res) => {
+  app.patch("/api/subscriptions/:id", async (req, res) => {
     try {
-      const updated = storage.updateSubscription(+req.params.id, req.body);
+      const updated = await storage.updateSubscription(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/subscriptions/:id", (req, res) => {
-    storage.deleteSubscription(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  app.delete("/api/subscriptions/:id", async (req, res) => {
+    (await storage.deleteSubscription(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Nav Prefs ────────────────────────────────────────────────────────────────────
-  app.get("/api/nav-prefs", (req, res) => {
+  app.get("/api/nav-prefs", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getNavPrefs(uid));
+      res.json(await storage.getNavPrefs(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/nav-prefs", (req, res) => {
+  app.post("/api/nav-prefs", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      storage.saveNavPrefs(uid, req.body);
+      await storage.saveNavPrefs(uid, req.body);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
@@ -603,30 +596,29 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
         cb(null, `${unique}${ext}`);
       },
     }),
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+    limits: { fileSize: 20 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"];
       cb(null, allowed.includes(file.mimetype));
     },
   });
 
-  // Serve uploaded files statically (must come before SPA catch-all)
   app.use("/uploads/receipts", express.static(UPLOADS_DIR));
 
-  app.get("/api/receipts", (req, res) => {
+  app.get("/api/receipts", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(storage.getAllReceipts(uid));
+      res.json(await storage.getAllReceipts(uid));
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/receipts", upload.single("file"), (req: any, res) => {
+  app.post("/api/receipts", upload.single("file"), async (req: any, res) => {
     try {
       const uid = (req.user as User).id;
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
       const today = new Date().toISOString().split("T")[0];
       const body = req.body ?? {};
-      const record = storage.createReceiptRecord({
+      const record = await storage.createReceiptRecord({
         filename: req.file.filename,
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
@@ -643,22 +635,22 @@ export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app
     } catch (e) { handleError(res, e); }
   });
 
-  app.patch("/api/receipts/:id", (req, res) => {
+  app.patch("/api/receipts/:id", async (req, res) => {
     try {
-      const updated = storage.updateReceiptRecord(+req.params.id, req.body);
+      const updated = await storage.updateReceiptRecord(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/receipts/:id", (req, res) => {
+  app.delete("/api/receipts/:id", async (req, res) => {
     try {
-      const all = storage.getAllReceipts();
+      const all = await storage.getAllReceipts((req.user as User).id);
       const rec = all.find((r) => r.id === +req.params.id);
       if (rec) {
         const filePath = path.join(UPLOADS_DIR, rec.filename);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
-      storage.deleteReceiptRecord(+req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteReceiptRecord(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }
