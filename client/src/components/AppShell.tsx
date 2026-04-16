@@ -4,10 +4,11 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { NavPref } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet,
-  Eye, EyeOff, GripVertical, Settings,
+  Eye, EyeOff, GripVertical, Settings, LogOut,
 } from "lucide-react";
 
 const ALL_TABS = [
@@ -120,6 +121,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [manageMode, setManageMode] = useState(false);
   const { prefs, save } = useNavPrefs();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  async function handleLogout() {
+    await fetch("/api/logout", { method: "POST" });
+    qc.clear();
+    window.location.href = "/";
+  }
 
   // Local drag state
   const [localPrefs, setLocalPrefs] = useState<NavPref[]>([]);
@@ -214,6 +223,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
+          {user && (
+            <div className="pt-2 mt-1 border-t">
+              <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-6 h-6 rounded-full shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold shrink-0">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-xs text-muted-foreground truncate">{user.name}</span>
+              </div>
+              <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground hover:text-destructive">
+                <LogOut size={14} />
+                <span>Sign out</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -250,10 +277,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setMobileOpen(false)}
               />
             ))}
-            <div className="border-t pt-2 mt-2">
+            <div className="border-t pt-2 mt-2 space-y-1">
               <button onClick={() => setManageMode(!manageMode)} className={`sidebar-item w-full ${manageMode ? "active" : ""}`}>
                 <Settings size={15} /><span>{manageMode ? "Done" : "Manage tabs"}</span>
               </button>
+              {user && (
+                <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground">
+                  <LogOut size={14} /><span>Sign out</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

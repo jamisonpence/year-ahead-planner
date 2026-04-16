@@ -1,7 +1,8 @@
 import express from "express";
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { storage } from "./storage";
+import { passport } from "./auth";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -25,7 +26,36 @@ function handleError(res: any, e: unknown) {
   res.status(500).json({ error: String(e) });
 }
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ error: "Unauthorized" });
+}
+
 export function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
+
+  // ── Auth Routes ──────────────────────────────────────────────────────────────
+  app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+
+  app.get(
+    "/auth/google/callback",
+    passport.authenticate("google", { failureRedirect: "/#/login?error=1" }),
+    (_req, res) => { res.redirect("/"); }
+  );
+
+  app.get("/api/me", (req, res) => {
+    if (req.isAuthenticated()) {
+      res.json(req.user);
+    } else {
+      res.status(401).json({ error: "Not authenticated" });
+    }
+  });
+
+  app.post("/api/logout", (req, res) => {
+    req.logout(() => { res.json({ ok: true }); });
+  });
+
+  // Protect all remaining /api routes
+  app.use("/api", requireAuth);
 
   // ── Events ──────────────────────────────────────────────────────────────────
   app.get("/api/events", (_req, res) => {

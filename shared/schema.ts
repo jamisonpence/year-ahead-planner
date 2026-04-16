@@ -2,6 +2,18 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ── USERS ─────────────────────────────────────────────────────────────────────
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  googleId: text("google_id").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  avatarUrl: text("avatar_url"),
+  createdAt: text("created_at").notNull(),
+});
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
 // ── EVENTS (existing, extended) ───────────────────────────────────────────────
 export const events = sqliteTable("events", {
   id: integer("id").primaryKey({ autoIncrement: true }),

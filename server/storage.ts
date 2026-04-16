@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs } from "@shared/schema";
+import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -21,6 +21,7 @@ import type {
   InsertSubscription, Subscription,
   InsertReceipt, Receipt,
   NavPref,
+  User, InsertUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -286,6 +287,18 @@ sqlite.exec(`
   );
 `);
 
+// Users table (for Google OAuth)
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    google_id TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
+    name TEXT NOT NULL,
+    avatar_url TEXT,
+    created_at TEXT NOT NULL
+  );
+`);
+
 // Safe migrations for existing DBs
 const migrations = [
   `ALTER TABLE events ADD COLUMN recurring TEXT NOT NULL DEFAULT 'none'`,
@@ -399,6 +412,9 @@ export interface IStorage {
   // Nav Prefs
   getNavPrefs(): NavPref[];
   saveNavPrefs(prefs: NavPref[]): void;
+  // Users
+  upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): User;
+  getUserById(id: number): User | undefined;
 }
 
 export const storage: IStorage = {
@@ -681,5 +697,17 @@ export const storage: IStorage = {
     } else {
       db.insert(navPrefs).values({ prefsJson: json }).run();
     }
+  },
+
+  // ── Users ────────────────────────────────────────────────────────────────────
+  upsertUser({ googleId, email, name, avatarUrl }) {
+    const existing = db.select().from(users).where(eq(users.googleId, googleId)).get();
+    if (existing) {
+      return db.update(users).set({ email, name, avatarUrl }).where(eq(users.googleId, googleId)).returning().get();
+    }
+    return db.insert(users).values({ googleId, email, name, avatarUrl, createdAt: new Date().toISOString() }).returning().get();
+  },
+  getUserById(id) {
+    return db.select().from(users).where(eq(users.id, id)).get();
   },
 };

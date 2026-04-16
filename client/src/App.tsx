@@ -14,27 +14,56 @@ import RelationshipsPage from "@/pages/RelationshipsPage";
 import RecipesPage from "@/pages/RecipesPage";
 import MoviesPage from "@/pages/MoviesPage";
 import BudgetPage from "@/pages/BudgetPage";
+import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
+import { useAuth } from "@/hooks/useAuth";
+
+function AuthenticatedApp() {
+  return (
+    <AppShell>
+      <Switch>
+        <Route path="/" component={DashboardPage} />
+        <Route path="/calendar" component={CalendarPage} />
+        <Route path="/goals" component={GoalsPage} />
+        <Route path="/reading" component={ReadingPage} />
+        <Route path="/workouts" component={WorkoutsPage} />
+        <Route path="/relationships" component={RelationshipsPage} />
+        <Route path="/recipes" component={RecipesPage} />
+        <Route path="/movies" component={MoviesPage} />
+        <Route path="/budget" component={BudgetPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </AppShell>
+  );
+}
+
+function AppContent() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route>
+        {user ? <AuthenticatedApp /> : <LoginPage />}
+      </Route>
+    </Switch>
+  );
+}
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <Router hook={useHashLocation}>
-          <AppShell>
-            <Switch>
-              <Route path="/" component={DashboardPage} />
-              <Route path="/calendar" component={CalendarPage} />
-              <Route path="/goals" component={GoalsPage} />
-              <Route path="/reading" component={ReadingPage} />
-              <Route path="/workouts" component={WorkoutsPage} />
-              <Route path="/relationships" component={RelationshipsPage} />
-              <Route path="/recipes" component={RecipesPage} />
-              <Route path="/movies" component={MoviesPage} />
-              <Route path="/budget" component={BudgetPage} />
-              <Route component={NotFound} />
-            </Switch>
-          </AppShell>
+          <AppContent />
         </Router>
         <Toaster />
       </ThemeProvider>
