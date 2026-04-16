@@ -23,6 +23,9 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Trust Railway's reverse proxy so HTTPS is detected correctly
+app.set("trust proxy", 1);
+
 // Session + Auth middleware (must come before routes)
 app.use(sessionMiddleware);
 app.use(passport.initialize());

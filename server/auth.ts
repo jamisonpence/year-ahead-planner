@@ -13,8 +13,8 @@ export const sessionMiddleware = session({
   saveUninitialized: false,
   store: new MemoryStore({ checkPeriod: 86400000 }), // prune expired entries every 24h
   cookie: {
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: false, // Railway handles TLS at proxy level; keep false to avoid cookie rejection
+    sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 });
