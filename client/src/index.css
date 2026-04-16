@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Deep navy/slate + amber accent — focused, clean, professional */
+    --background: 220 18% 97%;
+    --foreground: 222 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    --primary: 222 47% 22%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 222 30% 20%;
+
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 38 95% 54%;
+    --accent-foreground: 222 30% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 222 47% 22%;
+
+    --radius: 0.5rem;
+
+    /* Category colors */
+    --cat-birthday: 330 72% 54%;
+    --cat-travel: 198 80% 42%;
+    --cat-project: 262 52% 52%;
+    --cat-goal: 142 68% 36%;
+    --cat-other: 220 9% 52%;
+  }
+
+  .dark {
+    --background: 222 28% 9%;
+    --foreground: 210 30% 92%;
+
+    --card: 222 24% 12%;
+    --card-foreground: 210 30% 92%;
+
+    --popover: 222 24% 12%;
+    --popover-foreground: 210 30% 92%;
+
+    --primary: 210 30% 88%;
+    --primary-foreground: 222 47% 14%;
+
+    --secondary: 222 20% 18%;
+    --secondary-foreground: 210 30% 82%;
+
+    --muted: 222 20% 18%;
+    --muted-foreground: 215 12% 52%;
+
+    --accent: 38 90% 60%;
+    --accent-foreground: 222 30% 10%;
+
+    --destructive: 0 65% 56%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 18% 20%;
+    --input: 222 18% 20%;
+    --ring: 210 30% 72%;
+
+    --cat-birthday: 330 65% 64%;
+    --cat-travel: 198 72% 54%;
+    --cat-project: 262 60% 68%;
+    --cat-goal: 142 56% 50%;
+    --cat-other: 220 12% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+    min-height: 100dvh;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Cabinet Grotesk', 'DM Sans', sans-serif;
+    text-wrap: balance;
+    line-height: 1.15;
+  }
+
+  p, li {
+    text-wrap: pretty;
+  }
+
+  button { cursor: pointer; }
+  img { display: block; max-width: 100%; }
+}
+
+/* Category badge colors */
+.cat-birthday { background-color: hsl(var(--cat-birthday) / 0.12); color: hsl(var(--cat-birthday)); border-color: hsl(var(--cat-birthday) / 0.3); }
+.cat-travel { background-color: hsl(var(--cat-travel) / 0.12); color: hsl(var(--cat-travel)); border-color: hsl(var(--cat-travel) / 0.3); }
+.cat-project { background-color: hsl(var(--cat-project) / 0.12); color: hsl(var(--cat-project)); border-color: hsl(var(--cat-project) / 0.3); }
+.cat-goal { background-color: hsl(var(--cat-goal) / 0.12); color: hsl(var(--cat-goal)); border-color: hsl(var(--cat-goal) / 0.3); }
+.cat-other { background-color: hsl(var(--cat-other) / 0.12); color: hsl(var(--cat-other)); border-color: hsl(var(--cat-other) / 0.3); }
+
+/* Calendar dot colors */
+.dot-birthday { background-color: hsl(var(--cat-birthday)); }
+.dot-travel { background-color: hsl(var(--cat-travel)); }
+.dot-project { background-color: hsl(var(--cat-project)); }
+.dot-goal { background-color: hsl(var(--cat-goal)); }
+.dot-other { background-color: hsl(var(--cat-other)); }
+
+/* Alert banner */
+.alert-upcoming {
+  background: linear-gradient(135deg, hsl(38 95% 54% / 0.12) 0%, hsl(222 47% 22% / 0.06) 100%);
+  border-color: hsl(38 95% 54% / 0.4);
+}
+.dark .alert-upcoming {
+  background: linear-gradient(135deg, hsl(38 90% 60% / 0.12) 0%, hsl(210 30% 88% / 0.04) 100%);
+  border-color: hsl(38 90% 60% / 0.4);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+
+/* Module colors */
+.cat-reading   { background-color: hsl(25 85% 52% / 0.12); color: hsl(25 85% 52%); border-color: hsl(25 85% 52% / 0.3); }
+.cat-workout   { background-color: hsl(210 80% 48% / 0.12); color: hsl(210 80% 48%); border-color: hsl(210 80% 48% / 0.3); }
+.dot-reading   { background-color: hsl(25 85% 52%); }
+.dot-workout   { background-color: hsl(210 80% 48%); }
+
+.dark .cat-reading  { background-color: hsl(25 85% 62% / 0.15); color: hsl(25 85% 62%); border-color: hsl(25 85% 62% / 0.3); }
+.dark .cat-workout  { background-color: hsl(210 80% 62% / 0.15); color: hsl(210 80% 62%); border-color: hsl(210 80% 62% / 0.3); }
+
+/* Status pills */
+.status-backlog   { @apply bg-secondary text-muted-foreground border border-border; }
+.status-current   { @apply bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800; }
+.status-paused    { @apply bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800; }
+.status-finished  { @apply bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800; }
+
+/* Sidebar */
+.sidebar-item { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-secondary; }
+.sidebar-item.active { @apply bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground; }
+
+/* Priority */
+.priority-high   { @apply text-red-600 dark:text-red-400; }
+.priority-medium { @apply text-amber-600 dark:text-amber-400; }
+.priority-low    { @apply text-muted-foreground; }

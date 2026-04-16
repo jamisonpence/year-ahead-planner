@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recipe Kitchen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
+<style>
+/* Art direction: Recipe management app → warm, appetizing, home-kitchen feel
+   Palette: warm beige surfaces, terracotta accent
+   Typography: Instrument Serif (display headings) + DM Sans (body/UI)
+   Density: balanced */
+
+:root, [data-theme="light"] {
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+
+  --text-xs:   clamp(0.75rem,  0.7rem  + 0.25vw, 0.875rem);
+  --text-sm:   clamp(0.875rem, 0.8rem  + 0.35vw, 1rem);
+  --text-base: clamp(1rem,     0.95rem + 0.25vw, 1.125rem);
+  --text-lg:   clamp(1.125rem, 1rem    + 0.75vw, 1.5rem);
+  --text-xl:   clamp(1.5rem,   1.2rem  + 1.25vw, 2.25rem);
+
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem;
+  --space-12: 3rem; --space-16: 4rem;
+
+  --color-bg:             #f8f5f0;
+  --color-surface:        #faf7f3;
+  --color-surface-2:      #fdfcfa;
+  --color-surface-offset: #f0ebe3;
+  --color-divider:        #e2dcd4;
+  --color-border:         #d6cec4;
+  --color-text:           #2c2416;
+  --color-text-muted:     #7a6f60;
+  --color-text-faint:     #b8afa3;
+  --color-text-inverse:   #fdf9f4;
+
+  --color-primary:        #c4531c;
+  --color-primary-hover:  #a8431a;
+  --color-primary-active: #8a3314;
+  --color-primary-highlight: #f0ddd3;
+
+  --color-success:        #437a22;
+  --color-success-highlight: #d4dfcc;
+
+  --color-warning:        #b07300;
+  --color-warning-highlight: #f0e5c6;
+
+  --radius-sm: 0.375rem; --radius-md: 0.5rem; --radius-lg: 0.75rem;
+  --radius-xl: 1rem; --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px oklch(0.2 0.02 50 / 0.07);
+  --shadow-md: 0 4px 12px oklch(0.2 0.02 50 / 0.09);
+  --shadow-lg: 0 12px 32px oklch(0.2 0.02 50 / 0.13);
+
+  --transition-interactive: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --content-narrow: 640px;
+  --content-default: 960px;
+  --content-wide: 1200px;
+
+  --sidebar-w: 220px;
+}
+
+[data-theme="dark"] {
+  --color-bg:             #1a1612;
+  --color-surface:        #1f1b16;
+  --color-surface-2:      #24201a;
+  --color-surface-offset: #2a251e;
+  --color-divider:        #302b22;
+  --color-border:         #3d3629;
+  --color-text:           #d4ccc0;
+  --color-text-muted:     #857c6e;
+  --color-text-faint:     #5c5448;
+  --color-text-inverse:   #2c2416;
+  --color-primary:        #e07040;
+  --color-primary-hover:  #d05e2e;
+  --color-primary-active: #b84e22;
+  --color-primary-highlight: #3d2a1e;
+  --color-success:        #6daa45;
+  --color-success-highlight: #253318;
+  --color-warning:        #d4a030;
+  --color-warning-highlight: #2e2510;
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.25);
+  --shadow-md: 0 4px 12px oklch(0 0 0 / 0.35);
+  --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:#1a1612;--color-surface:#1f1b16;--color-surface-2:#24201a;
+    --color-surface-offset:#2a251e;--color-divider:#302b22;--color-border:#3d3629;
+    --color-text:#d4ccc0;--color-text-muted:#857c6e;--color-text-faint:#5c5448;
+    --color-text-inverse:#2c2416;--color-primary:#e07040;--color-primary-hover:#d05e2e;
+    --color-primary-active:#b84e22;--color-primary-highlight:#3d2a1e;
+    --color-success:#6daa45;--color-success-highlight:#253318;
+    --color-warning:#d4a030;--color-warning-highlight:#2e2510;
+    --shadow-sm:0 1px 2px oklch(0 0 0/.25);--shadow-md:0 4px 12px oklch(0 0 0/.35);--shadow-lg:0 12px 32px oklch(0 0 0/.45);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+body {
+  min-height: 100dvh; font-family: var(--font-body); font-size: var(--text-base);
+  color: var(--color-text); background: var(--color-bg);
+  display: flex; overflow: hidden; height: 100dvh;
+}
+img, svg { display: block; max-width: 100%; }
+input, button, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+h1,h2,h3,h4 { text-wrap: balance; line-height: 1.15; }
+p, li { text-wrap: pretty; }
+:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; border-radius: var(--radius-sm); }
+a, button, [role="button"], input, textarea, select {
+  transition: color var(--transition-interactive), background var(--transition-interactive),
+              border-color var(--transition-interactive), box-shadow var(--transition-interactive),
+              opacity var(--transition-interactive);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ─── SIDEBAR ─────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100dvh;
+  background: var(--color-surface); border-right: 1px solid var(--color-border);
+  display: flex; flex-direction: column; padding: var(--space-6) 0; overflow-y: auto;
+  box-shadow: var(--shadow-sm); z-index: 10; flex-shrink: 0;
+}
+.sidebar-logo {
+  padding: 0 var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-divider);
+  margin-bottom: var(--space-4);
+}
+.logo-mark { display: flex; align-items: center; gap: var(--space-2); }
+.logo-mark svg { color: var(--color-primary); }
+.logo-name { font-family: var(--font-display); font-size: var(--text-lg); color: var(--color-text); }
+.logo-name em { color: var(--color-primary); font-style: italic; }
+
+.nav-section-label {
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--color-text-faint);
+  padding: var(--space-3) var(--space-5) var(--space-1);
+}
+.nav-btn {
+  display: flex; align-items: center; gap: var(--space-3);
+  width: 100%; padding: var(--space-2) var(--space-5);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+  border-radius: 0; text-align: left;
+}
+.nav-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.nav-btn.active {
+  background: var(--color-primary-highlight); color: var(--color-primary);
+  font-weight: 600;
+}
+.nav-btn .icon { flex-shrink: 0; }
+
+.sidebar-bottom {
+  margin-top: auto; padding: var(--space-4) var(--space-5) 0;
+  border-top: 1px solid var(--color-divider);
+}
+.theme-toggle {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-2) 0;
+  width: 100%;
+}
+.theme-toggle:hover { color: var(--color-text); }
+
+/* ─── MAIN CONTENT ────────────────────────────────────── */
+.main {
+  flex: 1; display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-4) var(--space-8);
+  background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0; gap: var(--space-4);
+}
+.page-title { font-family: var(--font-display); font-size: var(--text-xl); color: var(--color-text); }
+.topbar-actions { display: flex; gap: var(--space-3); align-items: center; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+  font-size: var(--text-sm); font-weight: 500; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+.btn-primary:hover { background: var(--color-primary-hover); }
+.btn-primary:active { background: var(--color-primary-active); }
+.btn-secondary {
+  background: var(--color-surface-offset); color: var(--color-text);
+  border-color: var(--color-border);
+}
+.btn-secondary:hover { background: var(--color-divider); }
+.btn-ghost { color: var(--color-text-muted); }
+.btn-ghost:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.btn-danger { background: #c4531c22; color: var(--color-primary); border-color: var(--color-primary-highlight); }
+.btn-danger:hover { background: var(--color-primary-highlight); }
+
+.content-area {
+  flex: 1; overflow-y: auto; padding: var(--space-8);
+  background: var(--color-bg);
+}
+
+/* ─── VIEWS ───────────────────────────────────────────── */
+.view { display: none; animation: fadeIn 200ms ease; }
+.view.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ─── RECIPES GRID ────────────────────────────────────── */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+.section-header h2 { font-family: var(--font-display); font-size: var(--text-lg); }
+
+.recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: var(--space-5);
+}
+
+.recipe-card {
+  background: var(--color-surface);
+  border: 1px solid oklch(from var(--color-text) l c h / 0.08);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-interactive), transform var(--transition-interactive);
+  cursor: pointer;
+}
+.recipe-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.recipe-card-header {
+  background: var(--color-primary-highlight);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-3);
+}
+.recipe-emoji { font-size: 2rem; line-height: 1; }
+.recipe-tag {
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em;
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-full);
+  background: var(--color-primary); color: var(--color-text-inverse);
+}
+.recipe-tag.new { background: var(--color-success); }
+.recipe-card-body { padding: var(--space-4) var(--space-5) var(--space-5); }
+.recipe-card-name {
+  font-family: var(--font-display); font-size: var(--text-lg); margin-bottom: var(--space-1);
+  font-weight: 400;
+}
+.recipe-card-meta {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  display: flex; gap: var(--space-4); margin-bottom: var(--space-3);
+}
+.recipe-card-meta span { display: flex; align-items: center; gap: var(--space-1); }
+.recipe-card-ingredients {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  display: flex; flex-wrap: wrap; gap: var(--space-1);
+}
+.ingredient-chip {
+  padding: 2px var(--space-2); background: var(--color-surface-offset);
+  border-radius: var(--radius-full); font-size: 0.7rem;
+}
+.recipe-card-actions {
+  display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-divider);
+}
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: var(--space-16) var(--space-8);
+  color: var(--color-text-muted);
+}
+.empty-state-icon { font-size: 3rem; margin-bottom: var(--space-4); }
+.empty-state h3 { font-family: var(--font-display); color: var(--color-text); margin-bottom: var(--space-2); }
+.empty-state p { max-width: 36ch; margin-bottom: var(--space-6); font-size: var(--text-sm); }
+
+/* ─── WEEKLY PLANNER ──────────────────────────────────── */
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+  gap: var(--space-4); margin-bottom: var(--space-8);
+}
+.day-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.day-card-header {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface-offset);
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+.day-card-header.today { background: var(--color-primary-highlight); color: var(--color-primary); }
+.day-card-body { padding: var(--space-3) var(--space-4); min-height: 80px; }
+.day-recipe-name { font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space-1); }
+.day-recipe-sub { font-size: var(--text-xs); color: var(--color-text-muted); }
+.day-empty { font-size: var(--text-xs); color: var(--color-text-faint); font-style: italic; margin-top: var(--space-2); }
+.day-add-btn {
+  font-size: var(--text-xs); color: var(--color-primary);
+  display: flex; align-items: center; gap: 4px; margin-top: var(--space-2); padding: var(--space-1) 0;
+}
+.day-add-btn:hover { opacity: 0.7; }
+
+/* ─── GROCERY LIST ────────────────────────────────────── */
+.grocery-section { margin-bottom: var(--space-8); }
+.grocery-section-title {
+  font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-primary);
+  margin-bottom: var(--space-3); padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-primary-highlight);
+}
+.grocery-list { list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.grocery-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid oklch(from var(--color-text) l c h / 0.06);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.grocery-item input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--color-primary);
+  flex-shrink: 0; cursor: pointer;
+}
+.grocery-item.checked .grocery-item-name { text-decoration: line-through; color: var(--color-text-faint); }
+.grocery-item-qty { font-size: var(--text-xs); color: var(--color-text-muted); margin-left: auto; white-space: nowrap; }
+.grocery-recipes { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: 2px; }
+
+.grocery-actions { display: flex; gap: var(--space-3); margin-bottom: var(--space-6); }
+.grocery-stats {
+  display: flex; gap: var(--space-6); margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.stat-item { text-align: center; }
+.stat-number { font-family: var(--font-display); font-size: var(--text-xl); color: var(--color-primary); }
+.stat-label { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* ─── MODAL ───────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: oklch(0.1 0.01 50 / 0.55);
+  backdrop-filter: blur(4px); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--space-4);
+  opacity: 0; pointer-events: none; transition: opacity 250ms ease;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 560px; max-height: 90dvh;
+  overflow-y: auto; transform: scale(0.96) translateY(8px);
+  transition: transform 250ms cubic-bezier(0.16,1,0.3,1);
+}
+.modal-overlay.open .modal { transform: scale(1) translateY(0); }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--color-divider);
+}
+.modal-title { font-family: var(--font-display); font-size: var(--text-lg); }
+.modal-body { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); }
+.modal-footer {
+  padding: var(--space-4) var(--space-6); border-top: 1px solid var(--color-divider);
+  display: flex; gap: var(--space-3); justify-content: flex-end;
+}
+
+.form-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
+input[type="text"], input[type="number"], textarea, select {
+  width: 100%; padding: var(--space-2) var(--space-3);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--color-text);
+  outline: none;
+}
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+  border-color: var(--color-primary); box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
+}
+textarea { min-height: 100px; resize: vertical; }
+.ingredients-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.ingredient-row { display: flex; gap: var(--space-2); align-items: center; }
+.ingredient-row input:first-child { flex: 2; }
+.ingredient-row input:nth-child(2) { flex: 1; }
+.ingredient-row button { flex-shrink: 0; color: var(--color-text-faint); padding: var(--space-2); }
+.ingredient-row button:hover { color: var(--color-primary); }
+
+/* ─── RECIPE DETAIL MODAL ─────────────────────────────── */
+.recipe-detail-body { padding: var(--space-6); }
+.recipe-detail-meta {
+  display: flex; gap: var(--space-5); margin-bottom: var(--space-6);
+  padding: var(--space-4); background: var(--color-surface-offset);
+  border-radius: var(--radius-lg);
+}
+.recipe-detail-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.recipe-detail-meta-item .label { font-size: var(--text-xs); color: var(--color-text-muted); }
+.recipe-detail-meta-item .value { font-size: var(--text-sm); font-weight: 600; }
+.ingredients-section h4, .instructions-section h4 {
+  font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--color-primary);
+  margin-bottom: var(--space-3);
+}
+.ingredients-section ul { list-style: none; display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-6); }
+.ingredients-section li {
+  display: flex; align-items: center; gap: var(--space-3);
+  font-size: var(--text-sm); padding: var(--space-2) var(--space-3);
+  background: var(--color-surface); border-radius: var(--radius-md);
+}
+.ingredient-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary); flex-shrink: 0; }
+.ingredient-amount { color: var(--color-text-muted); margin-left: auto; font-size: var(--text-xs); }
+.instructions-section p { font-size: var(--text-sm); line-height: 1.7; color: var(--color-text-muted); }
+
+/* Day picker in assign modal */
+.day-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.day-pill {
+  padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 500;
+  border: 1px solid var(--color-border); color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+.day-pill.selected { background: var(--color-primary); color: var(--color-text-inverse); border-color: var(--color-primary); }
+.day-pill:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+/* week select in dropdown for assign */
+select option { background: var(--color-surface); }
+
+/* this week badge */
+.this-week-badge {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em;
+  padding: 3px var(--space-2); border-radius: var(--radius-full);
+  background: var(--color-warning-highlight); color: var(--color-warning);
+}
+
+/* ─── TOAST ───────────────────────────────────────────── */
+.toast-container { position: fixed; bottom: var(--space-6); right: var(--space-6); z-index: 200; display: flex; flex-direction: column; gap: var(--space-2); }
+.toast {
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg);
+  background: var(--color-text); color: var(--color-bg);
+  font-size: var(--text-sm); box-shadow: var(--shadow-lg);
+  animation: slideInToast 300ms cubic-bezier(0.16,1,0.3,1);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+@keyframes slideInToast { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform:none; } }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
+</style>
+</head>
+<body>
+
+<!-- ─── SIDEBAR ─────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="Recipe Kitchen logo">
+        <circle cx="14" cy="14" r="13" fill="currentColor" opacity="0.12"/>
+        <path d="M8 10 Q8 7 11 7 Q12 7 12 9 L12 14 Q12 16 14 16 Q16 16 16 14 L16 7 Q18 7 18 9 L18 10 Q20 10 20 13 Q20 17 16 18 L16 22 Q16 23 15 23 L13 23 Q12 23 12 22 L12 18 Q8 17 8 13 Z" fill="currentColor" opacity="0.8"/>
+        <circle cx="20" cy="9" r="1.5" fill="currentColor" opacity="0.5"/>
+      </svg>
+      <span class="logo-name">Recipe <em>Kitchen</em></span>
+    </div>
+  </div>
+
+  <span class="nav-section-label">Cookbook</span>
+  <button class="nav-btn active" onclick="switchView('recipes', this)">
+    <i data-lucide="book-open" class="icon" size="16"></i> All Recipes
+  </button>
+  <button class="nav-btn" onclick="switchView('week', this)">
+    <i data-lucide="calendar-days" class="icon" size="16"></i> This Week
+  </button>
+
+  <span class="nav-section-label" style="margin-top: var(--space-4)">Shopping</span>
+  <button class="nav-btn" onclick="switchView('grocery', this)">
+    <i data-lucide="shopping-cart" class="icon" size="16"></i> Grocery List
+  </button>
+
+  <div class="sidebar-bottom">
+    <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <span>Light mode</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ─── MAIN ─────────────────────────────────────────────── -->
+<div class="main">
+  <header class="topbar">
+    <h1 class="page-title" id="pageTitle">All Recipes</h1>
+    <div class="topbar-actions" id="topbarActions">
+      <button class="btn btn-primary" onclick="openAddRecipeModal()">
+        <i data-lucide="plus" size="16"></i> Add Recipe
+      </button>
+    </div>
+  </header>
+
+  <div class="content-area" id="contentArea">
+
+    <!-- ─── RECIPES VIEW ──────────────────────────────── -->
+    <div class="view active" id="view-recipes">
+      <div id="recipesGrid" class="recipe-grid"></div>
+    </div>
+
+    <!-- ─── WEEKLY PLANNER VIEW ───────────────────────── -->
+    <div class="view" id="view-week">
+      <div class="section-header">
+        <h2>Dinners This Week</h2>
+        <span class="this-week-badge">
+          <i data-lucide="flame" size="12"></i> Week of <span id="weekLabel"></span>
+        </span>
+      </div>
+      <div class="week-grid" id="weekGrid"></div>
+
+      <div class="section-header">
+        <h2>Add a Dinner This Week</h2>
+      </div>
+      <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;margin-bottom:var(--space-6)">
+        <select id="weekRecipeSelect" style="max-width:260px">
+          <option value="">— Choose a recipe —</option>
+        </select>
+        <div class="day-picker" id="weekDayPicker"></div>
+        <button class="btn btn-primary" onclick="assignRecipeToDay()">
+          <i data-lucide="check" size="14"></i> Assign
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── GROCERY VIEW ──────────────────────────────── -->
+    <div class="view" id="view-grocery">
+      <div class="grocery-stats">
+        <div class="stat-item">
+          <div class="stat-number" id="statItems">0</div>
+          <div class="stat-label">Items</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="statChecked">0</div>
+          <div class="stat-label">Checked off</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="statRecipes">0</div>
+          <div class="stat-label">Recipes</div>
+        </div>
+      </div>
+      <div class="grocery-actions">
+        <button class="btn btn-secondary" onclick="printGroceryList()">
+          <i data-lucide="printer" size="14"></i> Print / Copy
+        </button>
+        <button class="btn btn-ghost" onclick="uncheckAll()">
+          <i data-lucide="refresh-ccw" size="14"></i> Uncheck all
+        </button>
+      </div>
+      <div id="groceryContent"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── ADD RECIPE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="addModal" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="addModalTitle">Add New Recipe</h2>
+      <button class="btn btn-ghost" onclick="closeModal('addModal')" aria-label="Close">
+        <i data-lucide="x" size="18"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Recipe Name</label>
+        <input type="text" id="rName" placeholder="e.g. Garlic Butter Ribeye">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Emoji / Icon</label>
+          <input type="text" id="rEmoji" placeholder="🥩" maxlength="4">
+        </div>
+        <div class="form-group">
+          <label>Cuisine / Category</label>
+          <input type="text" id="rCategory" placeholder="e.g. American, Italian">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Prep Time (min)</label>
+          <input type="number" id="rPrepTime" placeholder="15" min="0">
+        </div>
+        <div class="form-group">
+          <label>Cook Time (min)</label>
+          <input type="number" id="rCookTime" placeholder="30" min="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Ingredients</label>
+        <div class="ingredients-list" id="ingredientsList">
+          <div class="ingredient-row">
+            <input type="text" placeholder="Ingredient name" class="ing-name">
+            <input type="text" placeholder="Amount (e.g. 2 lbs)" class="ing-qty">
+            <button onclick="removeIngredientRow(this)" aria-label="Remove">
+              <i data-lucide="trash-2" size="14"></i>
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-ghost" style="margin-top:var(--space-2);align-self:flex-start" onclick="addIngredientRow()">
+          <i data-lucide="plus" size="14"></i> Add Ingredient
+        </button>
+      </div>
+      <div class="form-group">
+        <label>Instructions (optional)</label>
+        <textarea id="rInstructions" placeholder="Brief cooking notes or steps..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRecipe()">
+        <i data-lucide="check" size="14"></i> Save Recipe
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── RECIPE DETAIL MODAL ─────────────────────────────── -->
+<div class="modal-overlay" id="detailModal" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="detailTitle"></h2>
+      <div style="display:flex;gap:var(--space-2)">
+        <button class="btn btn-secondary btn-sm" onclick="assignFromDetail()" style="padding:var(--space-1) var(--space-3)">
+          <i data-lucide="calendar-plus" size="14"></i> Add to Week
+        </button>
+        <button class="btn btn-ghost" onclick="closeModal('detailModal')" aria-label="Close">
+          <i data-lucide="x" size="18"></i>
+        </button>
+      </div>
+    </div>
+    <div class="recipe-detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- ─── ASSIGN DAY MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="assignModal" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2 class="modal-title">Assign to Day</h2>
+      <button class="btn btn-ghost" onclick="closeModal('assignModal')" aria-label="Close">
+        <i data-lucide="x" size="18"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted)">Pick a day this week for <strong id="assignRecipeName"></strong>:</p>
+      <div class="day-picker" id="assignDayPicker" style="margin-top:var(--space-2)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('assignModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAssign()">Assign Day</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TOAST CONTAINER ──────────────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ─── STATE ──────────────────────────────────────────────────
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const SHORT_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const TODAY_IDX = new Date().getDay();
+
+let recipes = [
+  {
+    id: 1, name: 'Garlic Butter Ribeye', emoji: '🥩', category: 'American',
+    prepTime: 10, cookTime: 15,
+    ingredients: [
+      {name: 'Ribeye steak', qty: '2 (1.5 lb each)'},
+      {name: 'Butter', qty: '4 tbsp'},
+      {name: 'Garlic cloves', qty: '6'},
+      {name: 'Fresh thyme', qty: '4 sprigs'},
+      {name: 'Kosher salt', qty: '2 tsp'},
+      {name: 'Black pepper', qty: '1 tsp'},
+    ],
+    instructions: 'Season steaks generously. Sear on high heat 3 min per side. Add butter, garlic, thyme. Baste continuously for 2 min. Rest 5 min before slicing.',
+    thisWeek: false,
+  },
+  {
+    id: 2, name: 'Baked Potato Bar', emoji: '🥔', category: 'American',
+    prepTime: 5, cookTime: 60,
+    ingredients: [
+      {name: 'Russet potatoes', qty: '4 large'},
+      {name: 'Sour cream', qty: '1 cup'},
+      {name: 'Shredded cheddar', qty: '1.5 cups'},
+      {name: 'Bacon bits', qty: '6 strips'},
+      {name: 'Green onions', qty: '4'},
+      {name: 'Butter', qty: '4 tbsp'},
+    ],
+    instructions: 'Rub with olive oil and salt. Bake at 400°F for 55-60 min. Set out all toppings and let everyone build their own.',
+    thisWeek: false,
+  },
+  {
+    id: 3, name: 'Spaghetti Bolognese', emoji: '🍝', category: 'Italian',
+    prepTime: 15, cookTime: 45,
+    ingredients: [
+      {name: 'Ground beef', qty: '1.5 lbs'},
+      {name: 'Spaghetti', qty: '1 lb'},
+      {name: 'Crushed tomatoes', qty: '28 oz can'},
+      {name: 'Onion', qty: '1 large'},
+      {name: 'Garlic cloves', qty: '4'},
+      {name: 'Olive oil', qty: '3 tbsp'},
+      {name: 'Parmesan', qty: '½ cup'},
+      {name: 'Fresh basil', qty: '1 bunch'},
+    ],
+    instructions: 'Brown beef with onion and garlic. Add tomatoes, simmer 30 min. Cook pasta al dente. Combine and top with parmesan.',
+    thisWeek: false,
+  },
+];
+
+let nextId = 4;
+// weekPlan: { dayIndex: recipeId }
+let weekPlan = {};
+// grocery: checked state { ingredientKey: bool }
+let groceryChecked = {};
+let pendingAssignRecipeId = null;
+let pendingAssignDay = null;
+
+// ─── VIEWS ──────────────────────────────────────────────────
+function switchView(view, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  const titles = { recipes: 'All Recipes', week: 'This Week', grocery: 'Grocery List' };
+  document.getElementById('pageTitle').textContent = titles[view] || '';
+
+  const actions = document.getElementById('topbarActions');
+  if (view === 'recipes') {
+    actions.innerHTML = `<button class="btn btn-primary" onclick="openAddRecipeModal()"><i data-lucide="plus" size="16"></i> Add Recipe</button>`;
+  } else if (view === 'grocery') {
+    actions.innerHTML = `<button class="btn btn-secondary" onclick="generateGroceryList()"><i data-lucide="refresh-cw" size="14"></i> Regenerate</button>`;
+  } else {
+    actions.innerHTML = '';
+  }
+
+  if (view === 'recipes') renderRecipes();
+  if (view === 'week') renderWeek();
+  if (view === 'grocery') renderGrocery();
+  lucide.createIcons();
+}
+
+// ─── RECIPES ────────────────────────────────────────────────
+function renderRecipes() {
+  const grid = document.getElementById('recipesGrid');
+  if (recipes.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-state-icon">🍳</div>
+      <h3>No recipes yet</h3>
+      <p>Start building your cookbook by adding your first dinner recipe.</p>
+      <button class="btn btn-primary" onclick="openAddRecipeModal()"><i data-lucide="plus" size="14"></i> Add Recipe</button>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = recipes.map(r => `
+    <div class="recipe-card" onclick="openDetail(${r.id})">
+      <div class="recipe-card-header">
+        <span class="recipe-emoji">${r.emoji || '🍽️'}</span>
+        <span class="recipe-tag">${r.category || 'Dinner'}</span>
+      </div>
+      <div class="recipe-card-body">
+        <div class="recipe-card-name">${r.name}</div>
+        <div class="recipe-card-meta">
+          <span><i data-lucide="clock" size="11"></i> ${r.prepTime + r.cookTime} min total</span>
+          <span><i data-lucide="package" size="11"></i> ${r.ingredients.length} items</span>
+        </div>
+        <div class="recipe-card-ingredients">
+          ${r.ingredients.slice(0, 5).map(i => `<span class="ingredient-chip">${i.name}</span>`).join('')}
+          ${r.ingredients.length > 5 ? `<span class="ingredient-chip">+${r.ingredients.length - 5} more</span>` : ''}
+        </div>
+      </div>
+      <div class="recipe-card-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-ghost" style="font-size:var(--text-xs);padding:var(--space-1) var(--space-2)" onclick="openAssignModal(${r.id})">
+          <i data-lucide="calendar-plus" size="12"></i> This week
+        </button>
+        <button class="btn btn-danger" style="font-size:var(--text-xs);padding:var(--space-1) var(--space-2);margin-left:auto" onclick="deleteRecipe(${r.id})">
+          <i data-lucide="trash-2" size="12"></i>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openDetail(id) {
+  const r = recipes.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('detailTitle').textContent = r.emoji + ' ' + r.name;
+  document.getElementById('detailBody').innerHTML = `
+    <div class="recipe-detail-meta">
+      <div class="recipe-detail-meta-item">
+        <span class="label">Prep</span>
+        <span class="value">${r.prepTime} min</span>
+      </div>
+      <div class="recipe-detail-meta-item">
+        <span class="label">Cook</span>
+        <span class="value">${r.cookTime} min</span>
+      </div>
+      <div class="recipe-detail-meta-item">
+        <span class="label">Total</span>
+        <span class="value">${r.prepTime + r.cookTime} min</span>
+      </div>
+      <div class="recipe-detail-meta-item">
+        <span class="label">Category</span>
+        <span class="value">${r.category || '—'}</span>
+      </div>
+    </div>
+    <div class="ingredients-section">
+      <h4>Ingredients</h4>
+      <ul>${r.ingredients.map(i => `<li><span class="ingredient-dot"></span>${i.name}<span class="ingredient-amount">${i.qty}</span></li>`).join('')}</ul>
+    </div>
+    ${r.instructions ? `<div class="instructions-section"><h4>Instructions</h4><p>${r.instructions}</p></div>` : ''}
+  `;
+  pendingAssignRecipeId = id;
+  openModal('detailModal');
+  lucide.createIcons();
+}
+
+function assignFromDetail() {
+  closeModal('detailModal');
+  if (pendingAssignRecipeId) openAssignModal(pendingAssignRecipeId);
+}
+
+function deleteRecipe(id) {
+  if (!confirm('Remove this recipe from your cookbook?')) return;
+  recipes = recipes.filter(r => r.id !== id);
+  // Remove from weekPlan
+  Object.keys(weekPlan).forEach(k => { if (weekPlan[k] === id) delete weekPlan[k]; });
+  renderRecipes();
+  toast('Recipe removed 🗑️');
+}
+
+// ─── ADD RECIPE ──────────────────────────────────────────────
+function openAddRecipeModal() {
+  document.getElementById('rName').value = '';
+  document.getElementById('rEmoji').value = '';
+  document.getElementById('rCategory').value = '';
+  document.getElementById('rPrepTime').value = '';
+  document.getElementById('rCookTime').value = '';
+  document.getElementById('rInstructions').value = '';
+  document.getElementById('ingredientsList').innerHTML = `
+    <div class="ingredient-row">
+      <input type="text" placeholder="Ingredient name" class="ing-name">
+      <input type="text" placeholder="Amount (e.g. 2 lbs)" class="ing-qty">
+      <button onclick="removeIngredientRow(this)" aria-label="Remove"><i data-lucide="trash-2" size="14"></i></button>
+    </div>`;
+  openModal('addModal');
+  lucide.createIcons();
+}
+
+function addIngredientRow() {
+  const list = document.getElementById('ingredientsList');
+  const row = document.createElement('div');
+  row.className = 'ingredient-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Ingredient name" class="ing-name">
+    <input type="text" placeholder="Amount" class="ing-qty">
+    <button onclick="removeIngredientRow(this)" aria-label="Remove"><i data-lucide="trash-2" size="14"></i></button>`;
+  list.appendChild(row);
+  lucide.createIcons();
+  row.querySelector('.ing-name').focus();
+}
+
+function removeIngredientRow(btn) {
+  const rows = document.querySelectorAll('.ingredient-row');
+  if (rows.length <= 1) return;
+  btn.closest('.ingredient-row').remove();
+}
+
+function saveRecipe() {
+  const name = document.getElementById('rName').value.trim();
+  if (!name) { document.getElementById('rName').focus(); toast('Please enter a recipe name'); return; }
+
+  const rows = document.querySelectorAll('.ingredient-row');
+  const ingredients = [];
+  rows.forEach(row => {
+    const n = row.querySelector('.ing-name').value.trim();
+    const q = row.querySelector('.ing-qty').value.trim();
+    if (n) ingredients.push({ name: n, qty: q || '' });
+  });
+
+  const recipe = {
+    id: nextId++,
+    name,
+    emoji: document.getElementById('rEmoji').value || '🍽️',
+    category: document.getElementById('rCategory').value.trim() || 'Dinner',
+    prepTime: parseInt(document.getElementById('rPrepTime').value) || 0,
+    cookTime: parseInt(document.getElementById('rCookTime').value) || 0,
+    ingredients,
+    instructions: document.getElementById('rInstructions').value.trim(),
+    thisWeek: false,
+    isNew: true,
+  };
+  recipes.unshift(recipe);
+  closeModal('addModal');
+  renderRecipes();
+  toast('Recipe added! 🎉');
+  lucide.createIcons();
+}
+
+// ─── WEEKLY PLANNER ──────────────────────────────────────────
+function renderWeek() {
+  // Week label (Mon–Sun starting from Sunday of this week)
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - TODAY_IDX);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  document.getElementById('weekLabel').textContent = fmt(startOfWeek) + ' – ' + fmt(endOfWeek);
+
+  // Day cards
+  const grid = document.getElementById('weekGrid');
+  grid.innerHTML = DAYS.map((day, i) => {
+    const recipeId = weekPlan[i];
+    const recipe = recipeId ? recipes.find(r => r.id === recipeId) : null;
+    const isToday = i === TODAY_IDX;
+    const date = new Date(startOfWeek); date.setDate(startOfWeek.getDate() + i);
+    return `<div class="day-card">
+      <div class="day-card-header ${isToday ? 'today' : ''}">${day} · ${fmt(date)}</div>
+      <div class="day-card-body">
+        ${recipe ? `
+          <div class="day-recipe-name">${recipe.emoji} ${recipe.name}</div>
+          <div class="day-recipe-sub">${recipe.prepTime + recipe.cookTime} min · ${recipe.category}</div>
+          <button class="day-add-btn" onclick="clearDay(${i})"><i data-lucide="x" size="10"></i> Clear</button>
+        ` : `
+          <div class="day-empty">No dinner planned</div>
+          <button class="day-add-btn" onclick="quickAssignDay(${i})"><i data-lucide="plus" size="10"></i> Add recipe</button>
+        `}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Recipe selector
+  const sel = document.getElementById('weekRecipeSelect');
+  sel.innerHTML = '<option value="">— Choose a recipe —</option>' +
+    recipes.map(r => `<option value="${r.id}">${r.emoji} ${r.name}</option>`).join('');
+
+  // Day pills
+  const picker = document.getElementById('weekDayPicker');
+  picker.innerHTML = SHORT_DAYS.map((d, i) => `
+    <button class="day-pill ${i === TODAY_IDX ? 'selected' : ''}" data-day="${i}" onclick="toggleWeekDay(this)">${d}</button>
+  `).join('');
+
+  lucide.createIcons();
+}
+
+function toggleWeekDay(btn) {
+  btn.classList.toggle('selected');
+}
+
+function clearDay(dayIdx) {
+  delete weekPlan[dayIdx];
+  renderWeek();
+  toast('Day cleared');
+}
+
+function quickAssignDay(dayIdx) {
+  // Pre-select day and scroll to picker
+  document.querySelectorAll('.day-pill').forEach(p => {
+    p.classList.toggle('selected', parseInt(p.dataset.day) === dayIdx);
+  });
+  document.getElementById('weekRecipeSelect').focus();
+}
+
+function assignRecipeToDay() {
+  const sel = document.getElementById('weekRecipeSelect');
+  const recipeId = parseInt(sel.value);
+  if (!recipeId) { toast('Pick a recipe first'); return; }
+  const selectedDays = [...document.querySelectorAll('.day-pill.selected')].map(p => parseInt(p.dataset.day));
+  if (!selectedDays.length) { toast('Pick at least one day'); return; }
+  selectedDays.forEach(d => { weekPlan[d] = recipeId; });
+  sel.value = '';
+  renderWeek();
+  toast(`Recipe assigned to ${selectedDays.map(d => SHORT_DAYS[d]).join(', ')} ✓`);
+}
+
+// ─── ASSIGN MODAL ────────────────────────────────────────────
+function openAssignModal(recipeId) {
+  pendingAssignRecipeId = recipeId;
+  const r = recipes.find(x => x.id === recipeId);
+  document.getElementById('assignRecipeName').textContent = r ? r.name : '';
+  const picker = document.getElementById('assignDayPicker');
+  picker.innerHTML = DAYS.map((d, i) => `
+    <button class="day-pill ${i === TODAY_IDX ? 'selected' : ''}" data-day="${i}" onclick="this.classList.toggle('selected')">${d}</button>
+  `).join('');
+  openModal('assignModal');
+}
+
+function confirmAssign() {
+  const selectedDays = [...document.querySelectorAll('#assignDayPicker .day-pill.selected')].map(p => parseInt(p.dataset.day));
+  if (!selectedDays.length) { toast('Pick at least one day'); return; }
+  if (!pendingAssignRecipeId) return;
+  selectedDays.forEach(d => { weekPlan[d] = pendingAssignRecipeId; });
+  closeModal('assignModal');
+  toast(`Added to ${selectedDays.map(d => SHORT_DAYS[d]).join(', ')} ✓`);
+}
+
+// ─── GROCERY LIST ────────────────────────────────────────────
+function generateGroceryList() {
+  renderGrocery();
+  toast('Grocery list updated 🛒');
+}
+
+function renderGrocery() {
+  const plannedRecipeIds = [...new Set(Object.values(weekPlan))];
+  const plannedRecipes = plannedRecipeIds.map(id => recipes.find(r => r.id === id)).filter(Boolean);
+
+  // Aggregate ingredients
+  const agg = {}; // key: lowercase name → { qty: [], recipes: [] }
+  plannedRecipes.forEach(recipe => {
+    recipe.ingredients.forEach(ing => {
+      const key = ing.name.toLowerCase().trim();
+      if (!agg[key]) agg[key] = { name: ing.name, qtys: [], recipes: [] };
+      if (ing.qty) agg[key].qtys.push(ing.qty);
+      if (!agg[key].recipes.includes(recipe.name)) agg[key].recipes.push(recipe.name);
+    });
+  });
+
+  // Categorize
+  const categories = {
+    'Produce': ['garlic','onion','thyme','basil','green onion','lettuce','tomato','lemon','lime','mushroom','pepper','spinach'],
+    'Meat & Seafood': ['steak','ribeye','beef','chicken','pork','salmon','shrimp','bacon','ground beef'],
+    'Dairy': ['butter','cheese','parmesan','sour cream','cream','milk','cheddar'],
+    'Pantry': ['pasta','spaghetti','rice','salt','pepper','olive oil','flour','sugar','tomato','can','broth'],
+    'Other': [],
+  };
+
+  const categorized = {};
+  Object.values(agg).forEach(item => {
+    let assigned = 'Other';
+    for (const [cat, keywords] of Object.entries(categories)) {
+      if (cat === 'Other') continue;
+      if (keywords.some(k => item.name.toLowerCase().includes(k))) { assigned = cat; break; }
+    }
+    if (!categorized[assigned]) categorized[assigned] = [];
+    categorized[assigned].push(item);
+  });
+
+  const total = Object.values(agg).length;
+  const checked = Object.values(groceryChecked).filter(Boolean).length;
+  document.getElementById('statItems').textContent = total;
+  document.getElementById('statChecked').textContent = checked;
+  document.getElementById('statRecipes').textContent = plannedRecipes.length;
+
+  const content = document.getElementById('groceryContent');
+  if (total === 0) {
+    content.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">🛒</div>
+      <h3>List is empty</h3>
+      <p>Assign recipes to days this week and your grocery list will auto-generate.</p>
+      <button class="btn btn-primary" onclick="switchView('week', document.querySelectorAll('.nav-btn')[1])">
+        <i data-lucide="calendar-days" size="14"></i> Plan This Week
+      </button>
+    </div>`;
+    lucide.createIcons();
+    return;
+  }
+
+  const orderedCats = ['Produce','Meat & Seafood','Dairy','Pantry','Other'].filter(c => categorized[c]?.length);
+  content.innerHTML = orderedCats.map(cat => `
+    <div class="grocery-section">
+      <div class="grocery-section-title">${cat}</div>
+      <ul class="grocery-list">
+        ${categorized[cat].map(item => {
+          const key = item.name.toLowerCase().trim();
+          const isChecked = groceryChecked[key] || false;
+          return `<li class="grocery-item ${isChecked ? 'checked' : ''}" id="gi-${CSS.escape(key)}">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleCheck('${key}', this)" aria-label="${item.name}">
+            <div>
+              <div class="grocery-item-name">${item.name}</div>
+              <div class="grocery-recipes">For: ${item.recipes.join(', ')}</div>
+            </div>
+            <span class="grocery-item-qty">${item.qtys.join(' + ') || ''}</span>
+          </li>`;
+        }).join('')}
+      </ul>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+function toggleCheck(key, checkbox) {
+  groceryChecked[key] = checkbox.checked;
+  const li = document.querySelector(`#gi-${CSS.escape(key)}`);
+  if (li) li.classList.toggle('checked', checkbox.checked);
+  const checked = Object.values(groceryChecked).filter(Boolean).length;
+  document.getElementById('statChecked').textContent = checked;
+}
+
+function uncheckAll() {
+  groceryChecked = {};
+  renderGrocery();
+  toast('All items unchecked');
+}
+
+function printGroceryList() {
+  const plannedRecipeIds = [...new Set(Object.values(weekPlan))];
+  const plannedRecipes = plannedRecipeIds.map(id => recipes.find(r => r.id === id)).filter(Boolean);
+  const agg = {};
+  plannedRecipes.forEach(recipe => {
+    recipe.ingredients.forEach(ing => {
+      const key = ing.name.toLowerCase().trim();
+      if (!agg[key]) agg[key] = { name: ing.name, qtys: [] };
+      if (ing.qty) agg[key].qtys.push(ing.qty);
+    });
+  });
+  const lines = Object.values(agg).map(i => `• ${i.name}${i.qtys.length ? ' – ' + i.qtys.join(' + ') : ''}`);
+  const text = '🛒 Grocery List
+' + lines.join('
+');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard! 📋'));
+  } else {
+    const win = window.open('', '_blank');
+    win.document.write('<pre>' + text + '</pre>');
+    win.print();
+  }
+}
+
+// ─── MODALS ──────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
+});
+
+// ─── TOAST ───────────────────────────────────────────────────
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+// ─── THEME TOGGLE ────────────────────────────────────────────
+(function() {
+  const btn = document.querySelector('[data-theme-toggle]');
+  const root = document.documentElement;
+  let d = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  root.setAttribute('data-theme', d);
+  if (btn) {
+    btn.querySelector('span').textContent = d === 'dark' ? 'Dark mode' : 'Light mode';
+    btn.addEventListener('click', () => {
+      d = d === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', d);
+      btn.querySelector('span').textContent = d === 'dark' ? 'Dark mode' : 'Light mode';
+    });
+  }
+})();
+
+// ─── INIT ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  renderRecipes();
+  lucide.createIcons();
+});
+</script>
+</body>
+</html>
