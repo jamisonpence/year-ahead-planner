@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mylifos — Your personal life OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --indigo: #4F46E5;
+    --indigo-light: #EEF2FF;
+    --indigo-mid: #C7D2FE;
+    --indigo-dark: #3730A3;
+    --text: #1a1a2e;
+    --text-mid: #4a4a68;
+    --text-soft: #8888aa;
+    --bg: #fafaf8;
+    --bg-card: #ffffff;
+    --border: rgba(79,70,229,0.12);
+    --border-soft: rgba(0,0,0,0.07);
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(79,70,229,0.06);
+    --shadow-lg: 0 8px 32px rgba(79,70,229,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    height: 60px;
+    background: rgba(250,250,248,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .nav-logo {
+    font-family: 'Lora', serif;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    text-decoration: none;
+    letter-spacing: -0.3px;
+  }
+  .nav-logo span { color: var(--indigo); }
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+  .nav-links a {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-mid);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-ghost {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-mid);
+    background: transparent;
+    border: 1px solid var(--border-soft);
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .btn-ghost:hover { border-color: var(--indigo-mid); color: var(--indigo); }
+  .btn-google-nav {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--indigo);
+    color: #fff;
+    border: none;
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-google-nav:hover { background: var(--indigo-dark); transform: translateY(-1px); }
+  /* ── HERO ── */
+  .hero {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 80px 24px 60px;
+    text-align: center;
+  }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    background: var(--indigo-light);
+    padding: 5px 14px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.5s ease both;
+  }
+  h1 {
+    font-family: 'Lora', serif;
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    margin-bottom: 20px;
+    animation: fadeUp 0.5s 0.08s ease both;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--indigo);
+  }
+  .hero-sub {
+    font-size: 17px;
+    font-weight: 300;
+    color: var(--text-mid);
+    max-width: 480px;
+    margin: 0 auto 36px;
+    line-height: 1.7;
+    animation: fadeUp 0.5s 0.16s ease both;
+  }
+  .hero-cta {
+    animation: fadeUp 0.5s 0.24s ease both;
+  }
+  .btn-google-hero {
+    font-family: 'DM Sans', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border-soft);
+    padding: 13px 28px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.2s, transform 0.15s;
+    text-decoration: none;
+  }
+  .btn-google-hero:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
+  /* ── DASHBOARD PREVIEW ── */
+  .preview-wrap {
+    max-width: 700px;
+    margin: 56px auto 0;
+    padding: 0 24px;
+    animation: fadeUp 0.6s 0.35s ease both;
+  }
+  .browser-chrome {
+    background: #f0eff0;
+    border-radius: 12px 12px 0 0;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-soft);
+    border-bottom: none;
+  }
+  .chrome-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chrome-dot:nth-child(1) { background: #ff5f56; }
+  .chrome-dot:nth-child(2) { background: #ffbd2e; }
+  .chrome-dot:nth-child(3) { background: #27c93f; }
+  .chrome-url {
+    margin-left: 10px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 4px;
+    padding: 3px 12px;
+    font-size: 11px;
+    color: var(--text-soft);
+    flex: 1;
+    max-width: 200px;
+  }
+  .dashboard {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    padding: 20px;
+    box-shadow: 0 12px 48px rgba(79,70,229,0.10);
+  }
+  .dash-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .dash-greeting {
+    font-family: 'Lora', serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .dash-date {
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .dash-card {
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+  }
+  .dc-label {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+  }
+  .dc-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .dc-sub {
+    font-size: 11px;
+    color: var(--text-soft);
+  }
+  .dc-pill {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 6px;
+  }
+  .pill-indigo { background: var(--indigo-light); color: var(--indigo); }
+  .pill-teal { background: #E1F5EE; color: #0F6E56; }
+  .pill-amber { background: #FAEEDA; color: #854F0B; }
+  .pill-rose { background: #FFF1F2; color: #9F1239; }
+  .pill-blue { background: #EFF6FF; color: #1D4ED8; }
+  .progress-track {
+    background: var(--border-soft);
+    border-radius: 4px;
+    height: 4px;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    height: 4px;
+    border-radius: 4px;
+    background: var(--indigo);
+  }
+  .task-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+  .task-item { font-size: 10px; color: var(--text-soft); }
+  .task-item.done { color: var(--text-soft); }
+  .task-item.todo { color: var(--text); }
+  /* ── CATEGORIES ── */
+  .section {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+  .section-label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin-bottom: 12px;
+  }
+  .section h2 {
+    font-family: 'Lora', serif;
+    font-size: clamp(24px, 3.5vw, 36px);
+    font-weight: 500;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+    line-height: 1.3;
+  }
+  .section-sub {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 300;
+    color: var(--text-mid);
+    margin-bottom: 44px;
+  }
+  .cats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .cat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 18px 14px;
+    text-align: center;
+    transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s;
+    cursor: default;
+  }
+  .cat-card:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+    border-color: var(--indigo-mid);
+  }
+  .cat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+  }
+  .cat-name { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
+  .cat-eg { font-size: 10px; color: var(--text-soft); line-height: 1.45; }
+  /* ── DIVIDER ── */
+  .divider {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .bj-block {
+    background: var(--indigo-light);
+    border: 1px solid var(--indigo-mid);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+  .bj-icon-wrap {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    background: var(--indigo-mid);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .bj-block h3 {
+    font-family: 'Lora', serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--indigo-dark);
+    margin-bottom: 5px;
+  }
+  .bj-block p { font-size: 13px; color: #4338CA; line-height: 1.6; font-weight: 300; }
+  /* ── HOW IT WORKS ── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .step {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    opacity: 0;
+    animation: fadeUp 0.5s ease both;
+  }
+  .step:nth-child(1) { animation-delay: 0.05s; }
+  .step:nth-child(2) { animation-delay: 0.15s; }
+  .step:nth-child(3) { animation-delay: 0.25s; }
+  .step-num {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    background: var(--indigo-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--indigo);
+    margin-top: 2px;
+  }
+  .step h3 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .step p { font-size: 14px; font-weight: 300; color: var(--text-mid); line-height: 1.6; }
+  /* ── FOOTER CTA ── */
+  .footer-cta {
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-soft);
+    text-align: center;
+    padding: 72px 24px;
+  }
+  .footer-cta h2 {
+    font-family: 'Lora', serif;
+    font-size: clamp(24px, 3vw, 36px);
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+  }
+  .footer-cta p {
+    font-size: 15px;
+    font-weight: 300;
+    color: var(--text-mid);
+    margin-bottom: 28px;
+  }
+  .footer-note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  .footer-note a { color: var(--indigo); text-decoration: none; }
+  .footer-note a:hover { text-decoration: underline; }
+  /* ── FOOTER BAR ── */
+  footer {
+    background: var(--bg);
+    border-top: 1px solid var(--border-soft);
+    padding: 18px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-copy {
+    font-size: 12px;
+    color: var(--text-soft);
+    font-family: 'Lora', serif;
+    font-style: italic;
+  }
+  .footer-links { display: flex; gap: 20px; }
+  .footer-links a { font-size: 12px; color: var(--text-soft); text-decoration: none; }
+  .footer-links a:hover { color: var(--indigo); }
+  /* ── BG TEXTURE ── */
+  .bg-dots {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: radial-gradient(circle, rgba(79,70,229,0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .content-layer { position: relative; z-index: 1; }
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    nav { padding: 0 20px; }
+    .nav-links { display: none; }
+    .cats-grid { grid-template-columns: repeat(2, 1fr); }
+    .dash-grid { grid-template-columns: 1fr 1fr; }
+    .dash-grid .dash-card:last-child { display: none; }
+    footer { flex-direction: column; gap: 10px; text-align: center; }
+  }
+  /* ── GOOGLE SIGN-IN CUSTOM STYLE ── */
+  .g-signin-wrapper {
+    display: flex;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+<div class="bg-dots"></div>
+<div class="content-layer">
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-logo">my<span>lifos</span></a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#how">How it works</a></li>
+  </ul>
+  <div class="nav-actions">
+    <button class="btn-ghost" onclick="signInWithGoogle()">Log in</button>
+    <button class="btn-google-nav" onclick="signInWithGoogle()">
+      <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#fff" opacity="0.9"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#fff" opacity="0.9"/>
+        <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#fff" opacity="0.9"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#fff" opacity="0.9"/>
+      </svg>
+      Get started free
+    </button>
+  </div>
+</nav>
+<!-- HERO -->
+<section class="hero">
+  <div class="eyebrow">Your personal life OS</div>
+  <h1>The <em>Bullet Journal</em><br>for every part of your life</h1>
+  <p class="hero-sub">Track goals, projects, tasks, books, workouts, relationships, recipes, budgets, and more — all connected, all in one place.</p>
+  <div class="hero-cta">
+    <button class="btn-google-hero" onclick="signInWithGoogle()">
+      <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+        <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+  </div>
+</section>
+<!-- DASHBOARD PREVIEW -->
+<div class="preview-wrap">
+  <div class="browser-chrome">
+    <div class="chrome-dot"></div>
+    <div class="chrome-dot"></div>
+    <div class="chrome-dot"></div>
+    <div class="chrome-url">mylifos.com/dashboard</div>
+  </div>
+  <div class="dashboard">
+    <div class="dash-header">
+      <div class="dash-greeting">Good morning, Alex</div>
+      <div class="dash-date">Friday, April 17</div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dc-label">Active goal</div>
+        <div class="dc-title">Run a 5K</div>
+        <div class="dc-sub">Week 6 of 8</div>
+        <div class="progress-track"><div class="progress-fill" style="width:72%"></div></div>
+        <div class="dc-sub" style="margin-top:4px;font-size:10px;">72% complete</div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">Today's tasks</div>
+        <div class="dc-title" style="margin-bottom:6px;">3 of 5 done</div>
+        <div class="task-list">
+          <div class="task-item done">✓ Grocery run</div>
+          <div class="task-item done">✓ Review budget</div>
+          <div class="task-item todo">◯ Call dentist</div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">Currently reading</div>
+        <div class="dc-title">Atomic Habits</div>
+        <div class="dc-sub">pg 142 of 320</div>
+        <span class="dc-pill pill-blue">books</span>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">This week's recipe</div>
+        <div class="dc-title">Thai green curry</div>
+        <div class="dc-sub">Grocery list ready · 6 items</div>
+        <span class="dc-pill pill-teal">recipes</span>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">Fitness log</div>
+        <div class="dc-title">Morning run · 3.2 mi</div>
+        <div class="dc-sub">Today, 7:14am</div>
+        <span class="dc-pill pill-amber">workouts</span>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">Budget · April</div>
+        <div class="dc-title">$1,240 spent</div>
+        <div class="progress-track"><div class="progress-fill" style="width:55%;background:#10b981;"></div></div>
+        <div class="dc-sub" style="margin-top:4px;font-size:10px;">55% of monthly budget</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- FEATURES / CATEGORIES -->
+<section class="section" id="features">
+  <div class="section-label">Everything in one place</div>
+  <h2>One app for all of it</h2>
+  <p class="section-sub">Every tracker you've wished existed, finally connected.</p>
+  <div class="cats-grid">
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#EEEDFE;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="#4F46E5" stroke-width="1.5"/><path d="M9 5.5V9.5L11.5 11" stroke="#4F46E5" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </div>
+      <div class="cat-name">Goals & Projects</div>
+      <div class="cat-eg">Milestones, progress, deadlines</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#EFF6FF;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="2" stroke="#1D4ED8" stroke-width="1.5"/><line x1="6" y1="7" x2="12" y2="7" stroke="#1D4ED8" stroke-width="1.3"/><line x1="6" y1="10" x2="10" y2="10" stroke="#1D4ED8" stroke-width="1.3"/></svg>
+      </div>
+      <div class="cat-name">Books & Movies</div>
+      <div class="cat-eg">Reading list, ratings, notes</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#FAEEDA;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M4 14L7 7L9 11L11 8L14 14" stroke="#854F0B" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="cat-name">Fitness</div>
+      <div class="cat-eg">Workouts, streaks, PRs</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#FFF1F2;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="7" r="3" stroke="#9F1239" stroke-width="1.5"/><path d="M4 15c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="#9F1239" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="cat-name">Relationships</div>
+      <div class="cat-eg">People, notes, check-ins</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#E1F5EE;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M5 6h8M5 9h6M5 12h4" stroke="#0F6E56" stroke-width="1.3" stroke-linecap="round"/><rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="#0F6E56" stroke-width="1.3"/></svg>
+      </div>
+      <div class="cat-name">Recipes</div>
+      <div class="cat-eg">Meals linked to grocery lists</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#E6F1FB;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M5 9h8M9 5v8" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="9" r="6" stroke="#185FA5" stroke-width="1.3"/></svg>
+      </div>
+      <div class="cat-name">Budgets</div>
+      <div class="cat-eg">Spending, saving, categories</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#EEEDFE;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><rect x="3" y="4" width="12" height="10" rx="1.5" stroke="#4F46E5" stroke-width="1.4"/><path d="M6 4V3M12 4V3" stroke="#4F46E5" stroke-width="1.4" stroke-linecap="round"/><line x1="3" y1="7.5" x2="15" y2="7.5" stroke="#4F46E5" stroke-width="1.2"/></svg>
+      </div>
+      <div class="cat-name">Daily logs</div>
+      <div class="cat-eg">Habits, moods, journal entries</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-icon" style="background:#FAEEDA;">
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M9 3L10.5 7H15L11.5 9.5L13 13.5L9 11L5 13.5L6.5 9.5L3 7H7.5L9 3Z" stroke="#854F0B" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="cat-name">+ anything</div>
+      <div class="cat-eg">Build your own trackers</div>
+    </div>
+  </div>
+</section>
+<!-- BJ CALLOUT -->
+<div class="divider">
+  <div class="bj-block">
+    <div class="bj-icon-wrap">
+      <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><rect x="3" y="2" width="12" height="14" rx="1.5" stroke="#3730A3" stroke-width="1.5"/><line x1="6" y1="6" x2="12" y2="6" stroke="#3730A3" stroke-width="1.3"/><line x1="6" y1="9" x2="12" y2="9" stroke="#3730A3" stroke-width="1.3"/><line x1="6" y1="12" x2="9" y2="12" stroke="#3730A3" stroke-width="1.3"/></svg>
+    </div>
+    <div>
+      <h3>Inspired by the Bullet Journal method</h3>
+      <p>mylifos brings the flexibility and intentionality of analog journaling into a connected digital system — so everything you track is linked, searchable, and always with you.</p>
+    </div>
+  </div>
+</div>
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="section-label">Simple by design</div>
+  <h2>How it works</h2>
+  <p class="section-sub">Get set up in minutes. No steep learning curve.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Set up your trackers</h3>
+        <p>Choose from built-in modules — goals, books, fitness, recipes, budget — or create your own custom tracker in seconds.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Log as you go</h3>
+        <p>Add entries, check off tasks, and update progress throughout your day. Everything timestamps automatically.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>See the connections</h3>
+        <p>A recipe links to your grocery list. A goal ties to daily tasks. Your workout streak shows up in your weekly review. Life, connected.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- FOOTER CTA -->
+<div class="footer-cta">
+  <h2>Start building your life OS</h2>
+  <p>Free to start. No credit card required.</p>
+  <button class="btn-google-hero" onclick="signInWithGoogle()">
+    <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+      <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+    </svg>
+    Continue with Google
+  </button>
+  <p class="footer-note">Already have an account? <a href="#" onclick="signInWithGoogle(); return false;">Log in →</a></p>
+</div>
+<!-- FOOTER -->
+<footer>
+  <div class="footer-copy">mylifos</div>
+  <div class="footer-links">
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">Contact</a>
+  </div>
+</footer>
+</div><!-- end content-layer -->
+<script>
+  const CLIENT_ID = '958218720068-tr19pmu1hmlnk1elpqve729pglaqjqbf.apps.googleusercontent.com';
+  function signInWithGoogle() {
+    google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'openid email profile',
+      callback: (response) => {
+        if (response.access_token) {
+          // Send the token to your backend for verification
+          // Replace this URL with your actual auth endpoint
+          fetch('/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: response.access_token })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.redirect) {
+              window.location.href = data.redirect;
+            } else {
+              window.location.href = '/dashboard';
+            }
+          })
+          .catch(() => {
+            // Fallback: redirect to dashboard
+            window.location.href = '/dashboard';
+          });
+        }
+      }
+    }).requestAccessToken();
+  }
+  // Smooth scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
+    });
+  });
+</script>
+</body>
+</html>
