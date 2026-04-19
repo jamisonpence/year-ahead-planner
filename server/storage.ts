@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants } from "@shared/schema";
+import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -23,6 +23,7 @@ import type {
   NavPref,
   User, InsertUser,
   InsertPlant, Plant,
+  InsertMusicArtist, MusicArtist, InsertMusicSong, MusicSong, MusicArtistWithSongs,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -373,6 +374,34 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS music_artists (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      genres TEXT,
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+      notes TEXT,
+      accent_color TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS music_songs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      artist_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      album TEXT,
+      genre TEXT,
+      year INTEGER,
+      status TEXT NOT NULL DEFAULT 'want_to_listen',
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+      rating INTEGER,
+      notes TEXT
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -490,6 +519,15 @@ export interface IStorage {
   createPlant(data: InsertPlant, userId: number): Promise<Plant>;
   updatePlant(id: number, data: Partial<InsertPlant>): Promise<Plant | undefined>;
   deletePlant(id: number): Promise<boolean>;
+  // Music Artists
+  getAllMusicArtistsWithSongs(userId: number): Promise<MusicArtistWithSongs[]>;
+  createMusicArtist(data: InsertMusicArtist, userId: number): Promise<MusicArtist>;
+  updateMusicArtist(id: number, data: Partial<InsertMusicArtist>): Promise<MusicArtist | undefined>;
+  deleteMusicArtist(id: number): Promise<boolean>;
+  // Music Songs
+  createMusicSong(data: InsertMusicSong, userId: number): Promise<MusicSong>;
+  updateMusicSong(id: number, data: Partial<InsertMusicSong>): Promise<MusicSong | undefined>;
+  deleteMusicSong(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -973,6 +1011,42 @@ export const storage: IStorage = {
   },
   async deletePlant(id) {
     const result = await db.delete(plants).where(eq(plants.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Music ─────────────────────────────────────────────────────────────────────
+  async getAllMusicArtistsWithSongs(userId: number) {
+    const artists = await db.select().from(musicArtists).where(eq(musicArtists.userId, userId)).orderBy(asc(musicArtists.name));
+    const songs = await db.select().from(musicSongs).where(eq(musicSongs.userId, userId)).orderBy(asc(musicSongs.title));
+    return artists.map((a) => ({ ...a, songs: songs.filter((s) => s.artistId === a.id) }));
+  },
+  async createMusicArtist(data, userId) {
+    const result = await db.insert(musicArtists).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateMusicArtist(id, data) {
+    const existing = await db.select().from(musicArtists).where(eq(musicArtists.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(musicArtists).set(data).where(eq(musicArtists.id, id)).returning();
+    return result[0];
+  },
+  async deleteMusicArtist(id) {
+    await pool.query(`DELETE FROM music_songs WHERE artist_id = $1`, [id]);
+    const result = await db.delete(musicArtists).where(eq(musicArtists.id, id));
+    return result.rowCount > 0;
+  },
+  async createMusicSong(data, userId) {
+    const result = await db.insert(musicSongs).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateMusicSong(id, data) {
+    const existing = await db.select().from(musicSongs).where(eq(musicSongs.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(musicSongs).set(data).where(eq(musicSongs.id, id)).returning();
+    return result[0];
+  },
+  async deleteMusicSong(id) {
+    const result = await db.delete(musicSongs).where(eq(musicSongs.id, id));
     return result.rowCount > 0;
   },
 };

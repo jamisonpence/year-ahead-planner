@@ -244,7 +244,7 @@ export const goalTasks = pgTable("goal_tasks", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// ── MOVIES & SHOWS ────────────────────────────────────────────
+// ── MOVIES & SHOWS ────────────────────────────────────────────────────────────
 // mediaType: "movie" | "show"
 // status: "backlog" | "watching" | "watched" | "finished"
 export const movies = pgTable("movies", {
@@ -272,6 +272,45 @@ export const movies = pgTable("movies", {
 export const insertMovieSchema = createInsertSchema(movies).omit({ id: true });
 export type InsertMovie = z.infer<typeof insertMovieSchema>;
 export type Movie = typeof movies.$inferSelect;
+
+// ── MUSIC ─────────────────────────────────────────────────────────────────────
+// Artists to explore or that you love
+export const musicArtists = pgTable("music_artists", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  genres: text("genres"),           // comma-separated e.g. "Rock,Indie"
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  notes: text("notes"),
+  accentColor: text("accent_color"), // card accent
+});
+
+// Songs nested under artists
+// status: "want_to_listen" | "listening" | "listened"
+export const musicSongs = pgTable("music_songs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  artistId: integer("artist_id").notNull(),
+  title: text("title").notNull(),
+  album: text("album"),
+  genre: text("genre"),             // comma-separated
+  year: integer("year"),
+  status: text("status").notNull().default("want_to_listen"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  rating: integer("rating"),        // 1–5
+  notes: text("notes"),
+});
+
+export const insertMusicArtistSchema = createInsertSchema(musicArtists).omit({ id: true });
+export type InsertMusicArtist = z.infer<typeof insertMusicArtistSchema>;
+export type MusicArtist = typeof musicArtists.$inferSelect;
+
+export const insertMusicSongSchema = createInsertSchema(musicSongs).omit({ id: true });
+export type InsertMusicSong = z.infer<typeof insertMusicSongSchema>;
+export type MusicSong = typeof musicSongs.$inferSelect;
+
+export type MusicArtistWithSongs = MusicArtist & { songs: MusicSong[] };
+
 // ── BUDGET ────────────────────────────────────────────────────────────────────
 // Budget categories for organizing expenses
 export const budgetCategories = pgTable("budget_categories", {

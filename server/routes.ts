@@ -20,6 +20,7 @@ import {
   insertMovieSchema,
   insertBudgetCategorySchema, insertTransactionSchema, insertSubscriptionSchema,
   insertPlantSchema,
+  insertMusicArtistSchema, insertMusicSongSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -718,6 +719,49 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   app.delete("/api/plants/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deletePlant(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Music Artists ─────────────────────────────────────────────────────────────
+  app.get("/api/music/artists", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getAllMusicArtistsWithSongs((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/music/artists", requireAuth, async (req, res) => {
+    try {
+      const data = insertMusicArtistSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createMusicArtist(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/music/artists/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateMusicArtist(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/music/artists/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteMusicArtist(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Music Songs ───────────────────────────────────────────────────────────────
+  app.post("/api/music/songs", requireAuth, async (req, res) => {
+    try {
+      const data = insertMusicSongSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createMusicSong(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/music/songs/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateMusicSong(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/music/songs/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteMusicSong(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }
