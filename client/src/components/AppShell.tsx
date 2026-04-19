@@ -7,7 +7,7 @@ import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet,
+  Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf,
   Eye, EyeOff, GripVertical, Settings, LogOut,
 } from "lucide-react";
 
@@ -21,6 +21,7 @@ const ALL_TABS = [
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/movies",        label: "Movies",                  icon: Film            },
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
+  { path: "/plants",        label: "Plants",                  icon: Leaf            },
 ];
 
 function useNavPrefs() {
