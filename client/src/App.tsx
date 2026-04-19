@@ -14,6 +14,7 @@ import RelationshipsPage from "@/pages/RelationshipsPage";
 import RecipesPage from "@/pages/RecipesPage";
 import MoviesPage from "@/pages/MoviesPage";
 import BudgetPage from "@/pages/BudgetPage";
+import PlantsPage from "@/pages/PlantsPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +32,7 @@ function AuthenticatedApp() {
         <Route path="/recipes" component={RecipesPage} />
         <Route path="/movies" component={MoviesPage} />
         <Route path="/budget" component={BudgetPage} />
+        <Route path="/plants" component={PlantsPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
