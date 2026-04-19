@@ -19,7 +19,7 @@ const ALL_TABS = [
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/relationships", label: "Relationships",           icon: Users           },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
-  { path: "/movies",        label: "Movies",                  icon: Film            },
+  { path: "/movies",        label: "Movies & Shows",                  icon: Film            },
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
 ];
