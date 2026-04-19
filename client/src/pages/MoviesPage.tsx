@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -24,10 +24,12 @@ const POSTER_COLORS = [
 ];
 
 const EMPTY_FORM = {
+  mediaType: "movie" as "movie" | "show",
   title: "", year: "", director: "", genres: [] as string[],
   status: "backlog", rating: 0, notes: "", listsJson: "[]",
   isFavorite: false, posterColor: POSTER_COLORS[0], streamingOn: "",
   customList: "",
+  totalSeasons: "", currentSeason: "",
 };
 
 function StarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
@@ -52,6 +54,7 @@ function StarRating({ value, onChange }: { value: number; onChange?: (v: number)
 export default function MoviesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [mediaTypeView, setMediaTypeView] = useState<"movie" | "show">("movie");
   const [tab, setTab] = useState("backlog");
   const [search, setSearch] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
@@ -62,17 +65,23 @@ export default function MoviesPage() {
   const [newListInput, setNewListInput] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const { data: movies = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
+  const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
+
+  // Split by type
+  const items = useMemo(
+    () => allItems.filter((m) => (m.mediaType ?? "movie") === mediaTypeView),
+    [allItems, mediaTypeView],
+  );
 
   const createMut = useMutation({
     mutationFn: (d: any) => apiRequest("POST", "/api/movies", d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/movies"] }); close_modal(); },
-    onError: () => toast({ title: "Error saving movie", variant: "destructive" }),
+    onError: () => toast({ title: "Error saving", variant: "destructive" }),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/movies/${id}`, d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/movies"] }); close_modal(); },
-    onError: () => toast({ title: "Error updating movie", variant: "destructive" }),
+    onError: () => toast({ title: "Error updating", variant: "destructive" }),
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/movies/${id}`),
@@ -83,23 +92,28 @@ export default function MoviesPage() {
       apiRequest("PATCH", `/api/movies/${id}`, { isFavorite }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movies"] }),
   });
-  const markWatched = useMutation({
-    mutationFn: (id: number) => apiRequest("PATCH", `/api/movies/${id}`, { status: "watched" }),
+  const markStatus = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      apiRequest("PATCH", `/api/movies/${id}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movies"] }),
   });
 
-  // Collect all custom lists
   const allCustomLists = useMemo(() => {
     const set = new Set<string>();
-    movies.forEach((m) => {
+    items.forEach((m) => {
       try { (JSON.parse(m.listsJson) as string[]).forEach((l) => set.add(l)); } catch {}
     });
     return Array.from(set).sort();
-  }, [movies]);
+  }, [items]);
 
   function open_add() {
     setEditing(null);
-    setForm({ ...EMPTY_FORM, posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)] });
+    setForm({
+      ...EMPTY_FORM,
+      mediaType: mediaTypeView,
+      status: "backlog",
+      posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+    });
     setModalOpen(true);
   }
   function open_edit(m: Movie) {
@@ -107,19 +121,24 @@ export default function MoviesPage() {
     let lists: string[] = [];
     try { lists = JSON.parse(m.listsJson); } catch {}
     setForm({
+      mediaType: (m.mediaType ?? "movie") as "movie" | "show",
       title: m.title, year: m.year ? String(m.year) : "",
       director: m.director ?? "", genres: m.genres ? m.genres.split(",") : [],
       status: m.status, rating: m.rating ?? 0, notes: m.notes ?? "",
       listsJson: m.listsJson, isFavorite: m.isFavorite,
       posterColor: m.posterColor ?? POSTER_COLORS[0],
       streamingOn: m.streamingOn ?? "", customList: "",
+      totalSeasons: m.totalSeasons ? String(m.totalSeasons) : "",
+      currentSeason: m.currentSeason ? String(m.currentSeason) : "",
     });
     setModalOpen(true);
   }
   function close_modal() { setModalOpen(false); setEditing(null); setNewListInput(""); }
 
   function save() {
-    const payload = {
+    const isShow = form.mediaType === "show";
+    const payload: any = {
+      mediaType: form.mediaType,
       title: form.title.trim(),
       year: form.year ? parseInt(form.year) : null,
       director: form.director.trim() || null,
@@ -131,6 +150,8 @@ export default function MoviesPage() {
       isFavorite: form.isFavorite,
       posterColor: form.posterColor,
       streamingOn: form.streamingOn || null,
+      totalSeasons: isShow && form.totalSeasons ? parseInt(form.totalSeasons) : null,
+      currentSeason: isShow && form.currentSeason ? parseInt(form.currentSeason) : null,
     };
     if (!payload.title) { toast({ title: "Title is required", variant: "destructive" }); return; }
     if (editing) updateMut.mutate({ id: editing.id, d: payload });
@@ -145,10 +166,7 @@ export default function MoviesPage() {
     if (!val) return;
     let lists: string[] = [];
     try { lists = JSON.parse(form.listsJson); } catch {}
-    if (!lists.includes(val)) {
-      const updated = [...lists, val];
-      setForm((f) => ({ ...f, listsJson: JSON.stringify(updated) }));
-    }
+    if (!lists.includes(val)) setForm((f) => ({ ...f, listsJson: JSON.stringify([...lists, val]) }));
     setNewListInput("");
   }
   function removeCustomList(name: string) {
@@ -157,9 +175,8 @@ export default function MoviesPage() {
     setForm((f) => ({ ...f, listsJson: JSON.stringify(lists.filter((l) => l !== name)) }));
   }
 
-  // Filtering
   const filtered = useMemo(() => {
-    return movies.filter((m) => {
+    return items.filter((m) => {
       const matchSearch = !search || m.title.toLowerCase().includes(search.toLowerCase()) ||
         (m.director ?? "").toLowerCase().includes(search.toLowerCase());
       const matchGenre = !genreFilter || (m.genres ?? "").split(",").includes(genreFilter);
@@ -168,32 +185,37 @@ export default function MoviesPage() {
       })();
       return matchSearch && matchGenre && matchList;
     });
-  }, [movies, search, genreFilter, listFilter]);
+  }, [items, search, genreFilter, listFilter]);
 
+  const isShowView = mediaTypeView === "show";
   const backlog = filtered.filter((m) => m.status === "backlog");
-  const watched = filtered.filter((m) => m.status === "watched");
+  const watching = filtered.filter((m) => m.status === "watching");
+  const watched = filtered.filter((m) => m.status === "watched" || m.status === "finished");
   const favorites = filtered.filter((m) => m.isFavorite);
 
-  // Group favorites by genre
   const favByGenre = useMemo(() => {
     const map: Record<string, Movie[]> = {};
     favorites.forEach((m) => {
       const genres = m.genres ? m.genres.split(",") : ["Uncategorized"];
-      genres.forEach((g) => {
-        if (!map[g]) map[g] = [];
-        map[g].push(m);
-      });
+      genres.forEach((g) => { if (!map[g]) map[g] = []; map[g].push(m); });
     });
     return map;
   }, [favorites]);
 
-  function MovieCard({ movie }: { movie: Movie }) {
+  // Switch type view — reset to backlog tab
+  function switchView(v: "movie" | "show") {
+    setMediaTypeView(v);
+    setTab("backlog");
+    setSearch(""); setGenreFilter(null); setListFilter(null);
+  }
+
+  function MediaCard({ movie }: { movie: Movie }) {
     const expanded = expandedId === movie.id;
+    const isShow = (movie.mediaType ?? "movie") === "show";
     let lists: string[] = [];
     try { lists = JSON.parse(movie.listsJson); } catch {}
     return (
-      <div className="rounded-xl border bg-card overflow-hidden group hover:shadow-md transition-shadow">
-        {/* Color bar */}
+      <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
         <div className="h-1.5 w-full" style={{ background: movie.posterColor ?? "hsl(210 80% 48%)" }} />
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
@@ -203,13 +225,26 @@ export default function MoviesPage() {
                 {movie.year && <span className="text-xs text-muted-foreground shrink-0">{movie.year}</span>}
                 {movie.isFavorite && <Heart size={13} className="text-rose-500 fill-rose-500 shrink-0" />}
               </div>
-              {movie.director && <p className="text-xs text-muted-foreground mt-0.5">Dir. {movie.director}</p>}
-              {movie.streamingOn && (
-                <div className="flex items-center gap-1 mt-1">
-                  <Tv2 size={11} className="text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">{movie.streamingOn}</span>
-                </div>
+              {movie.director && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isShow ? "Created by" : "Dir."} {movie.director}
+                </p>
               )}
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {movie.streamingOn && (
+                  <div className="flex items-center gap-1">
+                    <Tv2 size={11} className="text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">{movie.streamingOn}</span>
+                  </div>
+                )}
+                {isShow && movie.totalSeasons && (
+                  <span className="text-xs text-muted-foreground">
+                    {movie.currentSeason
+                      ? `S${movie.currentSeason}/${movie.totalSeasons}`
+                      : `${movie.totalSeasons} season${movie.totalSeasons !== 1 ? "s" : ""}`}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => toggleFav.mutate({ id: movie.id, isFavorite: !movie.isFavorite })}
@@ -225,7 +260,6 @@ export default function MoviesPage() {
             </div>
           </div>
 
-          {/* Genres */}
           {movie.genres && (
             <div className="flex flex-wrap gap-1 mt-2">
               {movie.genres.split(",").map((g) => (
@@ -234,12 +268,10 @@ export default function MoviesPage() {
             </div>
           )}
 
-          {/* Rating */}
           {(movie.rating ?? 0) > 0 && (
             <div className="mt-2"><StarRating value={movie.rating ?? 0} /></div>
           )}
 
-          {/* Custom lists */}
           {lists.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {lists.map((l) => (
@@ -248,7 +280,6 @@ export default function MoviesPage() {
             </div>
           )}
 
-          {/* Expand notes */}
           {movie.notes && (
             <div>
               <button onClick={() => setExpandedId(expanded ? null : movie.id)}
@@ -260,11 +291,25 @@ export default function MoviesPage() {
             </div>
           )}
 
-          {/* Backlog action */}
+          {/* Action buttons based on status */}
           {movie.status === "backlog" && (
-            <button onClick={() => markWatched.mutate(movie.id)}
+            <div className="mt-3 flex gap-2">
+              {isShow && (
+                <button onClick={() => markStatus.mutate({ id: movie.id, status: "watching" })}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors">
+                  <PlayCircle size={13} /> Now watching
+                </button>
+              )}
+              <button onClick={() => markStatus.mutate({ id: movie.id, status: isShow ? "finished" : "watched" })}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors">
+                <Check size={13} /> {isShow ? "Mark finished" : "Mark watched"}
+              </button>
+            </div>
+          )}
+          {movie.status === "watching" && (
+            <button onClick={() => markStatus.mutate({ id: movie.id, status: "finished" })}
               className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors">
-              <Check size={13} /> Mark as watched
+              <Check size={13} /> Mark finished
             </button>
           )}
         </div>
@@ -272,17 +317,50 @@ export default function MoviesPage() {
     );
   }
 
+  const watchedLabel = isShowView ? "Finished" : "Watched";
+  const watchedCount = watched.length;
+  const emptyIcon = isShowView ? <Tv2 size={40} className="mx-auto mb-3 opacity-20" /> : <Film size={40} className="mx-auto mb-3 opacity-20" />;
+  const singularLabel = isShowView ? "show" : "movie";
+
+  // Stats for header
+  const movieCount = allItems.filter((m) => (m.mediaType ?? "movie") === "movie").length;
+  const showCount = allItems.filter((m) => m.mediaType === "show").length;
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Film size={22} /> Movies</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Film size={22} /> Movies & Shows
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {movies.length} total · {backlog.length} to watch · {watched.length} watched · {favorites.length} favorites
+            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={open_add} size="sm" className="gap-1.5"><Plus size={15} /> Add Movie</Button>
+        <Button onClick={open_add} size="sm" className="gap-1.5">
+          <Plus size={15} /> Add {isShowView ? "Show" : "Movie"}
+        </Button>
+      </div>
+
+      {/* Type toggle */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-5">
+        <button
+          onClick={() => switchView("movie")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            mediaTypeView === "movie" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Film size={15} /> Movies
+        </button>
+        <button
+          onClick={() => switchView("show")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            mediaTypeView === "show" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Tv2 size={15} /> Shows
+        </button>
       </div>
 
       {/* Search + filters */}
@@ -290,7 +368,8 @@ export default function MoviesPage() {
         <div className="relative flex-1 min-w-48">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title or director…" className="pl-8 h-8 text-sm" />
+            placeholder={`Search by title or ${isShowView ? "creator" : "director"}…`}
+            className="pl-8 h-8 text-sm" />
         </div>
         <Select value={genreFilter ?? "__none__"} onValueChange={(v) => setGenreFilter(v === "__none__" ? null : v)}>
           <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Genre" /></SelectTrigger>
@@ -320,8 +399,13 @@ export default function MoviesPage() {
           <TabsTrigger value="backlog" className="gap-1.5">
             <Clock size={14} /> Backlog <span className="ml-1 text-xs opacity-60">{backlog.length}</span>
           </TabsTrigger>
+          {isShowView && (
+            <TabsTrigger value="watching" className="gap-1.5">
+              <PlayCircle size={14} /> Watching <span className="ml-1 text-xs opacity-60">{watching.length}</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="watched" className="gap-1.5">
-            <Check size={14} /> Watched <span className="ml-1 text-xs opacity-60">{watched.length}</span>
+            <Check size={14} /> {watchedLabel} <span className="ml-1 text-xs opacity-60">{watchedCount}</span>
           </TabsTrigger>
           <TabsTrigger value="favorites" className="gap-1.5">
             <Heart size={14} /> Favorites <span className="ml-1 text-xs opacity-60">{favorites.length}</span>
@@ -331,26 +415,41 @@ export default function MoviesPage() {
         <TabsContent value="backlog">
           {backlog.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
-              <Film size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No movies in your backlog yet.</p>
+              {emptyIcon}
+              <p className="text-sm">No {singularLabel}s in your backlog yet.</p>
               <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add one</Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {backlog.map((m) => <MovieCard key={m.id} movie={m} />)}
+              {backlog.map((m) => <MediaCard key={m.id} movie={m} />)}
             </div>
           )}
         </TabsContent>
+
+        {isShowView && (
+          <TabsContent value="watching">
+            {watching.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <PlayCircle size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No shows in progress. Move one from your backlog!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {watching.map((m) => <MediaCard key={m.id} movie={m} />)}
+              </div>
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="watched">
           {watched.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Check size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No watched movies yet.</p>
+              <p className="text-sm">No {isShowView ? "finished shows" : "watched movies"} yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {watched.map((m) => <MovieCard key={m.id} movie={m} />)}
+              {watched.map((m) => <MediaCard key={m.id} movie={m} />)}
             </div>
           )}
         </TabsContent>
@@ -359,7 +458,7 @@ export default function MoviesPage() {
           {favorites.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Heart size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No favorites yet — heart a movie to add it here.</p>
+              <p className="text-sm">No favorites yet — heart a {singularLabel} to add it here.</p>
             </div>
           ) : (
             <div className="space-y-8">
@@ -367,7 +466,7 @@ export default function MoviesPage() {
                 <div key={genre}>
                   <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">{genre}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {ms.map((m) => <MovieCard key={m.id} movie={m} />)}
+                    {ms.map((m) => <MediaCard key={m.id} movie={m} />)}
                   </div>
                 </div>
               ))}
@@ -380,24 +479,58 @@ export default function MoviesPage() {
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) close_modal(); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Movie" : "Add Movie"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? `Edit ${form.mediaType === "show" ? "Show" : "Movie"}`
+                : `Add ${form.mediaType === "show" ? "Show" : "Movie"}`}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+
+            {/* Type toggle (only when adding) */}
+            {!editing && (
+              <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, mediaType: "movie", status: "backlog", totalSeasons: "", currentSeason: "" }))}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-all ${
+                    form.mediaType === "movie" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Film size={13} /> Movie
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, mediaType: "show", status: "backlog" }))}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-all ${
+                    form.mediaType === "show" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Tv2 size={13} /> Show
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Title *</label>
-                <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Movie title" />
+                <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder={form.mediaType === "show" ? "Show title" : "Movie title"} />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Year</label>
-                <Input value={form.year} onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))} placeholder="2024" type="number" />
+                <Input value={form.year} onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))}
+                  placeholder="2024" type="number" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Director</label>
-                <Input value={form.director} onChange={(e) => setForm((f) => ({ ...f, director: e.target.value }))} placeholder="Director name" />
+                <label className="text-xs font-medium text-muted-foreground">
+                  {form.mediaType === "show" ? "Creator" : "Director"}
+                </label>
+                <Input value={form.director} onChange={(e) => setForm((f) => ({ ...f, director: e.target.value }))}
+                  placeholder={form.mediaType === "show" ? "Creator name" : "Director name"} />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Streaming on</label>
@@ -411,13 +544,32 @@ export default function MoviesPage() {
               </div>
             </div>
 
+            {/* Show-specific season fields */}
+            {form.mediaType === "show" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Total Seasons</label>
+                  <Input value={form.totalSeasons} onChange={(e) => setForm((f) => ({ ...f, totalSeasons: e.target.value }))}
+                    placeholder="e.g. 5" type="number" min="1" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Current Season</label>
+                  <Input value={form.currentSeason} onChange={(e) => setForm((f) => ({ ...f, currentSeason: e.target.value }))}
+                    placeholder="e.g. 2" type="number" min="1" />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Status</label>
               <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="backlog">Backlog (want to watch)</SelectItem>
-                  <SelectItem value="watched">Watched</SelectItem>
+                  {form.mediaType === "show" && <SelectItem value="watching">Watching</SelectItem>}
+                  <SelectItem value={form.mediaType === "show" ? "finished" : "watched"}>
+                    {form.mediaType === "show" ? "Finished" : "Watched"}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -440,7 +592,7 @@ export default function MoviesPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Poster color</label>
+              <label className="text-xs font-medium text-muted-foreground">Card color</label>
               <div className="flex gap-2 flex-wrap">
                 {POSTER_COLORS.map((c) => (
                   <button key={c} type="button" onClick={() => setForm((f) => ({ ...f, posterColor: c }))}
@@ -450,7 +602,6 @@ export default function MoviesPage() {
               </div>
             </div>
 
-            {/* Custom lists */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Custom Lists</label>
               <div className="flex gap-2">
@@ -491,7 +642,7 @@ export default function MoviesPage() {
 
             <div className="flex gap-2 pt-2">
               <Button onClick={save} disabled={createMut.isPending || updateMut.isPending} className="flex-1">
-                {editing ? "Save Changes" : "Add Movie"}
+                {editing ? "Save Changes" : `Add ${form.mediaType === "show" ? "Show" : "Movie"}`}
               </Button>
               <Button variant="outline" onClick={close_modal}>Cancel</Button>
             </div>
