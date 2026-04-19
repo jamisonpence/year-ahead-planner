@@ -342,6 +342,23 @@ export const insertReceiptSchema = createInsertSchema(receipts).omit({ id: true 
 export type InsertReceipt = z.infer<typeof insertReceiptSchema>;
 export type Receipt = typeof receipts.$inferSelect;
 
+// ── PLANTS ────────────────────────────────────────────────────────────────────
+// lightNeeds: "low" | "medium" | "bright_indirect" | "direct"
+export const plants = pgTable("plants", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  species: text("species"),
+  location: text("location"),
+  lightNeeds: text("light_needs").notNull().default("medium"),
+  waterFrequencyDays: integer("water_frequency_days").notNull().default(7),
+  soilType: text("soil_type"),
+  notes: text("notes"),
+  lastWatered: text("last_watered"),          // ISO date "YYYY-MM-DD"
+  remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 // ── NAV PREFERENCES ───────────────────────────────────────────────────────────
 // Stores user's tab order and visibility as a single JSON row
 export const navPrefs = pgTable("nav_prefs", {
@@ -409,6 +426,10 @@ export type Person = typeof people.$inferSelect;
 // childrenJson stores an array of child person IDs: number[]
 // (Legacy: may also contain [{name, birthday}] objects — handle both gracefully)
 export type PersonWithSpouse = Person & { spouse?: Person | null };
+
+export const insertPlantSchema = createInsertSchema(plants).omit({ id: true });
+export type InsertPlant = z.infer<typeof insertPlantSchema>;
+export type Plant = typeof plants.$inferSelect;
 
 // ── COMPOSITE TYPES ────────────────────────────────────────────────────────────
 export type EventWithTasks = Event & { tasks: Task[] };
