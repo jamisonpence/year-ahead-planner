@@ -19,6 +19,7 @@ import {
   insertRecipeSchema, insertWeekPlanSchema, insertGroceryCheckSchema,
   insertMovieSchema,
   insertBudgetCategorySchema, insertTransactionSchema, insertSubscriptionSchema,
+  insertPlantSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -689,6 +690,34 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
       (await storage.deleteReceiptRecord(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Plants ────────────────────────────────────────────────────────────────────
+  app.get("/api/plants", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getAllPlants((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/plants", requireAuth, async (req, res) => {
+    try {
+      const data = insertPlantSchema.omit({ userId: true } as any).parse(req.body);
+      const plant = await storage.createPlant(data as any, (req.user as User).id);
+      res.status(201).json(plant);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/plants/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePlant(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/plants/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePlant(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }
