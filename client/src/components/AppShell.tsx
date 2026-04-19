@@ -7,7 +7,7 @@ import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf,
+  Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2,
   Eye, EyeOff, GripVertical, Settings, LogOut,
 } from "lucide-react";
 
@@ -19,7 +19,8 @@ const ALL_TABS = [
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/relationships", label: "Relationships",           icon: Users           },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
-  { path: "/movies",        label: "Movies & Shows",                  icon: Film            },
+  { path: "/movies",        label: "Movies & Shows",           icon: Film            },
+  { path: "/music",         label: "Music",                   icon: Music2          },
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
 ];

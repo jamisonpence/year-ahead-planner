@@ -13,6 +13,7 @@ import WorkoutsPage from "@/pages/WorkoutsPage";
 import RelationshipsPage from "@/pages/RelationshipsPage";
 import RecipesPage from "@/pages/RecipesPage";
 import MoviesPage from "@/pages/MoviesPage";
+import MusicPage from "@/pages/MusicPage";
 import BudgetPage from "@/pages/BudgetPage";
 import PlantsPage from "@/pages/PlantsPage";
 import LoginPage from "@/pages/LoginPage";
@@ -31,6 +32,7 @@ function AuthenticatedApp() {
         <Route path="/relationships" component={RelationshipsPage} />
         <Route path="/recipes" component={RecipesPage} />
         <Route path="/movies" component={MoviesPage} />
+        <Route path="/music" component={MusicPage} />
         <Route path="/budget" component={BudgetPage} />
         <Route path="/plants" component={PlantsPage} />
         <Route component={NotFound} />
