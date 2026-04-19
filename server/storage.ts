@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users } from "@shared/schema";
+import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -22,6 +22,7 @@ import type {
   InsertReceipt, Receipt,
   NavPref,
   User, InsertUser,
+  InsertPlant, Plant,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -348,6 +349,23 @@ export async function initializeStorage() {
       prefs_json TEXT NOT NULL DEFAULT '[]'
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS plants (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      species TEXT,
+      location TEXT,
+      light_needs TEXT NOT NULL DEFAULT 'medium',
+      water_frequency_days INTEGER NOT NULL DEFAULT 7,
+      soil_type TEXT,
+      notes TEXT,
+      last_watered TEXT,
+      reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -460,6 +478,11 @@ export interface IStorage {
   // Users
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
+  // Plants
+  getAllPlants(userId: number): Promise<Plant[]>;
+  createPlant(data: InsertPlant, userId: number): Promise<Plant>;
+  updatePlant(id: number, data: Partial<InsertPlant>): Promise<Plant | undefined>;
+  deletePlant(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -925,6 +948,25 @@ export const storage: IStorage = {
   async getUserById(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
+  },
+
+  // ── Plants ───────────────────────────────────────────────────────────────────
+  async getAllPlants(userId: number) {
+    return db.select().from(plants).where(eq(plants.userId, userId)).orderBy(asc(plants.sortOrder), asc(plants.name));
+  },
+  async createPlant(data, userId) {
+    const result = await db.insert(plants).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePlant(id, data) {
+    const existing = await db.select().from(plants).where(eq(plants.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(plants).set(data).where(eq(plants.id, id)).returning();
+    return result[0];
+  },
+  async deletePlant(id) {
+    const result = await db.delete(plants).where(eq(plants.id, id));
+    return result.rowCount > 0;
   },
 };
 
