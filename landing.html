@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --indigo: #4F46E5;
@@ -722,36 +721,10 @@
 </footer>
 </div><!-- end content-layer -->
 <script>
-  const CLIENT_ID = '958218720068-tr19pmu1hmlnk1elpqve729pglaqjqbf.apps.googleusercontent.com';
   function signInWithGoogle() {
-    google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: 'openid email profile',
-      callback: (response) => {
-        if (response.access_token) {
-          // Send the token to your backend for verification
-          // Replace this URL with your actual auth endpoint
-          fetch('/auth/google', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ access_token: response.access_token })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.redirect) {
-              window.location.href = data.redirect;
-            } else {
-              window.location.href = '/dashboard';
-            }
-          })
-          .catch(() => {
-            // Fallback: redirect to dashboard
-            window.location.href = '/dashboard';
-          });
-        }
-      }
-    }).requestAccessToken();
+    window.location.href = '/auth/google';
   }
+
   // Smooth scroll for anchor links
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
