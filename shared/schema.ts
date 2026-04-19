@@ -244,17 +244,19 @@ export const goalTasks = pgTable("goal_tasks", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// ── MOVIES ───────────────────────────────────────────────────────────────────
-// status: "backlog" | "watching" | "watched"
+// ── MOVIES & SHOWS ────────────────────────────────────────────
+// mediaType: "movie" | "show"
+// status: "backlog" | "watching" | "watched" | "finished"
 export const movies = pgTable("movies", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
+  mediaType: text("media_type").notNull().default("movie"), // "movie" | "show"
   title: text("title").notNull(),
   year: integer("year"),
-  director: text("director"),
+  director: text("director"),       // director for movies, creator for shows
   // comma-separated genres e.g. "Action,Thriller"
   genres: text("genres"),
-  status: text("status").notNull().default("backlog"), // backlog | watched
+  status: text("status").notNull().default("backlog"), // backlog | watching | watched | finished
   rating: integer("rating"),   // 1-5 stars, null = unrated
   notes: text("notes"),
   // JSON array of custom list names: ["Date Night", "Watch with Kids"]
@@ -262,12 +264,14 @@ export const movies = pgTable("movies", {
   isFavorite: boolean("is_favorite").notNull().default(false),
   posterColor: text("poster_color"),   // accent color for card
   streamingOn: text("streaming_on"),  // "Netflix", "HBO", etc.
+  // Show-specific
+  totalSeasons: integer("total_seasons"),
+  currentSeason: integer("current_season"),
 });
 
 export const insertMovieSchema = createInsertSchema(movies).omit({ id: true });
 export type InsertMovie = z.infer<typeof insertMovieSchema>;
 export type Movie = typeof movies.$inferSelect;
-
 // ── BUDGET ────────────────────────────────────────────────────────────────────
 // Budget categories for organizing expenses
 export const budgetCategories = pgTable("budget_categories", {
