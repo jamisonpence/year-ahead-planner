@@ -9,10 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  MapPin, Plus, Pencil, Trash2, Search, Heart, Star,
-  Globe, Clock, DollarSign, Tag, Navigation,
+  MapPin, Plus, Pencil, Trash2, Search, Heart,
+  Globe, Clock, Tag, Navigation,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -141,7 +141,6 @@ export default function SpotsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [filterCity, setFilterCity] = useState("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -222,15 +221,6 @@ export default function SpotsPage() {
     visited:       applyFilters(spots.filter((s) => s.status === "visited")),
     favorites:     applyFilters(spots.filter((s) => s.isFavorite)),
   };
-
-  const byType = useMemo(() => {
-    const groups: Record<string, Spot[]> = {};
-    tabSpots[activeTab].forEach((s) => {
-      if (!groups[s.type]) groups[s.type] = [];
-      groups[s.type].push(s);
-    });
-    return groups;
-  }, [tabSpots, activeTab]);
 
   const displaySpots = tabSpots[activeTab] ?? [];
 
@@ -352,10 +342,10 @@ export default function SpotsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Price Range</label>
-                <Select value={String(form.priceRange || "")} onValueChange={(v) => setForm({ ...form, priceRange: v === "" ? "" : Number(v) })}>
+                <Select value={form.priceRange !== "" ? String(form.priceRange) : "_none"} onValueChange={(v) => setForm({ ...form, priceRange: v === "_none" ? "" : Number(v) })}>
                   <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="_none">None</SelectItem>
                     <SelectItem value="1">$ · Budget</SelectItem>
                     <SelectItem value="2">$$ · Moderate</SelectItem>
                     <SelectItem value="3">$$$ · Upscale</SelectItem>
