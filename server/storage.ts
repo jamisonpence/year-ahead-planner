@@ -268,6 +268,7 @@ export async function initializeStorage() {
     CREATE TABLE IF NOT EXISTS movies (
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
+      media_type TEXT NOT NULL DEFAULT 'movie',
       title TEXT NOT NULL,
       year INTEGER,
       director TEXT,
@@ -278,9 +279,15 @@ export async function initializeStorage() {
       lists_json TEXT NOT NULL DEFAULT '[]',
       is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
       poster_color TEXT,
-      streaming_on TEXT
+      streaming_on TEXT,
+      total_seasons INTEGER,
+      current_season INTEGER
     )
   `);
+  // Migrate existing rows: add new columns if they don't exist yet
+  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'movie'`);
+  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS total_seasons INTEGER`);
+  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS current_season INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS budget_categories (
