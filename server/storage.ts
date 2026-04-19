@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs } from "@shared/schema";
+import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, appliances, spots } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -24,6 +24,8 @@ import type {
   User, InsertUser,
   InsertPlant, Plant,
   InsertMusicArtist, MusicArtist, InsertMusicSong, MusicSong, MusicArtistWithSongs,
+  InsertChore, Chore, InsertHouseProject, HouseProject, InsertAppliance, Appliance,
+  InsertSpot, Spot,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -402,6 +404,85 @@ export async function initializeStorage() {
       notes TEXT
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chores (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'cleaning',
+      frequency TEXT NOT NULL DEFAULT 'weekly',
+      custom_frequency_days INTEGER,
+      last_completed TEXT,
+      next_due TEXT,
+      notes TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      assignee TEXT,
+      tags TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS house_projects (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'not_started',
+      priority TEXT NOT NULL DEFAULT 'medium',
+      due_date TEXT,
+      completed_date TEXT,
+      estimated_cost REAL,
+      actual_cost REAL,
+      contractor TEXT,
+      category TEXT NOT NULL DEFAULT 'other',
+      notes TEXT,
+      tags TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS appliances (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      brand TEXT,
+      model TEXT,
+      serial_number TEXT,
+      location TEXT,
+      purchase_date TEXT,
+      purchase_price REAL,
+      warranty_expiry TEXT,
+      last_serviced TEXT,
+      service_frequency_months INTEGER,
+      next_service_due TEXT,
+      notes TEXT,
+      tags TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spots (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'restaurant',
+      address TEXT,
+      neighborhood TEXT,
+      city TEXT,
+      status TEXT NOT NULL DEFAULT 'want_to_visit',
+      rating INTEGER,
+      notes TEXT,
+      website TEXT,
+      price_range INTEGER,
+      tags TEXT,
+      visited_date TEXT,
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+      opening_hours TEXT
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -528,6 +609,26 @@ export interface IStorage {
   createMusicSong(data: InsertMusicSong, userId: number): Promise<MusicSong>;
   updateMusicSong(id: number, data: Partial<InsertMusicSong>): Promise<MusicSong | undefined>;
   deleteMusicSong(id: number): Promise<boolean>;
+  // Chores
+  getAllChores(userId: number): Promise<Chore[]>;
+  createChore(data: InsertChore, userId: number): Promise<Chore>;
+  updateChore(id: number, data: Partial<InsertChore>): Promise<Chore | undefined>;
+  deleteChore(id: number): Promise<boolean>;
+  // House Projects
+  getAllHouseProjects(userId: number): Promise<HouseProject[]>;
+  createHouseProject(data: InsertHouseProject, userId: number): Promise<HouseProject>;
+  updateHouseProject(id: number, data: Partial<InsertHouseProject>): Promise<HouseProject | undefined>;
+  deleteHouseProject(id: number): Promise<boolean>;
+  // Appliances
+  getAllAppliances(userId: number): Promise<Appliance[]>;
+  createAppliance(data: InsertAppliance, userId: number): Promise<Appliance>;
+  updateAppliance(id: number, data: Partial<InsertAppliance>): Promise<Appliance | undefined>;
+  deleteAppliance(id: number): Promise<boolean>;
+  // Spots
+  getAllSpots(userId: number): Promise<Spot[]>;
+  createSpot(data: InsertSpot, userId: number): Promise<Spot>;
+  updateSpot(id: number, data: Partial<InsertSpot>): Promise<Spot | undefined>;
+  deleteSpot(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -1047,6 +1148,82 @@ export const storage: IStorage = {
   },
   async deleteMusicSong(id) {
     const result = await db.delete(musicSongs).where(eq(musicSongs.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Chores ────────────────────────────────────────────────────────────────────
+  async getAllChores(userId: number) {
+    return db.select().from(chores).where(eq(chores.userId, userId)).orderBy(asc(chores.sortOrder), asc(chores.title));
+  },
+  async createChore(data, userId) {
+    const result = await db.insert(chores).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateChore(id, data) {
+    const existing = await db.select().from(chores).where(eq(chores.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(chores).set(data).where(eq(chores.id, id)).returning();
+    return result[0];
+  },
+  async deleteChore(id) {
+    const result = await db.delete(chores).where(eq(chores.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── House Projects ────────────────────────────────────────────────────────────
+  async getAllHouseProjects(userId: number) {
+    return db.select().from(houseProjects).where(eq(houseProjects.userId, userId)).orderBy(asc(houseProjects.sortOrder), asc(houseProjects.title));
+  },
+  async createHouseProject(data, userId) {
+    const result = await db.insert(houseProjects).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateHouseProject(id, data) {
+    const existing = await db.select().from(houseProjects).where(eq(houseProjects.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(houseProjects).set(data).where(eq(houseProjects.id, id)).returning();
+    return result[0];
+  },
+  async deleteHouseProject(id) {
+    const result = await db.delete(houseProjects).where(eq(houseProjects.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Appliances ────────────────────────────────────────────────────────────────
+  async getAllAppliances(userId: number) {
+    return db.select().from(appliances).where(eq(appliances.userId, userId)).orderBy(asc(appliances.name));
+  },
+  async createAppliance(data, userId) {
+    const result = await db.insert(appliances).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateAppliance(id, data) {
+    const existing = await db.select().from(appliances).where(eq(appliances.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(appliances).set(data).where(eq(appliances.id, id)).returning();
+    return result[0];
+  },
+  async deleteAppliance(id) {
+    const result = await db.delete(appliances).where(eq(appliances.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Spots ─────────────────────────────────────────────────────────────────────
+  async getAllSpots(userId: number) {
+    return db.select().from(spots).where(eq(spots.userId, userId)).orderBy(asc(spots.name));
+  },
+  async createSpot(data, userId) {
+    const result = await db.insert(spots).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateSpot(id, data) {
+    const existing = await db.select().from(spots).where(eq(spots.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(spots).set(data).where(eq(spots.id, id)).returning();
+    return result[0];
+  },
+  async deleteSpot(id) {
+    const result = await db.delete(spots).where(eq(spots.id, id));
     return result.rowCount > 0;
   },
 };

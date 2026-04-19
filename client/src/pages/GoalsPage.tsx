@@ -21,8 +21,10 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask,
+  GeneralTask, InsertGeneralTask, Chore,
 } from "@shared/schema";
+import { Link } from "wouter";
+import { Home } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_COLORS: Record<string, string> = {
@@ -98,6 +100,7 @@ export default function GoalsPage() {
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
   const { data: standaloneProjects = [] } = useQuery<ProjectWithTasks[]>({ queryKey: ["/api/projects/standalone"] });
   const { data: generalTasksData = [] } = useQuery<GeneralTask[]>({ queryKey: ["/api/general-tasks"] });
+  const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -462,6 +465,45 @@ export default function GoalsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Due Chores section */}
+            {(() => {
+              const dueChores = chores
+                .filter((c) => c.isActive && c.nextDue)
+                .filter((c) => {
+                  const today = new Date(); today.setHours(0,0,0,0);
+                  const due = new Date(c.nextDue!);
+                  return due <= new Date(today.getTime() + 3 * 86400000);
+                })
+                .sort((a, b) => (a.nextDue ?? "").localeCompare(b.nextDue ?? ""));
+              if (dueChores.length === 0) return null;
+              return (
+                <div className="mb-4 p-3 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Home size={13} className="text-orange-600" />
+                      <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Chores Due Soon</span>
+                    </div>
+                    <Link href="/housekeeping"><a className="text-xs text-orange-600 hover:underline">View all →</a></Link>
+                  </div>
+                  <div className="space-y-1">
+                    {dueChores.slice(0, 4).map((chore) => {
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const due = new Date(chore.nextDue!);
+                      const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+                      return (
+                        <div key={chore.id} className="flex items-center justify-between text-xs">
+                          <span className="text-foreground truncate">{chore.title}</span>
+                          <span className={`shrink-0 ml-2 font-medium ${days < 0 ? "text-red-600" : days === 0 ? "text-orange-600" : "text-yellow-600"}`}>
+                            {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : `${days}d`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {!selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />

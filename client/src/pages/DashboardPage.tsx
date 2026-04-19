@@ -5,11 +5,11 @@ import { format, parseISO } from "date-fns";
 import {
   Calendar, BookOpen, Dumbbell, Target, Plus, Flame,
   TrendingUp, CheckCircle2, Clock, AlertTriangle, ChevronRight,
-  BookMarked, Zap,
+  BookMarked, Zap, Home, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import type { EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate, GoalWithProjects } from "@shared/schema";
+import type { EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate, GoalWithProjects, Chore } from "@shared/schema";
 import {
   daysUntil, nextOccurrence, thisMonthStr, thisWeekDates, todayStr,
   bookProgress, readingStreak, monthlyReadingStats, workoutStreak,
@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const { data: wLogs = [] } = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
   const { data: wTemplates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+  const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
   const today = todayStr();
   const allSessions = books.flatMap((b) => b.sessions ?? []);
@@ -65,6 +66,13 @@ export default function DashboardPage() {
   dueSoon.sort((a, b) => a.due.localeCompare(b.due));
 
   const dayLabel = (d: number) => d === 0 ? "Today" : d === 1 ? "Tomorrow" : `${d}d`;
+
+  // ── Due / overdue chores ──────────────────────────────────────────────────
+  const dueChores = chores
+    .filter((c) => c.isActive && c.nextDue)
+    .map((c) => ({ ...c, daysLeft: daysUntil(c.nextDue!) }))
+    .filter((c) => c.daysLeft !== null && c.daysLeft <= 3)
+    .sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0));
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -221,6 +229,32 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Due Chores */}
+          {dueChores.length > 0 && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Home size={15} className="text-primary" />
+                  <span className="text-sm font-semibold">Chores Due</span>
+                </div>
+                <Link href="/housekeeping"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
+              </div>
+              <div className="space-y-2">
+                {dueChores.slice(0, 5).map((chore) => (
+                  <div key={chore.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RefreshCw size={11} className="text-muted-foreground shrink-0" />
+                      <p className="text-xs font-medium truncate">{chore.title}</p>
+                    </div>
+                    <span className={`text-xs font-semibold shrink-0 ${(chore.daysLeft ?? 1) < 0 ? "text-red-600" : (chore.daysLeft ?? 1) === 0 ? "text-orange-600" : "text-yellow-600"}`}>
+                      {(chore.daysLeft ?? 0) < 0 ? `${Math.abs(chore.daysLeft!)}d overdue` : dayLabel(chore.daysLeft!)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Active Goals */}
           <div className="bg-card border rounded-xl p-4">
