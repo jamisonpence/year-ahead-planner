@@ -402,6 +402,85 @@ export const plants = pgTable("plants", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+// ── CHORES ────────────────────────────────────────────────────────────────────
+// frequency: "daily"|"weekly"|"biweekly"|"monthly"|"quarterly"|"yearly"|"custom"|"as_needed"
+export const chores = pgTable("chores", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("cleaning"), // cleaning|yard|maintenance|laundry|cooking|other
+  frequency: text("frequency").notNull().default("weekly"),
+  customFrequencyDays: integer("custom_frequency_days"),     // used when frequency="custom"
+  lastCompleted: text("last_completed"),   // ISO date
+  nextDue: text("next_due"),               // ISO date
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  priority: text("priority").notNull().default("medium"),    // low|medium|high
+  assignee: text("assignee"),              // optional household member name
+  tags: text("tags"),                      // comma-separated custom tags
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// ── HOUSE PROJECTS ────────────────────────────────────────────────────────────
+// status: "not_started"|"in_progress"|"done"|"blocked"
+export const houseProjects = pgTable("house_projects", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("not_started"),
+  priority: text("priority").notNull().default("medium"),
+  dueDate: text("due_date"),
+  completedDate: text("completed_date"),
+  estimatedCost: real("estimated_cost"),
+  actualCost: real("actual_cost"),
+  contractor: text("contractor"),
+  category: text("category").notNull().default("other"),     // repair|renovation|improvement|cleaning|other
+  notes: text("notes"),
+  tags: text("tags"),                      // comma-separated custom tags
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// ── APPLIANCES ────────────────────────────────────────────────────────────────
+export const appliances = pgTable("appliances", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  brand: text("brand"),
+  model: text("model"),
+  serialNumber: text("serial_number"),
+  location: text("location"),              // kitchen|bathroom|laundry|garage|bedroom|living_room|other
+  purchaseDate: text("purchase_date"),     // ISO date
+  purchasePrice: real("purchase_price"),
+  warrantyExpiry: text("warranty_expiry"), // ISO date
+  lastServiced: text("last_serviced"),     // ISO date
+  serviceFrequencyMonths: integer("service_frequency_months"),
+  nextServiceDue: text("next_service_due"),// ISO date
+  notes: text("notes"),
+  tags: text("tags"),                      // comma-separated custom tags
+});
+
+// ── SPOTS ─────────────────────────────────────────────────────────────────────
+// type: "restaurant"|"bar"|"cafe"|"park"|"trail"|"shop"|"service"|"attraction"|"hotel"|"other"
+// status: "want_to_visit"|"visited"|"favorite"
+export const spots = pgTable("spots", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("restaurant"),
+  address: text("address"),
+  neighborhood: text("neighborhood"),
+  city: text("city"),
+  status: text("status").notNull().default("want_to_visit"),
+  rating: integer("rating"),               // 1–5
+  notes: text("notes"),
+  website: text("website"),
+  priceRange: integer("price_range"),      // 1=$, 2=$$, 3=$$$, 4=$$$$
+  tags: text("tags"),                      // comma-separated custom tags/filters
+  visitedDate: text("visited_date"),       // ISO date
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  openingHours: text("opening_hours"),
+});
+
 // ── NAV PREFERENCES ───────────────────────────────────────────────────────────
 // Stores user's tab order and visibility as a single JSON row
 export const navPrefs = pgTable("nav_prefs", {
@@ -473,6 +552,22 @@ export type PersonWithSpouse = Person & { spouse?: Person | null };
 export const insertPlantSchema = createInsertSchema(plants).omit({ id: true });
 export type InsertPlant = z.infer<typeof insertPlantSchema>;
 export type Plant = typeof plants.$inferSelect;
+
+export const insertChoreSchema = createInsertSchema(chores).omit({ id: true });
+export type InsertChore = z.infer<typeof insertChoreSchema>;
+export type Chore = typeof chores.$inferSelect;
+
+export const insertHouseProjectSchema = createInsertSchema(houseProjects).omit({ id: true });
+export type InsertHouseProject = z.infer<typeof insertHouseProjectSchema>;
+export type HouseProject = typeof houseProjects.$inferSelect;
+
+export const insertApplianceSchema = createInsertSchema(appliances).omit({ id: true });
+export type InsertAppliance = z.infer<typeof insertApplianceSchema>;
+export type Appliance = typeof appliances.$inferSelect;
+
+export const insertSpotSchema = createInsertSchema(spots).omit({ id: true });
+export type InsertSpot = z.infer<typeof insertSpotSchema>;
+export type Spot = typeof spots.$inferSelect;
 
 // ── COMPOSITE TYPES ────────────────────────────────────────────────────────────
 export type EventWithTasks = Event & { tasks: Task[] };

@@ -16,6 +16,8 @@ import MoviesPage from "@/pages/MoviesPage";
 import MusicPage from "@/pages/MusicPage";
 import BudgetPage from "@/pages/BudgetPage";
 import PlantsPage from "@/pages/PlantsPage";
+import HousekeepingPage from "@/pages/HousekeepingPage";
+import SpotsPage from "@/pages/SpotsPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
@@ -35,6 +37,8 @@ function AuthenticatedApp() {
         <Route path="/music" component={MusicPage} />
         <Route path="/budget" component={BudgetPage} />
         <Route path="/plants" component={PlantsPage} />
+        <Route path="/housekeeping" component={HousekeepingPage} />
+        <Route path="/spots" component={SpotsPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

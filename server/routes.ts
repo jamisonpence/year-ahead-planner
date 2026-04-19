@@ -21,6 +21,7 @@ import {
   insertBudgetCategorySchema, insertTransactionSchema, insertSubscriptionSchema,
   insertPlantSchema,
   insertMusicArtistSchema, insertMusicSongSchema,
+  insertChoreSchema, insertHouseProjectSchema, insertApplianceSchema, insertSpotSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -762,6 +763,94 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   app.delete("/api/music/songs/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteMusicSong(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Chores ────────────────────────────────────────────────────────────────────
+  app.get("/api/chores", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllChores((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/chores", requireAuth, async (req, res) => {
+    try {
+      const data = insertChoreSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createChore(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/chores/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateChore(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/chores/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteChore(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── House Projects ────────────────────────────────────────────────────────────
+  app.get("/api/house-projects", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllHouseProjects((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/house-projects", requireAuth, async (req, res) => {
+    try {
+      const data = insertHouseProjectSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createHouseProject(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/house-projects/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateHouseProject(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/house-projects/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteHouseProject(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Appliances ────────────────────────────────────────────────────────────────
+  app.get("/api/appliances", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllAppliances((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/appliances", requireAuth, async (req, res) => {
+    try {
+      const data = insertApplianceSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createAppliance(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/appliances/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateAppliance(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/appliances/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteAppliance(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Spots ─────────────────────────────────────────────────────────────────────
+  app.get("/api/spots", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllSpots((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/spots", requireAuth, async (req, res) => {
+    try {
+      const data = insertSpotSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createSpot(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/spots/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateSpot(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/spots/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteSpot(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }
