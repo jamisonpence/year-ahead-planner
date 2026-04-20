@@ -591,5 +591,11 @@ export type TemplateExercise = {
 };
 export type LoggedSet = { reps: number; weight: number; rpe?: number };
 export type LoggedExercise = {
-  name: string; sets: LoggedSet[]; isPR: boolean; notes: string;
+  name: string;
+  type?: string;
+  sets: LoggedSet[];
+  distance?: string;
+  duration?: string;
+  isPR: boolean;
+  notes: string;
 };
