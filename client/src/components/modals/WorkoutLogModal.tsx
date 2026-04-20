@@ -12,6 +12,15 @@ import { Plus, Trash2, Star } from "lucide-react";
 import { todayStr, WORKOUT_TYPES, WORKOUT_TYPE_LABELS } from "@/lib/plannerUtils";
 import type { WorkoutTemplate, WorkoutLog, InsertWorkoutLog, LoggedExercise, LoggedSet } from "@shared/schema";
 
+// Exercise activity types (same set as template modal)
+const EXERCISE_TYPES = ["Lifting", "Run", "Bike", "Swim", "HIIT", "Yoga", "Stretch", "Custom"] as const;
+
+const CARDIO_TYPES = new Set(["Run", "Bike", "Swim"]);
+const DURATION_ONLY_TYPES = new Set(["Yoga", "Stretch"]);
+const isCardio = (t: string) => CARDIO_TYPES.has(t);
+const isDurationOnly = (t: string) => DURATION_ONLY_TYPES.has(t);
+const usesSetTable = (t: string) => !isCardio(t) && !isDurationOnly(t);
+
 export default function WorkoutLogModal({ open, onClose, templates, editLog }: {
   open: boolean; onClose: () => void; templates: WorkoutTemplate[];
   editLog: WorkoutLog | null;
@@ -49,9 +58,12 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog }: {
         try {
           const tex = JSON.parse(t.exercisesJson) as any[];
           setExercises(tex.map((ex: any) => ({
-            name: ex.name, isPR: false, notes: ex.notes || "",
-            // New format: sets is already an array of {reps, weight}
-            // Old format: sets was a count number with top-level reps/weight
+            name: ex.name,
+            type: ex.type ?? "",
+            isPR: false,
+            notes: ex.notes || "",
+            distance: ex.distance ?? "",
+            duration: ex.duration ?? "",
             sets: Array.isArray(ex.sets)
               ? ex.sets.map((s: any) => ({ reps: s.reps ?? 8, weight: s.weight ?? 0 }))
               : Array.from({ length: ex.sets || 3 }, () => ({ reps: ex.reps || 8, weight: ex.weight || 0 })),
@@ -61,18 +73,36 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog }: {
     }
   }, [templateId]);
 
-  const addExercise = () => setExercises((prev) => [...prev, { name: "", sets: [{ reps: 8, weight: 0 }], isPR: false, notes: "" }]);
+  // ── Exercise mutations ───────────────────────────────────────────────────────
+  const addExercise = () => setExercises((prev) => [
+    ...prev,
+    { name: "", type: "", sets: [{ reps: 8, weight: 0 }], distance: "", duration: "", isPR: false, notes: "" },
+  ]);
   const removeExercise = (i: number) => setExercises((prev) => prev.filter((_, idx) => idx !== i));
   const updateEx = (i: number, field: keyof LoggedExercise, val: any) =>
     setExercises((prev) => prev.map((ex, idx) => idx === i ? { ...ex, [field]: val } : ex));
-  const addSet = (i: number) => setExercises((prev) => prev.map((ex, idx) => idx === i ? { ...ex, sets: [...ex.sets, { reps: 8, weight: 0 }] } : ex));
-  const removeSet = (ei: number, si: number) => setExercises((prev) => prev.map((ex, idx) => idx === ei ? { ...ex, sets: ex.sets.filter((_, si2) => si2 !== si) } : ex));
+
+  // ── Set mutations ────────────────────────────────────────────────────────────
+  const addSet = (i: number) => setExercises((prev) => prev.map((ex, idx) =>
+    idx === i ? { ...ex, sets: [...ex.sets, { reps: 8, weight: 0 }] } : ex
+  ));
+  const removeSet = (ei: number, si: number) => setExercises((prev) => prev.map((ex, idx) =>
+    idx === ei ? { ...ex, sets: ex.sets.filter((_, si2) => si2 !== si) } : ex
+  ));
   const updateSet = (ei: number, si: number, field: keyof LoggedSet, val: number) =>
-    setExercises((prev) => prev.map((ex, idx) => idx === ei ? { ...ex, sets: ex.sets.map((s, si2) => si2 === si ? { ...s, [field]: val } : s) } : ex));
+    setExercises((prev) => prev.map((ex, idx) =>
+      idx === ei ? { ...ex, sets: ex.sets.map((s, si2) => si2 === si ? { ...s, [field]: val } : s) } : ex
+    ));
 
   const inv = () => queryClient.invalidateQueries({ queryKey: ["/api/workout-logs"] });
-  const createMut = useMutation({ mutationFn: (d: InsertWorkoutLog) => apiRequest("POST", "/api/workout-logs", d), onSuccess: () => { inv(); toast({ title: "Workout logged" }); onClose(); } });
-  const updateMut = useMutation({ mutationFn: (d: Partial<InsertWorkoutLog>) => apiRequest("PATCH", `/api/workout-logs/${editLog?.id}`, d), onSuccess: () => { inv(); toast({ title: "Workout updated" }); onClose(); } });
+  const createMut = useMutation({
+    mutationFn: (d: InsertWorkoutLog) => apiRequest("POST", "/api/workout-logs", d),
+    onSuccess: () => { inv(); toast({ title: "Workout logged" }); onClose(); },
+  });
+  const updateMut = useMutation({
+    mutationFn: (d: Partial<InsertWorkoutLog>) => apiRequest("PATCH", `/api/workout-logs/${editLog?.id}`, d),
+    onSuccess: () => { inv(); toast({ title: "Workout updated" }); onClose(); },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,19 +123,32 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog }: {
         <DialogHeader><DialogTitle>{editLog ? "Edit Workout" : "Log Workout"}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {templates.length > 0 && (
-            <div className="space-y-1.5"><Label>Load from Template <span className="text-muted-foreground text-xs">(opt)</span></Label>
+            <div className="space-y-1.5">
+              <Label>Load from Template <span className="text-muted-foreground text-xs">(opt)</span></Label>
               <Select value={templateId} onValueChange={setTemplateId}>
                 <SelectTrigger><SelectValue placeholder="Select template..." /></SelectTrigger>
-                <SelectContent><SelectItem value="__none__">— None —</SelectItem>{templates.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {templates.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
           )}
+
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Workout Name *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Push Day A" required /></div>
-            <div className="space-y-1.5"><Label>Type</Label>
-              <Select value={wType} onValueChange={setWType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WORKOUT_TYPES.map((t) => <SelectItem key={t} value={t}>{WORKOUT_TYPE_LABELS[t]}</SelectItem>)}</SelectContent></Select>
+            <div className="space-y-1.5">
+              <Label>Workout Name *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Push Day A" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={wType} onValueChange={setWType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{WORKOUT_TYPES.map((t) => <SelectItem key={t} value={t}>{WORKOUT_TYPE_LABELS[t]}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Duration (min)</Label><Input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="45" /></div>
@@ -115,33 +158,136 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog }: {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Exercises</Label>
-              <Button type="button" size="sm" variant="outline" onClick={addExercise} className="h-7 text-xs gap-1"><Plus size={12} />Add Exercise</Button>
+              <Button type="button" size="sm" variant="outline" onClick={addExercise} className="h-7 text-xs gap-1">
+                <Plus size={12} />Add Exercise
+              </Button>
             </div>
+
             {exercises.map((ex, ei) => (
-              <div key={ei} className="border rounded-xl p-3 space-y-2 bg-secondary/20">
-                <div className="flex items-center gap-2">
-                  <Input value={ex.name} onChange={(e) => updateEx(ei, "name", e.target.value)} placeholder="Exercise name" className="flex-1 h-8 text-sm" />
-                  <button type="button" onClick={() => updateEx(ei, "isPR", !ex.isPR)} className={`p-1.5 rounded ${ex.isPR ? "text-amber-500" : "text-muted-foreground"}`} title="Mark as PR"><Star size={14} fill={ex.isPR ? "currentColor" : "none"} /></button>
-                  <button type="button" onClick={() => removeExercise(ei)} className="p-1.5 rounded text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
+              <div key={ei} className="border rounded-xl bg-secondary/20 overflow-hidden">
+                {/* Exercise header row */}
+                <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                  <Input
+                    value={ex.name}
+                    onChange={(e) => updateEx(ei, "name", e.target.value)}
+                    placeholder="Exercise name"
+                    className="flex-1 h-8 text-sm"
+                  />
+                  <Select
+                    value={ex.type || "__none__"}
+                    onValueChange={(v) => updateEx(ei, "type", v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 w-[110px] text-xs shrink-0"><SelectValue placeholder="Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Any type</SelectItem>
+                      {EXERCISE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => updateEx(ei, "isPR", !ex.isPR)}
+                    className={`p-1.5 rounded shrink-0 ${ex.isPR ? "text-amber-500" : "text-muted-foreground"}`}
+                    title="Mark as PR"
+                  >
+                    <Star size={14} fill={ex.isPR ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeExercise(ei)}
+                    className="p-1.5 rounded text-muted-foreground hover:text-destructive shrink-0"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground px-1">
-                    <span>Reps</span><span>Weight (lb)</span><span></span>
-                  </div>
-                  {ex.sets.map((s, si) => (
-                    <div key={si} className="grid grid-cols-3 gap-1 items-center">
-                      <Input type="number" value={s.reps} onChange={(e) => updateSet(ei, si, "reps", +e.target.value)} className="h-7 text-xs" />
-                      <Input type="number" value={s.weight} onChange={(e) => updateSet(ei, si, "weight", +e.target.value)} className="h-7 text-xs" step="2.5" />
-                      <button type="button" onClick={() => removeSet(ei, si)} className="text-muted-foreground hover:text-destructive flex justify-center"><Trash2 size={12} /></button>
+
+                {/* ── Cardio: Distance + Time ──────────────────────────────── */}
+                {isCardio(ex.type ?? "") && (
+                  <div className="px-3 pb-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Distance</p>
+                        <Input
+                          value={ex.distance ?? ""}
+                          onChange={(e) => updateEx(ei, "distance", e.target.value)}
+                          placeholder="e.g. 5 mi, 10 km, 400 m"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Time / Duration</p>
+                        <Input
+                          value={ex.duration ?? ""}
+                          onChange={(e) => updateEx(ei, "duration", e.target.value)}
+                          placeholder="e.g. 30 min, 1:15:00"
+                          className="h-7 text-xs"
+                        />
+                      </div>
                     </div>
-                  ))}
-                  <button type="button" onClick={() => addSet(ei)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1"><Plus size={10} />Add set</button>
-                </div>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                      <Input value={ex.notes} onChange={(e) => updateEx(ei, "notes", e.target.value)} placeholder="e.g. easy pace, intervals" className="h-7 text-xs" />
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Duration only: Yoga / Stretch ────────────────────────── */}
+                {isDurationOnly(ex.type ?? "") && (
+                  <div className="px-3 pb-3">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-medium">Duration</p>
+                      <Input
+                        value={ex.duration ?? ""}
+                        onChange={(e) => updateEx(ei, "duration", e.target.value)}
+                        placeholder="e.g. 60 min, 1:30:00"
+                        className="h-7 text-xs w-48"
+                      />
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                      <Input value={ex.notes} onChange={(e) => updateEx(ei, "notes", e.target.value)} placeholder="e.g. restorative flow, focus on hips" className="h-7 text-xs" />
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Sets / Reps / Weight table ───────────────────────────── */}
+                {usesSetTable(ex.type ?? "") && (
+                  <div className="px-3 pb-3 space-y-1">
+                    <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground px-1 mb-1">
+                      <span>Reps</span><span>Weight (lb)</span><span></span>
+                    </div>
+                    {ex.sets.map((s, si) => (
+                      <div key={si} className="grid grid-cols-3 gap-1 items-center">
+                        <Input type="number" value={s.reps} onChange={(e) => updateSet(ei, si, "reps", +e.target.value)} className="h-7 text-xs" />
+                        <Input type="number" value={s.weight} onChange={(e) => updateSet(ei, si, "weight", +e.target.value)} className="h-7 text-xs" step="2.5" />
+                        <button type="button" onClick={() => removeSet(ei, si)} className="text-muted-foreground hover:text-destructive flex justify-center">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => addSet(ei)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1">
+                      <Plus size={10} />Add set
+                    </button>
+                    <div className="pt-1 space-y-1">
+                      <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                      <Input value={ex.notes} onChange={(e) => updateEx(ei, "notes", e.target.value)} placeholder="e.g. keep elbows tucked" className="h-7 text-xs" />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <div className="space-y-1.5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
-          <div className="flex gap-2"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editLog ? "Save" : "Log Workout"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
+
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+          </div>
+
+          <div className="flex gap-2">
+            <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">
+              {editLog ? "Save" : "Log Workout"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
