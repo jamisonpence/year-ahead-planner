@@ -5,7 +5,7 @@ import { format, startOfWeek, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, MoreHorizontal, Clock, ChefHat,
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
-  RefreshCw, Flame,
+  RefreshCw, Flame, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,64 @@ function groupIngredients(recipes: Recipe[]): Record<string, { name: string; qty
   return result;
 }
 
+// ── Recipe text parser ─────────────────────────────────────────────────────────
+function parseRecipeText(raw: string): { ingredients: RecipeIngredient[]; instructions: string; recipeName: string } {
+  const lines = raw.split('\n').map(l => l.trim());
+  const ingredients: RecipeIngredient[] = [];
+  const instructionLines: string[] = [];
+  let recipeName = "";
+
+  const isIngredientHeader = (l: string) => /^(ingredients?|what you('?ll)? need|you('?ll)? need):?\s*$/i.test(l);
+  const isInstructionHeader = (l: string) => /^(instructions?|directions?|method|steps?|how to( make)?|preparation|prep):?\s*$/i.test(l);
+  const UNIT_RE = /cups?|tbsps?|tsp|tablespoons?|teaspoons?|oz(?:s)?|lbs?|pounds?|grams?|g\b|kg\b|ml\b|liters?|cans?|cloves?|slices?|bunches?|handfuls?|pinch(?:es)?|dash(?:es)?|sprigs?|packages?|pkgs?|sticks?|sheets?/i;
+  const QTY_RE = new RegExp(`^([\\d\\s½⅓¼⅔¾\\/\\.]+(?:\\s*(?:${UNIT_RE.source}))?\\s+)(.+)`, 'i');
+
+  let mode: 'scan' | 'ingredients' | 'instructions' = 'scan';
+  let firstNonEmpty = true;
+
+  for (const line of lines) {
+    if (!line) continue;
+    // First non-empty line might be the recipe name
+    if (firstNonEmpty) {
+      firstNonEmpty = false;
+      if (!isIngredientHeader(line) && !isInstructionHeader(line)) {
+        recipeName = line;
+        continue;
+      }
+    }
+    if (isIngredientHeader(line)) { mode = 'ingredients'; continue; }
+    if (isInstructionHeader(line)) { mode = 'instructions'; continue; }
+
+    if (mode === 'ingredients') {
+      const c = line.replace(/^[-•*·✓]\s*/, '');
+      const m = c.match(QTY_RE);
+      if (m) {
+        ingredients.push({ qty: m[1].trim(), name: m[2].trim() });
+      } else {
+        ingredients.push({ qty: '', name: c });
+      }
+    } else if (mode === 'instructions') {
+      instructionLines.push(line);
+    } else {
+      // Scan mode: try to detect ingredients by pattern
+      const c = line.replace(/^[-•*·✓\d\.]+\s*/, '');
+      const m = c.match(QTY_RE);
+      if (m) {
+        mode = 'ingredients';
+        ingredients.push({ qty: m[1].trim(), name: m[2].trim() });
+      }
+    }
+  }
+
+  // Fallback: if nothing was found, treat everything after first line as instructions
+  if (ingredients.length === 0 && instructionLines.length === 0) {
+    const rest = lines.slice(recipeName ? 1 : 0).filter(l => l);
+    return { ingredients: [], instructions: rest.join('\n'), recipeName };
+  }
+
+  return { ingredients, instructions: instructionLines.join('\n').trim(), recipeName };
+}
+
 // ── Recipe Form Modal ─────────────────────────────────────────────────────────
 function RecipeFormModal({ open, onClose, editRecipe }: {
   open: boolean; onClose: () => void; editRecipe: Recipe | null;
@@ -85,6 +143,8 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
   const [cookTime, setCookTime] = useState("");
   const [instructions, setInstructions] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([{ name: "", qty: "" }]);
+  const [pasteText, setPasteText] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -96,6 +156,8 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
       setInstructions(editRecipe?.instructions ?? "");
       const ings = editRecipe ? parseIngredients(editRecipe.ingredientsJson) : [];
       setIngredients(ings.length > 0 ? ings : [{ name: "", qty: "" }]);
+      setPasteText("");
+      setShowPaste(false);
     }
   }, [open, editRecipe]);
 
@@ -137,6 +199,47 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
           <DialogTitle className="text-lg font-bold">{editRecipe ? "Edit Recipe" : "Add New Recipe"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Paste & Parse section */}
+          <div className="rounded-xl border border-dashed bg-secondary/20 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPaste(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span className="flex items-center gap-1.5"><BookOpen size={14} /> Paste a recipe to auto-fill</span>
+              <ChevronRight size={14} className={`transition-transform ${showPaste ? "rotate-90" : ""}`} />
+            </button>
+            {showPaste && (
+              <div className="px-3 pb-3 space-y-2 border-t">
+                <Textarea
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                  rows={6}
+                  placeholder={"Paste a full recipe here — ingredients, instructions, etc.\n\nExample:\n  Chocolate Chip Cookies\n  Ingredients:\n  2 cups flour\n  1 cup butter\n  Instructions:\n  1. Preheat oven to 375°F..."}
+                  className="text-xs mt-2 resize-none"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!pasteText.trim()}
+                  onClick={() => {
+                    const parsed = parseRecipeText(pasteText);
+                    if (parsed.recipeName && !name) setName(parsed.recipeName);
+                    if (parsed.ingredients.length > 0) setIngredients(parsed.ingredients);
+                    if (parsed.instructions) setInstructions(parsed.instructions);
+                    setShowPaste(false);
+                    setPasteText("");
+                    toast({ title: `Parsed ${parsed.ingredients.length} ingredient${parsed.ingredients.length !== 1 ? "s" : ""}` });
+                  }}
+                  className="gap-1.5"
+                >
+                  <RefreshCw size={12} /> Parse Recipe
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label>Recipe Name *</Label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Garlic Butter Ribeye" required />

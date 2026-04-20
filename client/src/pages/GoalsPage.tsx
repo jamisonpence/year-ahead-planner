@@ -21,7 +21,7 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask, Chore,
+  GeneralTask, InsertGeneralTask, Chore, HouseProject,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -84,8 +84,9 @@ function QuickAdd({ placeholder, onAdd, className = "" }: {
   );
 }
 
-// Sentinel value for the standalone "General" pseudo-goal
+// Sentinel values for pseudo-goal cards
 const STANDALONE_ID = -1;
+const HOUSEKEEPING_ID = -2;
 
 export default function GoalsPage() {
   const { toast } = useToast();
@@ -101,6 +102,7 @@ export default function GoalsPage() {
   const { data: standaloneProjects = [] } = useQuery<ProjectWithTasks[]>({ queryKey: ["/api/projects/standalone"] });
   const { data: generalTasksData = [] } = useQuery<GeneralTask[]>({ queryKey: ["/api/general-tasks"] });
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
+  const { data: houseProjects = [] } = useQuery<HouseProject[]>({ queryKey: ["/api/house-projects"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -178,6 +180,7 @@ export default function GoalsPage() {
   // ── Derived state ─────────────────────────────────────────────────────────
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) ?? null;
   const isStandaloneSelected = selectedGoalId === STANDALONE_ID;
+  const isHousekeepingSelected = selectedGoalId === HOUSEKEEPING_ID;
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -302,7 +305,7 @@ export default function GoalsPage() {
                 </div>
               );
             })}
-            {/* General (standalone) card — always at the bottom */}
+            {/* General (standalone) card */}
             <div
               onClick={() => { setSelectedGoalId(selectedGoalId === STANDALONE_ID ? null : STANDALONE_ID); setSelectedProjectId(null); }}
               className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-2 ${
@@ -319,6 +322,23 @@ export default function GoalsPage() {
               </div>
             </div>
 
+            {/* Housekeeping card */}
+            <div
+              onClick={() => { setSelectedGoalId(selectedGoalId === HOUSEKEEPING_ID ? null : HOUSEKEEPING_ID); setSelectedProjectId(null); }}
+              className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                selectedGoalId === HOUSEKEEPING_ID ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20" : "bg-card border-dashed hover:border-orange-300"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Home size={15} className="text-orange-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">Housekeeping</p>
+                  <p className="text-xs text-muted-foreground">{houseProjects.length} project{houseProjects.length !== 1 ? "s" : ""} · {chores.filter(c => c.isActive).length} chore{chores.filter(c => c.isActive).length !== 1 ? "s" : ""}</p>
+                </div>
+                <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === HOUSEKEEPING_ID ? "rotate-90" : ""}`} />
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -326,16 +346,52 @@ export default function GoalsPage() {
         <div className="w-72 shrink-0 flex flex-col min-h-0">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              {isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
+              {isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
             </span>
-            {(selectedGoal || isStandaloneSelected) && (
+            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && (
               <span className="text-xs text-muted-foreground">
-                {isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
+                {isHousekeepingSelected ? houseProjects.length : isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
               </span>
             )}
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {!selectedGoal && !isStandaloneSelected ? (
+            {/* Housekeeping mode: show house projects (read-only) */}
+            {isHousekeepingSelected ? (
+              <>
+                {houseProjects.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Folder size={24} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-xs">No house projects yet</p>
+                    <Link href="/housekeeping"><a className="text-xs text-primary hover:underline mt-1 block">Add in Housekeeping →</a></Link>
+                  </div>
+                ) : (
+                  houseProjects.map((p) => {
+                    const statusInfo = PROJECT_STATUSES.find((s) => s.value === p.status) ?? PROJECT_STATUSES[0];
+                    const d = p.dueDate ? daysUntil(p.dueDate) : null;
+                    return (
+                      <div key={p.id} className="rounded-xl border bg-card p-3">
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <p className="text-sm font-medium leading-tight flex-1 truncate">{p.title}</p>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border shrink-0 ${STATUS_PILL[p.status]}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                            {statusInfo.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          {d !== null ? (
+                            <span className={d < 0 ? "text-destructive font-medium" : d <= 7 ? "text-amber-600 dark:text-amber-400 font-medium" : ""}>
+                              {d < 0 ? "Overdue" : `Due ${format(parseISO(p.dueDate!), "MMM d")}`}
+                            </span>
+                          ) : <span className="capitalize text-muted-foreground">{p.category}</span>}
+                          {p.priority !== "medium" && <span className={`${PRIORITY_COLORS[p.priority]}`}>{p.priority}</span>}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <Link href="/housekeeping"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Home size={11} /> Manage in Housekeeping</a></Link>
+              </>
+            ) : !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Folder size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-xs">Select a goal to see projects</p>
@@ -451,22 +507,64 @@ export default function GoalsPage() {
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                {(selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}` : isStandaloneSelected ? "General Tasks" : selectedGoal ? "All Tasks" : "Tasks"}
+                {isHousekeepingSelected ? "Chores" : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}` : isStandaloneSelected ? "General Tasks" : selectedGoal ? "All Tasks" : "Tasks"}
               </span>
-              {totalTasks > 0 && (
+              {!isHousekeepingSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
               )}
+              {isHousekeepingSelected && (
+                <span className="text-xs text-muted-foreground">{chores.filter(c => c.isActive).length} active</span>
+              )}
             </div>
-            {totalTasks > 0 && (
+            {!isHousekeepingSelected && totalTasks > 0 && (
               <Progress value={totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0} className="h-1.5 w-24" />
             )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Due Chores section */}
-            {(() => {
+            {/* Housekeeping mode: show chores list */}
+            {isHousekeepingSelected ? (() => {
+              const activeChores = chores.filter(c => c.isActive).sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999"));
+              if (activeChores.length === 0) return (
+                <div className="text-center py-16 text-muted-foreground">
+                  <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
+                  <p className="font-medium text-sm">No active chores</p>
+                  <Link href="/housekeeping"><a className="text-xs text-primary hover:underline mt-1 block">Add in Housekeeping →</a></Link>
+                </div>
+              );
+              const today = new Date(); today.setHours(0, 0, 0, 0);
+              return (
+                <div className="space-y-1">
+                  {activeChores.map((chore) => {
+                    const due = chore.nextDue ? new Date(chore.nextDue) : null;
+                    const days = due ? Math.round((due.getTime() - today.getTime()) / 86400000) : null;
+                    const overdue = days !== null && days < 0;
+                    const soon = days !== null && days >= 0 && days <= 3;
+                    return (
+                      <div key={chore.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/40 transition-colors ${overdue ? "border border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                        <Home size={13} className={overdue ? "text-red-500 shrink-0" : soon ? "text-orange-500 shrink-0" : "text-muted-foreground shrink-0"} />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm">{chore.title}</span>
+                          {chore.category && <span className="text-xs text-muted-foreground ml-2 capitalize">{chore.category}</span>}
+                        </div>
+                        {days !== null && (
+                          <span className={`text-xs font-medium shrink-0 ${overdue ? "text-red-500" : soon ? "text-orange-500" : "text-muted-foreground"}`}>
+                            {overdue ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : `${days}d`}
+                          </span>
+                        )}
+                        {chore.frequency && <span className="text-xs text-muted-foreground shrink-0 capitalize hidden sm:block">{chore.frequency}</span>}
+                      </div>
+                    );
+                  })}
+                  <Link href="/housekeeping"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-2 px-1"><Home size={11} /> Manage in Housekeeping</a></Link>
+                </div>
+              );
+            })() : null}
+
+            {/* Due Chores section (only shown in non-housekeeping modes) */}
+            {!isHousekeepingSelected && (() => {
               const dueChores = chores
                 .filter((c) => c.isActive && c.nextDue)
                 .filter((c) => {
@@ -504,13 +602,13 @@ export default function GoalsPage() {
               );
             })()}
 
-            {!selectedGoal && !isStandaloneSelected ? (
+            {!isHousekeepingSelected && !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
                 <p className="font-medium text-sm">Select a goal to see tasks</p>
                 <p className="text-xs mt-1">Or use General for tasks not linked to a goal</p>
               </div>
-            ) : isStandaloneSelected && !standaloneSelectedProject ? (
+            ) : !isHousekeepingSelected && isStandaloneSelected && !standaloneSelectedProject ? (
               // Standalone mode — no project selected: show general tasks + quick-add
               <div className="space-y-1">
                 {generalTasksData.length === 0 && standaloneProjects.every(p => p.tasks.length === 0) && (
@@ -560,13 +658,13 @@ export default function GoalsPage() {
                 )}
                 <QuickAdd placeholder="Add general task..." onAdd={(t) => addGeneralTask.mutate(t)} className="mt-2 px-1" />
               </div>
-            ) : tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
+            ) : !isHousekeepingSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">No tasks yet</p>
                 <p className="text-xs mt-1">Add a project and tasks to track your work</p>
               </div>
-            ) : (
+            ) : !isHousekeepingSelected ? (
               <div className="space-y-1">
                 {/* Group tasks by project when showing all */}
                 {!selectedProject && !standaloneSelectedProject && selectedGoal && selectedGoal.projects.map((p) => {
@@ -619,7 +717,7 @@ export default function GoalsPage() {
                   );
                 })()}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 

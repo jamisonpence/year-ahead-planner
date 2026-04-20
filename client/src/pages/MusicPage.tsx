@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Music2, Plus, Star, Heart, ChevronDown, ChevronRight,
+  Music2, Plus, Heart, ChevronDown, ChevronRight,
   Trash2, Pencil, Search, Music,
 } from "lucide-react";
 
@@ -91,24 +91,15 @@ function SongRow({
   song,
   onEdit,
   onDelete,
-  onToggleFav,
   onStatusChange,
 }: {
   song: MusicSong;
   onEdit: (s: MusicSong) => void;
   onDelete: (id: number) => void;
-  onToggleFav: (s: MusicSong) => void;
   onStatusChange: (id: number, status: string) => void;
 }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
-      <button
-        onClick={() => onToggleFav(song)}
-        className={`shrink-0 transition-colors ${song.isFavorite ? "text-pink-500" : "text-muted-foreground/30 hover:text-pink-400"}`}
-      >
-        <Heart className="h-3.5 w-3.5" fill={song.isFavorite ? "currentColor" : "none"} />
-      </button>
-
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium truncate block">{song.title}</span>
         {song.album && <span className="text-xs text-muted-foreground truncate block">{song.album}{song.year ? ` · ${song.year}` : ""}</span>}
@@ -153,7 +144,6 @@ function ArtistCard({
   onAddSong,
   onEditSong,
   onDeleteSong,
-  onToggleSongFav,
   onSongStatusChange,
 }: {
   artist: MusicArtistWithSongs;
@@ -163,7 +153,6 @@ function ArtistCard({
   onAddSong: (artistId: number) => void;
   onEditSong: (s: MusicSong) => void;
   onDeleteSong: (id: number) => void;
-  onToggleSongFav: (s: MusicSong) => void;
   onSongStatusChange: (id: number, status: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -240,7 +229,6 @@ function ArtistCard({
                   song={s}
                   onEdit={onEditSong}
                   onDelete={onDeleteSong}
-                  onToggleFav={onToggleSongFav}
                   onStatusChange={onSongStatusChange}
                 />
               ))}
@@ -414,19 +402,19 @@ export default function MusicPage() {
     allSongs.filter((s) => s.status === "want_to_listen" && (!q || s.title.toLowerCase().includes(q) || s.artistName.toLowerCase().includes(q))),
     [allSongs, q]);
 
-  const favoriteSongs = useMemo(() => allSongs.filter((s) => s.isFavorite), [allSongs]);
+  const favoriteArtists = useMemo(() => artists.filter((a) => a.isFavorite), [artists]);
 
-  const favsByGenre = useMemo(() => {
-    const map: Record<string, typeof favoriteSongs> = {};
-    favoriteSongs.forEach((s) => {
-      const genres = s.genre ? s.genre.split(",").map((g) => g.trim()) : ["Uncategorized"];
+  const favArtistsByGenre = useMemo(() => {
+    const map: Record<string, typeof favoriteArtists> = {};
+    favoriteArtists.forEach((a) => {
+      const genres = a.genres ? a.genres.split(",").map((g) => g.trim()) : ["Uncategorized"];
       genres.forEach((g) => {
         if (!map[g]) map[g] = [];
-        map[g].push(s);
+        map[g].push(a);
       });
     });
     return map;
-  }, [favoriteSongs]);
+  }, [favoriteArtists]);
 
   const allGenres = useMemo(() => {
     const set = new Set<string>();
@@ -489,7 +477,7 @@ export default function MusicPage() {
             Want to Listen ({wantToListen.length})
           </TabsTrigger>
           <TabsTrigger value="favorites" className="text-xs">
-            Favorites ({favoriteSongs.length})
+            Favorites ({favoriteArtists.length})
           </TabsTrigger>
         </TabsList>
 
@@ -521,7 +509,6 @@ export default function MusicPage() {
                   onAddSong={openAddSong}
                   onEditSong={openEditSong}
                   onDeleteSong={(id) => deleteSong.mutate(id)}
-                  onToggleSongFav={(s) => updateSong.mutate({ id: s.id, d: { isFavorite: !s.isFavorite } })}
                   onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
                 />
               ))}
@@ -540,12 +527,6 @@ export default function MusicPage() {
             <div className="space-y-1">
               {wantToListen.map((s) => (
                 <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/40 group transition-colors">
-                  <button
-                    onClick={() => updateSong.mutate({ id: s.id, d: { isFavorite: !s.isFavorite } })}
-                    className={`shrink-0 transition-colors ${s.isFavorite ? "text-pink-500" : "text-muted-foreground/30 hover:text-pink-400"}`}
-                  >
-                    <Heart className="h-3.5 w-3.5" fill={s.isFavorite ? "currentColor" : "none"} />
-                  </button>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium">{s.title}</span>
                     <span className="text-xs text-muted-foreground ml-2">{(s as any).artistName}</span>
@@ -566,33 +547,35 @@ export default function MusicPage() {
           )}
         </TabsContent>
 
-        {/* Favorites tab */}
+        {/* Favorites tab — shows favorited artists grouped by genre */}
         <TabsContent value="favorites">
-          {favoriteSongs.length === 0 ? (
+          {favoriteArtists.length === 0 ? (
             <div className="text-center py-16">
               <Heart className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No favorites yet — heart a song to add it here</p>
+              <p className="text-sm text-muted-foreground">No favorite artists yet — heart an artist to add them here</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {Object.entries(favsByGenre).sort(([a], [b]) => a.localeCompare(b)).map(([genre, songs]) => (
+              {Object.entries(favArtistsByGenre).sort(([a], [b]) => a.localeCompare(b)).map(([genre, artistList]) => (
                 <div key={genre}>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-3">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{genre}</h3>
                     <div className="flex-1 border-t" />
-                    <span className="text-xs text-muted-foreground">{songs.length}</span>
+                    <span className="text-xs text-muted-foreground">{artistList.length}</span>
                   </div>
-                  <div className="space-y-1">
-                    {songs.map((s) => (
-                      <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 transition-colors">
-                        <Heart className="h-3.5 w-3.5 text-pink-500 shrink-0" fill="currentColor" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium">{s.title}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{(s as any).artistName}</span>
-                          {s.album && <span className="text-xs text-muted-foreground block">{s.album}</span>}
-                        </div>
-                        <StarRating value={s.rating} readonly />
-                      </div>
+                  <div className="space-y-3">
+                    {artistList.map((a) => (
+                      <ArtistCard
+                        key={a.id}
+                        artist={a}
+                        onEditArtist={openEditArtist}
+                        onDeleteArtist={(id) => deleteArtist.mutate(id)}
+                        onToggleArtistFav={(a) => updateArtist.mutate({ id: a.id, d: { isFavorite: !a.isFavorite } })}
+                        onAddSong={openAddSong}
+                        onEditSong={openEditSong}
+                        onDeleteSong={(id) => deleteSong.mutate(id)}
+                        onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
+                      />
                     ))}
                   </div>
                 </div>

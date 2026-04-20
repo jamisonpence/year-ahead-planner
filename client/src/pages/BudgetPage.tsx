@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
 import type { BudgetCategory, Transaction, Subscription, Receipt } from "@shared/schema";
@@ -256,6 +256,30 @@ export default function BudgetPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/subscriptions/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/subscriptions"] }),
   });
+
+  // Auto-advance past-due subscriptions (runs once per subscription load)
+  const autoAdvancedRef = useRef<Set<number>>(new Set());
+  const autoAdvanceSub = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/subscriptions/${id}`, d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/subscriptions"] }),
+  });
+  useEffect(() => {
+    if (!subscriptions.length) return;
+    const CYCLE_DAYS: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    subscriptions.forEach((s) => {
+      if (!s.isActive) return;
+      if (autoAdvancedRef.current.has(s.id)) return;
+      const days = daysUntil(s.nextRenewal);
+      if (days >= 0) return;
+      // Advance by cycle until renewal is in the future
+      const cycleDays = CYCLE_DAYS[s.billingCycle] ?? 30;
+      let newDate = new Date(s.nextRenewal + "T00:00:00");
+      while (newDate <= today) newDate.setDate(newDate.getDate() + cycleDays);
+      autoAdvancedRef.current.add(s.id);
+      autoAdvanceSub.mutate({ id: s.id, d: { nextRenewal: newDate.toISOString().split("T")[0] } });
+    });
+  }, [subscriptions]);
 
   // Computed
   const thisMonthTx = useMemo(() => transactions.filter((t) => t.date.startsWith(THIS_MONTH)), [transactions]);
