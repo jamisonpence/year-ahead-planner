@@ -15,9 +15,23 @@ import type { WorkoutTemplate, InsertWorkoutTemplate, TemplateExercise, Template
 // Exercise activity types
 const EXERCISE_TYPES = ["", "Lifting", "Run", "Bike", "Swim", "HIIT", "Yoga", "Stretch", "Custom"] as const;
 
+// Types that use Distance + Time instead of Sets/Reps/Weight
+const CARDIO_TYPES = new Set(["Run", "Bike", "Swim"]);
+// Types that use Duration only
+const DURATION_ONLY_TYPES = new Set(["Yoga", "Stretch"]);
+
+const isCardio = (t: string) => CARDIO_TYPES.has(t);
+const isDurationOnly = (t: string) => DURATION_ONLY_TYPES.has(t);
+const usesSetTable = (t: string) => !isCardio(t) && !isDurationOnly(t);
+
 // Local editable exercise type (weight can be blank string during editing)
 type EditableSet = { reps: number; weight: number | string };
-type EditableExercise = { name: string; type: string; sets: EditableSet[]; restSeconds: number; notes: string };
+type EditableExercise = {
+  name: string; type: string;
+  sets: EditableSet[];
+  distance?: string; duration?: string;  // for cardio / duration-only types
+  restSeconds: number; notes: string;
+};
 
 const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 
@@ -25,6 +39,8 @@ const blankExercise = (): EditableExercise => ({
   name: "",
   type: "",
   sets: [{ reps: 12, weight: 0 }, { reps: 10, weight: 0 }, { reps: 8, weight: 0 }],
+  distance: "",
+  duration: "",
   restSeconds: 90,
   notes: "",
 });
@@ -61,11 +77,13 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
                 name: ex.name ?? "",
                 type: ex.type ?? "",
                 sets: Array.from({ length: ex.sets }, () => ({ reps: ex.reps ?? 8, weight: ex.weight ?? 0 })),
+                distance: ex.distance ?? "",
+                duration: ex.duration ?? "",
                 restSeconds: ex.restSeconds ?? 90,
                 notes: ex.notes ?? "",
               };
             }
-            return { ...ex, type: ex.type ?? "" };
+            return { ...ex, type: ex.type ?? "", distance: ex.distance ?? "", duration: ex.duration ?? "" };
           });
           setExercises(migrated);
         } catch { setExercises([]); }
@@ -82,6 +100,10 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
     setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, name: val } : ex));
   const updateExType = (ei: number, val: string) =>
     setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, type: val } : ex));
+  const updateExDistance = (ei: number, val: string) =>
+    setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, distance: val } : ex));
+  const updateExDuration = (ei: number, val: string) =>
+    setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, duration: val } : ex));
   const updateExRest = (ei: number, val: number) =>
     setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, restSeconds: val } : ex));
   const updateExNotes = (ei: number, val: string) =>
@@ -232,97 +254,103 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
                   </button>
                 </div>
 
-                {/* Sets table */}
-                <div className="px-3 pb-1">
-                  {/* Column headers */}
-                  <div className="grid grid-cols-[28px_1fr_1fr_60px_32px] gap-1.5 px-1 mb-1">
-                    <span className="text-xs text-muted-foreground text-center">Set</span>
-                    <span className="text-xs text-muted-foreground text-center">Reps</span>
-                    <span className="text-xs text-muted-foreground text-center">Weight (lb)</span>
-                    <span></span>
-                    <span></span>
+                {/* ── Cardio: Distance + Time ─────────────────────────────── */}
+                {isCardio(ex.type) && (
+                  <div className="px-3 pb-3 pt-1">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Distance</p>
+                        <Input
+                          value={ex.distance ?? ""}
+                          onChange={(e) => updateExDistance(ei, e.target.value)}
+                          placeholder="e.g. 5 mi, 10 km, 400 m"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Time / Duration</p>
+                        <Input
+                          value={ex.duration ?? ""}
+                          onChange={(e) => updateExDuration(ei, e.target.value)}
+                          placeholder="e.g. 30 min, 1:15:00"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                      <Input value={ex.notes} onChange={(e) => updateExNotes(ei, e.target.value)} placeholder="e.g. easy pace, intervals" className="h-7 text-xs" />
+                    </div>
                   </div>
+                )}
 
-                  {ex.sets.map((s, si) => (
-                    <div key={si} className="grid grid-cols-[28px_1fr_1fr_60px_32px] gap-1.5 items-center mb-1">
-                      {/* Set number badge */}
-                      <span className="text-xs text-muted-foreground text-center font-medium">{si + 1}</span>
-
-                      {/* Reps */}
+                {/* ── Endurance only: Duration ────────────────────────────── */}
+                {isDurationOnly(ex.type) && (
+                  <div className="px-3 pb-3 pt-1">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-medium">Duration</p>
                       <Input
-                        type="number"
-                        value={s.reps}
-                        onChange={(e) => updateSet(ei, si, "reps", +e.target.value)}
-                        className="h-7 text-sm text-center px-1"
-                        min={1}
+                        value={ex.duration ?? ""}
+                        onChange={(e) => updateExDuration(ei, e.target.value)}
+                        placeholder="e.g. 60 min, 1:30:00"
+                        className="h-7 text-xs w-48"
                       />
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                      <Input value={ex.notes} onChange={(e) => updateExNotes(ei, e.target.value)} placeholder="e.g. restorative flow, focus on hips" className="h-7 text-xs" />
+                    </div>
+                  </div>
+                )}
 
-                      {/* Weight — allow blank (blank → 0 on save) */}
-                      <Input
-                        type="number"
-                        value={s.weight}
-                        onChange={(e) => updateSet(ei, si, "weight", e.target.value)}
-                        className="h-7 text-sm text-center px-1"
-                        step={2.5}
-                        min={0}
-                        placeholder="0"
-                      />
+                {/* ── Sets / Reps / Weight table ──────────────────────────── */}
+                {usesSetTable(ex.type) && (
+                  <>
+                    <div className="px-3 pb-1">
+                      {/* Column headers */}
+                      <div className="grid grid-cols-[28px_1fr_1fr_60px_32px] gap-1.5 px-1 mb-1">
+                        <span className="text-xs text-muted-foreground text-center">Set</span>
+                        <span className="text-xs text-muted-foreground text-center">Reps</span>
+                        <span className="text-xs text-muted-foreground text-center">Weight (lb)</span>
+                        <span></span>
+                        <span></span>
+                      </div>
 
-                      {/* Dupe button */}
-                      <button
-                        type="button"
-                        onClick={() => dupeSet(ei, si)}
-                        title="Duplicate set"
-                        className="flex items-center justify-center h-7 w-full rounded border border-border text-muted-foreground hover:text-foreground hover:bg-background transition-colors text-xs gap-0.5"
-                      >
-                        <Copy size={11} /> Copy
-                      </button>
+                      {ex.sets.map((s, si) => (
+                        <div key={si} className="grid grid-cols-[28px_1fr_1fr_60px_32px] gap-1.5 items-center mb-1">
+                          <span className="text-xs text-muted-foreground text-center font-medium">{si + 1}</span>
+                          <Input type="number" value={s.reps} onChange={(e) => updateSet(ei, si, "reps", +e.target.value)} className="h-7 text-sm text-center px-1" min={1} />
+                          <Input type="number" value={s.weight} onChange={(e) => updateSet(ei, si, "weight", e.target.value)} className="h-7 text-sm text-center px-1" step={2.5} min={0} placeholder="0" />
+                          <button type="button" onClick={() => dupeSet(ei, si)} title="Duplicate set"
+                            className="flex items-center justify-center h-7 w-full rounded border border-border text-muted-foreground hover:text-foreground hover:bg-background transition-colors text-xs gap-0.5">
+                            <Copy size={11} /> Copy
+                          </button>
+                          <button type="button" onClick={() => removeSet(ei, si)} disabled={ex.sets.length <= 1}
+                            className="flex items-center justify-center h-7 w-7 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
 
-                      {/* Remove set */}
-                      <button
-                        type="button"
-                        onClick={() => removeSet(ei, si)}
-                        disabled={ex.sets.length <= 1}
-                        className="flex items-center justify-center h-7 w-7 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <Trash2 size={12} />
+                      <button type="button" onClick={() => addSet(ei)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-1 mt-0.5">
+                        <Plus size={11} /> Add set
                       </button>
                     </div>
-                  ))}
 
-                  {/* Add set row */}
-                  <button
-                    type="button"
-                    onClick={() => addSet(ei)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-1 mt-0.5"
-                  >
-                    <Plus size={11} /> Add set
-                  </button>
-                </div>
-
-                {/* Rest time + notes */}
-                <div className="grid grid-cols-2 gap-2 px-3 pb-3 pt-1 border-t mt-1">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Rest between sets (seconds)</p>
-                    <Input
-                      type="number"
-                      value={ex.restSeconds}
-                      onChange={(e) => updateExRest(ei, +e.target.value)}
-                      className="h-7 text-xs"
-                      step={15}
-                      min={0}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Notes (optional)</p>
-                    <Input
-                      value={ex.notes}
-                      onChange={(e) => updateExNotes(ei, e.target.value)}
-                      placeholder="e.g. keep elbows tucked"
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                </div>
+                    {/* Rest time + notes */}
+                    <div className="grid grid-cols-2 gap-2 px-3 pb-3 pt-1 border-t mt-1">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Rest between sets (seconds)</p>
+                        <Input type="number" value={ex.restSeconds} onChange={(e) => updateExRest(ei, +e.target.value)} className="h-7 text-xs" step={15} min={0} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Notes (optional)</p>
+                        <Input value={ex.notes} onChange={(e) => updateExNotes(ei, e.target.value)} placeholder="e.g. keep elbows tucked" className="h-7 text-xs" />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

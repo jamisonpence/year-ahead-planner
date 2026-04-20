@@ -87,6 +87,7 @@ function QuickAdd({ placeholder, onAdd, className = "" }: {
 // Sentinel values for pseudo-goal cards
 const STANDALONE_ID = -1;
 const HOUSEKEEPING_ID = -2;
+const ALL_TASKS_ID = -3;
 
 export default function GoalsPage() {
   const { toast } = useToast();
@@ -181,6 +182,7 @@ export default function GoalsPage() {
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) ?? null;
   const isStandaloneSelected = selectedGoalId === STANDALONE_ID;
   const isHousekeepingSelected = selectedGoalId === HOUSEKEEPING_ID;
+  const isAllTasksSelected = selectedGoalId === ALL_TASKS_ID;
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -339,6 +341,23 @@ export default function GoalsPage() {
               </div>
             </div>
 
+            {/* All Tasks card */}
+            <div
+              onClick={() => { setSelectedGoalId(selectedGoalId === ALL_TASKS_ID ? null : ALL_TASKS_ID); setSelectedProjectId(null); }}
+              className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                selectedGoalId === ALL_TASKS_ID ? "border-violet-400 bg-violet-50 dark:bg-violet-950/20" : "bg-card border-dashed hover:border-violet-300"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ClipboardList size={15} className="text-violet-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">All Tasks</p>
+                  <p className="text-xs text-muted-foreground">Every task across all goals &amp; projects</p>
+                </div>
+                <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === ALL_TASKS_ID ? "rotate-90" : ""}`} />
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -346,17 +365,24 @@ export default function GoalsPage() {
         <div className="w-72 shrink-0 flex flex-col min-h-0">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              {isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
+              {isAllTasksSelected ? "Overview" : isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
             </span>
-            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && (
+            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && (
               <span className="text-xs text-muted-foreground">
                 {isHousekeepingSelected ? houseProjects.length : isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
               </span>
             )}
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {/* Housekeeping mode: show house projects (read-only) */}
-            {isHousekeepingSelected ? (
+            {/* All Tasks mode: show summary info */}
+            {isAllTasksSelected ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">All Tasks View</p>
+                <p className="text-xs mt-1 px-2">Tasks from every goal, project, and general list are shown in the Tasks column</p>
+              </div>
+            ) : /* Housekeeping mode: show house projects (read-only) */
+            isHousekeepingSelected ? (
               <>
                 {houseProjects.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
@@ -507,9 +533,9 @@ export default function GoalsPage() {
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                {isHousekeepingSelected ? "Chores" : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}` : isStandaloneSelected ? "General Tasks" : selectedGoal ? "All Tasks" : "Tasks"}
+                {isAllTasksSelected ? "All Tasks" : isHousekeepingSelected ? "Chores" : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}` : isStandaloneSelected ? "General Tasks" : selectedGoal ? "All Tasks" : "Tasks"}
               </span>
-              {!isHousekeepingSelected && totalTasks > 0 && (
+              {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
@@ -518,7 +544,7 @@ export default function GoalsPage() {
                 <span className="text-xs text-muted-foreground">{chores.filter(c => c.isActive).length} active</span>
               )}
             </div>
-            {!isHousekeepingSelected && totalTasks > 0 && (
+            {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
               <Progress value={totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0} className="h-1.5 w-24" />
             )}
           </div>
@@ -602,7 +628,106 @@ export default function GoalsPage() {
               );
             })()}
 
-            {!isHousekeepingSelected && !selectedGoal && !isStandaloneSelected ? (
+            {/* All Tasks mode: aggregate every task */}
+            {isAllTasksSelected && (() => {
+              const hasAnyTasks =
+                goals.some((g) => g.projects.some((p) => p.tasks.length > 0)) ||
+                standaloneProjects.some((p) => p.tasks.length > 0) ||
+                generalTasksData.length > 0;
+              if (!hasAnyTasks) return (
+                <div className="text-center py-16 text-muted-foreground">
+                  <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
+                  <p className="font-medium text-sm">No tasks yet</p>
+                  <p className="text-xs mt-1">Add tasks to your goals or projects to see them here</p>
+                </div>
+              );
+              return (
+                <div className="space-y-1">
+                  {/* Goal tasks grouped by goal → project */}
+                  {goals.map((g) => {
+                    const goalHasTasks = g.projects.some((p) => p.tasks.length > 0);
+                    if (!goalHasTasks) return null;
+                    return (
+                      <div key={g.id} className="mb-5">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <Target size={13} className="text-primary shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wide text-primary truncate">{g.title}</span>
+                        </div>
+                        {g.projects.map((p) => {
+                          if (p.tasks.length === 0) return null;
+                          return (
+                            <div key={p.id} className="ml-3 mb-3">
+                              <div className="flex items-center gap-2 mb-1 px-1">
+                                <Folder size={11} className="text-muted-foreground shrink-0" />
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{p.title}</span>
+                                <span className={`text-xs px-1 py-0.5 rounded-full border shrink-0 ${STATUS_PILL[p.status]}`}>
+                                  {PROJECT_STATUSES.find((s) => s.value === p.status)?.label}
+                                </span>
+                              </div>
+                              {p.tasks.map((t) => (
+                                <TaskRow key={t.id} task={t}
+                                  onToggle={(id, v) => toggleTask.mutate({ id, completed: v })}
+                                  onDelete={(id) => deleteTask.mutate(id)}
+                                  onUpdate={(id, data) => updateTask.mutate({ id, ...data })}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {/* Standalone project tasks */}
+                  {standaloneProjects.some((p) => p.tasks.length > 0) && (
+                    <div className="mb-5">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <Inbox size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">General Projects</span>
+                      </div>
+                      {standaloneProjects.map((p) => {
+                        if (p.tasks.length === 0) return null;
+                        return (
+                          <div key={p.id} className="ml-3 mb-3">
+                            <div className="flex items-center gap-2 mb-1 px-1">
+                              <Folder size={11} className="text-muted-foreground shrink-0" />
+                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{p.title}</span>
+                              <span className={`text-xs px-1 py-0.5 rounded-full border shrink-0 ${STATUS_PILL[p.status]}`}>
+                                {PROJECT_STATUSES.find((s) => s.value === p.status)?.label}
+                              </span>
+                            </div>
+                            {p.tasks.map((t) => (
+                              <TaskRow key={t.id} task={t}
+                                onToggle={(id, v) => toggleTask.mutate({ id, completed: v })}
+                                onDelete={(id) => deleteTask.mutate(id)}
+                                onUpdate={(id, data) => updateTask.mutate({ id, ...data })}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* General tasks */}
+                  {generalTasksData.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <Inbox size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">General Tasks</span>
+                      </div>
+                      {generalTasksData.map((t) => (
+                        <TaskRow key={t.id} task={t as unknown as ProjectTask}
+                          onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
+                          onDelete={(id) => deleteGeneralTask.mutate(id)}
+                          onUpdate={(id, data) => updateGeneralTask.mutate({ id, ...data })}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {!isAllTasksSelected && !isHousekeepingSelected && !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
                 <p className="font-medium text-sm">Select a goal to see tasks</p>
@@ -658,13 +783,13 @@ export default function GoalsPage() {
                 )}
                 <QuickAdd placeholder="Add general task..." onAdd={(t) => addGeneralTask.mutate(t)} className="mt-2 px-1" />
               </div>
-            ) : !isHousekeepingSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">No tasks yet</p>
                 <p className="text-xs mt-1">Add a project and tasks to track your work</p>
               </div>
-            ) : !isHousekeepingSelected ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected ? (
               <div className="space-y-1">
                 {/* Group tasks by project when showing all */}
                 {!selectedProject && !standaloneSelectedProject && selectedGoal && selectedGoal.projects.map((p) => {
