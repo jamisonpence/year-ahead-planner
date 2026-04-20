@@ -24,6 +24,7 @@ export const GENRE_TAGS = ["Biography","History","Personal Growth","Religion","F
 
 export const RECURRENCE_OPTIONS = [
   { value: "none",    label: "One-time"   },
+  { value: "daily",   label: "Every day"  },
   { value: "weekly",  label: "Every week" },
   { value: "monthly", label: "Every month"},
   { value: "yearly",  label: "Every year" },

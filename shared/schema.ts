@@ -583,7 +583,9 @@ export type TemplateSet = { reps: number; weight: number };
 export type TemplateExercise = {
   name: string;
   type?: string;         // "Lifting" | "Run" | "Bike" | "Swim" | "HIIT" | "Yoga" | "Stretch" | custom
-  sets: TemplateSet[];   // array of individual sets
+  sets: TemplateSet[];   // array of individual sets (used for Lifting/HIIT/Custom)
+  distance?: string;     // for cardio types: "5 mi", "10 km", "400 m"
+  duration?: string;     // for cardio/endurance types: "30 min", "1:15:00"
   restSeconds: number;
   notes: string;
 };
