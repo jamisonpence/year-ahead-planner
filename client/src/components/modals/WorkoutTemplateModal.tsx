@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -10,12 +10,20 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Copy } from "lucide-react";
 import { WORKOUT_TYPES, WORKOUT_TYPE_LABELS, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
-import type { WorkoutTemplate, InsertWorkoutTemplate, TemplateExercise, TemplateSet } from "@shared/schema";
+import type { WorkoutTemplate, InsertWorkoutTemplate, TemplateExercise, TemplateSet, GoalWithProjects } from "@shared/schema";
+
+// Exercise activity types
+const EXERCISE_TYPES = ["", "Lifting", "Run", "Bike", "Swim", "HIIT", "Yoga", "Stretch", "Custom"] as const;
+
+// Local editable exercise type (weight can be blank string during editing)
+type EditableSet = { reps: number; weight: number | string };
+type EditableExercise = { name: string; type: string; sets: EditableSet[]; restSeconds: number; notes: string };
 
 const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 
-const blankExercise = (): TemplateExercise => ({
+const blankExercise = (): EditableExercise => ({
   name: "",
+  type: "",
   sets: [{ reps: 12, weight: 0 }, { reps: 10, weight: 0 }, { reps: 8, weight: 0 }],
   restSeconds: 90,
   notes: "",
@@ -30,7 +38,10 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
   const [scheduledDay, setScheduledDay] = useState("__none__");
   const [recurring, setRecurring] = useState("weekly");
   const [notes, setNotes] = useState("");
-  const [exercises, setExercises] = useState<TemplateExercise[]>([]);
+  const [linkedGoalId, setLinkedGoalId] = useState<string>("__none__");
+  const [exercises, setExercises] = useState<EditableExercise[]>([]);
+
+  const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
 
   useEffect(() => {
     if (open) {
@@ -39,21 +50,22 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
       setScheduledDay(editTemplate?.scheduledDay ?? "__none__");
       setRecurring(editTemplate?.recurring ?? "weekly");
       setNotes(editTemplate?.notes ?? "");
+      setLinkedGoalId(editTemplate?.linkedGoalId ? String(editTemplate.linkedGoalId) : "__none__");
       if (editTemplate?.exercisesJson) {
         try {
           const parsed = JSON.parse(editTemplate.exercisesJson);
           // Migrate old format (sets: number) → new format (sets: array)
-          const migrated = parsed.map((ex: any) => {
+          const migrated: EditableExercise[] = parsed.map((ex: any) => {
             if (typeof ex.sets === "number") {
-              // Old flat format — build array from sets count + single reps/weight
               return {
                 name: ex.name ?? "",
+                type: ex.type ?? "",
                 sets: Array.from({ length: ex.sets }, () => ({ reps: ex.reps ?? 8, weight: ex.weight ?? 0 })),
                 restSeconds: ex.restSeconds ?? 90,
                 notes: ex.notes ?? "",
               };
             }
-            return ex;
+            return { ...ex, type: ex.type ?? "" };
           });
           setExercises(migrated);
         } catch { setExercises([]); }
@@ -68,6 +80,8 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
   const removeExercise = (ei: number) => setExercises((p) => p.filter((_, i) => i !== ei));
   const updateExName = (ei: number, val: string) =>
     setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, name: val } : ex));
+  const updateExType = (ei: number, val: string) =>
+    setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, type: val } : ex));
   const updateExRest = (ei: number, val: number) =>
     setExercises((p) => p.map((ex, i) => i === ei ? { ...ex, restSeconds: val } : ex));
   const updateExNotes = (ei: number, val: string) =>
@@ -77,7 +91,6 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
   const addSet = (ei: number) =>
     setExercises((p) => p.map((ex, i) => {
       if (i !== ei) return ex;
-      // Default the new set to the last set's values as a starting point
       const last = ex.sets[ex.sets.length - 1] ?? { reps: 8, weight: 0 };
       return { ...ex, sets: [...ex.sets, { reps: last.reps, weight: last.weight }] };
     }));
@@ -86,7 +99,8 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
       if (i !== ei || ex.sets.length <= 1) return ex;
       return { ...ex, sets: ex.sets.filter((_, j) => j !== si) };
     }));
-  const updateSet = (ei: number, si: number, field: keyof TemplateSet, val: number) =>
+  // weight accepts string so user can clear the field; converted to number on save
+  const updateSet = (ei: number, si: number, field: keyof EditableSet, val: number | string) =>
     setExercises((p) => p.map((ex, i) =>
       i !== ei ? ex : { ...ex, sets: ex.sets.map((s, j) => j !== si ? s : { ...s, [field]: val }) }
     ));
@@ -114,14 +128,22 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    // Normalize: convert blank weight strings to 0
+    const normalizedExercises = exercises.map((ex) => ({
+      ...ex,
+      sets: ex.sets.map((s) => ({
+        reps: s.reps,
+        weight: typeof s.weight === "string" ? (parseFloat(s.weight) || 0) : s.weight,
+      })),
+    }));
     const p: InsertWorkoutTemplate = {
       name: name.trim(),
       workoutType: wType,
       scheduledDay: (scheduledDay && scheduledDay !== "__none__") ? scheduledDay : null,
       recurring,
       notes: notes.trim() || null,
-      linkedGoalId: null,
-      exercisesJson: JSON.stringify(exercises),
+      linkedGoalId: linkedGoalId !== "__none__" ? parseInt(linkedGoalId) : null,
+      exercisesJson: JSON.stringify(normalizedExercises),
     };
     editTemplate ? updateMut.mutate(p) : createMut.mutate(p);
   };
@@ -190,7 +212,7 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
             {exercises.map((ex, ei) => (
               <div key={ei} className="border rounded-xl bg-secondary/20 overflow-hidden">
                 {/* Exercise header */}
-                <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                <div className="flex items-center gap-2 px-3 pt-3 pb-1">
                   <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{ei + 1}</span>
                   <Input
                     value={ex.name}
@@ -198,6 +220,13 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
                     placeholder="Exercise name (e.g. Bench Press)"
                     className="flex-1 h-8 text-sm font-medium"
                   />
+                  <Select value={ex.type || "__none__"} onValueChange={(v) => updateExType(ei, v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-8 w-[110px] text-xs shrink-0"><SelectValue placeholder="Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Any type</SelectItem>
+                      {EXERCISE_TYPES.filter(t => t !== "").map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <button type="button" onClick={() => removeExercise(ei)} className="p-1.5 text-muted-foreground hover:text-destructive shrink-0 transition-colors">
                     <Trash2 size={14} />
                   </button>
@@ -228,14 +257,15 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
                         min={1}
                       />
 
-                      {/* Weight */}
+                      {/* Weight — allow blank (blank → 0 on save) */}
                       <Input
                         type="number"
                         value={s.weight}
-                        onChange={(e) => updateSet(ei, si, "weight", +e.target.value)}
+                        onChange={(e) => updateSet(ei, si, "weight", e.target.value)}
                         className="h-7 text-sm text-center px-1"
                         step={2.5}
                         min={0}
+                        placeholder="0"
                       />
 
                       {/* Dupe button */}
@@ -295,6 +325,18 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Linked goal */}
+          <div className="space-y-1.5">
+            <Label>Linked Goal <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Select value={linkedGoalId} onValueChange={setLinkedGoalId}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {goals.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Template notes */}

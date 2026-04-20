@@ -582,6 +582,7 @@ export type WorkoutTemplateWithLogs = WorkoutTemplate & { recentLogs: WorkoutLog
 export type TemplateSet = { reps: number; weight: number };
 export type TemplateExercise = {
   name: string;
+  type?: string;         // "Lifting" | "Run" | "Bike" | "Swim" | "HIIT" | "Yoga" | "Stretch" | custom
   sets: TemplateSet[];   // array of individual sets
   restSeconds: number;
   notes: string;
