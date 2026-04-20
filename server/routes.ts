@@ -16,7 +16,7 @@ import {
   insertProjectSchema, insertProjectTaskSchema,
   insertGeneralTaskSchema,
   insertRelationshipGroupSchema, insertPersonSchema,
-  insertRecipeSchema, insertWeekPlanSchema, insertGroceryCheckSchema,
+  insertRecipeSchema, insertMealBundleSchema, insertWeekPlanSchema, insertGroceryCheckSchema,
   insertMovieSchema,
   insertBudgetCategorySchema, insertTransactionSchema, insertSubscriptionSchema,
   insertPlantSchema,
@@ -480,6 +480,29 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
+  // ── Meal Bundles ────────────────────────────────────────────────────────────
+  app.get("/api/meal-bundles", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getAllBundles(uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/meal-bundles", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.status(201).json(await storage.createBundle(insertMealBundleSchema.parse(req.body), uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/meal-bundles/:id", async (req, res) => {
+    try {
+      const r = await storage.updateBundle(+req.params.id, insertMealBundleSchema.partial().parse(req.body));
+      r ? res.json(r) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/meal-bundles/:id", async (req, res) => {
+    (await storage.deleteBundle(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  });
+
   // ── Week Plan ───────────────────────────────────────────────────────────────
   app.get("/api/week-plan/:weekStart", async (req, res) => {
     try {
@@ -490,7 +513,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   app.post("/api/week-plan", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(await storage.assignRecipe(insertWeekPlanSchema.parse(req.body), uid));
+      res.status(201).json(await storage.assignToWeek(insertWeekPlanSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });

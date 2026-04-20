@@ -157,6 +157,8 @@ export const recipes = pgTable("recipes", {
   name: text("name").notNull(),
   emoji: text("emoji").notNull().default("🍽️"),
   category: text("category"),
+  // "main" | "vegetable" | "side" | "sauce" — null = unclassified
+  componentType: text("component_type"),
   prepTime: integer("prep_time"),
   cookTime: integer("cook_time"),
   // JSON: [{name: string, qty: string}][]
@@ -164,13 +166,26 @@ export const recipes = pgTable("recipes", {
   instructions: text("instructions"),
 });
 
+// ── Meal Bundles ─────────────────────────────────────────────────────────────
+// A saved full-meal combination: e.g. "Steak Night" = Ribeye + Roasted Broccoli + Mashed Potatoes + Chimichurri
+export const mealBundles = pgTable("meal_bundles", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("🍽️"),
+  description: text("description"),
+  // JSON: number[] — array of recipe IDs in this bundle
+  recipeIdsJson: text("recipe_ids_json").notNull().default("[]"),
+});
+
 export const weekPlan = pgTable("week_plan", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
   // 0=Sun, 1=Mon ... 6=Sat
   dayIndex: integer("day_index").notNull(),
-  recipeId: integer("recipe_id").notNull(),
-  weekStart: text("week_start").notNull(), // ISO "YYYY-MM-DD" of the Monday
+  recipeId: integer("recipe_id"),   // set for single-recipe assignments
+  bundleId: integer("bundle_id"),   // set for bundle assignments
+  weekStart: text("week_start").notNull(), // ISO "YYYY-MM-DD" of the Sunday
 });
 
 export const groceryChecks = pgTable("grocery_checks", {
@@ -185,6 +200,10 @@ export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true })
 export type InsertRecipe = z.infer<typeof insertRecipeSchema>;
 export type Recipe = typeof recipes.$inferSelect;
 
+export const insertMealBundleSchema = createInsertSchema(mealBundles).omit({ id: true });
+export type InsertMealBundle = z.infer<typeof insertMealBundleSchema>;
+export type MealBundle = typeof mealBundles.$inferSelect;
+
 export const insertWeekPlanSchema = createInsertSchema(weekPlan).omit({ id: true });
 export type InsertWeekPlan = z.infer<typeof insertWeekPlanSchema>;
 export type WeekPlan = typeof weekPlan.$inferSelect;
@@ -194,6 +213,7 @@ export type InsertGroceryCheck = z.infer<typeof insertGroceryCheckSchema>;
 export type GroceryCheck = typeof groceryChecks.$inferSelect;
 
 export type RecipeIngredient = { name: string; qty: string };
+export type ComponentType = "main" | "vegetable" | "side" | "sauce";
 
 // ── RELATIONSHIP GROUPS ─────────────────────────────────────────────────────
 export const relationshipGroups = pgTable("relationship_groups", {

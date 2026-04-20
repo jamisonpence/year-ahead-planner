@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, appliances, spots } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, appliances, spots } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
-  InsertRecipe, Recipe, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
+  InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
   InsertBook, Book, BookWithSessions,
   InsertReadingSession, ReadingSession,
   InsertWorkoutTemplate, WorkoutTemplate,
@@ -181,16 +181,32 @@ export async function initializeStorage() {
       instructions TEXT
     )
   `);
+  // Migrations for recipes table
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS component_type TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meal_bundles (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      emoji TEXT NOT NULL DEFAULT '🍽️',
+      description TEXT,
+      recipe_ids_json TEXT NOT NULL DEFAULT '[]'
+    )
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS week_plan (
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
       day_index INTEGER NOT NULL,
-      recipe_id INTEGER NOT NULL,
+      recipe_id INTEGER,
       week_start TEXT NOT NULL
     )
   `);
+  // Migrations for week_plan table
+  await pool.query(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS bundle_id INTEGER`);
+  await pool.query(`ALTER TABLE week_plan ALTER COLUMN recipe_id DROP NOT NULL`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS grocery_checks (
@@ -547,9 +563,14 @@ export interface IStorage {
   createRecipe(data: InsertRecipe, userId: number): Promise<Recipe>;
   updateRecipe(id: number, data: Partial<InsertRecipe>): Promise<Recipe | undefined>;
   deleteRecipe(id: number): Promise<boolean>;
+  // Meal Bundles
+  getAllBundles(userId: number): Promise<MealBundle[]>;
+  createBundle(data: InsertMealBundle, userId: number): Promise<MealBundle>;
+  updateBundle(id: number, data: Partial<InsertMealBundle>): Promise<MealBundle | undefined>;
+  deleteBundle(id: number): Promise<boolean>;
   // Week Plan
   getWeekPlan(weekStart: string, userId: number): Promise<WeekPlan[]>;
-  assignRecipe(data: InsertWeekPlan, userId: number): Promise<WeekPlan>;
+  assignToWeek(data: InsertWeekPlan, userId: number): Promise<WeekPlan>;
   removeWeekAssignment(id: number): Promise<boolean>;
   // Grocery Checks
   getGroceryChecks(weekStart: string, userId: number): Promise<GroceryCheck[]>;
@@ -890,11 +911,31 @@ export const storage: IStorage = {
     return result.rowCount > 0;
   },
 
+  // ── Meal Bundles ──────────────────────────────────────────────────────
+  async getAllBundles(userId: number) {
+    return db.select().from(mealBundles).where(eq(mealBundles.userId, userId)).orderBy(asc(mealBundles.name));
+  },
+  async createBundle(data: InsertMealBundle, userId: number) {
+    const result = await db.insert(mealBundles).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateBundle(id: number, data: Partial<InsertMealBundle>) {
+    const existing = await db.select().from(mealBundles).where(eq(mealBundles.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(mealBundles).set(data).where(eq(mealBundles.id, id)).returning();
+    return result[0];
+  },
+  async deleteBundle(id: number) {
+    await pool.query(`DELETE FROM week_plan WHERE bundle_id = $1`, [id]);
+    const result = await db.delete(mealBundles).where(eq(mealBundles.id, id));
+    return result.rowCount > 0;
+  },
+
   // ── Week Plan ─────────────────────────────────────────────────────────
   async getWeekPlan(weekStart: string, userId: number) {
     return db.select().from(weekPlan).where(eq(weekPlan.weekStart, weekStart)).where(eq(weekPlan.userId, userId));
   },
-  async assignRecipe(data: InsertWeekPlan, userId: number) {
+  async assignToWeek(data: InsertWeekPlan, userId: number) {
     const result = await db.insert(weekPlan).values({ ...data, userId }).returning();
     return result[0];
   },
