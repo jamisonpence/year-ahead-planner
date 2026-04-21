@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X, Inbox,
+  ClipboardList, Flag, X, Inbox, Leaf, Droplets,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -21,7 +21,7 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks,
+  GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, Plant,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -88,6 +88,15 @@ function QuickAdd({ placeholder, onAdd, className = "" }: {
 const STANDALONE_ID = -1;
 const HOUSEKEEPING_ID = -2;
 const ALL_TASKS_ID = -3;
+const PLANTS_ID = -4;
+
+// Plant watering helpers
+function plantWateringDays(plant: Plant): number | null {
+  if (!plant.lastWatered) return null;
+  const next = new Date(plant.lastWatered).getTime() + plant.waterFrequencyDays * 86400000;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((next - today.getTime()) / 86400000);
+}
 
 export default function GoalsPage() {
   const { toast } = useToast();
@@ -106,6 +115,7 @@ export default function GoalsPage() {
   const { data: generalTasksData = [] } = useQuery<GeneralTask[]>({ queryKey: ["/api/general-tasks"] });
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
   const { data: houseProjects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
+  const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["/api/plants"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -114,6 +124,15 @@ export default function GoalsPage() {
   };
   const invHouse = () => queryClient.invalidateQueries({ queryKey: ["/api/house-projects"] });
   const invChores = () => queryClient.invalidateQueries({ queryKey: ["/api/chores"] });
+  const invPlants = () => queryClient.invalidateQueries({ queryKey: ["/api/plants"] });
+
+  // ── Plant mutations ───────────────────────────────────────────────────────
+  const waterPlant = useMutation({
+    mutationFn: (plant: Plant) => apiRequest("PATCH", `/api/plants/${plant.id}`, {
+      lastWatered: new Date().toISOString().slice(0, 10),
+    }),
+    onSuccess: () => { invPlants(); toast({ title: "Watered 💧" }); },
+  });
 
   // ── Chore mutations ──────────────────────────────────────────────────────
   const updateChore = useMutation({
@@ -226,6 +245,7 @@ export default function GoalsPage() {
   const isStandaloneSelected = selectedGoalId === STANDALONE_ID;
   const isHousekeepingSelected = selectedGoalId === HOUSEKEEPING_ID;
   const isAllTasksSelected = selectedGoalId === ALL_TASKS_ID;
+  const isPlantsSelected = selectedGoalId === PLANTS_ID;
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -384,6 +404,31 @@ export default function GoalsPage() {
               </div>
             </div>
 
+            {/* Plants card */}
+            {plants.length > 0 && (() => {
+              const needsWater = plants.filter(p => { const d = plantWateringDays(p); return d === null || d <= 0; }).length;
+              return (
+                <div
+                  onClick={() => { setSelectedGoalId(selectedGoalId === PLANTS_ID ? null : PLANTS_ID); setSelectedProjectId(null); }}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                    selectedGoalId === PLANTS_ID ? "border-green-400 bg-green-50 dark:bg-green-950/20" : "bg-card border-dashed hover:border-green-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Leaf size={15} className="text-green-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">Plants</p>
+                      <p className="text-xs text-muted-foreground">
+                        {plants.length} plant{plants.length !== 1 ? "s" : ""}
+                        {needsWater > 0 && <span className="text-amber-600 font-medium"> · {needsWater} need water</span>}
+                      </p>
+                    </div>
+                    <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === PLANTS_ID ? "rotate-90" : ""}`} />
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* All Tasks card */}
             <div
               onClick={() => { setSelectedGoalId(selectedGoalId === ALL_TASKS_ID ? null : ALL_TASKS_ID); setSelectedProjectId(null); }}
@@ -408,9 +453,9 @@ export default function GoalsPage() {
         <div className="w-72 shrink-0 flex flex-col min-h-0">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              {isAllTasksSelected ? "Overview" : isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
+              {isAllTasksSelected ? "Overview" : isPlantsSelected ? "Overview" : isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
             </span>
-            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && (
+            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && !isPlantsSelected && (
               <span className="text-xs text-muted-foreground">
                 {isHousekeepingSelected ? houseProjects.length : isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
               </span>
@@ -423,6 +468,13 @@ export default function GoalsPage() {
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">All Tasks View</p>
                 <p className="text-xs mt-1 px-2">Tasks from every goal, project, and general list are shown in the Tasks column</p>
+              </div>
+            ) : /* Plants mode: show summary stats */
+            isPlantsSelected ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Leaf size={28} className="mx-auto mb-3 opacity-20 text-green-500" />
+                <p className="text-sm font-medium">Plant Watering</p>
+                <p className="text-xs mt-1 px-2">All plants and their watering schedules are shown in the Tasks column</p>
               </div>
             ) : /* Housekeeping mode: show house projects (selectable + addable) */
             isHousekeepingSelected ? (
@@ -476,7 +528,7 @@ export default function GoalsPage() {
                 <Folder size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-xs">Select a goal to see projects</p>
               </div>
-            ) : (
+            ) : isPlantsSelected ? null : (
               <>
                 {/* Resolve the projects list based on mode */}
                 {(() => {
@@ -591,6 +643,7 @@ export default function GoalsPage() {
                 return (
                   <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     {isAllTasksSelected ? "All Tasks"
+                      : isPlantsSelected ? "Watering Schedule"
                       : isHousekeepingSelected && selectedHouseProject ? `Tasks — ${selectedHouseProject.title}`
                       : isHousekeepingSelected ? "Chores"
                       : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}`
@@ -599,13 +652,16 @@ export default function GoalsPage() {
                   </span>
                 );
               })()}
-              {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
+              {!isHousekeepingSelected && !isAllTasksSelected && !isPlantsSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
               )}
               {isHousekeepingSelected && !houseProjects.find((p) => p.id === selectedProjectId) && (
                 <span className="text-xs text-muted-foreground">{chores.filter(c => c.isActive).length} active</span>
+              )}
+              {isPlantsSelected && (
+                <span className="text-xs text-muted-foreground">{plants.length} plant{plants.length !== 1 ? "s" : ""}</span>
               )}
             </div>
             {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
@@ -696,8 +752,65 @@ export default function GoalsPage() {
               );
             })() : null}
 
+            {/* Plants watering schedule */}
+            {isPlantsSelected && (() => {
+              const sorted = [...plants].sort((a, b) => {
+                const da = plantWateringDays(a) ?? -999;
+                const db = plantWateringDays(b) ?? -999;
+                return da - db;
+              });
+              return (
+                <div className="space-y-2">
+                  {sorted.map((plant) => {
+                    const days = plantWateringDays(plant);
+                    const overdue = days !== null && days < 0;
+                    const today = days === 0;
+                    const soon = days !== null && days > 0 && days <= 2;
+                    const neverWatered = days === null;
+                    return (
+                      <div key={plant.id} className={`flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors ${overdue || neverWatered ? "border-red-200 dark:border-red-900 bg-red-50/40 dark:bg-red-950/10" : today || soon ? "border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/10" : "bg-card hover:bg-accent/30"}`}>
+                        <Leaf size={15} className={`shrink-0 ${overdue || neverWatered ? "text-red-500" : today || soon ? "text-amber-500" : "text-green-500"}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{plant.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {plant.species && <span className="italic">{plant.species} · </span>}
+                            every {plant.waterFrequencyDays}d
+                            {plant.location && <span> · {plant.location}</span>}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {neverWatered ? (
+                            <p className="text-xs font-medium text-red-500">Never watered</p>
+                          ) : overdue ? (
+                            <p className="text-xs font-medium text-red-500">{Math.abs(days!)}d overdue</p>
+                          ) : today ? (
+                            <p className="text-xs font-medium text-amber-600">Water today</p>
+                          ) : soon ? (
+                            <p className="text-xs font-medium text-amber-500">In {days}d</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">In {days}d</p>
+                          )}
+                          {plant.lastWatered && (
+                            <p className="text-[10px] text-muted-foreground">Last: {plant.lastWatered}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => waterPlant.mutate(plant)}
+                          className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:hover:bg-blue-950/60 dark:text-blue-400 transition-colors"
+                          title="Mark as watered today"
+                        >
+                          <Droplets size={12} /> Water
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <Link href="/plants"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Leaf size={11} /> Manage in Plants</a></Link>
+                </div>
+              );
+            })()}
+
             {/* Due Chores section (only shown in non-housekeeping modes) */}
-            {!isHousekeepingSelected && (() => {
+            {!isHousekeepingSelected && !isPlantsSelected && (() => {
               const dueChores = chores
                 .filter((c) => c.isActive && c.nextDue)
                 .filter((c) => {
@@ -738,12 +851,14 @@ export default function GoalsPage() {
             {/* All Tasks mode: aggregate every task */}
             {isAllTasksSelected && (() => {
               const activeChoresForAllTasks = chores.filter(c => c.isActive).sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999"));
+              const duePlants = [...plants].filter(p => { const d = plantWateringDays(p); return d === null || d <= 3; }).sort((a, b) => (plantWateringDays(a) ?? -999) - (plantWateringDays(b) ?? -999));
               const hasAnyTasks =
                 goals.some((g) => g.projects.some((p) => p.tasks.length > 0)) ||
                 standaloneProjects.some((p) => p.tasks.length > 0) ||
                 generalTasksData.length > 0 ||
                 houseProjects.some((p) => p.tasks.length > 0) ||
-                activeChoresForAllTasks.length > 0;
+                activeChoresForAllTasks.length > 0 ||
+                duePlants.length > 0;
               if (!hasAnyTasks) return (
                 <div className="text-center py-16 text-muted-foreground">
                   <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
@@ -833,6 +948,38 @@ export default function GoalsPage() {
                       ))}
                     </div>
                   )}
+                  {/* Plants due soon */}
+                  {duePlants.length > 0 && (
+                    <div className="mb-5">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <Leaf size={13} className="text-green-500 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-green-600 dark:text-green-400">Plants Due for Water</span>
+                      </div>
+                      {duePlants.map((plant) => {
+                        const days = plantWateringDays(plant);
+                        const overdue = days !== null && days < 0;
+                        const neverWatered = days === null;
+                        return (
+                          <div key={plant.id} className="group flex items-center gap-2.5 py-2 px-2 rounded-xl hover:bg-secondary/40 transition-colors">
+                            <Leaf size={14} className={`shrink-0 ${overdue || neverWatered ? "text-red-500" : "text-amber-500"}`} />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm">{plant.name}</span>
+                              {plant.species && <span className="text-xs text-muted-foreground ml-2 italic">{plant.species}</span>}
+                            </div>
+                            <span className={`text-xs font-medium shrink-0 ${neverWatered || overdue ? "text-red-500" : days === 0 ? "text-amber-600" : "text-amber-500"}`}>
+                              {neverWatered ? "Never watered" : overdue ? `${Math.abs(days!)}d overdue` : days === 0 ? "Today" : `In ${days}d`}
+                            </span>
+                            <button
+                              onClick={() => waterPlant.mutate(plant)}
+                              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 transition-colors"
+                            >
+                              <Droplets size={11} /> Water
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {/* Chores */}
                   {activeChoresForAllTasks.length > 0 && (() => {
                     const todayMs = new Date().setHours(0,0,0,0);
@@ -911,13 +1058,13 @@ export default function GoalsPage() {
               );
             })()}
 
-            {!isAllTasksSelected && !isHousekeepingSelected && !selectedGoal && !isStandaloneSelected ? (
+            {!isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
                 <p className="font-medium text-sm">Select a goal to see tasks</p>
                 <p className="text-xs mt-1">Or use General for tasks not linked to a goal</p>
               </div>
-            ) : !isHousekeepingSelected && isStandaloneSelected && !standaloneSelectedProject ? (
+            ) : !isHousekeepingSelected && !isPlantsSelected && isStandaloneSelected && !standaloneSelectedProject ? (
               // Standalone mode — no project selected: show general tasks + quick-add
               <div className="space-y-1">
                 {generalTasksData.length === 0 && standaloneProjects.every(p => p.tasks.length === 0) && (
@@ -967,13 +1114,13 @@ export default function GoalsPage() {
                 )}
                 <QuickAdd placeholder="Add general task..." onAdd={(t) => addGeneralTask.mutate(t)} className="mt-2 px-1" />
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">No tasks yet</p>
                 <p className="text-xs mt-1">Add a project and tasks to track your work</p>
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected ? (
               <div className="space-y-1">
                 {/* Group tasks by project when showing all */}
                 {!selectedProject && !standaloneSelectedProject && selectedGoal && selectedGoal.projects.map((p) => {
