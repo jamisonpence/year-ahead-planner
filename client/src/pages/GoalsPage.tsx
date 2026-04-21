@@ -21,7 +21,7 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask, Chore, HouseProjectWithTasks,
+  GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -95,6 +95,8 @@ export default function GoalsPage() {
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [projectEditModal, setProjectEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectWithTasks | null>(null);
+  const [choreEditModal, setChoreEditModal] = useState(false);
+  const [editingChore, setEditingChore] = useState<Chore | null>(null);
   // selectedGoalId = null (nothing), a real goalId, or STANDALONE_ID (-1)
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -111,6 +113,26 @@ export default function GoalsPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/general-tasks"] });
   };
   const invHouse = () => queryClient.invalidateQueries({ queryKey: ["/api/house-projects"] });
+  const invChores = () => queryClient.invalidateQueries({ queryKey: ["/api/chores"] });
+
+  // ── Chore mutations ──────────────────────────────────────────────────────
+  const updateChore = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertChore> }) =>
+      apiRequest("PATCH", `/api/chores/${id}`, data),
+    onSuccess: invChores,
+  });
+  const completeChore = useMutation({
+    mutationFn: (chore: Chore) => {
+      const freqDays: Record<string, number> = { daily: 1, weekly: 7, biweekly: 14, monthly: 30, quarterly: 91, yearly: 365 };
+      const days = chore.frequency === "custom" ? (chore.customFrequencyDays ?? 7) : (freqDays[chore.frequency] ?? 7);
+      const next = new Date(); next.setHours(0,0,0,0); next.setDate(next.getDate() + days);
+      return apiRequest("PATCH", `/api/chores/${chore.id}`, {
+        lastCompleted: new Date().toISOString().slice(0, 10),
+        nextDue: chore.frequency === "as_needed" ? chore.nextDue : next.toISOString().slice(0, 10),
+      });
+    },
+    onSuccess: () => { invChores(); toast({ title: "Chore marked complete ✓" }); },
+  });
 
   // ── Goal mutations ───────────────────────────────────────────────────────
   const deleteGoal = useMutation({
@@ -641,8 +663,14 @@ export default function GoalsPage() {
                     const overdue = days !== null && days < 0;
                     const soon = days !== null && days >= 0 && days <= 3;
                     return (
-                      <div key={chore.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/40 transition-colors ${overdue ? "border border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
-                        <Home size={13} className={overdue ? "text-red-500 shrink-0" : soon ? "text-orange-500 shrink-0" : "text-muted-foreground shrink-0"} />
+                      <div key={chore.id} className={`group flex items-center gap-2.5 px-2 py-2.5 rounded-xl hover:bg-secondary/40 transition-colors ${overdue ? "border border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                        <button
+                          onClick={() => completeChore.mutate(chore)}
+                          className="shrink-0 w-7 h-7 rounded-full border flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
+                          title="Mark complete"
+                        >
+                          <CheckCircle2 size={14} className="text-muted-foreground/40 hover:text-green-500" />
+                        </button>
                         <div className="flex-1 min-w-0">
                           <span className="text-sm">{chore.title}</span>
                           {chore.category && <span className="text-xs text-muted-foreground ml-2 capitalize">{chore.category}</span>}
@@ -653,6 +681,12 @@ export default function GoalsPage() {
                           </span>
                         )}
                         {chore.frequency && <span className="text-xs text-muted-foreground shrink-0 capitalize hidden sm:block">{chore.frequency}</span>}
+                        <button
+                          onClick={() => { setEditingChore(chore); setChoreEditModal(true); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-all shrink-0"
+                        >
+                          <Pencil size={12} />
+                        </button>
                       </div>
                     );
                   })}
@@ -703,11 +737,13 @@ export default function GoalsPage() {
 
             {/* All Tasks mode: aggregate every task */}
             {isAllTasksSelected && (() => {
+              const activeChoresForAllTasks = chores.filter(c => c.isActive).sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999"));
               const hasAnyTasks =
                 goals.some((g) => g.projects.some((p) => p.tasks.length > 0)) ||
                 standaloneProjects.some((p) => p.tasks.length > 0) ||
                 generalTasksData.length > 0 ||
-                houseProjects.some((p) => p.tasks.length > 0);
+                houseProjects.some((p) => p.tasks.length > 0) ||
+                activeChoresForAllTasks.length > 0;
               if (!hasAnyTasks) return (
                 <div className="text-center py-16 text-muted-foreground">
                   <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
@@ -797,6 +833,50 @@ export default function GoalsPage() {
                       ))}
                     </div>
                   )}
+                  {/* Chores */}
+                  {activeChoresForAllTasks.length > 0 && (() => {
+                    const todayMs = new Date().setHours(0,0,0,0);
+                    return (
+                      <div className="mb-5">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <Home size={13} className="text-orange-500 shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400">Chores</span>
+                        </div>
+                        {activeChoresForAllTasks.map((chore) => {
+                          const due = chore.nextDue ? new Date(chore.nextDue) : null;
+                          const days = due ? Math.round((due.getTime() - todayMs) / 86400000) : null;
+                          const overdue = days !== null && days < 0;
+                          const soon = days !== null && days >= 0 && days <= 3;
+                          return (
+                            <div key={chore.id} className={`group flex items-center gap-2.5 py-2 px-2 rounded-xl hover:bg-secondary/40 transition-colors ${overdue ? "border border-red-200 dark:border-red-900 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                              <button
+                                onClick={() => completeChore.mutate(chore)}
+                                className="shrink-0 w-6 h-6 rounded-full border flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
+                                title="Mark complete"
+                              >
+                                <CheckCircle2 size={13} className="text-muted-foreground/40 hover:text-green-500" />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm">{chore.title}</span>
+                                {chore.category && <span className="text-xs text-muted-foreground ml-2 capitalize">{chore.category}</span>}
+                              </div>
+                              {days !== null && (
+                                <span className={`text-xs font-medium shrink-0 ${overdue ? "text-red-500" : soon ? "text-orange-500" : "text-muted-foreground"}`}>
+                                  {overdue ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : `${days}d`}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => { setEditingChore(chore); setChoreEditModal(true); }}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-all shrink-0"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {/* Housekeeping project tasks */}
                   {houseProjects.some((p) => p.tasks.length > 0) && (
                     <div className="mb-5">
@@ -959,6 +1039,12 @@ export default function GoalsPage() {
         project={editingProject}
         onSave={(id, data) => updateProject.mutate({ id, ...data })}
       />
+      <ChoreEditModal
+        open={choreEditModal}
+        onClose={() => { setChoreEditModal(false); setEditingChore(null); }}
+        chore={editingChore}
+        onSave={(id, data) => updateChore.mutate({ id, data })}
+      />
     </div>
   );
 }
@@ -1106,6 +1192,111 @@ function ProjectEditModal({ open, onClose, project, onSave }: {
           </div>
           <div className="flex gap-2">
             <Button type="submit" className="flex-1">Save Changes</Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Chore Edit Modal ──────────────────────────────────────────────────────────
+const CHORE_CATEGORIES = [
+  { value: "cleaning", label: "Cleaning" }, { value: "yard", label: "Yard" },
+  { value: "maintenance", label: "Maintenance" }, { value: "laundry", label: "Laundry" },
+  { value: "cooking", label: "Cooking" }, { value: "other", label: "Other" },
+];
+const CHORE_FREQUENCIES = [
+  { value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Every 2 weeks" }, { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" }, { value: "yearly", label: "Yearly" },
+  { value: "as_needed", label: "As Needed" },
+];
+const CHORE_PRIORITIES = [
+  { value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" },
+];
+
+function ChoreEditModal({ open, onClose, chore, onSave }: {
+  open: boolean;
+  onClose: () => void;
+  chore: Chore | null;
+  onSave: (id: number, data: Partial<InsertChore>) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("cleaning");
+  const [frequency, setFrequency] = useState("weekly");
+  const [priority, setPriority] = useState("medium");
+  const [nextDue, setNextDue] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (open && chore) {
+      setTitle(chore.title);
+      setCategory(chore.category);
+      setFrequency(chore.frequency);
+      setPriority(chore.priority);
+      setNextDue(chore.nextDue ?? "");
+      setAssignee(chore.assignee ?? "");
+      setNotes(chore.notes ?? "");
+    }
+  }, [open, chore]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chore || !title.trim()) return;
+    onSave(chore.id, { title: title.trim(), category, frequency, priority, nextDue: nextDue || null, assignee: assignee.trim() || null, notes: notes.trim() || null });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Edit Chore</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+          <div className="space-y-1.5">
+            <Label>Title *</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Vacuum living room" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{CHORE_CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{CHORE_PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Frequency</Label>
+              <Select value={frequency} onValueChange={setFrequency}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{CHORE_FREQUENCIES.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Next Due</Label>
+              <Input type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Assignee <span className="text-muted-foreground text-xs">(opt)</span></Label>
+            <Input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="e.g. Jamison" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Notes <span className="text-muted-foreground text-xs">(opt)</span></Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button type="submit" className="flex-1" disabled={!title.trim()}>Save Changes</Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
         </form>
