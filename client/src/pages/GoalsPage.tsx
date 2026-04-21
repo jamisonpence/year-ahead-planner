@@ -706,7 +706,8 @@ export default function GoalsPage() {
               const hasAnyTasks =
                 goals.some((g) => g.projects.some((p) => p.tasks.length > 0)) ||
                 standaloneProjects.some((p) => p.tasks.length > 0) ||
-                generalTasksData.length > 0;
+                generalTasksData.length > 0 ||
+                houseProjects.some((p) => p.tasks.length > 0);
               if (!hasAnyTasks) return (
                 <div className="text-center py-16 text-muted-foreground">
                   <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
@@ -794,6 +795,36 @@ export default function GoalsPage() {
                           onUpdate={(id, data) => updateGeneralTask.mutate({ id, ...data })}
                         />
                       ))}
+                    </div>
+                  )}
+                  {/* Housekeeping project tasks */}
+                  {houseProjects.some((p) => p.tasks.length > 0) && (
+                    <div className="mb-5">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <Home size={13} className="text-orange-500 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400">Housekeeping</span>
+                      </div>
+                      {houseProjects.map((p) => {
+                        if (p.tasks.length === 0) return null;
+                        return (
+                          <div key={p.id} className="ml-3 mb-3">
+                            <div className="flex items-center gap-2 mb-1 px-1">
+                              <Folder size={11} className="text-muted-foreground shrink-0" />
+                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{p.title}</span>
+                              <span className={`text-xs px-1 py-0.5 rounded-full border shrink-0 ${STATUS_PILL[p.status]}`}>
+                                {PROJECT_STATUSES.find((s) => s.value === p.status)?.label}
+                              </span>
+                            </div>
+                            {p.tasks.map((t) => (
+                              <TaskRow key={t.id} task={t as any}
+                                onToggle={(id, v) => toggleHouseProjectTask.mutate({ id, completed: v })}
+                                onDelete={(id) => deleteHouseProjectTask.mutate(id)}
+                                onUpdate={() => {}}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
