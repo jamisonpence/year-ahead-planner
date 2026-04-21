@@ -833,6 +833,25 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── House Project Tasks ───────────────────────────────────────────────────────
+  app.post("/api/house-projects/:id/tasks", requireAuth, async (req, res) => {
+    try {
+      const data = { ...req.body, houseProjectId: +req.params.id, userId: (req.user as User).id };
+      res.status(201).json(await storage.createHouseProjectTask(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/house-project-tasks/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateHouseProjectTask(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/house-project-tasks/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteHouseProjectTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Appliances ────────────────────────────────────────────────────────────────
   app.get("/api/appliances", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllAppliances((req.user as User).id)); } catch (e) { handleError(res, e); }
