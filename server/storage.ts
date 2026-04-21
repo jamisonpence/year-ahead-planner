@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, appliances, spots } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -24,7 +24,7 @@ import type {
   User, InsertUser,
   InsertPlant, Plant,
   InsertMusicArtist, MusicArtist, InsertMusicSong, MusicSong, MusicArtistWithSongs,
-  InsertChore, Chore, InsertHouseProject, HouseProject, InsertAppliance, Appliance,
+  InsertChore, Chore, InsertHouseProject, HouseProject, HouseProjectWithTasks, InsertHouseProjectTask, HouseProjectTask, InsertAppliance, Appliance,
   InsertSpot, Spot,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
@@ -460,6 +460,20 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS house_project_tasks (
+      id SERIAL PRIMARY KEY,
+      house_project_id INTEGER NOT NULL,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      due_date TEXT,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS appliances (
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
@@ -636,10 +650,14 @@ export interface IStorage {
   updateChore(id: number, data: Partial<InsertChore>): Promise<Chore | undefined>;
   deleteChore(id: number): Promise<boolean>;
   // House Projects
-  getAllHouseProjects(userId: number): Promise<HouseProject[]>;
+  getAllHouseProjects(userId: number): Promise<HouseProjectWithTasks[]>;
   createHouseProject(data: InsertHouseProject, userId: number): Promise<HouseProject>;
   updateHouseProject(id: number, data: Partial<InsertHouseProject>): Promise<HouseProject | undefined>;
   deleteHouseProject(id: number): Promise<boolean>;
+  // House Project Tasks
+  createHouseProjectTask(data: InsertHouseProjectTask, userId: number): Promise<HouseProjectTask>;
+  updateHouseProjectTask(id: number, data: Partial<InsertHouseProjectTask>): Promise<HouseProjectTask | undefined>;
+  deleteHouseProjectTask(id: number): Promise<boolean>;
   // Appliances
   getAllAppliances(userId: number): Promise<Appliance[]>;
   createAppliance(data: InsertAppliance, userId: number): Promise<Appliance>;
@@ -1213,7 +1231,9 @@ export const storage: IStorage = {
 
   // ── House Projects ────────────────────────────────────────────────────────────
   async getAllHouseProjects(userId: number) {
-    return db.select().from(houseProjects).where(eq(houseProjects.userId, userId)).orderBy(asc(houseProjects.sortOrder), asc(houseProjects.title));
+    const projects = await db.select().from(houseProjects).where(eq(houseProjects.userId, userId)).orderBy(asc(houseProjects.sortOrder), asc(houseProjects.title));
+    const allTasks = await db.select().from(houseProjectTasks).where(eq(houseProjectTasks.userId, userId)).orderBy(asc(houseProjectTasks.sortOrder));
+    return projects.map((p) => ({ ...p, tasks: allTasks.filter((t) => t.houseProjectId === p.id) }));
   },
   async createHouseProject(data, userId) {
     const result = await db.insert(houseProjects).values({ ...data, userId }).returning();
@@ -1226,7 +1246,24 @@ export const storage: IStorage = {
     return result[0];
   },
   async deleteHouseProject(id) {
+    await db.delete(houseProjectTasks).where(eq(houseProjectTasks.houseProjectId, id));
     const result = await db.delete(houseProjects).where(eq(houseProjects.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── House Project Tasks ────────────────────────────────────────────────────────
+  async createHouseProjectTask(data, userId) {
+    const result = await db.insert(houseProjectTasks).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateHouseProjectTask(id, data) {
+    const existing = await db.select().from(houseProjectTasks).where(eq(houseProjectTasks.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(houseProjectTasks).set(data).where(eq(houseProjectTasks.id, id)).returning();
+    return result[0];
+  },
+  async deleteHouseProjectTask(id) {
+    const result = await db.delete(houseProjectTasks).where(eq(houseProjectTasks.id, id));
     return result.rowCount > 0;
   },
 

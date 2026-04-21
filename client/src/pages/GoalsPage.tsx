@@ -21,7 +21,7 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask, Chore, HouseProject,
+  GeneralTask, InsertGeneralTask, Chore, HouseProjectWithTasks,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -103,13 +103,14 @@ export default function GoalsPage() {
   const { data: standaloneProjects = [] } = useQuery<ProjectWithTasks[]>({ queryKey: ["/api/projects/standalone"] });
   const { data: generalTasksData = [] } = useQuery<GeneralTask[]>({ queryKey: ["/api/general-tasks"] });
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
-  const { data: houseProjects = [] } = useQuery<HouseProject[]>({ queryKey: ["/api/house-projects"] });
+  const { data: houseProjects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
     queryClient.invalidateQueries({ queryKey: ["/api/projects/standalone"] });
     queryClient.invalidateQueries({ queryKey: ["/api/general-tasks"] });
   };
+  const invHouse = () => queryClient.invalidateQueries({ queryKey: ["/api/house-projects"] });
 
   // ── Goal mutations ───────────────────────────────────────────────────────
   const deleteGoal = useMutation({
@@ -176,6 +177,26 @@ export default function GoalsPage() {
   const deleteGeneralTask = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/general-tasks/${id}`),
     onSuccess: inv,
+  });
+
+  // ── House project mutations ───────────────────────────────────────────────
+  const addHouseProject = useMutation({
+    mutationFn: (title: string) => apiRequest("POST", "/api/house-projects", { title, status: "not_started", priority: "medium", category: "other" }),
+    onSuccess: invHouse,
+  });
+  const addHouseProjectTask = useMutation({
+    mutationFn: ({ projectId, title }: { projectId: number; title: string }) =>
+      apiRequest("POST", `/api/house-projects/${projectId}/tasks`, { title, completed: false, priority: "medium", sortOrder: 0 }),
+    onSuccess: invHouse,
+  });
+  const toggleHouseProjectTask = useMutation({
+    mutationFn: ({ id, completed }: { id: number; completed: boolean }) =>
+      apiRequest("PATCH", `/api/house-project-tasks/${id}`, { completed }),
+    onSuccess: invHouse,
+  });
+  const deleteHouseProjectTask = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/house-project-tasks/${id}`),
+    onSuccess: invHouse,
   });
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -381,40 +402,51 @@ export default function GoalsPage() {
                 <p className="text-sm font-medium">All Tasks View</p>
                 <p className="text-xs mt-1 px-2">Tasks from every goal, project, and general list are shown in the Tasks column</p>
               </div>
-            ) : /* Housekeeping mode: show house projects (read-only) */
+            ) : /* Housekeeping mode: show house projects (selectable + addable) */
             isHousekeepingSelected ? (
               <>
-                {houseProjects.length === 0 ? (
+                {houseProjects.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Folder size={24} className="mx-auto mb-2 opacity-20" />
                     <p className="text-xs">No house projects yet</p>
-                    <Link href="/housekeeping"><a className="text-xs text-primary hover:underline mt-1 block">Add in Housekeeping →</a></Link>
                   </div>
-                ) : (
-                  houseProjects.map((p) => {
-                    const statusInfo = PROJECT_STATUSES.find((s) => s.value === p.status) ?? PROJECT_STATUSES[0];
-                    const d = p.dueDate ? daysUntil(p.dueDate) : null;
-                    return (
-                      <div key={p.id} className="rounded-xl border bg-card p-3">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <p className="text-sm font-medium leading-tight flex-1 truncate">{p.title}</p>
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border shrink-0 ${STATUS_PILL[p.status]}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
-                            {statusInfo.label}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          {d !== null ? (
-                            <span className={d < 0 ? "text-destructive font-medium" : d <= 7 ? "text-amber-600 dark:text-amber-400 font-medium" : ""}>
-                              {d < 0 ? "Overdue" : `Due ${format(parseISO(p.dueDate!), "MMM d")}`}
-                            </span>
-                          ) : <span className="capitalize text-muted-foreground">{p.category}</span>}
-                          {p.priority !== "medium" && <span className={`${PRIORITY_COLORS[p.priority]}`}>{p.priority}</span>}
-                        </div>
-                      </div>
-                    );
-                  })
                 )}
+                {houseProjects.map((p) => {
+                  const statusInfo = PROJECT_STATUSES.find((s) => s.value === p.status) ?? PROJECT_STATUSES[0];
+                  const d = p.dueDate ? daysUntil(p.dueDate) : null;
+                  const isSelected = p.id === selectedProjectId;
+                  const doneTasks = p.tasks.filter((t) => t.completed).length;
+                  return (
+                    <div key={p.id}
+                      onClick={() => setSelectedProjectId(isSelected ? null : p.id)}
+                      className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm ${isSelected ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20" : "bg-card hover:border-orange-200"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <p className="text-sm font-medium leading-tight flex-1 truncate">{p.title}</p>
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border shrink-0 ${STATUS_PILL[p.status]}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                          {statusInfo.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        {d !== null ? (
+                          <span className={d < 0 ? "text-destructive font-medium" : d <= 7 ? "text-amber-600 dark:text-amber-400 font-medium" : ""}>
+                            {d < 0 ? "Overdue" : `Due ${format(parseISO(p.dueDate!), "MMM d")}`}
+                          </span>
+                        ) : <span className="capitalize text-muted-foreground">{p.category}</span>}
+                        <span className="flex items-center gap-1">
+                          {p.tasks.length > 0 && <span>{doneTasks}/{p.tasks.length}</span>}
+                          <ChevronRight size={11} className={`transition-transform ${isSelected ? "rotate-90" : ""}`} />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <QuickAdd
+                  placeholder="Add house project..."
+                  onAdd={(title) => { addHouseProject.mutate(title); }}
+                  className="mt-1 px-1"
+                />
                 <Link href="/housekeeping"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Home size={11} /> Manage in Housekeeping</a></Link>
               </>
             ) : !selectedGoal && !isStandaloneSelected ? (
@@ -532,15 +564,25 @@ export default function GoalsPage() {
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                {isAllTasksSelected ? "All Tasks" : isHousekeepingSelected ? "Chores" : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}` : isStandaloneSelected ? "General Tasks" : selectedGoal ? "All Tasks" : "Tasks"}
-              </span>
+              {(() => {
+                const selectedHouseProject = isHousekeepingSelected ? houseProjects.find((p) => p.id === selectedProjectId) ?? null : null;
+                return (
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    {isAllTasksSelected ? "All Tasks"
+                      : isHousekeepingSelected && selectedHouseProject ? `Tasks — ${selectedHouseProject.title}`
+                      : isHousekeepingSelected ? "Chores"
+                      : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}`
+                      : isStandaloneSelected ? "General Tasks"
+                      : selectedGoal ? "All Tasks" : "Tasks"}
+                  </span>
+                );
+              })()}
               {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
               )}
-              {isHousekeepingSelected && (
+              {isHousekeepingSelected && !houseProjects.find((p) => p.id === selectedProjectId) && (
                 <span className="text-xs text-muted-foreground">{chores.filter(c => c.isActive).length} active</span>
               )}
             </div>
@@ -550,8 +592,38 @@ export default function GoalsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Housekeeping mode: show chores list */}
+            {/* Housekeeping mode: show project tasks OR chores list */}
             {isHousekeepingSelected ? (() => {
+              const selectedHouseProject = houseProjects.find((p) => p.id === selectedProjectId) ?? null;
+
+              // If a house project is selected, show its tasks
+              if (selectedHouseProject) {
+                return (
+                  <div className="space-y-1">
+                    {selectedHouseProject.tasks.length === 0 && (
+                      <div className="text-center py-10 text-muted-foreground">
+                        <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
+                        <p className="text-sm font-medium">No tasks yet</p>
+                        <p className="text-xs mt-1">Add tasks below to track this project</p>
+                      </div>
+                    )}
+                    {selectedHouseProject.tasks.map((task) => (
+                      <TaskRow key={task.id} task={task as any}
+                        onToggle={(id, v) => toggleHouseProjectTask.mutate({ id, completed: v })}
+                        onDelete={(id) => deleteHouseProjectTask.mutate(id)}
+                        onUpdate={() => {}}
+                      />
+                    ))}
+                    <QuickAdd
+                      placeholder="Add task..."
+                      onAdd={(title) => addHouseProjectTask.mutate({ projectId: selectedHouseProject.id, title })}
+                      className="mt-2 px-1"
+                    />
+                  </div>
+                );
+              }
+
+              // Otherwise show active chores list
               const activeChores = chores.filter(c => c.isActive).sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999"));
               if (activeChores.length === 0) return (
                 <div className="text-center py-16 text-muted-foreground">
@@ -584,7 +656,8 @@ export default function GoalsPage() {
                       </div>
                     );
                   })}
-                  <Link href="/housekeeping"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-2 px-1"><Home size={11} /> Manage in Housekeeping</a></Link>
+                  <p className="text-xs text-muted-foreground px-1 mt-2">Select a project above to view and add tasks</p>
+                  <Link href="/housekeeping"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Home size={11} /> Manage in Housekeeping</a></Link>
                 </div>
               );
             })() : null}

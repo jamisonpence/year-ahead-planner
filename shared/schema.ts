@@ -460,6 +460,19 @@ export const houseProjects = pgTable("house_projects", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+// ── HOUSE PROJECT TASKS ───────────────────────────────────────────────────────
+export const houseProjectTasks = pgTable("house_project_tasks", {
+  id: serial("id").primaryKey(),
+  houseProjectId: integer("house_project_id").notNull(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  dueDate: text("due_date"),
+  priority: text("priority").notNull().default("medium"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 // ── APPLIANCES ────────────────────────────────────────────────────────────────
 export const appliances = pgTable("appliances", {
   id: serial("id").primaryKey(),
@@ -580,6 +593,11 @@ export type Chore = typeof chores.$inferSelect;
 export const insertHouseProjectSchema = createInsertSchema(houseProjects).omit({ id: true });
 export type InsertHouseProject = z.infer<typeof insertHouseProjectSchema>;
 export type HouseProject = typeof houseProjects.$inferSelect;
+
+export const insertHouseProjectTaskSchema = createInsertSchema(houseProjectTasks).omit({ id: true });
+export type InsertHouseProjectTask = z.infer<typeof insertHouseProjectTaskSchema>;
+export type HouseProjectTask = typeof houseProjectTasks.$inferSelect;
+export type HouseProjectWithTasks = HouseProject & { tasks: HouseProjectTask[] };
 
 export const insertApplianceSchema = createInsertSchema(appliances).omit({ id: true });
 export type InsertAppliance = z.infer<typeof insertApplianceSchema>;

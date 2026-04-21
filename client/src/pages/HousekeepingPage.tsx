@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Chore, HouseProject, Appliance } from "@shared/schema";
+import type { Chore, HouseProjectWithTasks, HouseProjectTask, Appliance } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock,
+  Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock, Check, X, Circle,
   AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight,
 } from "lucide-react";
 
@@ -369,6 +369,29 @@ function ChoresTab() {
 // ── PROJECTS TAB ──────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ── Inline QuickAdd ───────────────────────────────────────────────────────────
+function QuickAdd({ placeholder, onAdd, className = "" }: {
+  placeholder: string; onAdd: (title: string) => void; className?: string;
+}) {
+  const [val, setVal] = useState("");
+  const [open, setOpen] = useState(false);
+  const submit = () => { if (!val.trim()) return; onAdd(val.trim()); setVal(""); setOpen(false); };
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className={`flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors ${className}`}>
+      <Plus size={12} /> {placeholder}
+    </button>
+  );
+  return (
+    <div className="flex gap-1.5">
+      <Input value={val} onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setOpen(false); setVal(""); } }}
+        placeholder={placeholder} className="h-7 text-xs flex-1" autoFocus />
+      <Button size="sm" className="h-7 px-2" onClick={submit}><Check size={12} /></Button>
+      <Button size="sm" variant="ghost" className="h-7 px-1" onClick={() => { setOpen(false); setVal(""); }}><X size={12} /></Button>
+    </div>
+  );
+}
+
 function ProjectsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -376,11 +399,11 @@ function ProjectsTab() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<HouseProject | null>(null);
+  const [editing, setEditing] = useState<HouseProjectWithTasks | null>(null);
   const [form, setForm] = useState({ ...EMPTY_PROJECT });
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
-  const { data: projects = [] } = useQuery<HouseProject[]>({ queryKey: ["/api/house-projects"] });
+  const { data: projects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -388,21 +411,39 @@ function ProjectsTab() {
     return Array.from(tags).sort();
   }, [projects]);
 
+  const inv = () => qc.invalidateQueries({ queryKey: ["/api/house-projects"] });
+
   const createMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/house-projects", data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/house-projects"] }); closeModal(); toast({ title: "Project added" }); },
+    onSuccess: () => { inv(); closeModal(); toast({ title: "Project added" }); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/house-projects/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/house-projects"] }); closeModal(); },
+    onSuccess: () => { inv(); closeModal(); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/house-projects/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/house-projects"] }); toast({ title: "Project deleted" }); },
+    onSuccess: () => { inv(); toast({ title: "Project deleted" }); },
+  });
+
+  // Task mutations
+  const addTask = useMutation({
+    mutationFn: ({ projectId, title }: { projectId: number; title: string }) =>
+      apiRequest("POST", `/api/house-projects/${projectId}/tasks`, { title, completed: false, priority: "medium", sortOrder: 0 }),
+    onSuccess: inv,
+  });
+  const toggleTask = useMutation({
+    mutationFn: ({ id, completed }: { id: number; completed: boolean }) =>
+      apiRequest("PATCH", `/api/house-project-tasks/${id}`, { completed }),
+    onSuccess: inv,
+  });
+  const deleteTask = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/house-project-tasks/${id}`),
+    onSuccess: inv,
   });
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_PROJECT }); setModalOpen(true); }
-  function openEdit(p: HouseProject) {
+  function openEdit(p: HouseProjectWithTasks) {
     setEditing(p);
     setForm({
       title: p.title, status: p.status, priority: p.priority,
@@ -477,6 +518,7 @@ function ProjectsTab() {
             const tags = (proj.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
             const isExpanded = expanded.has(proj.id);
             const daysLeft = daysUntil(proj.dueDate);
+            const doneTasks = proj.tasks.filter((t) => t.completed).length;
             return (
               <div key={proj.id} className="rounded-lg border bg-card overflow-hidden">
                 <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/30 transition-colors" onClick={() => toggleExpand(proj.id)}>
@@ -486,6 +528,9 @@ function ProjectsTab() {
                       <span className="font-medium text-sm">{proj.title}</span>
                       <Badge className={`text-xs ${STATUS_COLORS[proj.status]}`}>{PROJECT_STATUSES.find((s) => s.value === proj.status)?.label}</Badge>
                       <Badge className={`text-xs ${PRIORITY_COLORS[proj.priority]}`}>{proj.priority}</Badge>
+                      {proj.tasks.length > 0 && (
+                        <span className="text-xs text-muted-foreground">{doneTasks}/{proj.tasks.length} tasks</span>
+                      )}
                       {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
@@ -503,11 +548,48 @@ function ProjectsTab() {
                     <button onClick={() => deleteMut.mutate(proj.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
                   </div>
                 </div>
-                {isExpanded && (proj.notes || proj.contractor || proj.actualCost) && (
-                  <div className="px-4 pb-3 pt-1 border-t bg-muted/20 text-sm space-y-1">
-                    {proj.contractor && <p><span className="text-muted-foreground">Contractor:</span> {proj.contractor}</p>}
-                    {proj.actualCost != null && <p><span className="text-muted-foreground">Actual cost:</span> ${proj.actualCost.toLocaleString()}</p>}
-                    {proj.notes && <p className="text-muted-foreground text-xs">{proj.notes}</p>}
+                {isExpanded && (
+                  <div className="border-t bg-muted/10">
+                    {/* Project details */}
+                    {(proj.notes || proj.contractor || proj.actualCost != null) && (
+                      <div className="px-4 pt-2 pb-1 text-sm space-y-0.5 border-b border-border/50">
+                        {proj.contractor && <p className="text-xs"><span className="text-muted-foreground">Contractor:</span> {proj.contractor}</p>}
+                        {proj.actualCost != null && <p className="text-xs"><span className="text-muted-foreground">Actual cost:</span> ${proj.actualCost.toLocaleString()}</p>}
+                        {proj.notes && <p className="text-xs text-muted-foreground">{proj.notes}</p>}
+                      </div>
+                    )}
+                    {/* Tasks */}
+                    <div className="px-4 py-2 space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Tasks</p>
+                      {proj.tasks.length === 0 && (
+                        <p className="text-xs text-muted-foreground italic">No tasks yet</p>
+                      )}
+                      {proj.tasks.map((task) => (
+                        <div key={task.id} className="flex items-center gap-2 group">
+                          <button
+                            onClick={() => toggleTask.mutate({ id: task.id, completed: !task.completed })}
+                            className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {task.completed
+                              ? <CheckCircle2 size={15} className="text-primary" />
+                              : <Circle size={15} />}
+                          </button>
+                          <span className={`text-sm flex-1 ${task.completed ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
+                          <button
+                            onClick={() => deleteTask.mutate(task.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="pt-1">
+                        <QuickAdd
+                          placeholder="Add task..."
+                          onAdd={(title) => addTask.mutate({ projectId: proj.id, title })}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
