@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Video, ExternalLink,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -24,12 +24,13 @@ const POSTER_COLORS = [
 ];
 
 const EMPTY_FORM = {
-  mediaType: "movie" as "movie" | "show",
+  mediaType: "movie" as "movie" | "show" | "video",
   title: "", year: "", director: "", genres: [] as string[],
   status: "backlog", rating: 0, notes: "", listsJson: "[]",
   isFavorite: false, posterColor: POSTER_COLORS[0], streamingOn: "",
   customList: "",
   totalSeasons: "", currentSeason: "",
+  videoUrl: "",
 };
 
 function StarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
@@ -54,7 +55,7 @@ function StarRating({ value, onChange }: { value: number; onChange?: (v: number)
 export default function MoviesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [mediaTypeView, setMediaTypeView] = useState<"movie" | "show">("movie");
+  const [mediaTypeView, setMediaTypeView] = useState<"movie" | "show" | "video">("movie");
   const [tab, setTab] = useState("backlog");
   const [search, setSearch] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
@@ -69,9 +70,15 @@ export default function MoviesPage() {
 
   // Split by type
   const items = useMemo(
-    () => allItems.filter((m) => (m.mediaType ?? "movie") === mediaTypeView),
+    () => allItems.filter((m) => {
+      const mt = m.mediaType ?? "movie";
+      if (mediaTypeView === "video") return mt === "video";
+      if (mediaTypeView === "show") return mt === "show";
+      return mt === "movie";
+    }),
     [allItems, mediaTypeView],
   );
+  const isVideoView = mediaTypeView === "video";
 
   const createMut = useMutation({
     mutationFn: (d: any) => apiRequest("POST", "/api/movies", d),
@@ -168,6 +175,7 @@ export default function MoviesPage() {
       mediaType: mediaTypeView,
       status: "backlog",
       posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+      videoUrl: "",
     });
     setModalOpen(true);
   }
@@ -176,7 +184,7 @@ export default function MoviesPage() {
     let lists: string[] = [];
     try { lists = JSON.parse(m.listsJson); } catch {}
     setForm({
-      mediaType: (m.mediaType ?? "movie") as "movie" | "show",
+      mediaType: (m.mediaType ?? "movie") as "movie" | "show" | "video",
       title: m.title, year: m.year ? String(m.year) : "",
       director: m.director ?? "", genres: m.genres ? m.genres.split(",") : [],
       status: m.status, rating: m.rating ?? 0, notes: m.notes ?? "",
@@ -185,6 +193,7 @@ export default function MoviesPage() {
       streamingOn: m.streamingOn ?? "", customList: "",
       totalSeasons: m.totalSeasons ? String(m.totalSeasons) : "",
       currentSeason: m.currentSeason ? String(m.currentSeason) : "",
+      videoUrl: (m as any).videoUrl ?? "",
     });
     setModalOpen(true);
   }
@@ -192,21 +201,23 @@ export default function MoviesPage() {
 
   function save() {
     const isShow = form.mediaType === "show";
+    const isVideo = form.mediaType === "video";
     const payload: any = {
-      mediaType: form.mediaType,
+      mediaType: isVideo ? "video" : form.mediaType,
       title: form.title.trim(),
       year: form.year ? parseInt(form.year) : null,
       director: form.director.trim() || null,
-      genres: form.genres.join(",") || null,
+      genres: isVideo ? null : (form.genres.join(",") || null),
       status: form.status,
       rating: form.rating || null,
       notes: form.notes.trim() || null,
-      listsJson: form.listsJson,
+      listsJson: isVideo ? "[]" : form.listsJson,
       isFavorite: form.isFavorite,
       posterColor: form.posterColor,
       streamingOn: form.streamingOn || null,
       totalSeasons: isShow && form.totalSeasons ? parseInt(form.totalSeasons) : null,
       currentSeason: isShow && form.currentSeason ? parseInt(form.currentSeason) : null,
+      videoUrl: isVideo ? (form.videoUrl.trim() || null) : null,
     };
     if (!payload.title) { toast({ title: "Title is required", variant: "destructive" }); return; }
     if (editing) updateMut.mutate({ id: editing.id, d: payload });
@@ -258,7 +269,7 @@ export default function MoviesPage() {
   }, [favorites]);
 
   // Switch type view — reset to backlog tab
-  function switchView(v: "movie" | "show") {
+  function switchView(v: "movie" | "show" | "video") {
     setMediaTypeView(v);
     setTab("backlog");
     setSearch(""); setGenreFilter(null); setListFilter(null);
@@ -377,9 +388,60 @@ export default function MoviesPage() {
   const emptyIcon = isShowView ? <Tv2 size={40} className="mx-auto mb-3 opacity-20" /> : <Film size={40} className="mx-auto mb-3 opacity-20" />;
   const singularLabel = isShowView ? "show" : "movie";
 
+  function VideoCard({ movie }: { movie: Movie }) {
+    const vUrl = (movie as any).videoUrl as string | null | undefined;
+    return (
+      <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
+        <div className="h-1.5 w-full" style={{ background: movie.posterColor ?? "hsl(270 60% 50%)" }} />
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-sm">{movie.title}</h3>
+              {movie.streamingOn && (
+                <p className="text-xs text-muted-foreground mt-0.5">{movie.streamingOn}</p>
+              )}
+              {vUrl && (
+                <a
+                  href={vUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                >
+                  <ExternalLink size={11} /> Open link
+                </a>
+              )}
+              {movie.status === "watched" ? (
+                <Badge className="mt-2 text-xs py-0 px-1.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-0">Watched</Badge>
+              ) : (
+                <Badge className="mt-2 text-xs py-0 px-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0">Want to watch</Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => open_edit(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                <Pencil size={13} className="text-muted-foreground" />
+              </button>
+              <button onClick={() => deleteMut.mutate(movie.id)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+              </button>
+            </div>
+          </div>
+          {movie.status !== "watched" && (
+            <button
+              onClick={() => markStatus.mutate({ id: movie.id, status: "watched" })}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
+            >
+              <Check size={13} /> Mark watched
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Stats for header
   const movieCount = allItems.filter((m) => (m.mediaType ?? "movie") === "movie").length;
   const showCount = allItems.filter((m) => m.mediaType === "show").length;
+  const videoCount = allItems.filter((m) => m.mediaType === "video").length;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -390,7 +452,7 @@ export default function MoviesPage() {
             <Film size={22} /> Movies & Shows
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""}
+            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""} · {videoCount} video{videoCount !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex gap-2">
@@ -399,7 +461,7 @@ export default function MoviesPage() {
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           <Button onClick={open_add} size="sm" className="gap-1.5">
-            <Plus size={15} /> Add {isShowView ? "Show" : "Movie"}
+            <Plus size={15} /> Add {isVideoView ? "Video" : isShowView ? "Show" : "Movie"}
           </Button>
         </div>
       </div>
@@ -422,9 +484,48 @@ export default function MoviesPage() {
         >
           <Tv2 size={15} /> Shows
         </button>
+        <button
+          onClick={() => switchView("video")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            mediaTypeView === "video" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Video size={15} /> Videos
+        </button>
       </div>
 
-      {/* Search + filters */}
+      {/* Video view */}
+      {isVideoView && (
+        <div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <div className="relative flex-1 min-w-48">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search videos…"
+                className="pl-8 h-8 text-sm" />
+            </div>
+            {search && (
+              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => setSearch("")}>
+                <X size={13} /> Clear
+              </Button>
+            )}
+          </div>
+          {filtered.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Video size={40} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No videos yet.</p>
+              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add Video</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filtered.map((m) => <VideoCard key={m.id} movie={m} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search + filters + tabs (Movies / Shows only) */}
+      {!isVideoView && <>
       <div className="flex flex-wrap gap-2 mb-4">
         <div className="relative flex-1 min-w-48">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -535,6 +636,7 @@ export default function MoviesPage() {
           )}
         </TabsContent>
       </Tabs>
+      </>}
 
       {/* Add / Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) close_modal(); }}>
@@ -542,8 +644,8 @@ export default function MoviesPage() {
           <DialogHeader>
             <DialogTitle>
               {editing
-                ? `Edit ${form.mediaType === "show" ? "Show" : "Movie"}`
-                : `Add ${form.mediaType === "show" ? "Show" : "Movie"}`}
+                ? `Edit ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`
+                : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -568,6 +670,15 @@ export default function MoviesPage() {
                   }`}
                 >
                   <Tv2 size={13} /> Show
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, mediaType: "video", status: "want_to_watch" }))}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-all ${
+                    form.mediaType === "video" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Video size={13} /> Video
                 </button>
               </div>
             )}
@@ -594,7 +705,7 @@ export default function MoviesPage() {
                   placeholder={form.mediaType === "show" ? "Creator name" : "Director name"} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Streaming on</label>
+                <label className="text-xs font-medium text-muted-foreground">{form.mediaType === "video" ? "Platform" : "Streaming on"}</label>
                 <Select value={form.streamingOn || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, streamingOn: v === "__none__" ? "" : v }))}>
                   <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
                   <SelectContent>
@@ -621,36 +732,61 @@ export default function MoviesPage() {
               </div>
             )}
 
+            {/* Video URL field (video only) */}
+            {form.mediaType === "video" && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">URL</label>
+                <Input
+                  value={form.videoUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))}
+                  placeholder="https://…"
+                />
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Status</label>
               <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="backlog">Backlog (want to watch)</SelectItem>
-                  {form.mediaType === "show" && <SelectItem value="watching">Watching</SelectItem>}
-                  <SelectItem value={form.mediaType === "show" ? "finished" : "watched"}>
-                    {form.mediaType === "show" ? "Finished" : "Watched"}
-                  </SelectItem>
+                  {form.mediaType === "video" ? (
+                    <>
+                      <SelectItem value="want_to_watch">Want to Watch</SelectItem>
+                      <SelectItem value="watched">Watched</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="backlog">Backlog (want to watch)</SelectItem>
+                      {form.mediaType === "show" && <SelectItem value="watching">Watching</SelectItem>}
+                      <SelectItem value={form.mediaType === "show" ? "finished" : "watched"}>
+                        {form.mediaType === "show" ? "Finished" : "Watched"}
+                      </SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Genres</label>
-              <div className="flex flex-wrap gap-1.5">
-                {GENRES.map((g) => (
-                  <button key={g} type="button" onClick={() => toggleGenreForm(g)}
-                    className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${form.genres.includes(g) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-                    {g}
-                  </button>
-                ))}
+            {form.mediaType !== "video" && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Genres</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {GENRES.map((g) => (
+                    <button key={g} type="button" onClick={() => toggleGenreForm(g)}
+                      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${form.genres.includes(g) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+                      {g}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">My Rating</label>
-              <StarRating value={form.rating} onChange={(v) => setForm((f) => ({ ...f, rating: v }))} />
-            </div>
+            {form.mediaType !== "video" && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">My Rating</label>
+                <StarRating value={form.rating} onChange={(v) => setForm((f) => ({ ...f, rating: v }))} />
+              </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Card color</label>
@@ -663,29 +799,31 @@ export default function MoviesPage() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Custom Lists</label>
-              <div className="flex gap-2">
-                <Input value={newListInput} onChange={(e) => setNewListInput(e.target.value)}
-                  placeholder="e.g. Date Night, Watch with Kids"
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomList(); } }} />
-                <Button type="button" variant="outline" size="sm" onClick={addCustomList}>Add</Button>
+            {form.mediaType !== "video" && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Custom Lists</label>
+                <div className="flex gap-2">
+                  <Input value={newListInput} onChange={(e) => setNewListInput(e.target.value)}
+                    placeholder="e.g. Date Night, Watch with Kids"
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomList(); } }} />
+                  <Button type="button" variant="outline" size="sm" onClick={addCustomList}>Add</Button>
+                </div>
+                {(() => {
+                  let lists: string[] = [];
+                  try { lists = JSON.parse(form.listsJson); } catch {}
+                  return lists.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {lists.map((l) => (
+                        <Badge key={l} className="gap-1 bg-primary/10 text-primary border-primary/20">
+                          {l}
+                          <button type="button" onClick={() => removeCustomList(l)}><X size={10} /></button>
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
               </div>
-              {(() => {
-                let lists: string[] = [];
-                try { lists = JSON.parse(form.listsJson); } catch {}
-                return lists.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {lists.map((l) => (
-                      <Badge key={l} className="gap-1 bg-primary/10 text-primary border-primary/20">
-                        {l}
-                        <button type="button" onClick={() => removeCustomList(l)}><X size={10} /></button>
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null;
-              })()}
-            </div>
+            )}
 
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setForm((f) => ({ ...f, isFavorite: !f.isFavorite }))}
@@ -703,7 +841,7 @@ export default function MoviesPage() {
 
             <div className="flex gap-2 pt-2">
               <Button onClick={save} disabled={createMut.isPending || updateMut.isPending} className="flex-1">
-                {editing ? "Save Changes" : `Add ${form.mediaType === "show" ? "Show" : "Movie"}`}
+                {editing ? "Save Changes" : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`}
               </Button>
               <Button variant="outline" onClick={close_modal}>Cancel</Button>
             </div>

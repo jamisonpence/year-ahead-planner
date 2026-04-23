@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
-  Eye, EyeOff, GripVertical, Settings, LogOut,
+  Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette,
 } from "lucide-react";
 
 const ALL_TABS = [
@@ -25,6 +25,9 @@ const ALL_TABS = [
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
   { path: "/spots",         label: "Spots",                   icon: MapPin          },
+  { path: "/kids",          label: "Kids",                    icon: Baby            },
+  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
+  { path: "/art",           label: "Art",                     icon: Palette         },
 ];
 
 function useNavPrefs() {
