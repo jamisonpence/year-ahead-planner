@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
-  Globe, Clock, Tag, Navigation, Upload,
+  Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -178,11 +178,25 @@ export default function SpotsPage() {
   });
 
   const csvRef = useRef<HTMLInputElement>(null);
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+
+  // Normalize type/status values so CSV doesn't need exact casing
+  const TYPE_MAP: Record<string, string> = {
+    restaurant: "restaurant", bar: "bar", café: "cafe", cafe: "cafe",
+    park: "park", trail: "trail", shop: "shop", service: "service",
+    attraction: "attraction", hotel: "hotel",
+  };
+  const STATUS_MAP: Record<string, string> = {
+    want_to_visit: "want_to_visit", "want to visit": "want_to_visit", want: "want_to_visit",
+    visited: "visited", seen: "visited",
+    favorite: "favorite", favourite: "favorite", fav: "favorite",
+  };
 
   function parseCsvText(text: string): Record<string, string>[] {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    // ↓ lowercase + trim headers so "Name" and "name" both work
+    const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
     return lines.slice(1).map(line => {
       const cols = parseCsvLine(line);
       const row: Record<string, string> = {};
@@ -194,11 +208,21 @@ export default function SpotsPage() {
     const result: string[] = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
       else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
       else cur += c;
     }
     result.push(cur); return result;
+  }
+
+  function downloadCsvTemplate() {
+    const header = "name,type,address,neighborhood,city,status,rating,notes,website,priceRange,tags";
+    const ex1 = `"Franklin Barbecue",restaurant,"900 E 11th St",East Austin,Austin,want_to_visit,,Best brisket in Texas,franklinbbq.com,2,bbq`;
+    const ex2 = `"Barton Springs Pool",park,,Zilker,Austin,visited,5,Perfect swimming hole,,1,outdoor`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "spots_template.csv"; a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -206,29 +230,46 @@ export default function SpotsPage() {
     if (!file) return;
     const text = await file.text();
     const rows = parseCsvText(text);
-    let created = 0, errors = 0;
+    if (rows.length === 0) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and at least one data row.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    let created = 0, skipped = 0;
+    const errorDetails: string[] = [];
     for (const row of rows) {
-      if (!row.name?.trim()) continue;
+      if (!row.name?.trim()) { skipped++; continue; }
       try {
+        const typeVal = TYPE_MAP[row.type?.toLowerCase().trim() ?? ""] ?? (row.type?.trim() || "other");
+        const statusVal = STATUS_MAP[row.status?.toLowerCase().trim() ?? ""] ?? "want_to_visit";
         await apiRequest("POST", "/api/spots", {
           name: row.name.trim(),
-          type: row.type || "other",
+          type: typeVal,
           address: row.address || null,
           neighborhood: row.neighborhood || null,
           city: row.city || null,
-          status: row.status || "want_to_visit",
-          rating: row.rating ? parseInt(row.rating) : null,
+          status: statusVal,
+          rating: row.rating ? Math.min(5, Math.max(1, parseInt(row.rating))) : null,
           notes: row.notes || null,
           website: row.website || null,
-          priceRange: row.priceRange ? parseInt(row.priceRange) : null,
+          priceRange: row.priceRange ? Math.min(4, Math.max(1, parseInt(row.priceRange))) : null,
           tags: row.tags || null,
-          isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
+          isFavorite: row.isFavorite === "true" || row.isFavorite === "1" || row.isfavorite === "true",
         });
         created++;
-      } catch { errors++; }
+      } catch (err: any) {
+        errorDetails.push(row.name);
+      }
     }
     qc.invalidateQueries({ queryKey: ["/api/spots"] });
-    toast({ title: `Imported ${created} spot${created !== 1 ? "s" : ""}${errors ? `, ${errors} failed` : ""}` });
+    if (errorDetails.length === 0) {
+      toast({ title: `✓ Imported ${created} spot${created !== 1 ? "s" : ""}${skipped ? ` (${skipped} skipped — no name)` : ""}` });
+    } else {
+      toast({
+        title: `Imported ${created}, failed ${errorDetails.length}`,
+        description: `Failed rows: ${errorDetails.slice(0, 3).join(", ")}${errorDetails.length > 3 ? "…" : ""}`,
+        variant: "destructive",
+      });
+    }
     e.target.value = "";
   }
 
@@ -290,6 +331,9 @@ export default function SpotsPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download size={13} /> Template
+          </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>

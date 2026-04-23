@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Video, ExternalLink,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -115,10 +115,19 @@ export default function MoviesPage() {
 
   const csvRef = useRef<HTMLInputElement>(null);
 
+  const MEDIA_TYPE_MAP: Record<string, string> = {
+    movie: "movie", film: "movie", show: "show", series: "show", "tv show": "show", video: "video",
+  };
+  const MOVIE_STATUS_MAP: Record<string, string> = {
+    backlog: "backlog", "want to watch": "backlog", "want to see": "backlog",
+    watching: "watching", "in progress": "watching",
+    watched: "watched", seen: "watched", finished: "finished",
+  };
+
   function parseCsvText(text: string): Record<string, string>[] {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
     return lines.slice(1).map(line => {
       const cols = parseCsvLine(line);
       const row: Record<string, string> = {};
@@ -130,11 +139,21 @@ export default function MoviesPage() {
     const result: string[] = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
       else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
       else cur += c;
     }
     result.push(cur); return result;
+  }
+
+  function downloadCsvTemplate() {
+    const header = "title,mediaType,year,director,genres,status,rating,notes,streamingOn,isFavorite";
+    const ex1 = `"Inception",movie,2010,"Christopher Nolan","Action,Sci-Fi",backlog,5,"Mind-bending",Netflix,false`;
+    const ex2 = `"Breaking Bad",show,2008,"Vince Gilligan",Drama,watched,5,,Netflix,true`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "movies_template.csv"; a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -142,29 +161,42 @@ export default function MoviesPage() {
     if (!file) return;
     const text = await file.text();
     const rows = parseCsvText(text);
-    let created = 0, errors = 0;
+    if (rows.length === 0) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    let created = 0, skipped = 0;
+    const errorTitles: string[] = [];
     for (const row of rows) {
-      if (!row.title?.trim()) continue;
+      if (!row.title?.trim()) { skipped++; continue; }
       try {
+        const rawType = row.mediatype || row.media_type || row.type || "movie";
+        const mediaType = MEDIA_TYPE_MAP[rawType.toLowerCase().trim()] ?? "movie";
+        const rawStatus = row.status || "backlog";
+        const status = MOVIE_STATUS_MAP[rawStatus.toLowerCase().trim()] ?? "backlog";
         await apiRequest("POST", "/api/movies", {
           title: row.title.trim(),
-          mediaType: row.mediaType === "show" ? "show" : "movie",
+          mediaType,
           year: row.year ? parseInt(row.year) : null,
           director: row.director || null,
           genres: row.genres || null,
-          status: row.status || "backlog",
-          rating: row.rating ? parseInt(row.rating) : null,
+          status,
+          rating: row.rating ? Math.min(5, Math.max(1, parseInt(row.rating))) : null,
           notes: row.notes || null,
-          streamingOn: row.streamingOn || null,
-          isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
+          streamingOn: row.streamingon || row.streaming_on || row.streamingOn || null,
+          isFavorite: row.isfavorite === "true" || row.isfavorite === "1" || row.isFavorite === "true",
           listsJson: "[]",
           posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
         });
         created++;
-      } catch { errors++; }
+      } catch { errorTitles.push(row.title); }
     }
     qc.invalidateQueries({ queryKey: ["/api/movies"] });
-    toast({ title: `Imported ${created} title${created !== 1 ? "s" : ""}${errors ? `, ${errors} failed` : ""}` });
+    if (errorTitles.length === 0) {
+      toast({ title: `✓ Imported ${created} title${created !== 1 ? "s" : ""}${skipped ? ` (${skipped} skipped)` : ""}` });
+    } else {
+      toast({ title: `Imported ${created}, failed ${errorTitles.length}`, description: `Failed: ${errorTitles.slice(0, 3).join(", ")}`, variant: "destructive" });
+    }
     e.target.value = "";
   }
 
@@ -456,6 +488,9 @@ export default function MoviesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download size={13} /> Template
+          </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>

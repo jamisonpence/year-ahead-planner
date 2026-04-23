@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
-  Trash2, Pencil, Search, Music, Upload,
+  Trash2, Pencil, Search, Music, Upload, Download,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -302,10 +302,16 @@ export default function MusicPage() {
   // ── CSV upload ────────────────────────────────────────────────────────────────
   const csvRef = useRef<HTMLInputElement>(null);
 
+  const SONG_STATUS_MAP_CSV: Record<string, string> = {
+    want_to_listen: "want_to_listen", "want to listen": "want_to_listen", want: "want_to_listen",
+    listening: "listening",
+    listened: "listened", done: "listened",
+  };
+
   function parseCsvText(text: string): Record<string, string>[] {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
     return lines.slice(1).map(line => {
       const cols = parseCsvLine(line);
       const row: Record<string, string> = {};
@@ -317,11 +323,22 @@ export default function MusicPage() {
     const result: string[] = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
       else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
       else cur += c;
     }
     result.push(cur); return result;
+  }
+
+  function downloadCsvTemplate() {
+    const header = "artistName,songTitle,album,genre,year,status,rating,notes";
+    const ex1 = `"Radiohead","Karma Police","OK Computer",Rock,1997,want_to_listen,,`;
+    const ex2 = `"Radiohead","Creep","Pablo Honey",Rock,1992,listened,5,"Classic"`;
+    const ex3 = `"Arctic Monkeys","Do I Wanna Know","AM",Indie Rock,2013,listened,5,`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}\n${ex3}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "music_template.csv"; a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -329,16 +346,19 @@ export default function MusicPage() {
     if (!file) return;
     const text = await file.text();
     const rows = parseCsvText(text);
-    // Group rows by artistName
+    if (rows.length === 0) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    // Group by artistname (headers are lowercased)
     const byArtist = new Map<string, Record<string, string>[]>();
     for (const row of rows) {
-      const artistName = row.artistName?.trim();
+      const artistName = (row.artistname || row.artist_name || row.artist || "").trim();
       if (!artistName) continue;
       if (!byArtist.has(artistName)) byArtist.set(artistName, []);
       byArtist.get(artistName)!.push(row);
     }
     let artistsCreated = 0, songsCreated = 0, errors = 0;
-    // Build lookup of existing artists (case-insensitive)
     const existingMap = new Map<string, number>(artists.map(a => [a.name.toLowerCase(), a.id]));
     for (const [artistName, artistRows] of byArtist.entries()) {
       let artistId = existingMap.get(artistName.toLowerCase());
@@ -356,17 +376,20 @@ export default function MusicPage() {
         } catch { errors++; continue; }
       }
       for (const row of artistRows) {
-        if (!row.songTitle?.trim()) continue;
+        const songTitle = (row.songtitle || row.song_title || row.title || "").trim();
+        if (!songTitle) continue;
         try {
+          const rawStatus = row.status || "want_to_listen";
+          const status = SONG_STATUS_MAP_CSV[rawStatus.toLowerCase().trim()] ?? "want_to_listen";
           await apiRequest("POST", "/api/music/songs", {
             artistId,
-            title: row.songTitle.trim(),
+            title: songTitle,
             album: row.album || null,
             genre: row.genre || null,
             year: row.year ? parseInt(row.year) : null,
-            status: row.status || "want_to_listen",
-            isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
-            rating: row.rating ? parseInt(row.rating) : null,
+            status,
+            isFavorite: row.isfavorite === "true" || row.isfavorite === "1",
+            rating: row.rating ? Math.min(5, Math.max(1, parseInt(row.rating))) : null,
             notes: row.notes || null,
           });
           songsCreated++;
@@ -377,7 +400,9 @@ export default function MusicPage() {
     const parts = [];
     if (artistsCreated) parts.push(`${artistsCreated} artist${artistsCreated !== 1 ? "s" : ""}`);
     if (songsCreated) parts.push(`${songsCreated} song${songsCreated !== 1 ? "s" : ""}`);
-    toast({ title: `Imported ${parts.join(", ")}${errors ? `, ${errors} errors` : ""}` });
+    const summary = parts.length ? parts.join(", ") : "0 items";
+    if (errors === 0) toast({ title: `✓ Imported ${summary}` });
+    else toast({ title: `Imported ${summary}, ${errors} errors`, variant: "destructive" });
     e.target.value = "";
   }
 
@@ -521,6 +546,9 @@ export default function MusicPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download className="h-4 w-4" /> Template
+          </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload className="h-4 w-4" /> Upload CSV
           </Button>
