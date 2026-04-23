@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Spot } from "@shared/schema";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
-  Globe, Clock, Tag, Navigation,
+  Globe, Clock, Tag, Navigation, Upload,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -177,6 +177,61 @@ export default function SpotsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spots"] }),
   });
 
+  const csvRef = useRef<HTMLInputElement>(null);
+
+  function parseCsvText(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const cols = parseCsvLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+      return row;
+    }).filter(row => Object.values(row).some(v => v));
+  }
+  function parseCsvLine(line: string): string[] {
+    const result: string[] = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+      else cur += c;
+    }
+    result.push(cur); return result;
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    let created = 0, errors = 0;
+    for (const row of rows) {
+      if (!row.name?.trim()) continue;
+      try {
+        await apiRequest("POST", "/api/spots", {
+          name: row.name.trim(),
+          type: row.type || "other",
+          address: row.address || null,
+          neighborhood: row.neighborhood || null,
+          city: row.city || null,
+          status: row.status || "want_to_visit",
+          rating: row.rating ? parseInt(row.rating) : null,
+          notes: row.notes || null,
+          website: row.website || null,
+          priceRange: row.priceRange ? parseInt(row.priceRange) : null,
+          tags: row.tags || null,
+          isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
+        });
+        created++;
+      } catch { errors++; }
+    }
+    qc.invalidateQueries({ queryKey: ["/api/spots"] });
+    toast({ title: `Imported ${created} spot${created !== 1 ? "s" : ""}${errors ? `, ${errors} failed` : ""}` });
+    e.target.value = "";
+  }
+
   function openNew() { setEditing(null); setForm({ ...EMPTY_FORM }); setModalOpen(true); }
   function openEdit(s: Spot) {
     setEditing(s);
@@ -234,7 +289,13 @@ export default function SpotsPage() {
             <p className="text-sm text-muted-foreground">Places to visit & explore</p>
           </div>
         </div>
-        <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Spot</Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+            <Upload size={13} /> Upload CSV
+          </Button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Spot</Button>
+        </div>
       </div>
 
       {/* Tabs */}

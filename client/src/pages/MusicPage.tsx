@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { MusicArtistWithSongs, MusicSong } from "@shared/schema";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
-  Trash2, Pencil, Search, Music,
+  Trash2, Pencil, Search, Music, Upload,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -299,6 +299,88 @@ export default function MusicPage() {
     onSuccess: () => { invalidate(); toast({ title: "Song removed" }); },
   });
 
+  // ── CSV upload ────────────────────────────────────────────────────────────────
+  const csvRef = useRef<HTMLInputElement>(null);
+
+  function parseCsvText(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const cols = parseCsvLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+      return row;
+    }).filter(row => Object.values(row).some(v => v));
+  }
+  function parseCsvLine(line: string): string[] {
+    const result: string[] = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+      else cur += c;
+    }
+    result.push(cur); return result;
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    // Group rows by artistName
+    const byArtist = new Map<string, Record<string, string>[]>();
+    for (const row of rows) {
+      const artistName = row.artistName?.trim();
+      if (!artistName) continue;
+      if (!byArtist.has(artistName)) byArtist.set(artistName, []);
+      byArtist.get(artistName)!.push(row);
+    }
+    let artistsCreated = 0, songsCreated = 0, errors = 0;
+    // Build lookup of existing artists (case-insensitive)
+    const existingMap = new Map<string, number>(artists.map(a => [a.name.toLowerCase(), a.id]));
+    for (const [artistName, artistRows] of byArtist.entries()) {
+      let artistId = existingMap.get(artistName.toLowerCase());
+      if (!artistId) {
+        try {
+          const r = await apiRequest("POST", "/api/music/artists", {
+            name: artistName,
+            genres: artistRows[0].genres || null,
+            isFavorite: false,
+          });
+          const data = await r.json();
+          artistId = data.id;
+          existingMap.set(artistName.toLowerCase(), artistId!);
+          artistsCreated++;
+        } catch { errors++; continue; }
+      }
+      for (const row of artistRows) {
+        if (!row.songTitle?.trim()) continue;
+        try {
+          await apiRequest("POST", "/api/music/songs", {
+            artistId,
+            title: row.songTitle.trim(),
+            album: row.album || null,
+            genre: row.genre || null,
+            year: row.year ? parseInt(row.year) : null,
+            status: row.status || "want_to_listen",
+            isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
+            rating: row.rating ? parseInt(row.rating) : null,
+            notes: row.notes || null,
+          });
+          songsCreated++;
+        } catch { errors++; }
+      }
+    }
+    qc.invalidateQueries({ queryKey: ["/api/music/artists"] });
+    const parts = [];
+    if (artistsCreated) parts.push(`${artistsCreated} artist${artistsCreated !== 1 ? "s" : ""}`);
+    if (songsCreated) parts.push(`${songsCreated} song${songsCreated !== 1 ? "s" : ""}`);
+    toast({ title: `Imported ${parts.join(", ")}${errors ? `, ${errors} errors` : ""}` });
+    e.target.value = "";
+  }
+
   // ── Modal helpers ─────────────────────────────────────────────────────────────
   function openAddArtist() {
     setEditingArtist(null);
@@ -438,9 +520,15 @@ export default function MusicPage() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={openAddArtist} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Artist
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+            <Upload className="h-4 w-4" /> Upload CSV
+          </Button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          <Button size="sm" onClick={openAddArtist} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Artist
+          </Button>
+        </div>
       </div>
 
       {/* Search + Genre filter */}

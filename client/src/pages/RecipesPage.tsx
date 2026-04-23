@@ -5,8 +5,8 @@ import { format, startOfWeek, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, MoreHorizontal, Clock, ChefHat,
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
-  RefreshCw, Flame, ChevronRight, Layers, UtensilsCrossed,
-  Leaf, Wheat, Droplets, Package,
+  RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
+  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,8 @@ const COMPONENT_TYPES: { value: ComponentType; label: string; icon: React.ReactN
   { value: "vegetable", label: "Vegetable",  icon: <Leaf size={14} />,            color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800" },
   { value: "side",      label: "Side",       icon: <Wheat size={14} />,           color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"   },
   { value: "sauce",     label: "Sauce",      icon: <Droplets size={14} />,        color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800" },
+  { value: "dessert",   label: "Dessert",    icon: <CakeSlice size={14} />,       color: "text-pink-600 dark:text-pink-400",    bg: "bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800"    },
+  { value: "baking",    label: "Baking",     icon: <Cookie size={14} />,          color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800" },
 ];
 
 function getWeekStart(): string {
@@ -41,6 +43,50 @@ function parseIngredients(json: string): RecipeIngredient[] {
 
 function getComponentInfo(type: string | null | undefined) {
   return COMPONENT_TYPES.find(c => c.value === type) ?? null;
+}
+
+// ── Bucket grouping (by category/tag) ─────────────────────────────────────────
+function groupByCategory(recipes: Recipe[]): { category: string | null; recipes: Recipe[] }[] {
+  const map = new Map<string | null, Recipe[]>();
+  recipes.forEach(r => {
+    const key = r.category?.trim() || null;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(r);
+  });
+  return Array.from(map.entries())
+    .sort(([a], [b]) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return a.localeCompare(b);
+    })
+    .map(([category, recs]) => ({ category, recipes: recs }));
+}
+
+// Simple CSV parser
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cols = parseCSVLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+    return row;
+  }).filter(row => Object.values(row).some(v => v));
+}
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = ""; let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) { result.push(current); current = ""; }
+    else current += c;
+  }
+  result.push(current);
+  return result;
 }
 
 // ── Grocery grouping ───────────────────────────────────────────────────────────
@@ -616,7 +662,16 @@ export default function RecipesPage() {
   const [editBundle, setEditBundle] = useState<MealBundle | null>(null);
   const [assignRecipe, setAssignRecipe] = useState<Recipe | null>(null);
   const [assignBundle, setAssignBundle] = useState<MealBundle | null>(null);
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
   const weekStart = getWeekStart();
+
+  function toggleBucket(key: string) {
+    setCollapsedBuckets(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ["/api/recipes"] });
   const { data: bundles = [] } = useQuery<MealBundle[]>({ queryKey: ["/api/meal-bundles"] });
@@ -778,6 +833,8 @@ export default function RecipesPage() {
               {COMPONENT_TYPES.map(ct => {
                 const group = recipesByType[ct.value];
                 if (group.length === 0) return null;
+                const buckets = groupByCategory(group);
+                const hasBuckets = buckets.some(b => b.category !== null);
                 return (
                   <div key={ct.value}>
                     <div className={`flex items-center gap-2 mb-3 pb-2 border-b`}>
@@ -785,17 +842,51 @@ export default function RecipesPage() {
                       <h2 className={`text-sm font-bold uppercase tracking-widest ${ct.color}`}>{ct.label}s</h2>
                       <span className="text-xs text-muted-foreground">{group.length}</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {group.map(recipe => (
-                        <RecipeCard key={recipe.id} recipe={recipe}
-                          isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
-                          onDetail={() => setDetailRecipe(recipe)}
-                          onAssign={() => setAssignRecipe(recipe)}
-                          onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
-                          onDelete={() => deleteRecipeMut.mutate(recipe.id)}
-                        />
-                      ))}
-                    </div>
+                    {hasBuckets ? (
+                      <div className="space-y-4">
+                        {buckets.map(({ category, recipes: bRecipes }) => {
+                          const bucketKey = `${ct.value}:${category ?? "__none__"}`;
+                          const isCollapsed = collapsedBuckets.has(bucketKey);
+                          return (
+                            <div key={bucketKey}>
+                              <button onClick={() => toggleBucket(bucketKey)}
+                                className="flex items-center gap-1.5 w-full text-left mb-2 py-1 px-2 rounded-lg hover:bg-secondary/60 transition-colors">
+                                <ChevronDown size={12} className={`transition-transform duration-200 text-muted-foreground ${isCollapsed ? "-rotate-90" : ""}`} />
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  {category ?? "Other"}
+                                </span>
+                                <span className="text-xs text-muted-foreground/60 ml-1">{bRecipes.length}</span>
+                              </button>
+                              {!isCollapsed && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                  {bRecipes.map(recipe => (
+                                    <RecipeCard key={recipe.id} recipe={recipe}
+                                      isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                                      onDetail={() => setDetailRecipe(recipe)}
+                                      onAssign={() => setAssignRecipe(recipe)}
+                                      onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                                      onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {group.map(recipe => (
+                          <RecipeCard key={recipe.id} recipe={recipe}
+                            isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                            onDetail={() => setDetailRecipe(recipe)}
+                            onAssign={() => setAssignRecipe(recipe)}
+                            onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                            onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -868,7 +959,7 @@ export default function RecipesPage() {
               {bundles.map(bundle => {
                 const ids: number[] = JSON.parse(bundle.recipeIdsJson);
                 const bundleRecipes = ids.map(id => recipes.find(r => r.id === id)).filter(Boolean) as Recipe[];
-                const byType: Record<ComponentType, Recipe[]> = { main: [], vegetable: [], side: [], sauce: [] };
+                const byType: Record<ComponentType, Recipe[]> = { main: [], vegetable: [], side: [], sauce: [], dessert: [], baking: [] };
                 const untyped: Recipe[] = [];
                 bundleRecipes.forEach(r => {
                   if (r.componentType && byType[r.componentType as ComponentType]) byType[r.componentType as ComponentType].push(r);
