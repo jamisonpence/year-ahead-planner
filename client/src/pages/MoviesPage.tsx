@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Movie } from "@shared/schema";
@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -105,6 +105,61 @@ export default function MoviesPage() {
     });
     return Array.from(set).sort();
   }, [items]);
+
+  const csvRef = useRef<HTMLInputElement>(null);
+
+  function parseCsvText(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const cols = parseCsvLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+      return row;
+    }).filter(row => Object.values(row).some(v => v));
+  }
+  function parseCsvLine(line: string): string[] {
+    const result: string[] = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+      else cur += c;
+    }
+    result.push(cur); return result;
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    let created = 0, errors = 0;
+    for (const row of rows) {
+      if (!row.title?.trim()) continue;
+      try {
+        await apiRequest("POST", "/api/movies", {
+          title: row.title.trim(),
+          mediaType: row.mediaType === "show" ? "show" : "movie",
+          year: row.year ? parseInt(row.year) : null,
+          director: row.director || null,
+          genres: row.genres || null,
+          status: row.status || "backlog",
+          rating: row.rating ? parseInt(row.rating) : null,
+          notes: row.notes || null,
+          streamingOn: row.streamingOn || null,
+          isFavorite: row.isFavorite === "true" || row.isFavorite === "1",
+          listsJson: "[]",
+          posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+        });
+        created++;
+      } catch { errors++; }
+    }
+    qc.invalidateQueries({ queryKey: ["/api/movies"] });
+    toast({ title: `Imported ${created} title${created !== 1 ? "s" : ""}${errors ? `, ${errors} failed` : ""}` });
+    e.target.value = "";
+  }
 
   function open_add() {
     setEditing(null);
@@ -338,9 +393,15 @@ export default function MoviesPage() {
             {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={open_add} size="sm" className="gap-1.5">
-          <Plus size={15} /> Add {isShowView ? "Show" : "Movie"}
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+            <Upload size={13} /> Upload CSV
+          </Button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          <Button onClick={open_add} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add {isShowView ? "Show" : "Movie"}
+          </Button>
+        </div>
       </div>
 
       {/* Type toggle */}

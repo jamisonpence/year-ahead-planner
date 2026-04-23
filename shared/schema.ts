@@ -213,7 +213,7 @@ export type InsertGroceryCheck = z.infer<typeof insertGroceryCheckSchema>;
 export type GroceryCheck = typeof groceryChecks.$inferSelect;
 
 export type RecipeIngredient = { name: string; qty: string };
-export type ComponentType = "main" | "vegetable" | "side" | "sauce";
+export type ComponentType = "main" | "vegetable" | "side" | "sauce" | "dessert" | "baking";
 
 // ── RELATIONSHIP GROUPS ─────────────────────────────────────────────────────
 export const relationshipGroups = pgTable("relationship_groups", {
