@@ -22,6 +22,9 @@ import {
   insertPlantSchema,
   insertMusicArtistSchema, insertMusicSongSchema,
   insertChoreSchema, insertHouseProjectSchema, insertApplianceSchema, insertSpotSchema,
+  insertChildSchema, insertChildMilestoneSchema, insertChildMemorySchema, insertChildPrepItemSchema,
+  insertQuoteSchema,
+  insertArtPieceSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -893,6 +896,129 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   app.delete("/api/spots/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteSpot(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Children ──────────────────────────────────────────────────────────────────
+  app.get("/api/children", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/children", requireAuth, async (req, res) => {
+    try {
+      const data = insertChildSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createChild(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/children/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateChild(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/children/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteChild(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Child Milestones
+  app.post("/api/children/:childId/milestones", requireAuth, async (req, res) => {
+    try {
+      const data = insertChildMilestoneSchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
+      res.status(201).json(await storage.createChildMilestone(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/child-milestones/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateChildMilestone(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/child-milestones/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteChildMilestone(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Child Memories
+  app.post("/api/children/:childId/memories", requireAuth, async (req, res) => {
+    try {
+      const data = insertChildMemorySchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
+      res.status(201).json(await storage.createChildMemory(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/child-memories/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateChildMemory(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/child-memories/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteChildMemory(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Child Prep Items
+  app.post("/api/children/:childId/prep-items", requireAuth, async (req, res) => {
+    try {
+      const data = insertChildPrepItemSchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
+      res.status(201).json(await storage.createChildPrepItem(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/child-prep-items/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateChildPrepItem(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/child-prep-items/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteChildPrepItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Quotes ────────────────────────────────────────────────────────────────────
+  app.get("/api/quotes", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllQuotes((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/quotes", requireAuth, async (req, res) => {
+    try {
+      const data = insertQuoteSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createQuote(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/quotes/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateQuote(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/quotes/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteQuote(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Art Pieces ────────────────────────────────────────────────────────────────
+  app.get("/api/art", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllArtPieces((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/art", requireAuth, async (req, res) => {
+    try {
+      const data = insertArtPieceSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createArtPiece(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/art/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateArtPiece(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/art/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteArtPiece(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }

@@ -287,6 +287,8 @@ export const movies = pgTable("movies", {
   // Show-specific
   totalSeasons: integer("total_seasons"),
   currentSeason: integer("current_season"),
+  // Video-specific
+  videoUrl: text("video_url"),
 });
 
 export const insertMovieSchema = createInsertSchema(movies).omit({ id: true });
@@ -606,6 +608,115 @@ export type Appliance = typeof appliances.$inferSelect;
 export const insertSpotSchema = createInsertSchema(spots).omit({ id: true });
 export type InsertSpot = z.infer<typeof insertSpotSchema>;
 export type Spot = typeof spots.$inferSelect;
+
+// ── KIDS ─────────────────────────────────────────────────────────────────────
+export const children = pgTable("children", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  birthDate: text("birth_date"),
+  notes: text("notes"),
+  accentColor: text("accent_color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const childMilestones = pgTable("child_milestones", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  childId: integer("child_id").notNull(),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("other"), // motor|speech|social|academic|health|first|other
+  date: text("date"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const childMemories = pgTable("child_memories", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  childId: integer("child_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  date: text("date"),
+  tags: text("tags"), // comma-separated
+  mood: text("mood").notNull().default("happy"), // happy|funny|proud|sweet|bittersweet
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const childPrepItems = pgTable("child_prep_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  childId: integer("child_id").notNull(),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("other"), // health|school|activity|party|safety|gear|other
+  dueDate: text("due_date"),
+  completed: boolean("completed").notNull().default(false),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertChildSchema = createInsertSchema(children).omit({ id: true });
+export type InsertChild = z.infer<typeof insertChildSchema>;
+export type Child = typeof children.$inferSelect;
+
+export const insertChildMilestoneSchema = createInsertSchema(childMilestones).omit({ id: true });
+export type InsertChildMilestone = z.infer<typeof insertChildMilestoneSchema>;
+export type ChildMilestone = typeof childMilestones.$inferSelect;
+
+export const insertChildMemorySchema = createInsertSchema(childMemories).omit({ id: true });
+export type InsertChildMemory = z.infer<typeof insertChildMemorySchema>;
+export type ChildMemory = typeof childMemories.$inferSelect;
+
+export const insertChildPrepItemSchema = createInsertSchema(childPrepItems).omit({ id: true });
+export type InsertChildPrepItem = z.infer<typeof insertChildPrepItemSchema>;
+export type ChildPrepItem = typeof childPrepItems.$inferSelect;
+
+export type ChildWithDetails = Child & {
+  milestones: ChildMilestone[];
+  memories: ChildMemory[];
+  prepItems: ChildPrepItem[];
+};
+
+// ── QUOTES ─────────────────────────────────────────────────────────────────────
+export const quotes = pgTable("quotes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  text: text("text").notNull(),
+  author: text("author"),
+  source: text("source"),
+  category: text("category").notNull().default("other"), // motivation|wisdom|humor|love|life|philosophy|other
+  tags: text("tags"), // comma-separated
+  notes: text("notes"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true });
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+export type Quote = typeof quotes.$inferSelect;
+
+// ── ART ───────────────────────────────────────────────────────────────────────
+export const artPieces = pgTable("art_pieces", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  artistName: text("artist_name"),
+  yearCreated: integer("year_created"),
+  medium: text("medium").notNull().default("other"), // painting|sculpture|photography|digital|print|drawing|textile|other
+  movement: text("movement"),
+  whereViewed: text("where_viewed"),
+  city: text("city"),
+  status: text("status").notNull().default("want_to_see"), // want_to_see|seen|own
+  notes: text("notes"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  accentColor: text("accent_color"),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertArtPieceSchema = createInsertSchema(artPieces).omit({ id: true });
+export type InsertArtPiece = z.infer<typeof insertArtPieceSchema>;
+export type ArtPiece = typeof artPieces.$inferSelect;
 
 // ── COMPOSITE TYPES ────────────────────────────────────────────────────────────
 export type EventWithTasks = Event & { tasks: Task[] };

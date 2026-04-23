@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -26,6 +26,12 @@ import type {
   InsertMusicArtist, MusicArtist, InsertMusicSong, MusicSong, MusicArtistWithSongs,
   InsertChore, Chore, InsertHouseProject, HouseProject, HouseProjectWithTasks, InsertHouseProjectTask, HouseProjectTask, InsertAppliance, Appliance,
   InsertSpot, Spot,
+  InsertChild, Child, ChildWithDetails,
+  InsertChildMilestone, ChildMilestone,
+  InsertChildMemory, ChildMemory,
+  InsertChildPrepItem, ChildPrepItem,
+  InsertQuote, Quote,
+  InsertArtPiece, ArtPiece,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -493,6 +499,97 @@ export async function initializeStorage() {
     )
   `);
 
+  // Video URL migration for movies
+  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS video_url TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS children (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      birth_date TEXT,
+      notes TEXT,
+      accent_color TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS child_milestones (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      child_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other',
+      date TEXT,
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS child_memories (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      child_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      date TEXT,
+      tags TEXT,
+      mood TEXT NOT NULL DEFAULT 'happy',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS child_prep_items (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      child_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other',
+      due_date TEXT,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quotes (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      text TEXT NOT NULL,
+      author TEXT,
+      source TEXT,
+      category TEXT NOT NULL DEFAULT 'other',
+      tags TEXT,
+      notes TEXT,
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS art_pieces (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      artist_name TEXT,
+      year_created INTEGER,
+      medium TEXT NOT NULL DEFAULT 'other',
+      movement TEXT,
+      where_viewed TEXT,
+      city TEXT,
+      status TEXT NOT NULL DEFAULT 'want_to_see',
+      notes TEXT,
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+      accent_color TEXT,
+      image_url TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spots (
       id SERIAL PRIMARY KEY,
@@ -668,6 +765,33 @@ export interface IStorage {
   createSpot(data: InsertSpot, userId: number): Promise<Spot>;
   updateSpot(id: number, data: Partial<InsertSpot>): Promise<Spot | undefined>;
   deleteSpot(id: number): Promise<boolean>;
+  // Children
+  getAllChildrenWithDetails(userId: number): Promise<ChildWithDetails[]>;
+  createChild(data: InsertChild, userId: number): Promise<Child>;
+  updateChild(id: number, data: Partial<InsertChild>): Promise<Child | undefined>;
+  deleteChild(id: number): Promise<boolean>;
+  // Child Milestones
+  createChildMilestone(data: InsertChildMilestone, userId: number): Promise<ChildMilestone>;
+  updateChildMilestone(id: number, data: Partial<InsertChildMilestone>): Promise<ChildMilestone | undefined>;
+  deleteChildMilestone(id: number): Promise<boolean>;
+  // Child Memories
+  createChildMemory(data: InsertChildMemory, userId: number): Promise<ChildMemory>;
+  updateChildMemory(id: number, data: Partial<InsertChildMemory>): Promise<ChildMemory | undefined>;
+  deleteChildMemory(id: number): Promise<boolean>;
+  // Child Prep Items
+  createChildPrepItem(data: InsertChildPrepItem, userId: number): Promise<ChildPrepItem>;
+  updateChildPrepItem(id: number, data: Partial<InsertChildPrepItem>): Promise<ChildPrepItem | undefined>;
+  deleteChildPrepItem(id: number): Promise<boolean>;
+  // Quotes
+  getAllQuotes(userId: number): Promise<Quote[]>;
+  createQuote(data: InsertQuote, userId: number): Promise<Quote>;
+  updateQuote(id: number, data: Partial<InsertQuote>): Promise<Quote | undefined>;
+  deleteQuote(id: number): Promise<boolean>;
+  // Art Pieces
+  getAllArtPieces(userId: number): Promise<ArtPiece[]>;
+  createArtPiece(data: InsertArtPiece, userId: number): Promise<ArtPiece>;
+  updateArtPiece(id: number, data: Partial<InsertArtPiece>): Promise<ArtPiece | undefined>;
+  deleteArtPiece(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -1302,6 +1426,123 @@ export const storage: IStorage = {
   },
   async deleteSpot(id) {
     const result = await db.delete(spots).where(eq(spots.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Children ──────────────────────────────────────────────────────────────────
+  async getAllChildrenWithDetails(userId: number) {
+    const kids = await db.select().from(children).where(eq(children.userId, userId)).orderBy(asc(children.sortOrder), asc(children.name));
+    const milestones = await db.select().from(childMilestones).where(eq(childMilestones.userId, userId)).orderBy(asc(childMilestones.sortOrder));
+    const memories = await db.select().from(childMemories).where(eq(childMemories.userId, userId)).orderBy(desc(childMemories.date));
+    const prepItems = await db.select().from(childPrepItems).where(eq(childPrepItems.userId, userId)).orderBy(asc(childPrepItems.sortOrder));
+    return kids.map((k) => ({
+      ...k,
+      milestones: milestones.filter((m) => m.childId === k.id),
+      memories: memories.filter((m) => m.childId === k.id),
+      prepItems: prepItems.filter((p) => p.childId === k.id),
+    }));
+  },
+  async createChild(data, userId) {
+    const result = await db.insert(children).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateChild(id, data) {
+    const existing = await db.select().from(children).where(eq(children.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(children).set(data).where(eq(children.id, id)).returning();
+    return result[0];
+  },
+  async deleteChild(id) {
+    await db.delete(childMilestones).where(eq(childMilestones.childId, id));
+    await db.delete(childMemories).where(eq(childMemories.childId, id));
+    await db.delete(childPrepItems).where(eq(childPrepItems.childId, id));
+    const result = await db.delete(children).where(eq(children.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Child Milestones ──────────────────────────────────────────────────────────
+  async createChildMilestone(data, userId) {
+    const result = await db.insert(childMilestones).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateChildMilestone(id, data) {
+    const existing = await db.select().from(childMilestones).where(eq(childMilestones.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(childMilestones).set(data).where(eq(childMilestones.id, id)).returning();
+    return result[0];
+  },
+  async deleteChildMilestone(id) {
+    const result = await db.delete(childMilestones).where(eq(childMilestones.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Child Memories ────────────────────────────────────────────────────────────
+  async createChildMemory(data, userId) {
+    const result = await db.insert(childMemories).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateChildMemory(id, data) {
+    const existing = await db.select().from(childMemories).where(eq(childMemories.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(childMemories).set(data).where(eq(childMemories.id, id)).returning();
+    return result[0];
+  },
+  async deleteChildMemory(id) {
+    const result = await db.delete(childMemories).where(eq(childMemories.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Child Prep Items ──────────────────────────────────────────────────────────
+  async createChildPrepItem(data, userId) {
+    const result = await db.insert(childPrepItems).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateChildPrepItem(id, data) {
+    const existing = await db.select().from(childPrepItems).where(eq(childPrepItems.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(childPrepItems).set(data).where(eq(childPrepItems.id, id)).returning();
+    return result[0];
+  },
+  async deleteChildPrepItem(id) {
+    const result = await db.delete(childPrepItems).where(eq(childPrepItems.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Quotes ────────────────────────────────────────────────────────────────────
+  async getAllQuotes(userId: number) {
+    return db.select().from(quotes).where(eq(quotes.userId, userId)).orderBy(desc(quotes.sortOrder), asc(quotes.id));
+  },
+  async createQuote(data, userId) {
+    const result = await db.insert(quotes).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateQuote(id, data) {
+    const existing = await db.select().from(quotes).where(eq(quotes.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(quotes).set(data).where(eq(quotes.id, id)).returning();
+    return result[0];
+  },
+  async deleteQuote(id) {
+    const result = await db.delete(quotes).where(eq(quotes.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Art Pieces ────────────────────────────────────────────────────────────────
+  async getAllArtPieces(userId: number) {
+    return db.select().from(artPieces).where(eq(artPieces.userId, userId)).orderBy(asc(artPieces.sortOrder), asc(artPieces.title));
+  },
+  async createArtPiece(data, userId) {
+    const result = await db.insert(artPieces).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateArtPiece(id, data) {
+    const existing = await db.select().from(artPieces).where(eq(artPieces.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(artPieces).set(data).where(eq(artPieces.id, id)).returning();
+    return result[0];
+  },
+  async deleteArtPiece(id) {
+    const result = await db.delete(artPieces).where(eq(artPieces.id, id));
     return result.rowCount > 0;
   },
 };
