@@ -153,6 +153,7 @@ function ChoresTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Chore | null>(null);
   const [form, setForm] = useState({ ...EMPTY_CHORE });
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
 
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
@@ -218,6 +219,26 @@ function ChoresTab() {
     return da - db;
   });
 
+  const grouped = useMemo(() => {
+    const order = CHORE_CATEGORIES.map((c) => c.value);
+    const map = new Map<string, Chore[]>();
+    for (const cat of order) map.set(cat, []);
+    for (const chore of sorted) {
+      const list = map.get(chore.category) ?? [];
+      list.push(chore);
+      map.set(chore.category, list);
+    }
+    return Array.from(map.entries()).filter(([, chores]) => chores.length > 0);
+  }, [sorted]);
+
+  function toggleCat(cat: string) {
+    setCollapsedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 items-center justify-between">
@@ -246,47 +267,66 @@ function ChoresTab() {
         <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Chore</Button>
       </div>
 
-      {sorted.length === 0 ? (
+      {grouped.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <RefreshCw size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No chores yet. Add your first one!</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {sorted.map((chore) => {
-            const status = choreStatus(chore);
-            const StatusIcon = status.icon;
-            const freqLabel = FREQUENCIES.find((f) => f.value === chore.frequency)?.label ?? chore.frequency;
-            const tags = (chore.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+        <div className="space-y-3">
+          {grouped.map(([cat, catChores]) => {
+            const catLabel = CHORE_CATEGORIES.find((c) => c.value === cat)?.label ?? cat;
+            const isCollapsed = collapsedCats.has(cat);
             return (
-              <div key={chore.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+              <div key={cat}>
                 <button
-                  onClick={() => completeMut.mutate(chore)}
-                  className="shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
-                  title="Mark complete"
+                  onClick={() => toggleCat(cat)}
+                  className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors mb-1.5"
                 >
-                  <CheckCircle2 size={16} className="text-muted-foreground/40 hover:text-green-500" />
+                  {isCollapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                  <span className="text-sm font-semibold">{catLabel}</span>
+                  <Badge variant="secondary" className="text-xs ml-auto">{catChores.length}</Badge>
                 </button>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`font-medium text-sm ${!chore.isActive ? "line-through text-muted-foreground" : ""}`}>{chore.title}</span>
-                    <Badge variant="outline" className="text-xs">{freqLabel}</Badge>
-                    <Badge className={`text-xs ${PRIORITY_COLORS[chore.priority]}`}>{chore.priority}</Badge>
-                    {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
+                {!isCollapsed && (
+                  <div className="space-y-2 pl-2">
+                    {catChores.map((chore) => {
+                      const status = choreStatus(chore);
+                      const StatusIcon = status.icon;
+                      const freqLabel = FREQUENCIES.find((f) => f.value === chore.frequency)?.label ?? chore.frequency;
+                      const tags = (chore.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+                      return (
+                        <div key={chore.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                          <button
+                            onClick={() => completeMut.mutate(chore)}
+                            className="shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
+                            title="Mark complete"
+                          >
+                            <CheckCircle2 size={16} className="text-muted-foreground/40 hover:text-green-500" />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`font-medium text-sm ${!chore.isActive ? "line-through text-muted-foreground" : ""}`}>{chore.title}</span>
+                              <Badge variant="outline" className="text-xs">{freqLabel}</Badge>
+                              <Badge className={`text-xs ${PRIORITY_COLORS[chore.priority]}`}>{chore.priority}</Badge>
+                              {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                              {chore.assignee && <span>→ {chore.assignee}</span>}
+                              {chore.lastCompleted && <span>Last done: {formatDate(chore.lastCompleted)}</span>}
+                              <span className={`flex items-center gap-1 font-medium ${status.color}`}>
+                                <StatusIcon size={11} />{status.label}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => openEdit(chore)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
+                            <button onClick={() => deleteMut.mutate(chore.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                    <span>{CHORE_CATEGORIES.find((c) => c.value === chore.category)?.label}</span>
-                    {chore.assignee && <span>→ {chore.assignee}</span>}
-                    {chore.lastCompleted && <span>Last done: {formatDate(chore.lastCompleted)}</span>}
-                    <span className={`flex items-center gap-1 font-medium ${status.color}`}>
-                      <StatusIcon size={11} />{status.label}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => openEdit(chore)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
-                  <button onClick={() => deleteMut.mutate(chore.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
-                </div>
+                )}
               </div>
             );
           })}
