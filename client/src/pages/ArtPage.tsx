@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ArtPiece } from "@shared/schema";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Palette, Plus, Pencil, Trash2, Search, Heart, X,
+  Palette, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -149,6 +149,8 @@ export default function ArtPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ArtPiece | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allPieces = [] } = useQuery<ArtPiece[]>({
     queryKey: ["/api/art"],
@@ -174,6 +176,90 @@ export default function ArtPage() {
       apiRequest("PATCH", `/api/art/${id}`, { isFavorite }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/art"] }),
   });
+
+  function parseCsvText(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const parseLine = (line: string) => {
+      const result: string[] = []; let cur = ""; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+        else cur += c;
+      }
+      result.push(cur); return result;
+    };
+    const headers = parseLine(lines[0]).map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const cols = parseLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+      return row;
+    }).filter(row => Object.values(row).some(v => v));
+  }
+
+  const MEDIUM_MAP: Record<string, string> = {
+    painting: "painting", sculpture: "sculpture", photography: "photography",
+    digital: "digital", print: "print", drawing: "drawing", textile: "textile", other: "other",
+  };
+  const STATUS_MAP: Record<string, string> = {
+    want_to_see: "want_to_see", "want to see": "want_to_see",
+    seen: "seen", viewed: "seen",
+    own: "own", owned: "own",
+  };
+
+  function downloadCsvTemplate() {
+    const header = "title,artistName,yearCreated,medium,movement,whereViewed,city,status,notes,isFavorite";
+    const ex1 = `"Starry Night","Vincent van Gogh",1889,painting,Post-Impressionism,"Museum of Modern Art",New York,seen,"Breathtaking in person",true`;
+    const ex2 = `"Girl with a Pearl Earring","Johannes Vermeer",1665,painting,Dutch Golden Age,"Mauritshuis",The Hague,want_to_see,,false`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "art_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    if (rows.length === 0) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    let created = 0, skipped = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+      if (!row.title?.trim()) { skipped++; continue; }
+      try {
+        await apiRequest("POST", "/api/art", {
+          title: row.title.trim(),
+          artistName: row.artistname?.trim() || row.artist_name?.trim() || null,
+          yearCreated: row.yearcreated ? parseInt(row.yearcreated) : null,
+          medium: MEDIUM_MAP[row.medium?.toLowerCase().trim() ?? ""] ?? "other",
+          movement: row.movement?.trim() || null,
+          whereViewed: row.whereViewed?.trim() || row.whereviewed?.trim() || row.where_viewed?.trim() || null,
+          city: row.city?.trim() || null,
+          status: STATUS_MAP[row.status?.toLowerCase().trim() ?? ""] ?? "want_to_see",
+          notes: row.notes?.trim() || null,
+          isFavorite: row.isfavorite === "true" || row.isFavorite === "true",
+          accentColor: ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)],
+        });
+        created++;
+      } catch {
+        errors.push(row.title?.slice(0, 30) ?? "unknown");
+      }
+    }
+    qc.invalidateQueries({ queryKey: ["/api/art"] });
+    e.target.value = "";
+    const desc = [
+      `${created} artwork${created !== 1 ? "s" : ""} imported`,
+      skipped ? `${skipped} skipped (no title)` : "",
+      errors.length ? `${errors.length} failed` : "",
+    ].filter(Boolean).join(" · ");
+    toast({ title: "CSV imported", description: desc });
+  }
 
   function openAdd() {
     setEditing(null);
@@ -262,9 +348,21 @@ export default function ArtPage() {
             {allPieces.length} artwork{allPieces.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openAdd} size="sm" className="gap-1.5">
-          <Plus size={15} /> Add Artwork
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download size={13} /> Template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle size={13} /> CSV Format
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+            <Upload size={13} /> Upload CSV
+          </Button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          <Button onClick={openAdd} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add Artwork
+          </Button>
+        </div>
       </div>
 
       {/* Filter tabs */}
@@ -462,6 +560,37 @@ export default function ArtPage() {
               <Button size="sm" onClick={save}>Save</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Format Info */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Art CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">title</span> is required — all others are optional.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "title",       req: true,  note: "Title of the artwork" },
+              { col: "artistName",  req: false, note: "Artist or creator name" },
+              { col: "yearCreated", req: false, note: "e.g. 1889" },
+              { col: "medium",      req: false, note: "painting · sculpture · photography · digital · print · drawing · textile · other" },
+              { col: "movement",    req: false, note: "e.g. Impressionism, Surrealism" },
+              { col: "whereViewed", req: false, note: "Museum or gallery name" },
+              { col: "city",        req: false, note: "City where viewed" },
+              { col: "status",      req: false, note: "want_to_see (default) · seen · own" },
+              { col: "notes",       req: false, note: "Free text" },
+              { col: "isFavorite",  req: false, note: "true · false" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
     </div>
