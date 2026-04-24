@@ -21,6 +21,7 @@ import SpotsPage from "@/pages/SpotsPage";
 import KidsPage from "@/pages/KidsPage";
 import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
+import JournalPage from "@/pages/JournalPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
@@ -45,6 +46,7 @@ function AuthenticatedApp() {
         <Route path="/kids" component={KidsPage} />
         <Route path="/quotes" component={QuotesPage} />
         <Route path="/art" component={ArtPage} />
+        <Route path="/journal" component={JournalPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
