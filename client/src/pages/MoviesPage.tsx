@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -65,6 +65,7 @@ export default function MoviesPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [newListInput, setNewListInput] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
 
   const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
 
@@ -491,6 +492,9 @@ export default function MoviesPage() {
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle size={13} /> CSV Format
+          </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>
@@ -881,6 +885,37 @@ export default function MoviesPage() {
               <Button variant="outline" onClick={close_modal}>Cancel</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Format Info Dialog */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Movies &amp; Shows CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">title</span> is required — all others are optional.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "title",      req: true,  note: "Title of the movie or show" },
+              { col: "mediaType",  req: false, note: "movie (default) · show" },
+              { col: "year",       req: false, note: "e.g. 2023" },
+              { col: "director",   req: false, note: "Director / creator name" },
+              { col: "genres",     req: false, note: "Comma-separated, e.g. Action,Sci-Fi" },
+              { col: "status",     req: false, note: "backlog (default) · watching · watched · want_to_rewatch" },
+              { col: "rating",     req: false, note: "1–5" },
+              { col: "notes",      req: false, note: "Free text" },
+              { col: "streamingOn",req: false, note: "Netflix · HBO Max · Disney+ · Amazon Prime · Hulu · etc." },
+              { col: "isFavorite", req: false, note: "true · false" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
     </div>
