@@ -1021,4 +1021,23 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       (await storage.deleteArtPiece(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Journal ──────────────────────────────────────────────────────────────────
+  app.get("/api/journal", requireAuth, async (req, res) => {
+    const entries = await storage.getJournalEntries(req.user!.id);
+    res.json(entries);
+  });
+  app.post("/api/journal", requireAuth, async (req, res) => {
+    const entry = await storage.createJournalEntry(req.body, req.user!.id);
+    res.json(entry);
+  });
+  app.patch("/api/journal/:id", requireAuth, async (req, res) => {
+    const entry = await storage.updateJournalEntry(Number(req.params.id), req.body);
+    if (!entry) return res.status(404).json({ error: "Not found" });
+    res.json(entry);
+  });
+  app.delete("/api/journal/:id", requireAuth, async (req, res) => {
+    await storage.deleteJournalEntry(Number(req.params.id));
+    res.json({ ok: true });
+  });
 }

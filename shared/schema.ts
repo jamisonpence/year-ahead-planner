@@ -718,6 +718,24 @@ export const insertArtPieceSchema = createInsertSchema(artPieces).omit({ id: tru
 export type InsertArtPiece = z.infer<typeof insertArtPieceSchema>;
 export type ArtPiece = typeof artPieces.$inferSelect;
 
+// ── JOURNAL ────────────────────────────────────────────────────────────────────
+
+export const journalEntries = pgTable("journal_entries", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  date: text("date").notNull(),
+  title: text("title"),
+  content: text("content").notNull(),
+  mood: text("mood"),
+  tags: text("tags"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true });
+export type InsertJournalEntry = z.infer<typeof insertJournalEntrySchema>;
+export type JournalEntry = typeof journalEntries.$inferSelect;
+
 // ── COMPOSITE TYPES ────────────────────────────────────────────────────────────
 export type EventWithTasks = Event & { tasks: Task[] };
 export type GoalWithTasks = Goal & { tasks: GoalTask[] }; // legacy

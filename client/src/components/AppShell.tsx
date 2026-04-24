@@ -28,6 +28,7 @@ const ALL_TABS = [
   { path: "/kids",          label: "Kids",                    icon: Baby            },
   { path: "/quotes",        label: "Quotes",                  icon: Quote           },
   { path: "/art",           label: "Art",                     icon: Palette         },
+  { path: "/journal",       label: "Journal",                 icon: BookOpen        },
 ];
 
 function useNavPrefs() {
