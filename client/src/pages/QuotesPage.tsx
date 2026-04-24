@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Quote } from "@shared/schema";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X,
+  Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -119,6 +119,8 @@ export default function QuotesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allQuotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
@@ -144,6 +146,81 @@ export default function QuotesPage() {
       apiRequest("PATCH", `/api/quotes/${id}`, { isFavorite }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/quotes"] }),
   });
+
+  function parseCsvText(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const parseLine = (line: string) => {
+      const result: string[] = []; let cur = ""; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+        else cur += c;
+      }
+      result.push(cur); return result;
+    };
+    const headers = parseLine(lines[0]).map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const cols = parseLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+      return row;
+    }).filter(row => Object.values(row).some(v => v));
+  }
+
+  const CATEGORY_MAP: Record<string, string> = {
+    motivation: "motivation", wisdom: "wisdom", humor: "humor",
+    love: "love", life: "life", philosophy: "philosophy", other: "other",
+  };
+
+  function downloadCsvTemplate() {
+    const header = "text,author,source,category,tags,notes,isFavorite";
+    const ex1 = `"The only way to do great work is to love what you do.",Steve Jobs,Stanford Commencement 2005,motivation,"inspiration,work",,false`;
+    const ex2 = `"In the middle of every difficulty lies opportunity.",Albert Einstein,,wisdom,life,,true`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "quotes_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    if (rows.length === 0) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    let created = 0, skipped = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+      if (!row.text?.trim()) { skipped++; continue; }
+      try {
+        await apiRequest("POST", "/api/quotes", {
+          text: row.text.trim(),
+          author: row.author?.trim() || null,
+          source: row.source?.trim() || null,
+          category: CATEGORY_MAP[row.category?.toLowerCase().trim() ?? ""] ?? "other",
+          tags: row.tags?.trim() || null,
+          notes: row.notes?.trim() || null,
+          isFavorite: row.isfavorite === "true" || row.isFavorite === "true",
+        });
+        created++;
+      } catch {
+        errors.push(row.text?.slice(0, 30) ?? "unknown");
+      }
+    }
+    qc.invalidateQueries({ queryKey: ["/api/quotes"] });
+    e.target.value = "";
+    const desc = [
+      `${created} quote${created !== 1 ? "s" : ""} imported`,
+      skipped ? `${skipped} skipped (no text)` : "",
+      errors.length ? `${errors.length} failed` : "",
+    ].filter(Boolean).join(" · ");
+    toast({ title: "CSV imported", description: desc });
+  }
 
   function openAdd() {
     setEditing(null);
@@ -222,9 +299,21 @@ export default function QuotesPage() {
             {allQuotes.length} quote{allQuotes.length !== 1 ? "s" : ""} · {favoriteCount} favorited
           </p>
         </div>
-        <Button onClick={openAdd} size="sm" className="gap-1.5">
-          <Plus size={15} /> Add Quote
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download size={13} /> Template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle size={13} /> CSV Format
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+            <Upload size={13} /> Upload CSV
+          </Button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          <Button onClick={openAdd} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add Quote
+          </Button>
+        </div>
       </div>
 
       {/* Search + filters */}
@@ -390,6 +479,34 @@ export default function QuotesPage() {
               <Button size="sm" onClick={save}>Save</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Format Info */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Quotes CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">text</span> is required — all others are optional.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "text",       req: true,  note: "The quote itself" },
+              { col: "author",     req: false, note: "Who said it" },
+              { col: "source",     req: false, note: "Book, film, speech, etc." },
+              { col: "category",   req: false, note: "motivation · wisdom · humor · love · life · philosophy · other  (default: other)" },
+              { col: "tags",       req: false, note: "Comma-separated, e.g. gratitude,work" },
+              { col: "notes",      req: false, note: "Free text" },
+              { col: "isFavorite", req: false, note: "true · false" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
     </div>

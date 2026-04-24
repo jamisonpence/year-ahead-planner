@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, parseISO } from "date-fns";
@@ -6,7 +6,7 @@ import {
   Plus, Pencil, Trash2, MoreHorizontal, Clock, ChefHat,
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
   RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
-  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie,
+  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -663,6 +663,8 @@ export default function RecipesPage() {
   const [assignRecipe, setAssignRecipe] = useState<Recipe | null>(null);
   const [assignBundle, setAssignBundle] = useState<MealBundle | null>(null);
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const csvRef = useRef<HTMLInputElement>(null);
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
@@ -671,6 +673,70 @@ export default function RecipesPage() {
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }
+
+  const COMPONENT_TYPE_MAP: Record<string, string> = {
+    main: "main", vegetable: "vegetable", side: "side",
+    sauce: "sauce", dessert: "dessert", baking: "baking",
+  };
+
+  function downloadCsvTemplate() {
+    const header = "name,category,componentType,prepTime,cookTime,servings,notes,isFavorite";
+    const ex1 = `"Spaghetti Bolognese",Italian,main,"15 min","45 min",4,"Classic comfort food",false`;
+    const ex2 = `"Chocolate Chip Cookies",Baked Goods,baking,"20 min","12 min",24,"Crispy edges, chewy center",true`;
+    const ex3 = `"Caesar Salad",Salads,side,"10 min",,2,,false`;
+    const blob = new Blob([`${header}\n${ex1}\n${ex2}\n${ex3}`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "recipes_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    // reuse existing parseCSV but lowercase headers
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) {
+      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    const rows = parseCSV(text).map(row => {
+      const lower: Record<string, string> = {};
+      Object.entries(row).forEach(([k, v]) => { lower[k.toLowerCase()] = v; });
+      return lower;
+    });
+    let created = 0, skipped = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+      if (!row.name?.trim()) { skipped++; continue; }
+      try {
+        await apiRequest("POST", "/api/recipes", {
+          name: row.name.trim(),
+          category: row.category?.trim() || null,
+          componentType: COMPONENT_TYPE_MAP[row.componenttype?.toLowerCase().trim() ?? ""] ?? null,
+          prepTime: row.preptime?.trim() || null,
+          cookTime: row.cooktime?.trim() || null,
+          servings: row.servings ? parseInt(row.servings) : null,
+          notes: row.notes?.trim() || null,
+          isFavorite: row.isfavorite === "true",
+          ingredientsJson: "[]",
+          instructions: "",
+        });
+        created++;
+      } catch {
+        errors.push(row.name?.slice(0, 30) ?? "unknown");
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
+    e.target.value = "";
+    const desc = [
+      `${created} recipe${created !== 1 ? "s" : ""} imported`,
+      skipped ? `${skipped} skipped (no name)` : "",
+      errors.length ? `${errors.length} failed` : "",
+      "Ingredients can be added by editing each recipe.",
+    ].filter(Boolean).join(" · ");
+    toast({ title: "CSV imported", description: desc });
   }
 
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ["/api/recipes"] });
@@ -761,9 +827,21 @@ export default function RecipesPage() {
         <h1 className="text-2xl font-bold">Recipes</h1>
         <div className="flex gap-2">
           {subView === "library" && (
-            <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
-              <Plus size={13} /><ChefHat size={13} /> Add Recipe
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+                <Download size={13} /> Template
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+                <HelpCircle size={13} /> CSV Format
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+                <Upload size={13} /> Upload CSV
+              </Button>
+              <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+              <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
+                <Plus size={13} /><ChefHat size={13} /> Add Recipe
+              </Button>
+            </div>
           )}
           {subView === "bundles" && (
             <Button size="sm" onClick={() => { setEditBundle(null); setBundleModal(true); }} className="gap-1.5">
@@ -1203,6 +1281,35 @@ export default function RecipesPage() {
       {assignBundle && (
         <AssignDayModal bundle={assignBundle} weekStart={weekStart} existingPlan={weekPlan} onClose={() => setAssignBundle(null)} />
       )}
+
+      {/* CSV Format Info */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Recipes CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">name</span> is required. Ingredients must be added manually after import.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "name",          req: true,  note: "Recipe name" },
+              { col: "category",      req: false, note: "Tag / bucket label, e.g. Italian, Baked Goods, Salads" },
+              { col: "componentType", req: false, note: "main · vegetable · side · sauce · dessert · baking" },
+              { col: "prepTime",      req: false, note: "e.g. 15 min" },
+              { col: "cookTime",      req: false, note: "e.g. 45 min" },
+              { col: "servings",      req: false, note: "Number, e.g. 4" },
+              { col: "notes",         req: false, note: "Free text" },
+              { col: "isFavorite",    req: false, note: "true · false" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
