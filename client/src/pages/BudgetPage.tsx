@@ -21,9 +21,9 @@ const TODAY = new Date().toISOString().split("T")[0];
 const THIS_MONTH = TODAY.slice(0, 7);
 
 const BILLING_LABELS: Record<string, string> = {
-  weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly",
+  weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", semi_annual: "Every 6 Months", yearly: "Yearly",
 };
-const CYCLE_MONTHS: Record<string, number> = { weekly: 0.25, monthly: 1, quarterly: 3, yearly: 12 };
+const CYCLE_MONTHS: Record<string, number> = { weekly: 0.25, monthly: 1, quarterly: 3, semi_annual: 6, yearly: 12 };
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
@@ -265,7 +265,7 @@ export default function BudgetPage() {
   });
   useEffect(() => {
     if (!subscriptions.length) return;
-    const CYCLE_DAYS: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+    const CYCLE_DAYS: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, semi_annual: 182, yearly: 365 };
     const today = new Date(); today.setHours(0, 0, 0, 0);
     subscriptions.forEach((s) => {
       if (!s.isActive) return;
@@ -868,6 +868,7 @@ export default function BudgetPage() {
                     <SelectItem value="weekly">Weekly</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="semi_annual">Every 6 Months</SelectItem>
                     <SelectItem value="yearly">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
