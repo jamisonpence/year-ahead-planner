@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
-  Trash2, Pencil, Search, Music, Upload, Download,
+  Trash2, Pencil, Search, Music, Upload, Download, HelpCircle,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -258,6 +258,7 @@ export default function MusicPage() {
   const [tab, setTab] = useState("artists");
   const [search, setSearch] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
 
   // Artist modal
   const [artistModal, setArtistModal] = useState(false);
@@ -548,6 +549,9 @@ export default function MusicPage() {
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download className="h-4 w-4" /> Template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle className="h-4 w-4" /> CSV Format
           </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload className="h-4 w-4" /> Upload CSV
@@ -865,6 +869,35 @@ export default function MusicPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Format Info Dialog */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Music CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. <span className="font-semibold text-foreground">artistName</span> and <span className="font-semibold text-foreground">songTitle</span> are required — all others are optional.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "artistName", req: true,  note: "Artist or band name" },
+              { col: "songTitle",  req: true,  note: "Song title" },
+              { col: "album",      req: false, note: "Album name" },
+              { col: "genre",      req: false, note: "e.g. Rock · Indie · Hip-Hop · Jazz" },
+              { col: "year",       req: false, note: "Release year, e.g. 1997" },
+              { col: "status",     req: false, note: "want_to_listen (default) · listening · listened" },
+              { col: "rating",     req: false, note: "1–5" },
+              { col: "notes",      req: false, note: "Free text" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Songs with the same <code className="font-mono bg-secondary px-1 rounded">artistName</code> are grouped under one artist automatically. Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
     </div>

@@ -334,6 +334,9 @@ export default function SpotsPage() {
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle size={13} /> CSV Format
+          </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>
@@ -499,6 +502,38 @@ export default function SpotsPage() {
               <Button variant="outline" onClick={closeModal}>Cancel</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Format Info Dialog */}
+      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Spots CSV Format</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">name</span> is required — all others are optional.</p>
+          <div className="space-y-1 text-sm">
+            {[
+              { col: "name", req: true,  note: "Name of the spot" },
+              { col: "type", req: false, note: "restaurant · bar · cafe · park · trail · beach · museum · hotel · shop · gym · venue · activity · other" },
+              { col: "address", req: false, note: "Street address" },
+              { col: "neighborhood", req: false, note: "Neighborhood name" },
+              { col: "city", req: false, note: "City name" },
+              { col: "status", req: false, note: "want_to_visit · visited · favorite  (default: want_to_visit)" },
+              { col: "rating", req: false, note: "1–5" },
+              { col: "notes", req: false, note: "Free text" },
+              { col: "website", req: false, note: "URL, e.g. franklinbbq.com" },
+              { col: "priceRange", req: false, note: "1 ($) · 2 ($$) · 3 ($$$) · 4 ($$$$)" },
+              { col: "tags", req: false, note: "Comma-separated, e.g. Date Night, Dog-Friendly" },
+            ].map(({ col, req, note }) => (
+              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
+                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
+                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
+                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
     </div>
