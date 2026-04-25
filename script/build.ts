@@ -55,6 +55,7 @@ async function buildAll() {
       "process.env.TMDB_API_KEY": JSON.stringify(process.env.TMDB_API_KEY ?? ""),
       "process.env.GOOGLE_BOOKS_API_KEY": JSON.stringify(process.env.GOOGLE_BOOKS_API_KEY ?? ""),
       "process.env.LASTFM_API_KEY": JSON.stringify(process.env.LASTFM_API_KEY ?? ""),
+      "process.env.PERENUAL_API_KEY": JSON.stringify(process.env.PERENUAL_API_KEY ?? ""),
     },
     minify: true,
     external: externals,
