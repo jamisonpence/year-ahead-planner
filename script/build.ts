@@ -52,6 +52,8 @@ async function buildAll() {
     outfile: "dist/index.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
+      "process.env.TMDB_API_KEY": JSON.stringify(process.env.TMDB_API_KEY ?? ""),
+      "process.env.GOOGLE_BOOKS_API_KEY": JSON.stringify(process.env.GOOGLE_BOOKS_API_KEY ?? ""),
     },
     minify: true,
     external: externals,
