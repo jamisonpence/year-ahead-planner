@@ -26,6 +26,7 @@ export default function BookFormModal({ open, onClose, editBook }: {
   const [targetDate, setTargetDate] = useState("");
   const [notes, setNotes] = useState("");
   const [coverColor, setCoverColor] = useState(COVER_COLORS[0]);
+  const [coverUrl, setCoverUrl] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -36,6 +37,7 @@ export default function BookFormModal({ open, onClose, editBook }: {
       setPagesRead(editBook?.pagesRead?.toString() ?? "0");
       setStartDate(editBook?.startDate ?? ""); setTargetDate(editBook?.targetFinishDate ?? "");
       setNotes(editBook?.notes ?? ""); setCoverColor(editBook?.coverColor ?? COVER_COLORS[0]);
+      setCoverUrl((editBook as any)?.coverUrl ?? "");
     }
   }, [open, editBook]);
 
@@ -54,6 +56,7 @@ export default function BookFormModal({ open, onClose, editBook }: {
       startDate: startDate || null, targetFinishDate: targetDate || null,
       finishDate: status === "finished" && !editBook?.finishDate ? new Date().toISOString().split("T")[0] : editBook?.finishDate ?? null,
       notes: notes.trim() || null, highlights: null, linkedGoalId: null, coverColor,
+      coverUrl: coverUrl || null,
     };
     editBook ? updateMut.mutate(p) : createMut.mutate(p);
   };

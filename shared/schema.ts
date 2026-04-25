@@ -58,6 +58,7 @@ export const books = pgTable("books", {
   highlights: text("highlights"),
   linkedGoalId: integer("linked_goal_id"),
   coverColor: text("cover_color"),  // for visual card accent
+  coverUrl: text("cover_url"),      // thumbnail from Google Books
 });
 
 // ── READING SESSIONS ──────────────────────────────────────────────────────────

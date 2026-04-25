@@ -506,6 +506,9 @@ export async function initializeStorage() {
   // Poster URL from TMDB
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS poster_url TEXT`);
 
+  // Cover URL from Google Books
+  await pool.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS cover_url TEXT`);
+
   // Image URL for recipes
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
