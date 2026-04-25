@@ -179,6 +179,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
   const [prepTime, setPrepTime] = useState("");
   const [cookTime, setCookTime] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([{ name: "", qty: "" }]);
   const [pasteText, setPasteText] = useState("");
   const [showPaste, setShowPaste] = useState(false);
@@ -192,6 +193,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
       setPrepTime(editRecipe?.prepTime?.toString() ?? "");
       setCookTime(editRecipe?.cookTime?.toString() ?? "");
       setInstructions(editRecipe?.instructions ?? "");
+      setImageUrl(editRecipe?.imageUrl ?? "");
       const ings = editRecipe ? parseIngredients(editRecipe.ingredientsJson) : [];
       setIngredients(ings.length > 0 ? ings : [{ name: "", qty: "" }]);
       setPasteText(""); setShowPaste(false);
@@ -224,6 +226,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
       cookTime: cookTime ? parseInt(cookTime) : null,
       instructions: instructions.trim() || null,
       ingredientsJson: JSON.stringify(ingredients.filter(i => i.name.trim())),
+      imageUrl: imageUrl.trim() || null,
     };
     editRecipe ? updateMut.mutate(payload) : createMut.mutate(payload);
   };
@@ -300,6 +303,16 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
               <Label>Cook (min)</Label>
               <Input type="number" value={cookTime} onChange={e => setCookTime(e.target.value)} placeholder="30" min={0} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Image URL <span className="text-muted-foreground text-xs">(opt)</span></Label>
+            {imageUrl && (
+              <div className="relative h-32 w-full rounded-lg overflow-hidden mb-1.5 border">
+                <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = "none")} />
+              </div>
+            )}
+            <Input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
           </div>
 
           <div className="space-y-2">
@@ -478,22 +491,42 @@ function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, isOnWeek }: 
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer group"
       onClick={onDetail}>
-      <div className={`px-4 py-3 flex items-start justify-between ${info ? info.bg : "bg-amber-50 dark:bg-amber-950/30"}`}>
-        <span className="text-2xl">{recipe.emoji}</span>
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {isOnWeek && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/60 dark:bg-amber-800/40 text-amber-800 dark:text-amber-300">This week</span>
-          )}
-          {info && (
-            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${info.bg} ${info.color}`}>
-              {info.icon} {info.label}
-            </span>
-          )}
-          {recipe.category && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">{recipe.category}</span>
-          )}
+      {recipe.imageUrl ? (
+        <div className="relative h-36 w-full overflow-hidden">
+          <img src={recipe.imageUrl} alt={recipe.name} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+          <div className="absolute top-2 right-2 flex items-center gap-1 flex-wrap justify-end">
+            {isOnWeek && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">This week</span>
+            )}
+            {info && (
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${info.bg} ${info.color}`}>
+                {info.icon} {info.label}
+              </span>
+            )}
+            {recipe.category && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">{recipe.category}</span>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className={`px-4 py-3 flex items-start justify-between ${info ? info.bg : "bg-amber-50 dark:bg-amber-950/30"}`}>
+          <span className="text-2xl">{recipe.emoji}</span>
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {isOnWeek && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-200/60 dark:bg-amber-800/40 text-amber-800 dark:text-amber-300">This week</span>
+            )}
+            {info && (
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${info.bg} ${info.color}`}>
+                {info.icon} {info.label}
+              </span>
+            )}
+            {recipe.category && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">{recipe.category}</span>
+            )}
+          </div>
+        </div>
+      )}
       <div className="p-3">
         <p className="font-semibold text-sm leading-tight mb-1">{recipe.name}</p>
         <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
@@ -538,20 +571,28 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
   const info = getComponentInfo(recipe.componentType);
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">{recipe.emoji}</span>
-            <div>
-              <DialogTitle className="text-xl font-bold leading-tight">{recipe.name}</DialogTitle>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                {info && <span className={`text-xs font-medium ${info.color}`}>{info.label}</span>}
-                {recipe.category && <span className="text-xs text-muted-foreground">{recipe.category}</span>}
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+        {recipe.imageUrl && (
+          <div className="relative h-52 w-full overflow-hidden rounded-t-lg">
+            <img src={recipe.imageUrl} alt={recipe.name} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          </div>
+        )}
+        <div className="px-6 pt-5 pb-2">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              {!recipe.imageUrl && <span className="text-3xl">{recipe.emoji}</span>}
+              <div>
+                <DialogTitle className="text-xl font-bold leading-tight">{recipe.name}</DialogTitle>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {info && <span className={`text-xs font-medium ${info.color}`}>{info.label}</span>}
+                  {recipe.category && <span className="text-xs text-muted-foreground">{recipe.category}</span>}
+                </div>
               </div>
             </div>
-          </div>
-        </DialogHeader>
-        <div className="space-y-4">
+          </DialogHeader>
+        </div>
+        <div className="space-y-4 px-6 pb-6">
           {(recipe.prepTime != null || recipe.cookTime != null) && (
             <div className="grid grid-cols-3 gap-3 p-3 bg-secondary/40 rounded-xl text-center">
               {recipe.prepTime != null && <div><p className="text-lg font-bold">{recipe.prepTime}m</p><p className="text-xs text-muted-foreground">Prep</p></div>}
@@ -744,6 +785,7 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
         componentType: MEALDB_COMPONENT_MAP[catKey] ?? "main",
         ingredientsJson: JSON.stringify(extractIngredients(fullMeal)),
         instructions: fullMeal.strInstructions || null,
+        imageUrl: fullMeal.strMealThumb || null,
         prepTime: null,
         cookTime: null,
       });
