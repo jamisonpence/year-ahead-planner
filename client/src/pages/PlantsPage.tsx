@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Plant } from "@shared/schema";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Leaf, Plus, Droplets, Sun, Pencil, Trash2, Search,
-  Bell, BellOff, Clock, CheckCircle2, AlertTriangle,
+  Bell, BellOff, Clock, CheckCircle2, AlertTriangle, Loader2,
 } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -65,6 +65,204 @@ function wateringStatus(plant: Plant): { label: string; daysUntil: number | null
   return { label: `In ${daysUntil}d`, daysUntil, color: "text-green-600" };
 }
 
+// ── Perenual helpers ─────────────────────────────────────────────────────────
+
+function mapWatering(w: string): number {
+  const map: Record<string, number> = { frequent: 3, average: 7, minimum: 14, none: 30 };
+  return map[w?.toLowerCase()] ?? 7;
+}
+
+function mapSunlight(arr: string[]): string {
+  const s = (arr?.[0] ?? "").toLowerCase();
+  if (s.includes("full sun")) return "direct";
+  if (s.includes("part sun") || s.includes("part shade")) return "bright_indirect";
+  if (s.includes("shade") || s.includes("filtered")) return "low";
+  return "medium";
+}
+
+type PerenualResult = {
+  id: number;
+  common_name: string;
+  scientific_name: string[];
+  watering: string;
+  sunlight: string[];
+  cycle: string;
+  default_image?: { medium_url?: string; small_url?: string; thumbnail?: string };
+};
+
+type PerenualDetail = PerenualResult & {
+  description?: string;
+  soil?: string[];
+  care_level?: string;
+};
+
+function PerenualSearchModal({ open, onClose, onAdd }: {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (payload: any) => void;
+}) {
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PerenualResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState<PerenualDetail | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => { if (!open) { setQuery(""); setResults([]); setPreview(null); } }, [open]);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setLoading(true); setPreview(null);
+    try {
+      const r = await apiRequest("GET", `/api/perenual/search?q=${encodeURIComponent(query)}`);
+      setResults(await r.json());
+    } catch (e: any) {
+      toast({ title: "Search failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  async function loadPreview(plant: PerenualResult) {
+    setPreviewLoading(true); setPreview(null);
+    try {
+      const r = await apiRequest("GET", `/api/perenual/plant/${plant.id}`);
+      setPreview(await r.json());
+    } catch { setPreview(plant as PerenualDetail); }
+    finally { setPreviewLoading(false); }
+  }
+
+  async function handleAdd() {
+    if (!preview) return;
+    setAdding(true);
+    try {
+      const payload = {
+        name: preview.common_name,
+        species: preview.scientific_name?.[0] ?? null,
+        lightNeeds: mapSunlight(preview.sunlight ?? []),
+        waterFrequencyDays: mapWatering(preview.watering),
+        soilType: preview.soil?.join(", ") || null,
+        notes: preview.description ? preview.description.slice(0, 500) : null,
+        location: null, lastWatered: null, remindersEnabled: false, sortOrder: 0,
+      };
+      onAdd(payload);
+      onClose();
+    } finally { setAdding(false); }
+  }
+
+  const img = preview?.default_image?.medium_url ?? preview?.default_image?.small_url ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Leaf size={16} className="text-green-600" /> Search Plants
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Search bar */}
+        <div className="px-5 pb-3 shrink-0 flex gap-2">
+          <Input
+            placeholder="Search by common name, e.g. Monstera, Lavender…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doSearch()}
+            className="text-sm"
+          />
+          <Button size="sm" onClick={doSearch} disabled={loading} className="shrink-0">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+          </Button>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          {/* Results list */}
+          <div className={`overflow-y-auto px-3 pb-4 space-y-1 ${preview ? "w-72 border-r shrink-0" : "flex-1 px-5"}`}>
+            {results.length === 0 && !loading && (
+              <p className="text-center text-xs text-muted-foreground pt-6 px-4">
+                {query ? "No results found" : "Search for a plant to see results from the Perenual database"}
+              </p>
+            )}
+            {results.map(p => (
+              <button
+                key={p.id}
+                onClick={() => loadPreview(p)}
+                className={`w-full text-left flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${preview?.id === p.id ? "bg-primary/5 border-primary/30" : "bg-card hover:bg-muted/40 border-transparent"}`}
+              >
+                {p.default_image?.thumbnail ? (
+                  <img src={p.default_image.thumbnail} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded bg-green-100 flex items-center justify-center shrink-0">
+                    <Leaf size={14} className="text-green-600" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{p.common_name}</p>
+                  <p className="text-xs text-muted-foreground truncate italic">{p.scientific_name?.[0]}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Preview panel */}
+          {(preview || previewLoading) && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 size={20} className="animate-spin text-muted-foreground" />
+                </div>
+              ) : preview && (
+                <>
+                  {img && <img src={img} alt={preview.common_name} className="w-full h-36 object-cover rounded-lg" />}
+                  <div>
+                    <h3 className="font-semibold text-base">{preview.common_name}</h3>
+                    {preview.scientific_name?.[0] && <p className="text-xs text-muted-foreground italic">{preview.scientific_name[0]}</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-muted/50 rounded-lg p-2.5">
+                      <p className="font-medium text-muted-foreground mb-0.5">Watering</p>
+                      <p className="font-semibold">{preview.watering ?? "—"}</p>
+                      <p className="text-muted-foreground">every ~{mapWatering(preview.watering)} days</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2.5">
+                      <p className="font-medium text-muted-foreground mb-0.5">Sunlight</p>
+                      <p className="font-semibold capitalize">{preview.sunlight?.[0] ?? "—"}</p>
+                    </div>
+                    {preview.cycle && (
+                      <div className="bg-muted/50 rounded-lg p-2.5">
+                        <p className="font-medium text-muted-foreground mb-0.5">Cycle</p>
+                        <p className="font-semibold">{preview.cycle}</p>
+                      </div>
+                    )}
+                    {preview.care_level && (
+                      <div className="bg-muted/50 rounded-lg p-2.5">
+                        <p className="font-medium text-muted-foreground mb-0.5">Care Level</p>
+                        <p className="font-semibold">{preview.care_level}</p>
+                      </div>
+                    )}
+                    {preview.soil && preview.soil.length > 0 && (
+                      <div className="bg-muted/50 rounded-lg p-2.5 col-span-2">
+                        <p className="font-medium text-muted-foreground mb-0.5">Soil</p>
+                        <p className="font-semibold">{preview.soil.join(", ")}</p>
+                      </div>
+                    )}
+                  </div>
+                  {preview.description && (
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{preview.description}</p>
+                  )}
+                  <Button className="w-full" size="sm" onClick={handleAdd} disabled={adding}>
+                    {adding ? <Loader2 size={13} className="animate-spin mr-1.5" /> : <Plus size={13} className="mr-1.5" />}
+                    Add to My Plants
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function PlantsPage() {
@@ -73,6 +271,7 @@ export default function PlantsPage() {
 
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [perenualOpen, setPerenualOpen] = useState(false);
   const [editing, setEditing] = useState<Plant | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
@@ -183,6 +382,9 @@ export default function PlantsPage() {
               className="pl-8 w-52 h-9"
             />
           </div>
+          <Button size="sm" variant="outline" onClick={() => setPerenualOpen(true)} className="gap-1.5">
+            <Search size={14} /> Search
+          </Button>
           <Button size="sm" onClick={openAdd}>
             <Plus size={15} className="mr-1" /> Add Plant
           </Button>
@@ -265,6 +467,12 @@ export default function PlantsPage() {
           })}
         </div>
       )}
+
+      <PerenualSearchModal
+        open={perenualOpen}
+        onClose={() => setPerenualOpen(false)}
+        onAdd={(payload) => createMut.mutate(payload)}
+      />
 
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

@@ -1089,6 +1089,32 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Perenual plant API proxy ──────────────────────────────────────────────────
+  app.get("/api/perenual/search", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.PERENUAL_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "PERENUAL_API_KEY not configured" });
+      const q = String(req.query.q || "").trim();
+      if (!q) return res.status(400).json({ error: "q is required" });
+      const url = `https://perenual.com/api/species-list?key=${apiKey}&q=${encodeURIComponent(q)}&page=1`;
+      const r = await fetch(url);
+      if (!r.ok) return res.status(r.status).json({ error: "Perenual error" });
+      const data = await r.json() as any;
+      res.json(data.data ?? []);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/perenual/plant/:id", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.PERENUAL_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "PERENUAL_API_KEY not configured" });
+      const url = `https://perenual.com/api/species/details/${req.params.id}?key=${apiKey}`;
+      const r = await fetch(url);
+      if (!r.ok) return res.status(r.status).json({ error: "Perenual error" });
+      res.json(await r.json());
+    } catch (e) { handleError(res, e); }
+  });
+
   // Keeps the API key server-side; client never sees it
   app.get("/api/tmdb/search", requireAuth, async (req, res) => {
     try {
