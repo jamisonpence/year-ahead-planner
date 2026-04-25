@@ -426,6 +426,7 @@ export const plants = pgTable("plants", {
   lastWatered: text("last_watered"),          // ISO date "YYYY-MM-DD"
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
+  photoUrl: text("photo_url"),
 });
 
 // ── CHORES ────────────────────────────────────────────────────────────────────
