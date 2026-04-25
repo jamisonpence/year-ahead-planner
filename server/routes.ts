@@ -1062,9 +1062,31 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     const allKeys = Object.keys(process.env).sort();
     res.json({
       TMDB_API_KEY: process.env.TMDB_API_KEY ? `set (${process.env.TMDB_API_KEY.length} chars)` : "NOT SET",
+      LASTFM_API_KEY: process.env.LASTFM_API_KEY ? `set (${process.env.LASTFM_API_KEY.length} chars)` : "NOT SET",
       NODE_ENV: process.env.NODE_ENV ?? "not set",
       allEnvKeys: allKeys,
     });
+  });
+
+  // ── Last.fm proxy ─────────────────────────────────────────────────────────────
+  app.get("/api/lastfm/search", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.LASTFM_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "LASTFM_API_KEY not configured" });
+      const q = String(req.query.q || "").trim();
+      const type = String(req.query.type || "artist"); // "artist" | "track"
+      if (!q) return res.status(400).json({ error: "q is required" });
+      const method = type === "track" ? "track.search" : "artist.search";
+      const param = type === "track" ? `track=${encodeURIComponent(q)}` : `artist=${encodeURIComponent(q)}`;
+      const url = `https://ws.audioscrobbler.com/2.0/?method=${method}&${param}&api_key=${apiKey}&format=json&limit=20`;
+      const r = await fetch(url);
+      if (!r.ok) return res.status(r.status).json({ error: "Last.fm error" });
+      const data = await r.json() as any;
+      const results = type === "track"
+        ? (data.results?.trackmatches?.track ?? [])
+        : (data.results?.artistmatches?.artist ?? []);
+      res.json(Array.isArray(results) ? results : [results]);
+    } catch (e) { handleError(res, e); }
   });
 
   // Keeps the API key server-side; client never sees it

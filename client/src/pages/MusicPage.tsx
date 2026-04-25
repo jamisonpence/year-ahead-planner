@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { MusicArtistWithSongs, MusicSong } from "@shared/schema";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
-  Trash2, Pencil, Search, Music, Upload, Download, HelpCircle,
+  Trash2, Pencil, Search, Music, Upload, Download, HelpCircle, Loader2, Users, Mic2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -240,6 +240,176 @@ function ArtistCard({
   );
 }
 
+// ── Last.fm Search Modal ──────────────────────────────────────────────────────
+
+type LfmArtist = { name: string; listeners: string; url: string };
+type LfmTrack  = { name: string; artist: string; listeners: string; url: string };
+
+function LastFmModal({ open, onClose, artists, onAdded }: {
+  open: boolean;
+  onClose: () => void;
+  artists: MusicArtistWithSongs[];
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const [type, setType] = useState<"artist" | "track">("artist");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<LfmArtist[] | LfmTrack[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  useEffect(() => { if (!open) { setQuery(""); setResults([]); } }, [open]);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setLoading(true);
+    try {
+      const r = await apiRequest("GET", `/api/lastfm/search?q=${encodeURIComponent(query)}&type=${type}`);
+      setResults(await r.json());
+    } catch (e: any) {
+      toast({ title: "Search failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  async function addArtist(name: string) {
+    setAdding(name);
+    try {
+      await apiRequest("POST", "/api/music/artists", {
+        name, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false,
+      });
+      onAdded();
+      toast({ title: "Artist added", description: name });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    } finally { setAdding(null); }
+  }
+
+  async function addTrack(trackName: string, artistName: string) {
+    const key = `${artistName}::${trackName}`;
+    setAdding(key);
+    try {
+      // Find or create artist
+      const existing = artists.find(a => a.name.toLowerCase() === artistName.toLowerCase());
+      let artistId: number;
+      if (existing) {
+        artistId = existing.id;
+      } else {
+        const r = await apiRequest("POST", "/api/music/artists", {
+          name: artistName, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false,
+        });
+        const created = await r.json();
+        artistId = created.id;
+      }
+      await apiRequest("POST", "/api/music/songs", {
+        artistId, title: trackName, album: null, genre: null,
+        year: null, status: "want_to_listen", isFavorite: false, rating: null, notes: null,
+      });
+      onAdded();
+      toast({ title: "Song added", description: `${trackName} · ${artistName}` });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    } finally { setAdding(null); }
+  }
+
+  const artistResults = results as LfmArtist[];
+  const trackResults  = results as LfmTrack[];
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Search size={16} /> Search Last.fm
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Type toggle */}
+        <div className="px-5 pb-3 shrink-0 flex gap-2">
+          <button
+            onClick={() => { setType("artist"); setResults([]); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${type === "artist" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Users size={12} /> Artists
+          </button>
+          <button
+            onClick={() => { setType("track"); setResults([]); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${type === "track" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Mic2 size={12} /> Songs
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="px-5 pb-3 shrink-0 flex gap-2">
+          <Input
+            placeholder={type === "artist" ? "Search for an artist…" : "Search for a song…"}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doSearch()}
+            className="text-sm"
+          />
+          <Button size="sm" onClick={doSearch} disabled={loading} className="shrink-0">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+          </Button>
+        </div>
+
+        {/* Results */}
+        <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-1.5">
+          {results.length === 0 && !loading && (
+            <p className="text-center text-xs text-muted-foreground pt-6">
+              {query ? "No results found" : `Search Last.fm for ${type === "artist" ? "artists" : "songs"} to add to your library`}
+            </p>
+          )}
+
+          {type === "artist" && artistResults.map((a, i) => {
+            const alreadyAdded = artists.some(x => x.name.toLowerCase() === a.name.toLowerCase());
+            const isAdding = adding === a.name;
+            return (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/40 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Music2 size={14} className="text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{a.name}</p>
+                  {a.listeners && <p className="text-xs text-muted-foreground">{Number(a.listeners).toLocaleString()} listeners</p>}
+                </div>
+                {alreadyAdded ? (
+                  <span className="text-xs text-muted-foreground italic">Added</span>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => addArtist(a.name)} disabled={isAdding} className="shrink-0 text-xs h-7 px-2.5">
+                    {isAdding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                    {isAdding ? "" : " Add"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+
+          {type === "track" && trackResults.map((t, i) => {
+            const key = `${t.artist}::${t.name}`;
+            const isAdding = adding === key;
+            return (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/40 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                  <Music size={14} className="text-violet-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{t.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{t.artist}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => addTrack(t.name, t.artist)} disabled={isAdding} className="shrink-0 text-xs h-7 px-2.5">
+                  {isAdding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                  {isAdding ? "" : " Add"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MusicPage() {
@@ -259,6 +429,7 @@ export default function MusicPage() {
   const [search, setSearch] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const [lastfmOpen, setLastfmOpen] = useState(false);
 
   // Artist modal
   const [artistModal, setArtistModal] = useState(false);
@@ -547,18 +718,21 @@ export default function MusicPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
-            <Download className="h-4 w-4" /> Template
+          <Button size="sm" variant="outline" onClick={() => setLastfmOpen(true)} className="gap-1.5">
+            <Search className="h-4 w-4" /> Search
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
-            <HelpCircle className="h-4 w-4" /> CSV Format
+          <Button size="sm" onClick={openAddArtist} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Artist
           </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload className="h-4 w-4" /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button size="sm" onClick={openAddArtist} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add Artist
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download className="h-4 w-4" /> Template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle className="h-4 w-4" /> CSV Format
           </Button>
         </div>
       </div>
@@ -871,6 +1045,14 @@ export default function MusicPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Last.fm Search Modal */}
+      <LastFmModal
+        open={lastfmOpen}
+        onClose={() => setLastfmOpen(false)}
+        artists={artists}
+        onAdded={() => qc.invalidateQueries({ queryKey: ["/api/music/artists"] })}
+      />
 
       {/* CSV Format Info Dialog */}
       <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
