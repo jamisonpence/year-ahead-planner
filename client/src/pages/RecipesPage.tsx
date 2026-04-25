@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, MoreHorizontal, Clock, ChefHat,
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
   RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
-  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle,
+  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -647,6 +647,276 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
   );
 }
 
+// ── MealDB Search Modal ───────────────────────────────────────────────────────
+
+const MEALDB_CATEGORY_EMOJI: Record<string, string> = {
+  beef: "🥩", chicken: "🍗", dessert: "🍰", lamb: "🍖", miscellaneous: "🍽️",
+  pasta: "🍝", pork: "🥓", seafood: "🐟", side: "🥗", starter: "🥗",
+  vegan: "🌿", vegetarian: "🥦", breakfast: "🍳", goat: "🐐",
+};
+const MEALDB_COMPONENT_MAP: Record<string, string> = {
+  dessert: "dessert", starter: "side", side: "side",
+  beef: "main", chicken: "main", lamb: "main", pasta: "main", pork: "main",
+  seafood: "main", vegan: "main", vegetarian: "main", breakfast: "main",
+  goat: "main", miscellaneous: "main",
+};
+
+interface MealDBMeal {
+  idMeal: string; strMeal: string; strCategory: string; strArea: string;
+  strInstructions: string; strMealThumb: string; [key: string]: string;
+}
+
+function extractIngredients(meal: MealDBMeal) {
+  const ings: { name: string; qty: string }[] = [];
+  for (let i = 1; i <= 20; i++) {
+    const name = (meal[`strIngredient${i}`] ?? "").trim();
+    const qty  = (meal[`strMeasure${i}`]   ?? "").trim();
+    if (name) ings.push({ name, qty });
+  }
+  return ings;
+}
+
+function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<MealDBMeal[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [categories, setCategories] = useState<{ strCategory: string; strCategoryThumb: string; strCategoryDescription: string }[]>([]);
+  const [browseCategory, setBrowseCategory] = useState<string | null>(null);
+  const [catLoading, setCatLoading] = useState(false);
+  const [mode, setMode] = useState<"search" | "browse">("search");
+
+  // Load categories once on open
+  useEffect(() => {
+    if (!open || categories.length > 0) return;
+    fetch("https://www.themealdb.com/api/json/v1/1/categories.php")
+      .then(r => r.json())
+      .then(d => setCategories(d.categories ?? []))
+      .catch(() => {});
+  }, [open]);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setLoading(true); setResults([]);
+    try {
+      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query.trim())}`);
+      const d = await r.json();
+      setResults(d.meals ?? []);
+      if (!d.meals) toast({ title: "No results found", description: `Nothing matched "${query}"` });
+    } catch {
+      toast({ title: "Search failed", description: "Could not reach TheMealDB", variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  async function browseByCategory(cat: string) {
+    setBrowseCategory(cat); setCatLoading(true); setResults([]);
+    try {
+      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(cat)}`);
+      const d = await r.json();
+      // filter results only have id/name/thumb — we'll do full lookup on add
+      setResults((d.meals ?? []).map((m: any) => ({
+        idMeal: m.idMeal, strMeal: m.strMeal, strMealThumb: m.strMealThumb,
+        strCategory: cat, strArea: "", strInstructions: "",
+      })));
+    } catch {
+      toast({ title: "Browse failed", variant: "destructive" });
+    } finally { setCatLoading(false); }
+  }
+
+  async function addMeal(meal: MealDBMeal) {
+    setAdding(prev => new Set([...prev, meal.idMeal]));
+    try {
+      let fullMeal = meal;
+      // If browsed (no instructions), do a full lookup first
+      if (!meal.strInstructions) {
+        const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
+        const d = await r.json();
+        fullMeal = d.meals?.[0] ?? meal;
+      }
+      const catKey = (fullMeal.strCategory ?? "").toLowerCase();
+      await apiRequest("POST", "/api/recipes", {
+        name: fullMeal.strMeal,
+        emoji: MEALDB_CATEGORY_EMOJI[catKey] ?? "🍽️",
+        category: fullMeal.strArea || null,
+        componentType: MEALDB_COMPONENT_MAP[catKey] ?? "main",
+        ingredientsJson: JSON.stringify(extractIngredients(fullMeal)),
+        instructions: fullMeal.strInstructions || null,
+        prepTime: null,
+        cookTime: null,
+      });
+      setAdded(prev => new Set([...prev, meal.idMeal]));
+      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: `"${fullMeal.strMeal}" added to your recipes ✓` });
+    } catch {
+      toast({ title: "Failed to add recipe", variant: "destructive" });
+    } finally {
+      setAdding(prev => { const n = new Set(prev); n.delete(meal.idMeal); return n; });
+    }
+  }
+
+  function handleClose() {
+    setQuery(""); setResults([]); setAdded(new Set()); setBrowseCategory(null); setMode("search");
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <ChefHat size={18} /> Find Recipes from MealDB
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-0.5">Search thousands of recipes and add them to your library in one click.</p>
+        </DialogHeader>
+
+        {/* Mode toggle + search */}
+        <div className="px-6 pt-4 pb-3 space-y-3 shrink-0 border-b">
+          <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+            {[{ id: "search", label: "Search" }, { id: "browse", label: "Browse by Category" }].map(m => (
+              <button
+                key={m.id}
+                onClick={() => { setMode(m.id as any); setResults([]); setBrowseCategory(null); }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >{m.label}</button>
+            ))}
+          </div>
+          {mode === "search" && (
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="e.g. chicken tikka, chocolate cake, pasta…"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && doSearch()}
+                />
+              </div>
+              <Button onClick={doSearch} disabled={loading || !query.trim()} className="gap-1.5">
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+                Search
+              </Button>
+            </div>
+          )}
+          {mode === "browse" && browseCategory && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setBrowseCategory(null); setResults([]); }} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
+                <ChevronRight size={14} className="rotate-180" /> All Categories
+              </button>
+              <span className="text-sm font-medium">{browseCategory}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* Browse: category grid */}
+          {mode === "browse" && !browseCategory && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {categories.map(cat => (
+                <button
+                  key={cat.strCategory}
+                  onClick={() => browseByCategory(cat.strCategory)}
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl border bg-card hover:bg-accent/40 transition-colors text-center"
+                >
+                  <img src={cat.strCategoryThumb} alt={cat.strCategory} className="w-14 h-14 rounded-lg object-cover" />
+                  <span className="text-xs font-medium leading-tight">{cat.strCategory}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Loading */}
+          {(loading || catLoading) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[1,2,3,4].map(n => (
+                <div key={n} className="flex gap-3 p-3 rounded-xl border bg-card animate-pulse">
+                  <div className="w-20 h-20 rounded-lg bg-muted shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-4 bg-muted rounded w-3/4" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                    <div className="h-7 bg-muted rounded w-24 mt-2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Results */}
+          {!loading && !catLoading && results.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {results.map(meal => {
+                const isAdded = added.has(meal.idMeal);
+                const isAdding = adding.has(meal.idMeal);
+                return (
+                  <div key={meal.idMeal} className="flex gap-3 p-3 rounded-xl border bg-card hover:bg-accent/20 transition-colors">
+                    <img
+                      src={meal.strMealThumb}
+                      alt={meal.strMeal}
+                      className="w-20 h-20 rounded-lg object-cover shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <p className="font-medium text-sm leading-snug line-clamp-2">{meal.strMeal}</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {meal.strCategory && <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{meal.strCategory}</span>}
+                          {meal.strArea && <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{meal.strArea}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => !isAdded && !isAdding && addMeal(meal)}
+                        disabled={isAdded || isAdding}
+                        className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors w-fit flex items-center gap-1.5 ${
+                          isAdded
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        }`}
+                      >
+                        {isAdding
+                          ? <><RefreshCw size={11} className="animate-spin" /> Adding…</>
+                          : isAdded
+                          ? <><Check size={11} /> Added</>
+                          : <><Plus size={11} /> Add to My Recipes</>
+                        }
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty state after search */}
+          {!loading && !catLoading && results.length === 0 && mode === "search" && query && (
+            <div className="text-center py-12 text-muted-foreground">
+              <ChefHat size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No recipes found for "{query}"</p>
+              <p className="text-xs mt-1">Try a different search term</p>
+            </div>
+          )}
+
+          {/* Initial search prompt */}
+          {!loading && results.length === 0 && mode === "search" && !query && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Search size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Search for any dish to get started</p>
+              <p className="text-xs mt-1">e.g. "pasta", "chicken", "chocolate cake"</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t shrink-0 flex justify-between items-center">
+          <p className="text-xs text-muted-foreground">Powered by <a href="https://www.themealdb.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">TheMealDB</a></p>
+          <Button variant="outline" size="sm" onClick={handleClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 type SubView = "library" | "bundles" | "week" | "grocery";
 type LibFilter = ComponentType | "all" | "unclassified";
@@ -665,6 +935,7 @@ export default function RecipesPage() {
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
+  const [mealDbOpen, setMealDbOpen] = useState(false);
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
@@ -838,6 +1109,9 @@ export default function RecipesPage() {
                 <Upload size={13} /> Upload CSV
               </Button>
               <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+              <Button size="sm" variant="outline" onClick={() => setMealDbOpen(true)} className="gap-1.5">
+                <Search size={13} /> Find Recipes
+              </Button>
               <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
                 <Plus size={13} /><ChefHat size={13} /> Add Recipe
               </Button>
@@ -1270,6 +1544,7 @@ export default function RecipesPage() {
       )}
 
       {/* Modals */}
+      <MealDBSearchModal open={mealDbOpen} onClose={() => setMealDbOpen(false)} />
       <RecipeFormModal open={recipeModal} onClose={() => { setRecipeModal(false); setEditRecipe(null); }} editRecipe={editRecipe} />
       <BundleFormModal open={bundleModal} onClose={() => { setBundleModal(false); setEditBundle(null); }} editBundle={editBundle} recipes={recipes} />
       {detailRecipe && (
