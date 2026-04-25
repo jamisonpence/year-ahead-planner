@@ -503,6 +503,9 @@ export async function initializeStorage() {
   // Video URL migration for movies
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS video_url TEXT`);
 
+  // Poster URL from TMDB
+  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS poster_url TEXT`);
+
   // Image URL for recipes
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
 

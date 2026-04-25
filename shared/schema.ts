@@ -290,6 +290,8 @@ export const movies = pgTable("movies", {
   currentSeason: integer("current_season"),
   // Video-specific
   videoUrl: text("video_url"),
+  // Poster from TMDB
+  posterUrl: text("poster_url"),
 });
 
 export const insertMovieSchema = createInsertSchema(movies).omit({ id: true });
