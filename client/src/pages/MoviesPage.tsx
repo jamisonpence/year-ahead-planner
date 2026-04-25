@@ -514,23 +514,23 @@ export default function MoviesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
-            <Download size={13} /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
-            <HelpCircle size={13} /> CSV Format
+          {!isVideoView && (
+            <Button size="sm" variant="outline" onClick={() => setTmdbOpen(true)} className="gap-1.5">
+              <Clapperboard size={13} /> Search
+            </Button>
+          )}
+          <Button onClick={open_add} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add {isVideoView ? "Video" : isShowView ? "Show" : "Movie"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          {!isVideoView && (
-            <Button size="sm" variant="outline" onClick={() => setTmdbOpen(true)} className="gap-1.5">
-              <Clapperboard size={13} /> Find on TMDB
-            </Button>
-          )}
-          <Button onClick={open_add} size="sm" className="gap-1.5">
-            <Plus size={15} /> Add {isVideoView ? "Video" : isShowView ? "Show" : "Movie"}
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+            <Download size={13} /> Template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+            <HelpCircle size={13} /> CSV Format
           </Button>
         </div>
       </div>
@@ -1078,7 +1078,7 @@ function TMDBSearchModal({
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Clapperboard size={16} /> Find on TMDB
+            <Clapperboard size={16} /> Search
           </DialogTitle>
         </DialogHeader>
 
