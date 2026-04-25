@@ -1253,21 +1253,21 @@ export default function RecipesPage() {
         <div className="flex gap-2">
           {subView === "library" && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
-                <Download size={13} /> Template
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
-                <HelpCircle size={13} /> CSV Format
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
-                <Upload size={13} /> Upload CSV
-              </Button>
-              <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
               <Button size="sm" variant="outline" onClick={() => setMealDbOpen(true)} className="gap-1.5">
                 <Search size={13} /> Find Recipes
               </Button>
               <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
                 <Plus size={13} /><ChefHat size={13} /> Add Recipe
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+                <Upload size={13} /> Upload CSV
+              </Button>
+              <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+              <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+                <Download size={13} /> Template
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+                <HelpCircle size={13} /> CSV Format
               </Button>
             </div>
           )}
