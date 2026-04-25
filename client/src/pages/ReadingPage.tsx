@@ -1,10 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
-import { Plus, BookOpen, BookMarked, Check, Trash2, Pencil, MoreHorizontal, Flame, Star } from "lucide-react";
+import {
+  Plus, BookOpen, BookMarked, Check, Trash2, Pencil, MoreHorizontal,
+  Flame, Star, Search, Clock, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { bookProgress, daysUntil, BOOK_STATUSES, GENRE_TAGS, readingStreak } from "@/lib/plannerUtils";
@@ -19,12 +23,196 @@ const STATUS_TABS = [
   { value: "finished", label: "Finished"  },
 ];
 
+// ── Google Books Search Modal ─────────────────────────────────────────────────
+interface GBVolume {
+  id: string;
+  volumeInfo: {
+    title: string;
+    authors?: string[];
+    publishedDate?: string;
+    pageCount?: number;
+    categories?: string[];
+    imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+    description?: string;
+  };
+}
+
+function GoogleBooksModal({
+  open, onClose, onAdd,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (payload: any) => void;
+}) {
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GBVolume[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [addingId, setAddingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) { setQuery(""); setResults([]); setAddedIds(new Set()); }
+  }, [open]);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("GET", `/api/gbooks/search?q=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      setResults(Array.isArray(data) ? data : []);
+    } catch {
+      toast({ title: "Search failed", description: "Could not reach Google Books API.", variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  async function addBook(vol: GBVolume) {
+    setAddingId(vol.id);
+    try {
+      const info = vol.volumeInfo;
+      const rawThumb = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || null;
+      // Google returns http:// — upgrade to https://
+      const coverUrl = rawThumb ? rawThumb.replace(/^http:\/\//, "https://") : null;
+      const year = (info.publishedDate || "").slice(0, 4);
+      const category = info.categories?.[0] ?? null;
+
+      const payload = {
+        title: info.title,
+        author: info.authors?.join(", ") || null,
+        series: null,
+        seriesNumber: null,
+        genre: category ?? null,
+        status: "backlog",
+        totalPages: info.pageCount || null,
+        pagesRead: 0,
+        startDate: null,
+        targetFinishDate: null,
+        finishDate: null,
+        notes: null,
+        highlights: null,
+        linkedGoalId: null,
+        coverColor: null,
+        coverUrl,
+      };
+
+      onAdd(payload);
+      setAddedIds((prev) => new Set([...prev, vol.id]));
+      toast({ title: `✓ Added "${info.title}"` });
+    } catch {
+      toast({ title: "Failed to add book", variant: "destructive" });
+    } finally { setAddingId(null); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <BookOpen size={16} /> Find on Google Books
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="px-5 pb-3 shrink-0 border-b">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="w-full pl-8 pr-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder="Search by title, author, or ISBN…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
+              />
+            </div>
+            <Button size="sm" onClick={doSearch} disabled={loading || !query.trim()}>
+              {loading ? <Clock size={14} className="animate-spin" /> : "Search"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 py-3">
+          {loading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-lg border bg-muted animate-pulse h-52" />
+              ))}
+            </div>
+          )}
+          {!loading && results.length === 0 && query && (
+            <div className="text-center py-10 text-muted-foreground text-sm">No results found.</div>
+          )}
+          {!loading && results.length === 0 && !query && (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              <BookOpen size={36} className="mx-auto mb-2 opacity-20" />
+              Search for books to add them to your reading list.
+            </div>
+          )}
+          {!loading && results.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {results.map((vol) => {
+                const info = vol.volumeInfo;
+                const thumb = (info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || "")
+                  .replace(/^http:\/\//, "https://");
+                const added = addedIds.has(vol.id);
+                const isAdding = addingId === vol.id;
+                return (
+                  <div key={vol.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                    {thumb ? (
+                      <img src={thumb} alt={info.title} className="w-full h-40 object-cover" />
+                    ) : (
+                      <div className="w-full h-40 bg-muted flex items-center justify-center">
+                        <BookOpen size={28} className="opacity-20" />
+                      </div>
+                    )}
+                    <div className="p-2 flex flex-col flex-1">
+                      <p className="text-xs font-semibold line-clamp-2 leading-tight">{info.title}</p>
+                      {info.authors && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{info.authors.join(", ")}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        {info.publishedDate && (
+                          <span className="text-[10px] text-muted-foreground">{info.publishedDate.slice(0, 4)}</span>
+                        )}
+                        {info.pageCount && (
+                          <span className="text-[10px] text-muted-foreground">{info.pageCount}p</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => !added && addBook(vol)}
+                        disabled={added || isAdding}
+                        className={`mt-auto mt-2 w-full flex items-center justify-center gap-1 text-xs py-1.5 rounded-md border transition-colors ${
+                          added
+                            ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                            : "hover:bg-secondary"
+                        }`}
+                      >
+                        {isAdding ? <Clock size={12} className="animate-spin" /> : added ? <><Check size={12} /> Added</> : <><Plus size={12} /> Add</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t shrink-0 flex justify-end">
+          <Button variant="outline" size="sm" onClick={onClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ReadingPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState("current");
   const [genreFilter, setGenreFilter] = useState("all");
   const [bookModal, setBookModal] = useState(false);
   const [sessionModal, setSessionModal] = useState(false);
+  const [gbooksOpen, setGbooksOpen] = useState(false);
   const [editBook, setEditBook] = useState<Book | null>(null);
   const [editSession, setEditSession] = useState<ReadingSession | null>(null);
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
@@ -37,6 +225,11 @@ export default function ReadingPage() {
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/books/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/books"] }); toast({ title: "Book removed" }); },
+  });
+
+  const createMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/books", d),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/books"] }),
   });
 
   const markFinished = useMutation({
@@ -71,6 +264,9 @@ export default function ReadingPage() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
+            <Search size={13} /> Find Books
+          </Button>
           <Button size="sm" variant="outline" onClick={() => { setEditSession(null); setSessionBookId(undefined); setSessionModal(true); }} className="gap-1.5">
             <Plus size={13} /><BookMarked size={13} />Log Session
           </Button>
@@ -104,22 +300,39 @@ export default function ReadingPage() {
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen size={40} className="mx-auto mb-4 opacity-20" />
           <p className="font-medium">No books here yet</p>
-          <p className="text-sm mt-1">Add a book to get started</p>
+          <p className="text-sm mt-1">Use <strong>Find Books</strong> to search Google Books, or add one manually</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((book) => {
             const pct = bookProgress(book);
             const daysLeft = book.targetFinishDate ? daysUntil(book.targetFinishDate) : null;
+            const coverUrl = (book as any).coverUrl as string | null;
             return (
               <div key={book.id} className="bg-card border rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
-                {/* Color band */}
-                <div className="h-2" style={{ backgroundColor: book.coverColor || "#1e3a5f" }} />
+                {/* Cover image or color band */}
+                {coverUrl ? (
+                  <div className="relative h-48 bg-muted overflow-hidden">
+                    <img src={coverUrl} alt={book.title} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                    <div className="absolute bottom-2 left-3 right-3">
+                      <p className="font-semibold text-sm text-white leading-tight line-clamp-2">{book.title}</p>
+                      {book.author && <p className="text-xs text-white/70 mt-0.5">{book.author}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-2" style={{ backgroundColor: book.coverColor || "#1e3a5f" }} />
+                )}
+
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm leading-tight">{book.title}</p>
-                      {book.author && <p className="text-xs text-muted-foreground mt-0.5">{book.author}</p>}
+                      {!coverUrl && (
+                        <>
+                          <p className="font-semibold text-sm leading-tight">{book.title}</p>
+                          {book.author && <p className="text-xs text-muted-foreground mt-0.5">{book.author}</p>}
+                        </>
+                      )}
                       {book.series && <p className="text-xs text-muted-foreground">{book.series}</p>}
                     </div>
                     <DropdownMenu>
@@ -185,6 +398,11 @@ export default function ReadingPage() {
       {/* Modals */}
       <BookFormModal open={bookModal} onClose={() => { setBookModal(false); setEditBook(null); }} editBook={editBook} />
       {sessionModal && <ReadingSessionModal open onClose={() => { setSessionModal(false); setSessionBookId(undefined); }} books={books} editSession={editSession} defaultBookId={sessionBookId} />}
+      <GoogleBooksModal
+        open={gbooksOpen}
+        onClose={() => setGbooksOpen(false)}
+        onAdd={(payload) => createMut.mutate(payload)}
+      />
     </div>
   );
 }

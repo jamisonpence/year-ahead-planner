@@ -1041,6 +1041,21 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     res.json({ ok: true });
   });
 
+  // ── Google Books Proxy ────────────────────────────────────────────────────────
+  app.get("/api/gbooks/search", requireAuth, async (req, res) => {
+    try {
+      const query = String(req.query.q || "").trim();
+      if (!query) return res.status(400).json({ error: "q is required" });
+      const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+      const keyParam = apiKey ? `&key=${apiKey}` : "";
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=20&printType=books${keyParam}`;
+      const gbRes = await fetch(url);
+      if (!gbRes.ok) return res.status(gbRes.status).json({ error: "Google Books error" });
+      const data = await gbRes.json() as any;
+      res.json(data.items ?? []);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── TMDB Proxy ───────────────────────────────────────────────────────────────
   // Keeps the API key server-side; client never sees it
   app.get("/api/tmdb/search", requireAuth, async (req, res) => {
