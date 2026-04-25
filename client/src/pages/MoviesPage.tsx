@@ -1023,8 +1023,8 @@ function TMDBSearchModal({
       const res = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(query.trim())}&type=${searchType}`);
       const data = await res.json();
       setResults(Array.isArray(data) ? data : []);
-    } catch {
-      toast({ title: "Search failed", description: "Could not reach TMDB. Check TMDB_API_KEY in your .env file.", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Search failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     } finally { setLoading(false); }
   }
 
