@@ -46,6 +46,7 @@ const EMPTY_FORM = {
   lastWatered: "",
   remindersEnabled: false,
   sortOrder: 0,
+  photoUrl: "",
 };
 
 // ── Watering status helpers ──────────────────────────────────────────────────
@@ -311,6 +312,7 @@ export default function PlantsPage() {
       lastWatered: p.lastWatered ?? "",
       remindersEnabled: p.remindersEnabled,
       sortOrder: p.sortOrder,
+      photoUrl: (p as any).photoUrl ?? "",
     });
     setModalOpen(true);
   }
@@ -326,6 +328,7 @@ export default function PlantsPage() {
       location: form.location || null,
       soilType: form.soilType || null,
       notes: form.notes || null,
+      photoUrl: form.photoUrl || null,
     };
     if (editing) {
       updateMut.mutate({ id: editing.id, d: payload });
@@ -540,6 +543,24 @@ export default function PlantsPage() {
             <div className="space-y-1">
               <label className="text-sm font-medium">Notes</label>
               <Textarea placeholder="Care tips, fertilizing schedule, observations..." rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Photo URL</label>
+              <Input
+                placeholder="https://…  (paste any image URL)"
+                value={form.photoUrl}
+                onChange={(e) => setForm({ ...form, photoUrl: e.target.value })}
+              />
+              {form.photoUrl && (
+                <div className="relative mt-1.5 rounded-lg overflow-hidden h-32 bg-muted">
+                  <img
+                    src={form.photoUrl}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3 py-1">
               <button type="button" onClick={() => setForm({ ...form, remindersEnabled: !form.remindersEnabled })}
