@@ -164,6 +164,7 @@ export const recipes = pgTable("recipes", {
   // JSON: [{name: string, qty: string}][]
   ingredientsJson: text("ingredients_json").notNull().default("[]"),
   instructions: text("instructions"),
+  imageUrl: text("image_url"),
 });
 
 // ── Meal Bundles ─────────────────────────────────────────────────────────────

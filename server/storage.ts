@@ -503,6 +503,9 @@ export async function initializeStorage() {
   // Video URL migration for movies
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS video_url TEXT`);
 
+  // Image URL for recipes
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS children (
       id SERIAL PRIMARY KEY,
