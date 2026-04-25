@@ -729,6 +729,25 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [browseCategory, setBrowseCategory] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(false);
   const [mode, setMode] = useState<"search" | "browse">("search");
+  const [preview, setPreview] = useState<MealDBMeal | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  async function openPreview(meal: MealDBMeal) {
+    // If browse result (no instructions), fetch full details first
+    if (!meal.strInstructions) {
+      setPreviewLoading(true);
+      setPreview({ ...meal }); // show panel immediately with loading state
+      try {
+        const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
+        const d = await r.json();
+        setPreview(d.meals?.[0] ?? meal);
+      } catch {
+        toast({ title: "Could not load recipe details", variant: "destructive" });
+      } finally { setPreviewLoading(false); }
+    } else {
+      setPreview(meal);
+    }
+  }
 
   // Load categories once on open
   useEffect(() => {
@@ -800,13 +819,13 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
   }
 
   function handleClose() {
-    setQuery(""); setResults([]); setAdded(new Set()); setBrowseCategory(null); setMode("search");
+    setQuery(""); setResults([]); setAdded(new Set()); setBrowseCategory(null); setMode("search"); setPreview(null);
     onClose();
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0">
+      <DialogContent className={`${preview ? "max-w-5xl" : "max-w-3xl"} max-h-[88vh] flex flex-col p-0 gap-0 transition-all duration-200`}>
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ChefHat size={18} /> Find Recipes from MealDB
@@ -853,7 +872,8 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
           )}
         </div>
 
-        {/* Content area */}
+        {/* Content area — splits into results + preview when a recipe is selected */}
+        <div className="flex flex-1 min-h-0">
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {/* Browse: category grid */}
           {mode === "browse" && !browseCategory && (
@@ -908,22 +928,34 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
                           {meal.strArea && <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{meal.strArea}</span>}
                         </div>
                       </div>
-                      <button
-                        onClick={() => !isAdded && !isAdding && addMeal(meal)}
-                        disabled={isAdded || isAdding}
-                        className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors w-fit flex items-center gap-1.5 ${
-                          isAdded
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
-                            : "bg-primary text-primary-foreground hover:bg-primary/90"
-                        }`}
-                      >
-                        {isAdding
-                          ? <><RefreshCw size={11} className="animate-spin" /> Adding…</>
-                          : isAdded
-                          ? <><Check size={11} /> Added</>
-                          : <><Plus size={11} /> Add to My Recipes</>
-                        }
-                      </button>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <button
+                          onClick={() => openPreview(meal)}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
+                            preview?.idMeal === meal.idMeal
+                              ? "bg-secondary border-foreground/20 text-foreground"
+                              : "hover:bg-secondary border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          <BookOpen size={11} /> Preview
+                        </button>
+                        <button
+                          onClick={() => !isAdded && !isAdding && addMeal(meal)}
+                          disabled={isAdded || isAdding}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+                            isAdded
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+                              : "bg-primary text-primary-foreground hover:bg-primary/90"
+                          }`}
+                        >
+                          {isAdding
+                            ? <><RefreshCw size={11} className="animate-spin" /> Adding…</>
+                            : isAdded
+                            ? <><Check size={11} /> Added</>
+                            : <><Plus size={11} /> Add</>
+                          }
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -948,7 +980,87 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
               <p className="text-xs mt-1">e.g. "pasta", "chicken", "chocolate cake"</p>
             </div>
           )}
-        </div>
+        </div>{/* end results column */}
+
+        {/* Preview panel */}
+        {preview && (
+          <div className="w-80 shrink-0 border-l flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
+              <span className="text-sm font-semibold">Preview</span>
+              <button onClick={() => setPreview(null)} className="p-1 rounded hover:bg-secondary transition-colors">
+                <X size={14} className="text-muted-foreground" />
+              </button>
+            </div>
+            {previewLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <RefreshCw size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto">
+                {/* Hero image */}
+                {preview.strMealThumb && (
+                  <div className="relative h-44 shrink-0">
+                    <img src={preview.strMealThumb} alt={preview.strMeal} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-2 left-3 right-3">
+                      <p className="text-white font-semibold text-sm leading-tight line-clamp-2">{preview.strMeal}</p>
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {preview.strCategory && <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full">{preview.strCategory}</span>}
+                        {preview.strArea && <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full">{preview.strArea}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 space-y-4">
+                  {/* Ingredients */}
+                  {extractIngredients(preview).length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Ingredients</p>
+                      <ul className="space-y-1">
+                        {extractIngredients(preview).map((ing, i) => (
+                          <li key={i} className="flex justify-between text-xs gap-2">
+                            <span className="text-foreground">{ing.name}</span>
+                            <span className="text-muted-foreground shrink-0">{ing.qty}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Instructions */}
+                  {preview.strInstructions && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Instructions</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">{preview.strInstructions}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Add button */}
+            <div className="p-3 border-t shrink-0">
+              <button
+                onClick={() => { addMeal(preview); }}
+                disabled={added.has(preview.idMeal) || adding.has(preview.idMeal)}
+                className={`w-full flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg transition-colors ${
+                  added.has(preview.idMeal)
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+              >
+                {adding.has(preview.idMeal)
+                  ? <><RefreshCw size={13} className="animate-spin" /> Adding…</>
+                  : added.has(preview.idMeal)
+                  ? <><Check size={13} /> Added</>
+                  : <><Plus size={13} /> Add to My Recipes</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+        </div>{/* end flex row */}
 
         <div className="px-6 py-3 border-t shrink-0 flex justify-between items-center">
           <p className="text-xs text-muted-foreground">Powered by <a href="https://www.themealdb.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">TheMealDB</a></p>
