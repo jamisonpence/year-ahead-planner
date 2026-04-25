@@ -1040,4 +1040,43 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     await storage.deleteJournalEntry(Number(req.params.id));
     res.json({ ok: true });
   });
+
+  // ── TMDB Proxy ───────────────────────────────────────────────────────────────
+  // Keeps the API key server-side; client never sees it
+  app.get("/api/tmdb/search", requireAuth, async (req, res) => {
+    try {
+      const query = String(req.query.q || "").trim();
+      const type = String(req.query.type || "movie"); // "movie" | "tv"
+      if (!query) return res.status(400).json({ error: "q is required" });
+      const apiKey = process.env.TMDB_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "TMDB_API_KEY not configured" });
+      const url = `https://api.themoviedb.org/3/search/${type}?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`;
+      const tmdbRes = await fetch(url);
+      if (!tmdbRes.ok) return res.status(tmdbRes.status).json({ error: "TMDB error" });
+      const data = await tmdbRes.json() as any;
+      res.json(data.results ?? []);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/tmdb/movie/:id", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.TMDB_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "TMDB_API_KEY not configured" });
+      const url = `https://api.themoviedb.org/3/movie/${req.params.id}?api_key=${apiKey}&append_to_response=credits`;
+      const tmdbRes = await fetch(url);
+      if (!tmdbRes.ok) return res.status(tmdbRes.status).json({ error: "TMDB error" });
+      res.json(await tmdbRes.json());
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/tmdb/tv/:id", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.TMDB_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "TMDB_API_KEY not configured" });
+      const url = `https://api.themoviedb.org/3/tv/${req.params.id}?api_key=${apiKey}&append_to_response=credits`;
+      const tmdbRes = await fetch(url);
+      if (!tmdbRes.ok) return res.status(tmdbRes.status).json({ error: "TMDB error" });
+      res.json(await tmdbRes.json());
+    } catch (e) { handleError(res, e); }
+  });
 }

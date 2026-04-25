@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Movie } from "@shared/schema";
@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
-  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle,
+  Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle, Clapperboard,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -23,6 +23,8 @@ const POSTER_COLORS = [
   "hsl(195 75% 42%)", "hsl(0 70% 48%)",
 ];
 
+const TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w342";
+
 const EMPTY_FORM = {
   mediaType: "movie" as "movie" | "show" | "video",
   title: "", year: "", director: "", genres: [] as string[],
@@ -31,6 +33,7 @@ const EMPTY_FORM = {
   customList: "",
   totalSeasons: "", currentSeason: "",
   videoUrl: "",
+  posterUrl: "",
 };
 
 function StarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
@@ -66,6 +69,7 @@ export default function MoviesPage() {
   const [newListInput, setNewListInput] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const [tmdbOpen, setTmdbOpen] = useState(false);
 
   const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
 
@@ -227,6 +231,7 @@ export default function MoviesPage() {
       totalSeasons: m.totalSeasons ? String(m.totalSeasons) : "",
       currentSeason: m.currentSeason ? String(m.currentSeason) : "",
       videoUrl: (m as any).videoUrl ?? "",
+      posterUrl: (m as any).posterUrl ?? "",
     });
     setModalOpen(true);
   }
@@ -251,6 +256,7 @@ export default function MoviesPage() {
       totalSeasons: isShow && form.totalSeasons ? parseInt(form.totalSeasons) : null,
       currentSeason: isShow && form.currentSeason ? parseInt(form.currentSeason) : null,
       videoUrl: isVideo ? (form.videoUrl.trim() || null) : null,
+      posterUrl: form.posterUrl.trim() || null,
     };
     if (!payload.title) { toast({ title: "Title is required", variant: "destructive" }); return; }
     if (editing) updateMut.mutate({ id: editing.id, d: payload });
@@ -311,19 +317,38 @@ export default function MoviesPage() {
   function MediaCard({ movie }: { movie: Movie }) {
     const expanded = expandedId === movie.id;
     const isShow = (movie.mediaType ?? "movie") === "show";
+    const posterUrl = (movie as any).posterUrl as string | null;
     let lists: string[] = [];
     try { lists = JSON.parse(movie.listsJson); } catch {}
     return (
       <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
-        <div className="h-1.5 w-full" style={{ background: movie.posterColor ?? "hsl(210 80% 48%)" }} />
+        {posterUrl ? (
+          <div className="relative h-44 bg-muted overflow-hidden">
+            <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+            <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
+              <div>
+                <h3 className="font-semibold text-sm text-white leading-tight line-clamp-1">{movie.title}</h3>
+                {movie.year && <span className="text-xs text-white/70">{movie.year}</span>}
+              </div>
+              <div className="flex items-center gap-1">
+                {movie.isFavorite && <Heart size={13} className="text-rose-400 fill-rose-400" />}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="h-1.5 w-full" style={{ background: movie.posterColor ?? "hsl(210 80% 48%)" }} />
+        )}
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-semibold text-sm truncate">{movie.title}</h3>
-                {movie.year && <span className="text-xs text-muted-foreground shrink-0">{movie.year}</span>}
-                {movie.isFavorite && <Heart size={13} className="text-rose-500 fill-rose-500 shrink-0" />}
-              </div>
+              {!posterUrl && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-sm truncate">{movie.title}</h3>
+                  {movie.year && <span className="text-xs text-muted-foreground shrink-0">{movie.year}</span>}
+                  {movie.isFavorite && <Heart size={13} className="text-rose-500 fill-rose-500 shrink-0" />}
+                </div>
+              )}
               {movie.director && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {isShow ? "Created by" : "Dir."} {movie.director}
@@ -499,6 +524,11 @@ export default function MoviesPage() {
             <Upload size={13} /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+          {!isVideoView && (
+            <Button size="sm" variant="outline" onClick={() => setTmdbOpen(true)} className="gap-1.5">
+              <Clapperboard size={13} /> Find on TMDB
+            </Button>
+          )}
           <Button onClick={open_add} size="sm" className="gap-1.5">
             <Plus size={15} /> Add {isVideoView ? "Video" : isShowView ? "Show" : "Movie"}
           </Button>
@@ -918,6 +948,245 @@ export default function MoviesPage() {
           <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
+
+      {/* TMDB Search Modal */}
+      <TMDBSearchModal
+        open={tmdbOpen}
+        onClose={() => setTmdbOpen(false)}
+        defaultType={mediaTypeView === "show" ? "tv" : "movie"}
+        onAdd={(payload) => createMut.mutate(payload)}
+        posterColors={POSTER_COLORS}
+      />
     </div>
+  );
+}
+
+// ── TMDB Search Modal ──────────────────────────────────────────────────────────
+interface TMDBResult {
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  overview?: string;
+  poster_path?: string | null;
+  genre_ids?: number[];
+  vote_average?: number;
+  number_of_seasons?: number;
+}
+
+interface TMDBDetail extends TMDBResult {
+  genres?: { id: number; name: string }[];
+  credits?: {
+    crew?: { job: string; name: string }[];
+    created_by?: { name: string }[];
+  };
+  number_of_seasons?: number;
+}
+
+const TMDB_GENRE_MAP: Record<number, string> = {
+  28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+  99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+  27: "Horror", 10402: "Musical", 9648: "Mystery", 10749: "Romance",
+  878: "Sci-Fi", 10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+  // TV
+  10759: "Action", 10762: "Kids", 10763: "News", 10764: "Reality",
+  10765: "Sci-Fi", 10766: "Soap", 10767: "Talk", 10768: "War",
+};
+
+function TMDBSearchModal({
+  open, onClose, defaultType, onAdd, posterColors,
+}: {
+  open: boolean;
+  onClose: () => void;
+  defaultType: "movie" | "tv";
+  onAdd: (payload: any) => void;
+  posterColors: string[];
+}) {
+  const { toast } = useToast();
+  const [searchType, setSearchType] = useState<"movie" | "tv">(defaultType);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<TMDBResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addingId, setAddingId] = useState<number | null>(null);
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (open) { setQuery(""); setResults([]); setAddedIds(new Set()); }
+  }, [open]);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(query.trim())}&type=${searchType}`);
+      const data = await res.json();
+      setResults(Array.isArray(data) ? data : []);
+    } catch {
+      toast({ title: "Search failed", description: "Could not reach TMDB. Check TMDB_API_KEY in your .env file.", variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  async function addItem(item: TMDBResult) {
+    setAddingId(item.id);
+    try {
+      // Fetch full details for director/creator + genre names
+      const detailRes = await apiRequest("GET", `/api/tmdb/${searchType}/${item.id}`);
+      const detail: TMDBDetail = await detailRes.json();
+
+      const isTV = searchType === "tv";
+      const title = detail.title || detail.name || "";
+      const year = parseInt((detail.release_date || detail.first_air_date || "").slice(0, 4)) || null;
+      const genres = (detail.genres ?? []).map((g) => g.name).join(",") || null;
+      const director = isTV
+        ? (detail.credits?.created_by?.[0]?.name ?? null)
+        : (detail.credits?.crew?.find((c) => c.job === "Director")?.name ?? null);
+      const posterUrl = detail.poster_path ? `${TMDB_IMG_BASE}${detail.poster_path}` : null;
+
+      const payload: any = {
+        mediaType: isTV ? "show" : "movie",
+        title,
+        year,
+        director,
+        genres,
+        status: "backlog",
+        rating: null,
+        notes: null,
+        listsJson: "[]",
+        isFavorite: false,
+        posterColor: posterColors[Math.floor(Math.random() * posterColors.length)],
+        streamingOn: null,
+        totalSeasons: isTV ? (detail.number_of_seasons ?? null) : null,
+        currentSeason: null,
+        videoUrl: null,
+        posterUrl,
+      };
+
+      onAdd(payload);
+      setAddedIds((prev) => new Set([...prev, item.id]));
+      toast({ title: `✓ Added "${title}"` });
+    } catch {
+      toast({ title: "Failed to add", variant: "destructive" });
+    } finally { setAddingId(null); }
+  }
+
+  const imgBase = "https://image.tmdb.org/t/p/w185";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Clapperboard size={16} /> Find on TMDB
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Type toggle + search */}
+        <div className="px-5 pb-3 space-y-3 shrink-0 border-b">
+          <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+            <button
+              onClick={() => { setSearchType("movie"); setResults([]); }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-all ${searchType === "movie" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Film size={13} /> Movies
+            </button>
+            <button
+              onClick={() => { setSearchType("tv"); setResults([]); }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm font-medium transition-all ${searchType === "tv" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Tv2 size={13} /> TV Shows
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="w-full pl-8 pr-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder={searchType === "tv" ? "Search TV shows…" : "Search movies…"}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
+              />
+            </div>
+            <Button size="sm" onClick={doSearch} disabled={loading || !query.trim()}>
+              {loading ? <Clock size={14} className="animate-spin" /> : "Search"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="overflow-y-auto flex-1 px-4 py-3">
+          {loading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-lg border bg-muted animate-pulse h-44" />
+              ))}
+            </div>
+          )}
+          {!loading && results.length === 0 && query && (
+            <div className="text-center py-10 text-muted-foreground text-sm">No results found.</div>
+          )}
+          {!loading && results.length === 0 && !query && (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              <Clapperboard size={36} className="mx-auto mb-2 opacity-20" />
+              Search for {searchType === "tv" ? "TV shows" : "movies"} to add them to your list.
+            </div>
+          )}
+          {!loading && results.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {results.map((item) => {
+                const title = item.title || item.name || "";
+                const year = (item.release_date || item.first_air_date || "").slice(0, 4);
+                const added = addedIds.has(item.id);
+                const isAdding = addingId === item.id;
+                const genres = (item.genre_ids ?? []).slice(0, 2).map((id) => TMDB_GENRE_MAP[id]).filter(Boolean);
+                return (
+                  <div key={item.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                    {item.poster_path ? (
+                      <img
+                        src={`${imgBase}${item.poster_path}`}
+                        alt={title}
+                        className="w-full h-36 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-36 bg-muted flex items-center justify-center">
+                        {searchType === "tv" ? <Tv2 size={28} className="opacity-20" /> : <Film size={28} className="opacity-20" />}
+                      </div>
+                    )}
+                    <div className="p-2 flex flex-col flex-1">
+                      <p className="text-xs font-semibold line-clamp-2 leading-tight">{title}</p>
+                      {year && <p className="text-xs text-muted-foreground mt-0.5">{year}</p>}
+                      {genres.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {genres.map((g) => (
+                            <span key={g} className="text-[10px] bg-secondary text-secondary-foreground px-1 py-0.5 rounded">{g}</span>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => !added && addItem(item)}
+                        disabled={added || isAdding}
+                        className={`mt-auto mt-2 w-full flex items-center justify-center gap-1 text-xs py-1.5 rounded-md border transition-colors ${
+                          added
+                            ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                            : "hover:bg-secondary"
+                        }`}
+                      >
+                        {isAdding ? <Clock size={12} className="animate-spin" /> : added ? <><Check size={12} /> Added</> : <><Plus size={12} /> Add</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t shrink-0 flex justify-end">
+          <Button variant="outline" size="sm" onClick={onClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
