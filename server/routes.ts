@@ -1057,6 +1057,14 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   });
 
   // ── TMDB Proxy ───────────────────────────────────────────────────────────────
+  // Temporary debug endpoint – remove after confirming env vars work
+  app.get("/api/debug/env-check", requireAuth, (req, res) => {
+    res.json({
+      TMDB_API_KEY: process.env.TMDB_API_KEY ? `set (${process.env.TMDB_API_KEY.length} chars)` : "NOT SET",
+      NODE_ENV: process.env.NODE_ENV ?? "not set",
+    });
+  });
+
   // Keeps the API key server-side; client never sees it
   app.get("/api/tmdb/search", requireAuth, async (req, res) => {
     try {
