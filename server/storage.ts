@@ -512,6 +512,9 @@ export async function initializeStorage() {
   // Image URL for recipes
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
+  // Photo URL for plants (from Perenual API)
+  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS photo_url TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS children (
       id SERIAL PRIMARY KEY,

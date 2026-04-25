@@ -142,6 +142,7 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
         waterFrequencyDays: mapWatering(preview.watering),
         soilType: preview.soil?.join(", ") || null,
         notes: preview.description ? preview.description.slice(0, 500) : null,
+        photoUrl: preview.default_image?.medium_url ?? preview.default_image?.small_url ?? null,
         location: null, lastWatered: null, remindersEnabled: false, sortOrder: 0,
       };
       onAdd(payload);
@@ -410,8 +411,30 @@ export default function PlantsPage() {
             const accentColor = CARD_COLORS[colorIdx];
             return (
               <div key={plant.id} className="rounded-xl border bg-card shadow-sm overflow-hidden flex flex-col">
-                <div className="h-1.5 w-full" style={{ background: accentColor }} />
+                {(plant as any).photoUrl ? (
+                  <div className="relative h-36 overflow-hidden">
+                    <img src={(plant as any).photoUrl} alt={plant.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-sm text-white leading-tight truncate drop-shadow">{plant.name}</h3>
+                        {plant.species && <p className="text-xs text-white/80 italic truncate">{plant.species}</p>}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => openEdit(plant)} className="p-1 rounded bg-black/30 hover:bg-black/50 text-white transition-colors" title="Edit">
+                          <Pencil size={12} />
+                        </button>
+                        <button onClick={() => deleteMut.mutate(plant.id)} className="p-1 rounded bg-black/30 hover:bg-red-500/70 text-white transition-colors" title="Delete">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-1.5 w-full" style={{ background: accentColor }} />
+                )}
                 <div className="p-4 flex flex-col gap-2 flex-1">
+                  {!(plant as any).photoUrl && (
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-semibold text-sm leading-tight truncate">{plant.name}</h3>
@@ -428,6 +451,7 @@ export default function PlantsPage() {
                       </button>
                     </div>
                   </div>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${LIGHT_COLORS[plant.lightNeeds] ?? "bg-muted text-muted-foreground"}`}>
                       <Sun size={10} className="inline mr-0.5 -mt-0.5" />
