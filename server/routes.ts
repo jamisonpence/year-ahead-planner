@@ -730,8 +730,23 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
 
   app.post("/api/plants", requireAuth, async (req, res) => {
     try {
-      const data = insertPlantSchema.omit({ userId: true } as any).parse(req.body);
-      const plant = await storage.createPlant(data as any, (req.user as User).id);
+      const b = req.body;
+      // Explicitly map all plant fields to avoid any Zod stripping surprises
+      const data: any = {
+        name: b.name,
+        species: b.species ?? null,
+        location: b.location ?? null,
+        lightNeeds: b.lightNeeds ?? "medium",
+        waterFrequencyDays: b.waterFrequencyDays != null ? Number(b.waterFrequencyDays) : 7,
+        soilType: b.soilType ?? null,
+        notes: b.notes ?? null,
+        lastWatered: b.lastWatered ?? null,
+        remindersEnabled: b.remindersEnabled ?? false,
+        sortOrder: b.sortOrder != null ? Number(b.sortOrder) : 0,
+        photoUrl: b.photoUrl ?? null,
+      };
+      if (!data.name) return res.status(400).json({ error: "name is required" });
+      const plant = await storage.createPlant(data, (req.user as User).id);
       res.status(201).json(plant);
     } catch (e) { handleError(res, e); }
   });
