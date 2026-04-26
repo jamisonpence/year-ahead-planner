@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Spot } from "@shared/schema";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
-  Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle,
+  Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle, Loader2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -49,6 +49,233 @@ const EMPTY_FORM = {
   status: "want_to_visit", rating: "" as string | number, notes: "", website: "",
   priceRange: "" as string | number, tags: "", visitedDate: "", isFavorite: false, openingHours: "",
 };
+
+// ── Nominatim types ───────────────────────────────────────────────────────────
+
+type NominatimResult = {
+  place_id: number;
+  display_name: string;
+  name?: string;
+  type: string;
+  class: string;
+  lat: string;
+  lon: string;
+  address?: {
+    road?: string; house_number?: string;
+    suburb?: string; neighbourhood?: string; quarter?: string;
+    city?: string; town?: string; village?: string; municipality?: string;
+    state?: string; postcode?: string; country?: string;
+  };
+  extratags?: {
+    website?: string; "contact:website"?: string;
+    opening_hours?: string; phone?: string; cuisine?: string;
+  };
+};
+
+/** Map Nominatim type/class → our SPOT_TYPES value */
+function nominatimToSpotType(cls: string, type: string): string {
+  const t = type.toLowerCase();
+  const c = cls.toLowerCase();
+  if (t === "restaurant" || t === "fast_food" || t === "food_court") return "restaurant";
+  if (t === "bar" || t === "pub" || t === "biergarten" || t === "nightclub") return "bar";
+  if (t === "cafe" || t === "coffee_shop" || t === "tea") return "cafe";
+  if (t === "park" || t === "nature_reserve" || t === "garden") return "park";
+  if (t === "trail" || t === "footway" || t === "path" || t === "cycleway") return "trail";
+  if (t === "hotel" || t === "motel" || t === "hostel" || t === "guest_house" || t === "chalet") return "hotel";
+  if (c === "shop" || t === "supermarket" || t === "convenience" || t === "mall") return "shop";
+  if (t === "museum" || t === "gallery" || t === "theatre" || t === "cinema" || t === "theme_park" || t === "attraction") return "attraction";
+  if (t === "hospital" || t === "dentist" || t === "doctors" || t === "pharmacy" || t === "laundry" || t === "bank") return "service";
+  return "other";
+}
+
+/** Build a clean address string from Nominatim address components */
+function buildAddress(addr: NominatimResult["address"]): string {
+  if (!addr) return "";
+  const parts: string[] = [];
+  if (addr.house_number && addr.road) parts.push(`${addr.house_number} ${addr.road}`);
+  else if (addr.road) parts.push(addr.road);
+  return parts.join(", ");
+}
+
+function buildCity(addr: NominatimResult["address"]): string {
+  return addr?.city ?? addr?.town ?? addr?.village ?? addr?.municipality ?? "";
+}
+
+function buildNeighborhood(addr: NominatimResult["address"]): string {
+  return addr?.suburb ?? addr?.neighbourhood ?? addr?.quarter ?? "";
+}
+
+// ── Nominatim Search Modal ────────────────────────────────────────────────────
+
+function NominatimSearchModal({ open, onClose, onSelect }: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (form: Partial<typeof EMPTY_FORM>) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<NominatimResult | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (!open) { setQuery(""); setResults([]); setSelected(null); } }, [open]);
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 80); }, [open]);
+
+  async function doSearch() {
+    const q = query.trim();
+    if (!q) return;
+    setLoading(true); setSelected(null);
+    try {
+      const r = await apiRequest("GET", `/api/nominatim/search?q=${encodeURIComponent(q)}`);
+      const data: NominatimResult[] = await r.json();
+      setResults(data);
+      if (data.length === 0) setResults([]);
+    } catch {
+      setResults([]);
+    } finally { setLoading(false); }
+  }
+
+  function handleAdd() {
+    if (!selected) return;
+    const addr = selected.address ?? {};
+    const name = selected.name ?? selected.display_name.split(",")[0].trim();
+    const website = selected.extratags?.website ?? selected.extratags?.["contact:website"] ?? "";
+    const openingHours = selected.extratags?.opening_hours ?? "";
+
+    onSelect({
+      name,
+      type: nominatimToSpotType(selected.class, selected.type),
+      address: buildAddress(addr),
+      neighborhood: buildNeighborhood(addr),
+      city: buildCity(addr),
+      website,
+      openingHours,
+    });
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <MapPin size={16} className="text-primary" /> Search Places
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Search bar */}
+        <div className="px-5 pb-3 shrink-0 flex gap-2">
+          <Input
+            ref={inputRef}
+            placeholder="e.g. Franklin Barbecue Austin, Millennium Park Chicago…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doSearch()}
+            className="text-sm"
+          />
+          <Button size="sm" onClick={doSearch} disabled={loading || !query.trim()} className="shrink-0">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+          </Button>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          {/* Results list */}
+          <div className={`overflow-y-auto px-3 pb-4 space-y-1 ${selected ? "w-72 border-r shrink-0" : "flex-1 px-5"}`}>
+            {results.length === 0 && !loading && (
+              <p className="text-center text-xs text-muted-foreground pt-6 px-4">
+                {query ? "No results — try a more specific search, e.g. include the city name" : "Search for any place — restaurants, parks, hotels, shops, attractions…"}
+              </p>
+            )}
+            {results.map(r => {
+              const name = r.name ?? r.display_name.split(",")[0];
+              const sub = r.display_name.split(",").slice(1, 3).join(",").trim();
+              const spotType = nominatimToSpotType(r.class, r.type);
+              const emoji = SPOT_TYPES.find(t => t.value === spotType)?.emoji ?? "📍";
+              return (
+                <button
+                  key={r.place_id}
+                  onClick={() => setSelected(r)}
+                  className={`w-full text-left flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${selected?.place_id === r.place_id ? "bg-primary/5 border-primary/30" : "bg-card hover:bg-muted/40 border-transparent"}`}
+                >
+                  <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-snug truncate">{name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{sub}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Preview panel */}
+          {selected && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {(() => {
+                const addr = selected.address ?? {};
+                const name = selected.name ?? selected.display_name.split(",")[0];
+                const spotType = nominatimToSpotType(selected.class, selected.type);
+                const emoji = SPOT_TYPES.find(t => t.value === spotType)?.emoji ?? "📍";
+                const fullAddress = buildAddress(addr);
+                const city = buildCity(addr);
+                const neighborhood = buildNeighborhood(addr);
+                const website = selected.extratags?.website ?? selected.extratags?.["contact:website"];
+                const hours = selected.extratags?.opening_hours;
+                const osmUrl = `https://www.openstreetmap.org/?mlat=${selected.lat}&mlon=${selected.lon}&zoom=17`;
+
+                return (
+                  <>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-2xl">{emoji}</span>
+                        <h3 className="font-semibold text-base leading-tight">{name}</h3>
+                      </div>
+                      <Badge variant="outline" className="text-xs capitalize">{SPOT_TYPES.find(t => t.value === spotType)?.label ?? spotType}</Badge>
+                    </div>
+
+                    <div className="space-y-1.5 text-sm">
+                      {fullAddress && (
+                        <p className="flex items-start gap-2 text-muted-foreground">
+                          <MapPin size={13} className="shrink-0 mt-0.5" />
+                          <span>{[fullAddress, neighborhood, city, addr.state, addr.postcode].filter(Boolean).join(", ")}</span>
+                        </p>
+                      )}
+                      {hours && (
+                        <p className="flex items-start gap-2 text-muted-foreground">
+                          <Clock size={13} className="shrink-0 mt-0.5" /><span className="text-xs">{hours}</span>
+                        </p>
+                      )}
+                      {website && (
+                        <p className="flex items-center gap-2 text-muted-foreground">
+                          <Globe size={13} className="shrink-0" />
+                          <a href={website.startsWith("http") ? website : `https://${website}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-blue-500 hover:underline truncate">{website}</a>
+                        </p>
+                      )}
+                      <p className="flex items-center gap-2 text-muted-foreground">
+                        <Navigation size={13} className="shrink-0" />
+                        <a href={osmUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
+                          View on OpenStreetMap
+                        </a>
+                      </p>
+                    </div>
+
+                    <Button className="w-full" size="sm" onClick={handleAdd}>
+                      <Plus size={13} className="mr-1.5" /> Add to My Spots
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      You can add notes, rating, and status after adding.
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -142,6 +369,7 @@ export default function SpotsPage() {
   const [filterTag, setFilterTag] = useState("all");
   const [filterCity, setFilterCity] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
+  const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState("all");
@@ -331,6 +559,12 @@ export default function SpotsPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" onClick={() => setNominatimOpen(true)} className="gap-1.5">
+            <Search size={13} /> Search
+          </Button>
+          <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
+            <Plus size={14} /> Add Spot
+          </Button>
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
           </Button>
@@ -341,7 +575,6 @@ export default function SpotsPage() {
             <Upload size={13} /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Spot</Button>
         </div>
       </div>
 
@@ -407,6 +640,17 @@ export default function SpotsPage() {
           ))}
         </div>
       )}
+
+      {/* Nominatim Search Modal */}
+      <NominatimSearchModal
+        open={nominatimOpen}
+        onClose={() => setNominatimOpen(false)}
+        onSelect={(prefill) => {
+          setEditing(null);
+          setForm({ ...EMPTY_FORM, ...prefill });
+          setModalOpen(true);
+        }}
+      />
 
       {/* Add/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

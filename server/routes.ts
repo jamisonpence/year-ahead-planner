@@ -1073,6 +1073,32 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Nominatim (OpenStreetMap) place search proxy ───────────────────────────────
+  // Nominatim requires a descriptive User-Agent — proxying through the server
+  // avoids CORS and ensures the header is always set correctly.
+  app.get("/api/nominatim/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      if (!q) return res.status(400).json({ error: "q is required" });
+      const url = new URL("https://nominatim.openstreetmap.org/search");
+      url.searchParams.set("q", q);
+      url.searchParams.set("format", "json");
+      url.searchParams.set("addressdetails", "1");
+      url.searchParams.set("limit", "10");
+      url.searchParams.set("extratags", "1");   // website, opening_hours, phone
+      const r = await fetch(url.toString(), {
+        headers: {
+          "User-Agent": "YearAheadPlanner/1.0 (personal life planner app)",
+          "Accept": "application/json",
+          "Accept-Language": "en",
+        },
+      });
+      if (!r.ok) return res.status(r.status).json({ error: "Nominatim error" });
+      const data = await r.json();
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
