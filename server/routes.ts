@@ -26,6 +26,7 @@ import {
   insertChildSchema, insertChildMilestoneSchema, insertChildMemorySchema, insertChildPrepItemSchema,
   insertQuoteSchema,
   insertArtPieceSchema,
+  insertEquipmentSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1182,6 +1183,163 @@ Return exactly this structure:
         }));
       res.json(results);
     } catch (e) { handleError(res, e); }
+  });
+
+  // ── Equipment ────────────────────────────────────────────────────────────────
+  app.get("/api/equipment", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllEquipment((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/equipment", requireAuth, async (req, res) => {
+    try {
+      const data = insertEquipmentSchema.parse({ ...req.body, userId: (req.user as User).id });
+      res.status(201).json(await storage.createEquipment(data, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/equipment/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateEquipment(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/equipment/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteEquipment(+req.params.id);
+      ok ? res.status(204).end() : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Exercise library (free-exercise-db, cached in memory) ─────────────────────
+  let exerciseDbCache: any[] | null = null;
+  let exerciseDbCacheTime = 0;
+  async function getExerciseDb(): Promise<any[]> {
+    if (exerciseDbCache && Date.now() - exerciseDbCacheTime < 24 * 60 * 60 * 1000) return exerciseDbCache!;
+    const r = await fetch("https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json");
+    if (!r.ok) throw new Error("Failed to fetch exercise database");
+    exerciseDbCache = await r.json() as any[];
+    exerciseDbCacheTime = Date.now();
+    return exerciseDbCache!;
+  }
+
+  app.get("/api/exercises/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim().toLowerCase();
+      const equipmentFilter = String(req.query.equipment ?? "").trim().toLowerCase();
+      const muscle = String(req.query.muscle ?? "").trim().toLowerCase();
+      const category = String(req.query.category ?? "").trim().toLowerCase();
+
+      const db = await getExerciseDb();
+      let results = db;
+      if (q) results = results.filter((e: any) => e.name.toLowerCase().includes(q));
+      if (equipmentFilter) results = results.filter((e: any) => (e.equipment ?? "").toLowerCase().includes(equipmentFilter));
+      if (muscle) results = results.filter((e: any) =>
+        (e.primaryMuscles ?? []).some((m: string) => m.toLowerCase().includes(muscle)) ||
+        (e.secondaryMuscles ?? []).some((m: string) => m.toLowerCase().includes(muscle))
+      );
+      if (category) results = results.filter((e: any) => (e.category ?? "").toLowerCase() === category);
+
+      const response = results.slice(0, 30).map((e: any) => ({
+        id: e.id,
+        name: e.name,
+        equipment: e.equipment,
+        primaryMuscles: e.primaryMuscles ?? [],
+        secondaryMuscles: e.secondaryMuscles ?? [],
+        category: e.category,
+        level: e.level,
+        force: e.force,
+        mechanic: e.mechanic,
+        image: e.images?.[0]
+          ? `https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/${e.images[0]}`
+          : null,
+        instructions: e.instructions ?? [],
+      }));
+      res.json(response);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Add exercise to a workout template ────────────────────────────────────────
+  app.post("/api/workout-templates/:id/add-exercise", requireAuth, async (req, res) => {
+    try {
+      const templates = await storage.getAllWorkoutTemplates((req.user as User).id);
+      const template = templates.find(t => t.id === +req.params.id);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      const exercises = JSON.parse(template.exercisesJson ?? "[]");
+      exercises.push(req.body);
+      const updated = await storage.updateWorkoutTemplate(+req.params.id, { exercisesJson: JSON.stringify(exercises) });
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── AI Workout Plan Generation ─────────────────────────────────────────────────
+  app.post("/api/workout/generate", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(userId);
+      if (!enc) return res.status(400).json({ error: "no_api_key", message: "Anthropic API key not configured. Add it in Settings." });
+      const apiKey = decrypt(enc);
+
+      const { equipmentList = [], goalsList = [], daysPerWeek = 3, focus = "general fitness", level = "intermediate", additionalNotes = "" } = req.body;
+      const equipmentStr = equipmentList.length > 0 ? equipmentList.join(", ") : "bodyweight only (no equipment)";
+      const goalsStr = goalsList.length > 0 ? goalsList.join(", ") : "general fitness and health";
+
+      const prompt = `You are an expert personal trainer. Generate a ${daysPerWeek}-day per week workout plan.
+
+AVAILABLE EQUIPMENT: ${equipmentStr}
+GOALS: ${goalsStr}
+TRAINING LEVEL: ${level}
+FOCUS: ${focus}
+${additionalNotes ? `ADDITIONAL NOTES: ${additionalNotes}` : ""}
+
+Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
+{
+  "planName": "descriptive plan name",
+  "description": "2-3 sentence overview of the plan and its approach",
+  "days": [
+    {
+      "dayLabel": "Day 1 (Monday)",
+      "name": "workout name e.g. Push Day A",
+      "workoutType": "full_body|upper|lower|push|pull|legs|cardio|custom",
+      "durationEstimate": "45-60 min",
+      "exercises": [
+        {
+          "name": "Exercise Name",
+          "type": "Lifting|Run|Bike|Swim|HIIT|Yoga|Stretch|Custom",
+          "sets": [{"reps": 8, "weight": 0}, {"reps": 8, "weight": 0}, {"reps": 8, "weight": 0}],
+          "restSeconds": 90,
+          "notes": "optional coaching tip or form cue"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- For cardio exercises (Run/Bike/Swim), omit "sets" and use "distance": "5 km" and "duration": "30 min" instead
+- For yoga/stretch (Yoga/Stretch), omit "sets" and use "duration": "60 min"
+- Set weight to 0 for all exercises (user fills in their own weights)
+- Only include exercises possible with the listed equipment
+- Make it ${level}-level appropriate with progressive structure
+- Include exactly ${daysPerWeek} workout days
+- Include warm-up and cool-down exercises where appropriate`;
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 4096, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!r.ok) {
+        const err = await r.json() as any;
+        return res.status(400).json({ error: "anthropic_error", message: err.error?.message ?? "API error" });
+      }
+      const data = await r.json() as any;
+      const text: string = data.content?.[0]?.text ?? "";
+      // Strip markdown code fences if present
+      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      const plan = JSON.parse(cleaned);
+      res.json(plan);
+    } catch (e) {
+      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      handleError(res, e);
+    }
   });
 
   // ── Children ──────────────────────────────────────────────────────────────────

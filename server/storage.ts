@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -33,6 +33,7 @@ import type {
   InsertQuote, Quote,
   InsertArtPiece, ArtPiece,
   InsertJournalEntry, JournalEntry,
+  InsertEquipment, Equipment,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -644,7 +645,15 @@ export async function initializeStorage() {
       tags TEXT,
       is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TEXT NOT NULL
-    )
+    );
+    CREATE TABLE IF NOT EXISTS equipment (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other',
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }
 
@@ -833,6 +842,11 @@ export interface IStorage {
   createJournalEntry(data: InsertJournalEntry, userId: number): Promise<JournalEntry>;
   updateJournalEntry(id: number, data: Partial<InsertJournalEntry>): Promise<JournalEntry | null>;
   deleteJournalEntry(id: number): Promise<boolean>;
+  // Equipment
+  getAllEquipment(userId: number): Promise<Equipment[]>;
+  createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
+  updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
+  deleteEquipment(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -1613,6 +1627,25 @@ export const storage: IStorage = {
   },
   async deleteJournalEntry(id) {
     const result = await db.delete(journalEntries).where(eq(journalEntries.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Equipment ─────────────────────────────────────────────────────────────────
+  async getAllEquipment(userId: number) {
+    return db.select().from(equipment).where(eq(equipment.userId, userId)).orderBy(asc(equipment.category), asc(equipment.name));
+  },
+  async createEquipment(data, userId) {
+    const result = await db.insert(equipment).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateEquipment(id, data) {
+    const existing = await db.select().from(equipment).where(eq(equipment.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(equipment).set(data).where(eq(equipment.id, id)).returning();
+    return result[0];
+  },
+  async deleteEquipment(id) {
+    const result = await db.delete(equipment).where(eq(equipment.id, id));
     return result.rowCount > 0;
   },
 };
