@@ -205,13 +205,32 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
         ? soilRaw.filter(Boolean).join(", ") || null
         : (soilRaw as string) || null;
 
+      const computedLight = mapSunlight(preview.sunlight);
+      const computedWater = mapWatering(preview.watering, preview.watering_general_benchmark);
+      const computedNotes = buildNotes(preview);
+
+      console.log("[Plants] preview raw:", {
+        watering: preview.watering,
+        sunlight: preview.sunlight,
+        watering_general_benchmark: preview.watering_general_benchmark,
+        soil: preview.soil,
+        description: preview.description?.slice(0, 80),
+        care_level: preview.care_level,
+      });
+      console.log("[Plants] mapped payload:", {
+        lightNeeds: computedLight,
+        waterFrequencyDays: computedWater,
+        soilType,
+        notes: computedNotes?.slice(0, 80),
+      });
+
       const payload = {
         name: preview.common_name,
         species: sciName ?? null,
-        lightNeeds: mapSunlight(preview.sunlight),
-        waterFrequencyDays: mapWatering(preview.watering, preview.watering_general_benchmark),
+        lightNeeds: computedLight,
+        waterFrequencyDays: computedWater,
         soilType,
-        notes: buildNotes(preview),
+        notes: computedNotes,
         photoUrl: preview.default_image?.medium_url
           ?? preview.default_image?.regular_url
           ?? preview.default_image?.small_url
