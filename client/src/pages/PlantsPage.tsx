@@ -135,7 +135,7 @@ type PerenualDetail = PerenualResult & {
 function PerenualSearchModal({ open, onClose, onAdd }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (payload: any) => void;
+  onAdd: (payload: any, careDataMissing: boolean) => void;
 }) {
   const { toast } = useToast();
   const [query, setQuery] = useState("");
@@ -209,20 +209,8 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
       const computedWater = mapWatering(preview.watering, preview.watering_general_benchmark);
       const computedNotes = buildNotes(preview);
 
-      console.log("[Plants] preview raw:", {
-        watering: preview.watering,
-        sunlight: preview.sunlight,
-        watering_general_benchmark: preview.watering_general_benchmark,
-        soil: preview.soil,
-        description: preview.description?.slice(0, 80),
-        care_level: preview.care_level,
-      });
-      console.log("[Plants] mapped payload:", {
-        lightNeeds: computedLight,
-        waterFrequencyDays: computedWater,
-        soilType,
-        notes: computedNotes?.slice(0, 80),
-      });
+      // Detect if Perenual returned no care data (free-tier restriction)
+      const careDataMissing = !preview.watering && !preview.sunlight && !preview.soil && !preview.description && !preview.care_level;
 
       const payload = {
         name: preview.common_name,
@@ -237,7 +225,7 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
           ?? null,
         location: null, lastWatered: null, remindersEnabled: false, sortOrder: 0,
       };
-      onAdd(payload);
+      onAdd(payload, careDataMissing);
       onClose();
     } finally { setAdding(false); }
   }
@@ -361,6 +349,11 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
                   {preview.description && (
                     <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{preview.description}</p>
                   )}
+                  {!preview.watering && !preview.sunlight && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800">
+                      <span className="font-medium">Care data unavailable</span> — Perenual's free tier doesn't include watering and light details for this plant. You'll be able to set them after adding.
+                    </div>
+                  )}
                   <Button className="w-full" size="sm" onClick={handleAdd} disabled={adding}>
                     {adding ? <Loader2 size={13} className="animate-spin mr-1.5" /> : <Plus size={13} className="mr-1.5" />}
                     Add to My Plants
@@ -389,9 +382,17 @@ export default function PlantsPage() {
 
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["/api/plants"] });
 
+  const [pendingEditAfterAdd, setPendingEditAfterAdd] = useState(false);
   const createMut = useMutation({
-    mutationFn: (d: any) => apiRequest("POST", "/api/plants", d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/plants"] }); closeModal(); },
+    mutationFn: (d: any) => apiRequest("POST", "/api/plants", d).then(r => r.json()),
+    onSuccess: (newPlant: Plant) => {
+      qc.invalidateQueries({ queryKey: ["/api/plants"] });
+      closeModal();
+      if (pendingEditAfterAdd) {
+        setPendingEditAfterAdd(false);
+        openEdit(newPlant);
+      }
+    },
     onError: () => toast({ title: "Error saving plant", variant: "destructive" }),
   });
   const updateMut = useMutation({
@@ -608,7 +609,10 @@ export default function PlantsPage() {
       <PerenualSearchModal
         open={perenualOpen}
         onClose={() => setPerenualOpen(false)}
-        onAdd={(payload) => createMut.mutate(payload)}
+        onAdd={(payload, careDataMissing) => {
+          if (careDataMissing) setPendingEditAfterAdd(true);
+          createMut.mutate(payload);
+        }}
       />
 
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
