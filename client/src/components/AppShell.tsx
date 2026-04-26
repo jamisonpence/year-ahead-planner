@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
-  Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette,
+  Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
 } from "lucide-react";
 
 const ALL_TABS = [
@@ -227,6 +227,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Settings size={15} />
             <span>{manageMode ? "Done" : "Manage tabs"}</span>
           </button>
+          <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} />
           <button onClick={toggle} className="sidebar-item w-full">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
@@ -289,6 +290,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <button onClick={() => setManageMode(!manageMode)} className={`sidebar-item w-full ${manageMode ? "active" : ""}`}>
                 <Settings size={15} /><span>{manageMode ? "Done" : "Manage tabs"}</span>
               </button>
+              <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} onClick={() => setMobileOpen(false)} />
               {user && (
                 <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground">
                   <LogOut size={14} /><span>Sign out</span>

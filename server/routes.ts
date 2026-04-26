@@ -3,6 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { storage } from "./storage";
 import { passport } from "./auth";
+import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -87,11 +88,169 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     }
   });
 
-  app.get("/api/me", (req, res) => {
-    if (req.isAuthenticated()) {
-      res.json(req.user);
-    } else {
-      res.status(401).json({ error: "Not authenticated" });
+  app.get("/api/me", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Not authenticated" });
+    const user = req.user as User;
+    const enc = await storage.getAnthropicApiKeyEnc(user.id);
+    // Never expose the raw key — only indicate whether one is saved
+    res.json({ ...user, anthropicApiKeyEnc: undefined, hasAnthropicKey: !!enc });
+  });
+
+  // ── Anthropic API Key Management ─────────────────────────────────────────────
+
+  /** GET /api/user/api-key/status — returns { hasKey, encryptionConfigured } */
+  app.get("/api/user/api-key/status", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(uid);
+      res.json({ hasKey: !!enc, encryptionConfigured: hasEncryptionKey() });
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** PUT /api/user/api-key — validates the key with Anthropic, then encrypts and saves it */
+  app.put("/api/user/api-key", requireAuth, async (req, res) => {
+    try {
+      if (!hasEncryptionKey()) return res.status(503).json({ error: "Encryption not configured on server. Set ENCRYPTION_KEY." });
+      const { apiKey } = req.body as { apiKey?: string };
+      if (!apiKey || typeof apiKey !== "string" || !apiKey.startsWith("sk-ant-")) {
+        return res.status(400).json({ error: "Invalid Anthropic API key format. Key should start with sk-ant-" });
+      }
+      // Validate the key by making a minimal test call
+      const testRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 5,
+          messages: [{ role: "user", content: "Hi" }],
+        }),
+      });
+      if (!testRes.ok) {
+        const err = await testRes.text();
+        return res.status(400).json({ error: "API key validation failed. Check the key and try again.", detail: err.slice(0, 200) });
+      }
+      const uid = (req.user as User).id;
+      await storage.saveAnthropicApiKey(uid, encrypt(apiKey));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** DELETE /api/user/api-key — removes the saved key */
+  app.delete("/api/user/api-key", requireAuth, async (req, res) => {
+    try {
+      await storage.removeAnthropicApiKey((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Plant AI Enrichment ───────────────────────────────────────────────────────
+
+  app.post("/api/plants/:id/enrich", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const plantId = +req.params.id;
+
+      // Get the user's encrypted Anthropic API key
+      const enc = await storage.getAnthropicApiKeyEnc(uid);
+      if (!enc) return res.status(402).json({ error: "No Anthropic API key saved. Add one in Settings." });
+
+      let apiKey: string;
+      try { apiKey = decrypt(enc); }
+      catch { return res.status(500).json({ error: "Failed to decrypt API key. Re-save it in Settings." }); }
+
+      // Get the plant to know its name
+      const allPlants = await storage.getAllPlants(uid);
+      const plant = allPlants.find(p => p.id === plantId);
+      if (!plant) return res.status(404).json({ error: "Plant not found" });
+
+      const plantName = plant.name;
+      const species = plant.species ?? "";
+
+      const prompt = `You are a plant care expert. For the plant "${plantName}"${species ? ` (${species})` : ""}, provide care information as JSON only — no explanation, no markdown, just raw JSON.
+
+Return exactly this structure:
+{
+  "waterFrequencyDays": <integer: recommended days between watering>,
+  "lightNeeds": <"low" | "medium" | "bright_indirect" | "direct">,
+  "soilType": <string: e.g. "Well-draining potting mix with perlite">,
+  "toxicityHumans": <"non-toxic" | "mildly toxic" | "toxic" | "unknown">,
+  "toxicityPets": <"non-toxic" | "mildly toxic" | "toxic" | "unknown">,
+  "propagationMethods": <string: e.g. "Stem cuttings in water or soil, division">,
+  "careDifficulty": <"easy" | "moderate" | "difficult">,
+  "description": <string: 2-3 sentence care overview>
+}`;
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 512,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        console.error("[Plant enrich] Claude error:", claudeRes.status, errText.slice(0, 200));
+        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 200) });
+      }
+
+      const claudeData = await claudeRes.json() as any;
+      const rawText: string = claudeData?.content?.[0]?.text ?? "";
+
+      let enriched: any;
+      try {
+        // Extract JSON from response (Claude may include extra text)
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        enriched = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+      } catch {
+        console.error("[Plant enrich] Failed to parse Claude JSON:", rawText.slice(0, 300));
+        return res.status(502).json({ error: "Could not parse Claude response as JSON" });
+      }
+
+      // Build update — only overwrite fields that are currently empty/default
+      const update: any = { aiEnriched: true };
+
+      // Only set care fields if Perenual didn't already provide them (or if they're still defaults)
+      if (!plant.notes && enriched.description) {
+        const toxLine = enriched.toxicityHumans && enriched.toxicityPets
+          ? `\n\nToxicity: ${enriched.toxicityHumans} to humans · ${enriched.toxicityPets} to pets`
+          : "";
+        update.notes = enriched.description + toxLine;
+      }
+      if (enriched.waterFrequencyDays && typeof enriched.waterFrequencyDays === "number") {
+        update.waterFrequencyDays = enriched.waterFrequencyDays;
+      }
+      if (enriched.lightNeeds && ["low","medium","bright_indirect","direct"].includes(enriched.lightNeeds)) {
+        update.lightNeeds = enriched.lightNeeds;
+      }
+      if (!plant.soilType && enriched.soilType) {
+        update.soilType = enriched.soilType;
+      }
+      // Always save the structured enrichment fields
+      if (enriched.toxicityHumans || enriched.toxicityPets) {
+        const parts = [];
+        if (enriched.toxicityHumans) parts.push(`Humans: ${enriched.toxicityHumans}`);
+        if (enriched.toxicityPets) parts.push(`Pets: ${enriched.toxicityPets}`);
+        update.toxicityNotes = parts.join(" · ");
+      }
+      if (enriched.propagationMethods) update.propagationMethods = enriched.propagationMethods;
+      if (enriched.careDifficulty) update.careDifficulty = enriched.careDifficulty;
+
+      const updated = await storage.updatePlant(plantId, update);
+      res.json(updated);
+    } catch (e) {
+      console.error("[Plant enrich] Unexpected error:", e);
+      handleError(res, e);
     }
   });
 

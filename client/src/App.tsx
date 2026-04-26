@@ -23,6 +23,7 @@ import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
 import JournalPage from "@/pages/JournalPage";
 import LoginPage from "@/pages/LoginPage";
+import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -47,6 +48,7 @@ function AuthenticatedApp() {
         <Route path="/quotes" component={QuotesPage} />
         <Route path="/art" component={ArtPage} />
         <Route path="/journal" component={JournalPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

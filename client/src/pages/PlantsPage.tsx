@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import type { Plant } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Leaf, Plus, Droplets, Sun, Pencil, Trash2, Search,
-  Bell, BellOff, Clock, CheckCircle2, AlertTriangle, Loader2,
+  Bell, BellOff, Clock, CheckCircle2, AlertTriangle, Loader2, Sparkles,
 } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -380,7 +381,37 @@ export default function PlantsPage() {
   const [editing, setEditing] = useState<Plant | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
+  const [, navigate] = useLocation();
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["/api/plants"] });
+  const { data: me } = useQuery<{ hasAnthropicKey: boolean }>({
+    queryKey: ["/api/me"],
+    queryFn: () => apiRequest("GET", "/api/me").then(r => r.json()),
+  });
+  const hasAnthropicKey = me?.hasAnthropicKey ?? false;
+
+  // Track which plant is currently being enriched
+  const [enrichingId, setEnrichingId] = useState<number | null>(null);
+  const enrichMut = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/plants/${id}/enrich`).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/plants"] });
+      toast({ title: "Plant enriched with AI ✨", description: "Care data updated from Claude." });
+      setEnrichingId(null);
+    },
+    onError: async (err: any) => {
+      const msg = err?.message ?? "Enrichment failed";
+      toast({ title: "Enrichment failed", description: msg, variant: "destructive" });
+      setEnrichingId(null);
+    },
+  });
+  function handleEnrich(plant: Plant) {
+    if (!hasAnthropicKey) {
+      navigate("/settings");
+      return;
+    }
+    setEnrichingId(plant.id);
+    enrichMut.mutate(plant.id);
+  }
 
   const [pendingEditAfterAdd, setPendingEditAfterAdd] = useState(false);
   const createMut = useMutation({
@@ -596,9 +627,46 @@ export default function PlantsPage() {
                       <Droplets size={12} /> Water now
                     </button>
                   </div>
+
+                  {/* AI-enriched fields */}
+                  {(plant as any).toxicityNotes && (
+                    <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 border-t border-amber-100">
+                      ⚠️ {(plant as any).toxicityNotes}
+                    </p>
+                  )}
+                  {(plant as any).propagationMethods && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Propagation:</span> {(plant as any).propagationMethods}
+                    </p>
+                  )}
+                  {(plant as any).careDifficulty && (
+                    <span className={`self-start text-xs px-2 py-0.5 rounded-full font-medium ${
+                      (plant as any).careDifficulty === "easy" ? "bg-green-100 text-green-700" :
+                      (plant as any).careDifficulty === "moderate" ? "bg-yellow-100 text-yellow-700" :
+                      "bg-red-100 text-red-700"
+                    }`}>
+                      {(plant as any).careDifficulty === "easy" ? "Easy care" :
+                       (plant as any).careDifficulty === "moderate" ? "Moderate care" : "Difficult care"}
+                    </span>
+                  )}
                   {plant.notes && (
                     <p className="text-xs text-muted-foreground border-t pt-2 line-clamp-2">{plant.notes}</p>
                   )}
+                  {/* Enrich with AI button */}
+                  <button
+                    onClick={() => handleEnrich(plant)}
+                    disabled={enrichingId === plant.id}
+                    className={`flex items-center justify-center gap-1.5 w-full text-xs px-2.5 py-1.5 rounded-lg border transition-colors font-medium mt-1 ${
+                      (plant as any).aiEnriched
+                        ? "border-violet-200 text-violet-600 bg-violet-50 hover:bg-violet-100"
+                        : "border-dashed border-muted-foreground/30 text-muted-foreground hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50"
+                    }`}
+                  >
+                    {enrichingId === plant.id
+                      ? <><Loader2 size={11} className="animate-spin" /> Enriching…</>
+                      : <><Sparkles size={11} /> {(plant as any).aiEnriched ? "Re-enrich with AI" : hasAnthropicKey ? "Enrich with AI" : "Enrich with AI (add key in Settings)"}</>
+                    }
+                  </button>
                 </div>
               </div>
             );
