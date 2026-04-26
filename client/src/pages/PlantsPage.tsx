@@ -68,33 +68,65 @@ function wateringStatus(plant: Plant): { label: string; daysUntil: number | null
 
 // ── Perenual helpers ─────────────────────────────────────────────────────────
 
-function mapWatering(w: string): number {
+// Perenual returns sunlight as either an array OR a comma-separated string
+function normalizeSunlight(raw: string | string[] | undefined): string[] {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.flatMap(s => s.split(",").map(p => p.trim().toLowerCase())).filter(Boolean);
+}
+
+function mapWatering(w: string, benchmark?: { value?: string; unit?: string } | null): number {
+  // Use the benchmark range if available (e.g. "7-10" days → average)
+  if (benchmark?.value && benchmark?.unit?.toLowerCase().includes("day")) {
+    const parts = benchmark.value.split("-").map(Number).filter(n => !isNaN(n) && n > 0);
+    if (parts.length) return Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
+  }
   const map: Record<string, number> = { frequent: 3, average: 7, minimum: 14, none: 30 };
   return map[w?.toLowerCase()] ?? 7;
 }
 
-function mapSunlight(arr: string[]): string {
-  const s = (arr?.[0] ?? "").toLowerCase();
-  if (s.includes("full sun")) return "direct";
-  if (s.includes("part sun") || s.includes("part shade")) return "bright_indirect";
-  if (s.includes("shade") || s.includes("filtered")) return "low";
+function mapSunlight(raw: string | string[] | undefined): string {
+  const parts = normalizeSunlight(raw);
+  if (parts.some(s => s === "full sun")) return "direct";
+  if (parts.some(s => s.includes("part sun") || s === "part shade" || s.includes("part sun/part shade"))) return "bright_indirect";
+  if (parts.some(s => s.includes("shade") || s.includes("filtered"))) return "low";
   return "medium";
+}
+
+function buildNotes(p: PerenualDetail): string | null {
+  const lines: string[] = [];
+  if (p.description) lines.push(p.description.slice(0, 500));
+  const meta: string[] = [];
+  if (p.cycle)          meta.push(`Cycle: ${p.cycle}`);
+  if (p.care_level)     meta.push(`Care level: ${p.care_level}`);
+  if (p.maintenance)    meta.push(`Maintenance: ${p.maintenance}`);
+  if (p.growth_rate)    meta.push(`Growth rate: ${p.growth_rate}`);
+  if (p.poisonous_to_pets === true || String(p.poisonous_to_pets).toLowerCase() === "yes")
+    meta.push("⚠️ Poisonous to pets");
+  if (p.indoor === true || String(p.indoor).toLowerCase() === "yes") meta.push("Suitable indoors");
+  if (meta.length) lines.push(meta.join(" · "));
+  return lines.join("\n\n") || null;
 }
 
 type PerenualResult = {
   id: number;
   common_name: string;
-  scientific_name: string[];
+  scientific_name: string[] | string;
   watering: string;
-  sunlight: string[];
+  sunlight: string[] | string;
   cycle: string;
-  default_image?: { medium_url?: string; small_url?: string; thumbnail?: string };
+  default_image?: { medium_url?: string; regular_url?: string; small_url?: string; thumbnail?: string };
 };
 
 type PerenualDetail = PerenualResult & {
   description?: string;
-  soil?: string[];
+  soil?: string[] | string;
   care_level?: string;
+  maintenance?: string;
+  growth_rate?: string;
+  poisonous_to_pets?: boolean | string | null;
+  indoor?: boolean | string | null;
+  watering_general_benchmark?: { value?: string; unit?: string } | null;
 };
 
 function PerenualSearchModal({ open, onClose, onAdd }: {
@@ -136,14 +168,28 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
     if (!preview) return;
     setAdding(true);
     try {
+      // scientific_name can be array or string
+      const sciName = Array.isArray(preview.scientific_name)
+        ? preview.scientific_name[0]
+        : preview.scientific_name ?? null;
+
+      // soil can be array or string
+      const soilRaw = preview.soil;
+      const soilType = Array.isArray(soilRaw)
+        ? soilRaw.filter(Boolean).join(", ") || null
+        : (soilRaw as string) || null;
+
       const payload = {
         name: preview.common_name,
-        species: preview.scientific_name?.[0] ?? null,
-        lightNeeds: mapSunlight(preview.sunlight ?? []),
-        waterFrequencyDays: mapWatering(preview.watering),
-        soilType: preview.soil?.join(", ") || null,
-        notes: preview.description ? preview.description.slice(0, 500) : null,
-        photoUrl: preview.default_image?.medium_url ?? preview.default_image?.small_url ?? null,
+        species: sciName ?? null,
+        lightNeeds: mapSunlight(preview.sunlight),
+        waterFrequencyDays: mapWatering(preview.watering, preview.watering_general_benchmark),
+        soilType,
+        notes: buildNotes(preview),
+        photoUrl: preview.default_image?.medium_url
+          ?? preview.default_image?.regular_url
+          ?? preview.default_image?.small_url
+          ?? null,
         location: null, lastWatered: null, remindersEnabled: false, sortOrder: 0,
       };
       onAdd(payload);
@@ -223,11 +269,13 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
                     <div className="bg-muted/50 rounded-lg p-2.5">
                       <p className="font-medium text-muted-foreground mb-0.5">Watering</p>
                       <p className="font-semibold">{preview.watering ?? "—"}</p>
-                      <p className="text-muted-foreground">every ~{mapWatering(preview.watering)} days</p>
+                      <p className="text-muted-foreground">every ~{mapWatering(preview.watering, preview.watering_general_benchmark)} days</p>
                     </div>
                     <div className="bg-muted/50 rounded-lg p-2.5">
                       <p className="font-medium text-muted-foreground mb-0.5">Sunlight</p>
-                      <p className="font-semibold capitalize">{preview.sunlight?.[0] ?? "—"}</p>
+                      <p className="font-semibold capitalize">
+                        {normalizeSunlight(preview.sunlight).join(", ") || "—"}
+                      </p>
                     </div>
                     {preview.cycle && (
                       <div className="bg-muted/50 rounded-lg p-2.5">
@@ -241,10 +289,27 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
                         <p className="font-semibold">{preview.care_level}</p>
                       </div>
                     )}
-                    {preview.soil && preview.soil.length > 0 && (
+                    {preview.maintenance && (
+                      <div className="bg-muted/50 rounded-lg p-2.5">
+                        <p className="font-medium text-muted-foreground mb-0.5">Maintenance</p>
+                        <p className="font-semibold">{preview.maintenance}</p>
+                      </div>
+                    )}
+                    {preview.growth_rate && (
+                      <div className="bg-muted/50 rounded-lg p-2.5">
+                        <p className="font-medium text-muted-foreground mb-0.5">Growth Rate</p>
+                        <p className="font-semibold">{preview.growth_rate}</p>
+                      </div>
+                    )}
+                    {preview.soil && (Array.isArray(preview.soil) ? preview.soil.length > 0 : !!preview.soil) && (
                       <div className="bg-muted/50 rounded-lg p-2.5 col-span-2">
                         <p className="font-medium text-muted-foreground mb-0.5">Soil</p>
-                        <p className="font-semibold">{preview.soil.join(", ")}</p>
+                        <p className="font-semibold">{Array.isArray(preview.soil) ? preview.soil.join(", ") : preview.soil as string}</p>
+                      </div>
+                    )}
+                    {(preview.poisonous_to_pets === true || String(preview.poisonous_to_pets).toLowerCase() === "yes") && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 col-span-2">
+                        <p className="font-semibold text-red-700">⚠️ Poisonous to pets</p>
                       </div>
                     )}
                   </div>
