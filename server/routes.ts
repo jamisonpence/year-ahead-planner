@@ -1099,6 +1099,91 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Museum search proxies ─────────────────────────────────────────────────────
+
+  // The Metropolitan Museum of Art
+  app.get("/api/museum/met/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      if (!q) return res.status(400).json({ error: "q is required" });
+
+      // Step 1: search for object IDs
+      const searchUrl = new URL("https://collectionapi.metmuseum.org/public/collection/v1/search");
+      searchUrl.searchParams.set("q", q);
+      searchUrl.searchParams.set("hasImages", "true");
+      const searchRes = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json" } });
+      if (!searchRes.ok) return res.status(searchRes.status).json({ error: "Met API error" });
+      const searchData = await searchRes.json() as { total: number; objectIDs: number[] | null };
+      if (!searchData.objectIDs || searchData.objectIDs.length === 0) return res.json([]);
+
+      // Step 2: fetch details for first 10 IDs in parallel, keep those with images
+      const ids = searchData.objectIDs.slice(0, 10);
+      const details = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const r = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`);
+            if (!r.ok) return null;
+            return await r.json();
+          } catch { return null; }
+        })
+      );
+      const results = details
+        .filter((d) => d && d.primaryImageSmall)
+        .slice(0, 8)
+        .map((d: any) => ({
+          id: String(d.objectID),
+          title: d.title || "Untitled",
+          artistName: d.artistDisplayName || null,
+          yearCreated: d.objectDate ? d.objectDate.replace(/[^0-9\-–]/g, "").trim() || d.objectDate : null,
+          medium: d.medium || null,
+          movement: d.department || null,
+          imageUrl: d.primaryImageSmall || null,
+          sourceUrl: d.objectURL || null,
+          museum: "The Metropolitan Museum of Art",
+          city: "New York",
+          culture: d.culture || null,
+          classification: d.classification || null,
+        }));
+      res.json(results);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Art Institute of Chicago
+  app.get("/api/museum/aic/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      if (!q) return res.status(400).json({ error: "q is required" });
+
+      const searchUrl = new URL("https://api.artic.edu/api/v1/artworks/search");
+      searchUrl.searchParams.set("q", q);
+      searchUrl.searchParams.set("limit", "10");
+      searchUrl.searchParams.set("fields", "id,title,artist_display,date_display,medium_display,style_title,department_title,image_id,artwork_type_title,place_of_origin");
+      const searchRes = await fetch(searchUrl.toString(), {
+        headers: { "Accept": "application/json", "AIC-User-Agent": "YearAheadPlanner/1.0 (personal life planner app)" }
+      });
+      if (!searchRes.ok) return res.status(searchRes.status).json({ error: "AIC API error" });
+      const searchData = await searchRes.json() as { data: any[] };
+      const results = (searchData.data || [])
+        .filter((d: any) => d.image_id)
+        .slice(0, 8)
+        .map((d: any) => ({
+          id: String(d.id),
+          title: d.title || "Untitled",
+          artistName: d.artist_display ? d.artist_display.split("\n")[0] : null,
+          yearCreated: d.date_display || null,
+          medium: d.medium_display || null,
+          movement: d.style_title || d.department_title || null,
+          imageUrl: d.image_id ? `https://www.artic.edu/iiif/2/${d.image_id}/full/400,/0/default.jpg` : null,
+          sourceUrl: `https://www.artic.edu/artworks/${d.id}`,
+          museum: "Art Institute of Chicago",
+          city: "Chicago",
+          artworkType: d.artwork_type_title || null,
+          placeOfOrigin: d.place_of_origin || null,
+        }));
+      res.json(results);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
