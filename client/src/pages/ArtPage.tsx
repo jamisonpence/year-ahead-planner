@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ArtPiece } from "@shared/schema";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Palette, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle,
+  Palette, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle, Landmark, Loader2, ExternalLink,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -66,6 +66,237 @@ const EMPTY_FORM = {
   accentColor: ACCENT_COLORS[0],
   imageUrl: "",
 };
+
+// ── Museum Search ─────────────────────────────────────────────────────────────
+
+type MuseumResult = {
+  id: string;
+  title: string;
+  artistName: string | null;
+  yearCreated: string | null;
+  medium: string | null;
+  movement: string | null;
+  imageUrl: string | null;
+  sourceUrl: string | null;
+  museum: string;
+  city: string;
+};
+
+function inferMedium(raw: string | null): string {
+  if (!raw) return "other";
+  const t = raw.toLowerCase();
+  if (/oil|acrylic|tempera|gouache|watercolor|fresco|encaustic/.test(t)) return "painting";
+  if (/pencil|chalk|charcoal|ink|pastel|crayon|graphite/.test(t)) return "drawing";
+  if (/print|etching|lithograph|woodcut|engraving|silkscreen|screen/.test(t)) return "print";
+  if (/photograph|gelatin|daguerreotype|silver print/.test(t)) return "photography";
+  if (/marble|bronze|terracotta|ceramic|plaster|wood carv|stone|cast/.test(t)) return "sculpture";
+  if (/cotton|silk|wool|linen|tapestry|embroid|textile|fabric|weav/.test(t)) return "textile";
+  if (/digital/.test(t)) return "digital";
+  return "other";
+}
+
+function MuseumSearchModal({
+  open,
+  onClose,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (prefill: Partial<typeof EMPTY_FORM>) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"met" | "aic">("met");
+  const [query, setQuery] = useState("");
+  const [draftQuery, setDraftQuery] = useState("");
+  const [results, setResults] = useState<MuseumResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<MuseumResult | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery(""); setDraftQuery(""); setResults([]); setSelected(null);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [open, activeTab]);
+
+  async function doSearch() {
+    const q = draftQuery.trim();
+    if (!q) return;
+    setQuery(q); setLoading(true); setResults([]); setSelected(null);
+    try {
+      const endpoint = activeTab === "met" ? "/api/museum/met/search" : "/api/museum/aic/search";
+      const res = await apiRequest("GET", `${endpoint}?q=${encodeURIComponent(q)}`);
+      const data: MuseumResult[] = await res.json();
+      setResults(data);
+      if (data.length > 0) setSelected(data[0]);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }
+
+  function handleAdd(r: MuseumResult) {
+    const yearStr = r.yearCreated
+      ? String(r.yearCreated).replace(/[^0-9]/g, "").slice(0, 4)
+      : "";
+    onSelect({
+      title: r.title,
+      artistName: r.artistName ?? "",
+      yearCreated: yearStr,
+      medium: inferMedium(r.medium),
+      movement: r.movement ?? "",
+      whereViewed: r.museum,
+      city: r.city,
+      imageUrl: r.imageUrl ?? "",
+      status: "want_to_see",
+    });
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Landmark size={16} /> Search Museum Collections
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mx-5 mt-3 shrink-0">
+          {([["met", "The Met"], ["aic", "Art Institute of Chicago"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setResults([]); setSelected(null); setDraftQuery(""); setQuery(""); }}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                activeTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search bar */}
+        <div className="flex gap-2 px-5 py-3 shrink-0">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={inputRef}
+              value={draftQuery}
+              onChange={(e) => setDraftQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
+              placeholder={activeTab === "met" ? "Search The Met collection…" : "Search Art Institute of Chicago…"}
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+          <Button size="sm" onClick={doSearch} disabled={loading || !draftQuery.trim()}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : "Search"}
+          </Button>
+        </div>
+
+        {/* Results + preview */}
+        <div className="flex flex-1 min-h-0 border-t">
+          {/* Results list */}
+          <div className="w-56 shrink-0 border-r overflow-y-auto">
+            {loading && (
+              <div className="flex items-center justify-center h-24 text-muted-foreground">
+                <Loader2 size={18} className="animate-spin" />
+              </div>
+            )}
+            {!loading && query && results.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-8 px-3">No results with images found for "{query}"</p>
+            )}
+            {!loading && results.length === 0 && !query && (
+              <p className="text-xs text-muted-foreground text-center py-8 px-3">Search to find artworks</p>
+            )}
+            {results.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setSelected(r)}
+                className={`w-full text-left p-3 border-b transition-colors flex gap-2 ${
+                  selected?.id === r.id ? "bg-secondary" : "hover:bg-secondary/50"
+                }`}
+              >
+                {r.imageUrl && (
+                  <img src={r.imageUrl} alt={r.title} className="w-10 h-10 object-cover rounded shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium line-clamp-2 leading-snug">{r.title}</p>
+                  {r.artistName && (
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{r.artistName}</p>
+                  )}
+                  {r.yearCreated && (
+                    <p className="text-xs text-muted-foreground">{r.yearCreated}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Preview panel */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {selected ? (
+              <div className="space-y-4">
+                {selected.imageUrl && (
+                  <img
+                    src={selected.imageUrl}
+                    alt={selected.title}
+                    className="w-full max-h-64 object-contain rounded-lg bg-muted"
+                  />
+                )}
+                <div>
+                  <h3 className="font-semibold text-sm leading-snug">{selected.title}</h3>
+                  {selected.artistName && (
+                    <p className="text-sm text-muted-foreground mt-0.5">{selected.artistName}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {selected.yearCreated && (
+                    <div>
+                      <span className="text-muted-foreground font-medium">Date</span>
+                      <p>{selected.yearCreated}</p>
+                    </div>
+                  )}
+                  {selected.medium && (
+                    <div>
+                      <span className="text-muted-foreground font-medium">Medium</span>
+                      <p className="line-clamp-2">{selected.medium}</p>
+                    </div>
+                  )}
+                  {selected.movement && (
+                    <div>
+                      <span className="text-muted-foreground font-medium">Style / Dept.</span>
+                      <p>{selected.movement}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground font-medium">Museum</span>
+                    <p>{selected.museum}</p>
+                  </div>
+                </div>
+                {selected.sourceUrl && (
+                  <a
+                    href={selected.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink size={11} /> View on museum website
+                  </a>
+                )}
+                <Button size="sm" className="w-full" onClick={() => handleAdd(selected)}>
+                  Add to My Art
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Select a result to preview
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── Art Card ──────────────────────────────────────────────────────────────────
 
@@ -150,6 +381,7 @@ export default function ArtPage() {
   const [editing, setEditing] = useState<ArtPiece | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const [museumOpen, setMuseumOpen] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allPieces = [] } = useQuery<ArtPiece[]>({
@@ -348,7 +580,10 @@ export default function ArtPage() {
             {allPieces.length} artwork{allPieces.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={() => setMuseumOpen(true)} className="gap-1.5">
+            <Landmark size={13} /> Search Museums
+          </Button>
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
           </Button>
@@ -562,6 +797,17 @@ export default function ArtPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Museum Search */}
+      <MuseumSearchModal
+        open={museumOpen}
+        onClose={() => setMuseumOpen(false)}
+        onSelect={(prefill) => {
+          setEditing(null);
+          setForm({ ...EMPTY_FORM, accentColor: ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)], ...prefill });
+          setModalOpen(true);
+        }}
+      />
 
       {/* CSV Format Info */}
       <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
