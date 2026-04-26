@@ -515,6 +515,15 @@ export async function initializeStorage() {
   // Photo URL for plants (from Perenual API)
   await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS photo_url TEXT`);
 
+  // AI enrichment fields for plants
+  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS toxicity_notes TEXT`);
+  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS propagation_methods TEXT`);
+  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS care_difficulty TEXT`);
+  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS ai_enriched BOOLEAN NOT NULL DEFAULT false`);
+
+  // Encrypted Anthropic API key on users
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS children (
       id SERIAL PRIMARY KEY,
@@ -1309,6 +1318,16 @@ export const storage: IStorage = {
   async getUserById(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
+  },
+  async saveAnthropicApiKey(userId: number, encryptedKey: string) {
+    await db.update(users).set({ anthropicApiKeyEnc: encryptedKey }).where(eq(users.id, userId));
+  },
+  async getAnthropicApiKeyEnc(userId: number): Promise<string | null> {
+    const result = await db.select({ enc: users.anthropicApiKeyEnc }).from(users).where(eq(users.id, userId)).limit(1);
+    return result[0]?.enc ?? null;
+  },
+  async removeAnthropicApiKey(userId: number) {
+    await db.update(users).set({ anthropicApiKeyEnc: null }).where(eq(users.id, userId));
   },
 
   // ── Plants ───────────────────────────────────────────────────────────────────

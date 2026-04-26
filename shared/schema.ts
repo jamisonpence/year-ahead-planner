@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   avatarUrl: text("avatar_url"),
   createdAt: text("created_at").notNull(),
+  anthropicApiKeyEnc: text("anthropic_api_key_enc"), // AES-256-GCM encrypted, never returned to client
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -427,6 +428,11 @@ export const plants = pgTable("plants", {
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   photoUrl: text("photo_url"),
+  // AI-enriched fields (populated by Claude)
+  toxicityNotes: text("toxicity_notes"),
+  propagationMethods: text("propagation_methods"),
+  careDifficulty: text("care_difficulty"), // "easy" | "moderate" | "difficult"
+  aiEnriched: boolean("ai_enriched").notNull().default(false),
 });
 
 // ── CHORES ────────────────────────────────────────────────────────────────────
