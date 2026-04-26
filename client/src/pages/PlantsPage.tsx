@@ -164,12 +164,20 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
       const r = await apiRequest("GET", `/api/perenual/plant/${plant.id}`);
       const detail = await r.json();
       // Perenual free tier returns "Upgrade Plan to Access" strings for restricted fields
-      const clean = (v: any) => (typeof v === "string" && v.toLowerCase().includes("upgrade")) ? null : v;
+      const isUpgrade = (v: any) => typeof v === "string" && v.toLowerCase().includes("upgrade");
+      const clean = (v: any) => isUpgrade(v) ? null : v;
+      const cleanArr = (v: any) => Array.isArray(v) ? v.filter((s: string) => !isUpgrade(s)) : clean(v);
       setPreview({
         ...plant,         // search result as base (has watering, sunlight, default_image)
         ...detail,        // detail overrides with full data
+        // Never let null/restricted detail values overwrite good search-result values
+        watering: (detail.watering && !isUpgrade(detail.watering)) ? detail.watering : plant.watering,
+        sunlight: (detail.sunlight && (Array.isArray(detail.sunlight) ? detail.sunlight.length > 0 : true) && !isUpgrade(detail.sunlight))
+          ? detail.sunlight : plant.sunlight,
+        default_image: detail.default_image || plant.default_image,
+        // Clean restricted text fields
         description: clean(detail.description),
-        soil: Array.isArray(detail.soil) ? detail.soil.filter((s: string) => !s.toLowerCase().includes("upgrade")) : clean(detail.soil),
+        soil: cleanArr(detail.soil),
         maintenance: clean(detail.maintenance),
         care_level: clean(detail.care_level),
         growth_rate: clean(detail.growth_rate),
