@@ -101,9 +101,12 @@ function buildNotes(p: PerenualDetail): string | null {
   if (p.care_level)     meta.push(`Care level: ${p.care_level}`);
   if (p.maintenance)    meta.push(`Maintenance: ${p.maintenance}`);
   if (p.growth_rate)    meta.push(`Growth rate: ${p.growth_rate}`);
-  if (p.poisonous_to_pets === true || String(p.poisonous_to_pets).toLowerCase() === "yes")
+  // poisonous_to_pets can be boolean, 0/1 integer, or "Yes"/"No" string
+  const toxic = p.poisonous_to_pets;
+  if (toxic === true || toxic === 1 || String(toxic).toLowerCase() === "yes")
     meta.push("⚠️ Poisonous to pets");
-  if (p.indoor === true || String(p.indoor).toLowerCase() === "yes") meta.push("Suitable indoors");
+  const indoors = p.indoor;
+  if (indoors === true || indoors === 1 || String(indoors).toLowerCase() === "yes") meta.push("Suitable indoors");
   if (meta.length) lines.push(meta.join(" · "));
   return lines.join("\n\n") || null;
 }
@@ -159,8 +162,23 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
     setPreviewLoading(true); setPreview(null);
     try {
       const r = await apiRequest("GET", `/api/perenual/plant/${plant.id}`);
-      setPreview(await r.json());
-    } catch { setPreview(plant as PerenualDetail); }
+      const detail = await r.json();
+      // Perenual free tier returns "Upgrade Plan to Access" strings for restricted fields
+      const clean = (v: any) => (typeof v === "string" && v.toLowerCase().includes("upgrade")) ? null : v;
+      setPreview({
+        ...plant,         // search result as base (has watering, sunlight, default_image)
+        ...detail,        // detail overrides with full data
+        description: clean(detail.description),
+        soil: Array.isArray(detail.soil) ? detail.soil.filter((s: string) => !s.toLowerCase().includes("upgrade")) : clean(detail.soil),
+        maintenance: clean(detail.maintenance),
+        care_level: clean(detail.care_level),
+        growth_rate: clean(detail.growth_rate),
+      } as PerenualDetail);
+    } catch (e: any) {
+      // Detail call failed — use search result and warn
+      toast({ title: "Using basic plant info", description: "Full care details unavailable. You can edit them after adding.", variant: "default" });
+      setPreview(plant as PerenualDetail);
+    }
     finally { setPreviewLoading(false); }
   }
 
@@ -307,7 +325,7 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
                         <p className="font-semibold">{Array.isArray(preview.soil) ? preview.soil.join(", ") : preview.soil as string}</p>
                       </div>
                     )}
-                    {(preview.poisonous_to_pets === true || String(preview.poisonous_to_pets).toLowerCase() === "yes") && (
+                    {(preview.poisonous_to_pets === true || preview.poisonous_to_pets === 1 || String(preview.poisonous_to_pets).toLowerCase() === "yes") && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 col-span-2">
                         <p className="font-semibold text-red-700">⚠️ Poisonous to pets</p>
                       </div>

@@ -1110,8 +1110,15 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       if (!apiKey) return res.status(500).json({ error: "PERENUAL_API_KEY not configured" });
       const url = `https://perenual.com/api/species/details/${req.params.id}?key=${apiKey}`;
       const r = await fetch(url);
-      if (!r.ok) return res.status(r.status).json({ error: "Perenual error" });
-      res.json(await r.json());
+      if (!r.ok) {
+        const errText = await r.text();
+        console.error(`[Perenual detail] ${r.status}:`, errText.slice(0, 200));
+        return res.status(r.status).json({ error: "Perenual error", detail: errText.slice(0, 200) });
+      }
+      const data = await r.json();
+      // Log key fields to help debug mapping
+      console.log(`[Perenual detail id=${req.params.id}] watering=${data.watering}, sunlight=${JSON.stringify(data.sunlight)}, soil=${JSON.stringify(data.soil)}, care_level=${data.care_level}, maintenance=${data.maintenance}`);
+      res.json(data);
     } catch (e) { handleError(res, e); }
   });
 
