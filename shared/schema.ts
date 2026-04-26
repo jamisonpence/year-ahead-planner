@@ -729,6 +729,20 @@ export const insertArtPieceSchema = createInsertSchema(artPieces).omit({ id: tru
 export type InsertArtPiece = z.infer<typeof insertArtPieceSchema>;
 export type ArtPiece = typeof artPieces.$inferSelect;
 
+// ── EQUIPMENT ────────────────────────────────────────────────────────────────────
+// category: "barbell" | "dumbbell" | "kettlebell" | "resistance_band" | "cable" | "machine" | "pullup_bar" | "bench" | "cardio" | "bodyweight" | "other"
+export const equipment = pgTable("equipment", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("other"),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+export const insertEquipmentSchema = createInsertSchema(equipment).omit({ id: true });
+export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
+export type Equipment = typeof equipment.$inferSelect;
+
 // ── JOURNAL ────────────────────────────────────────────────────────────────────
 
 export const journalEntries = pgTable("journal_entries", {
