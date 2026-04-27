@@ -70,17 +70,38 @@ const EMPTY_FORM = {
 // ── Museum Search ─────────────────────────────────────────────────────────────
 
 type MuseumResult = {
-  id: string;
-  title: string;
-  artistName: string | null;
-  yearCreated: string | null;
-  medium: string | null;
-  movement: string | null;
-  imageUrl: string | null;
-  sourceUrl: string | null;
-  museum: string;
-  city: string;
+  id: string; title: string; artistName: string | null; yearCreated: string | null;
+  medium: string | null; movement: string | null; imageUrl: string | null;
+  sourceUrl: string | null; museum: string; city: string;
 };
+
+type BrowseCategory = { id?: number; type?: string; label: string; emoji: string };
+
+const MET_DEPARTMENTS: BrowseCategory[] = [
+  { id: 11, label: "European Paintings",        emoji: "🖼️" },
+  { id: 21, label: "Modern Art",                emoji: "🎨" },
+  { id: 19, label: "Photographs",               emoji: "📷" },
+  { id: 9,  label: "Drawings & Prints",         emoji: "✏️" },
+  { id: 6,  label: "Asian Art",                 emoji: "🏮" },
+  { id: 10, label: "Egyptian Art",              emoji: "🏺" },
+  { id: 13, label: "Greek & Roman Art",         emoji: "⚱️" },
+  { id: 17, label: "Medieval Art",              emoji: "⚔️" },
+  { id: 14, label: "Islamic Art",               emoji: "☪️" },
+  { id: 5,  label: "African, Oceanic & Americas", emoji: "🌍" },
+  { id: 4,  label: "Arms & Armor",              emoji: "🛡️" },
+  { id: 1,  label: "American Decorative Arts",  emoji: "🏛️" },
+];
+
+const AIC_TYPES: BrowseCategory[] = [
+  { type: "Painting",               label: "Paintings",            emoji: "🖼️" },
+  { type: "Drawing and Watercolor", label: "Drawings & Watercolors", emoji: "✏️" },
+  { type: "Print",                  label: "Prints",               emoji: "🖨️" },
+  { type: "Photograph",             label: "Photography",          emoji: "📷" },
+  { type: "Sculpture",              label: "Sculpture",            emoji: "🗿" },
+  { type: "Decorative Arts",        label: "Decorative Arts",      emoji: "🏺" },
+  { type: "Textile",                label: "Textiles",             emoji: "🧶" },
+  { type: "Architecture",           label: "Architecture",         emoji: "🏛️" },
+];
 
 function inferMedium(raw: string | null): string {
   if (!raw) return "other";
@@ -105,193 +126,213 @@ function MuseumSearchModal({
   onSelect: (prefill: Partial<typeof EMPTY_FORM>) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"met" | "aic">("met");
-  const [query, setQuery] = useState("");
   const [draftQuery, setDraftQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState<BrowseCategory | null>(null);
   const [results, setResults] = useState<MuseumResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<MuseumResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const browsing = !loading && results.length === 0 && !activeCategory;
+
   useEffect(() => {
     if (open) {
-      setQuery(""); setDraftQuery(""); setResults([]); setSelected(null);
+      setDraftQuery(""); setResults([]); setSelected(null); setActiveCategory(null);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [open, activeTab]);
+  }, [open]);
 
-  async function doSearch() {
-    const q = draftQuery.trim();
-    if (!q) return;
-    setQuery(q); setLoading(true); setResults([]); setSelected(null);
+  // Reset category + results when switching tabs
+  function switchTab(tab: "met" | "aic") {
+    setActiveTab(tab);
+    setResults([]); setSelected(null); setActiveCategory(null); setDraftQuery("");
+  }
+
+  async function doSearch(q = draftQuery, cat = activeCategory) {
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    if (cat?.id) params.set("departmentId", String(cat.id));
+    if (cat?.type) params.set("artworkType", cat.type);
+    if (!params.toString()) return;
+    setLoading(true); setResults([]); setSelected(null);
     try {
       const endpoint = activeTab === "met" ? "/api/museum/met/search" : "/api/museum/aic/search";
-      const res = await apiRequest("GET", `${endpoint}?q=${encodeURIComponent(q)}`);
+      const res = await apiRequest("GET", `${endpoint}?${params.toString()}`);
       const data: MuseumResult[] = await res.json();
       setResults(data);
       if (data.length > 0) setSelected(data[0]);
     } catch { /* ignore */ } finally { setLoading(false); }
   }
 
+  function handleBrowseCategory(cat: BrowseCategory) {
+    setActiveCategory(cat);
+    doSearch("", cat);
+  }
+
+  function clearAll() {
+    setActiveCategory(null); setDraftQuery(""); setResults([]); setSelected(null);
+  }
+
   function handleAdd(r: MuseumResult) {
-    const yearStr = r.yearCreated
-      ? String(r.yearCreated).replace(/[^0-9]/g, "").slice(0, 4)
-      : "";
+    const yearStr = r.yearCreated ? String(r.yearCreated).replace(/[^0-9]/g, "").slice(0, 4) : "";
     onSelect({
-      title: r.title,
-      artistName: r.artistName ?? "",
-      yearCreated: yearStr,
-      medium: inferMedium(r.medium),
-      movement: r.movement ?? "",
-      whereViewed: r.museum,
-      city: r.city,
-      imageUrl: r.imageUrl ?? "",
-      status: "want_to_see",
+      title: r.title, artistName: r.artistName ?? "",
+      yearCreated: yearStr, medium: inferMedium(r.medium),
+      movement: r.movement ?? "", whereViewed: r.museum,
+      city: r.city, imageUrl: r.imageUrl ?? "", status: "want_to_see",
     });
     onClose();
   }
 
+  const categories = activeTab === "met" ? MET_DEPARTMENTS : AIC_TYPES;
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <Landmark size={16} /> Search Museum Collections
+            <Landmark size={16} /> Browse Museum Collections
           </DialogTitle>
         </DialogHeader>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mx-5 mt-3 shrink-0">
+        {/* Museum tabs */}
+        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mx-5 mt-3 mb-1 shrink-0">
           {([["met", "The Met"], ["aic", "Art Institute of Chicago"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => { setActiveTab(key); setResults([]); setSelected(null); setDraftQuery(""); setQuery(""); }}
+            <button key={key} onClick={() => switchTab(key)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                 activeTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+              }`}>
               {label}
             </button>
           ))}
         </div>
 
         {/* Search bar */}
-        <div className="flex gap-2 px-5 py-3 shrink-0">
+        <div className="flex gap-2 px-5 py-2.5 shrink-0">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={inputRef}
-              value={draftQuery}
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input ref={inputRef} value={draftQuery}
               onChange={(e) => setDraftQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { setActiveCategory(null); doSearch(draftQuery, null); } }}
               placeholder={activeTab === "met" ? "Search The Met collection…" : "Search Art Institute of Chicago…"}
-              className="pl-8 h-9 text-sm"
+              className="pl-8 h-8 text-sm"
             />
           </div>
-          <Button size="sm" onClick={doSearch} disabled={loading || !draftQuery.trim()}>
-            {loading ? <Loader2 size={14} className="animate-spin" /> : "Search"}
+          <Button size="sm" className="h-8" onClick={() => { setActiveCategory(null); doSearch(draftQuery, null); }}
+            disabled={loading || !draftQuery.trim()}>
+            {loading ? <Loader2 size={13} className="animate-spin" /> : "Search"}
           </Button>
+          {(activeCategory || draftQuery || results.length > 0) && (
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={clearAll}>
+              <X size={13} />
+            </Button>
+          )}
         </div>
 
-        {/* Results + preview */}
-        <div className="flex flex-1 min-h-0 border-t">
-          {/* Results list */}
-          <div className="w-56 shrink-0 border-r overflow-y-auto">
-            {loading && (
-              <div className="flex items-center justify-center h-24 text-muted-foreground">
-                <Loader2 size={18} className="animate-spin" />
-              </div>
-            )}
-            {!loading && query && results.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-8 px-3">No results with images found for "{query}"</p>
-            )}
-            {!loading && results.length === 0 && !query && (
-              <p className="text-xs text-muted-foreground text-center py-8 px-3">Search to find artworks</p>
-            )}
-            {results.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setSelected(r)}
-                className={`w-full text-left p-3 border-b transition-colors flex gap-2 ${
-                  selected?.id === r.id ? "bg-secondary" : "hover:bg-secondary/50"
-                }`}
-              >
-                {r.imageUrl && (
-                  <img src={r.imageUrl} alt={r.title} className="w-10 h-10 object-cover rounded shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium line-clamp-2 leading-snug">{r.title}</p>
-                  {r.artistName && (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{r.artistName}</p>
-                  )}
-                  {r.yearCreated && (
-                    <p className="text-xs text-muted-foreground">{r.yearCreated}</p>
-                  )}
-                </div>
-              </button>
-            ))}
+        {/* Active category chip */}
+        {activeCategory && (
+          <div className="px-5 pb-2 shrink-0 flex items-center gap-2">
+            <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+              {activeCategory.emoji} {activeCategory.label}
+              <button onClick={clearAll} className="ml-0.5 hover:text-primary/60"><X size={10} /></button>
+            </span>
+            <button onClick={() => doSearch("", activeCategory)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              ↻ Shuffle
+            </button>
           </div>
+        )}
 
-          {/* Preview panel */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {selected ? (
-              <div className="space-y-4">
-                {selected.imageUrl && (
-                  <img
-                    src={selected.imageUrl}
-                    alt={selected.title}
-                    className="w-full max-h-64 object-contain rounded-lg bg-muted"
-                  />
-                )}
-                <div>
-                  <h3 className="font-semibold text-sm leading-snug">{selected.title}</h3>
-                  {selected.artistName && (
-                    <p className="text-sm text-muted-foreground mt-0.5">{selected.artistName}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {selected.yearCreated && (
-                    <div>
-                      <span className="text-muted-foreground font-medium">Date</span>
-                      <p>{selected.yearCreated}</p>
-                    </div>
-                  )}
-                  {selected.medium && (
-                    <div>
-                      <span className="text-muted-foreground font-medium">Medium</span>
-                      <p className="line-clamp-2">{selected.medium}</p>
-                    </div>
-                  )}
-                  {selected.movement && (
-                    <div>
-                      <span className="text-muted-foreground font-medium">Style / Dept.</span>
-                      <p>{selected.movement}</p>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground font-medium">Museum</span>
-                    <p>{selected.museum}</p>
+        {/* Body */}
+        <div className="flex-1 min-h-0 border-t overflow-hidden flex flex-col">
+          {/* Category browse grid — shown when nothing loaded yet */}
+          {browsing && (
+            <div className="flex-1 overflow-y-auto p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Browse by {activeTab === "met" ? "Department" : "Category"}
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {categories.map((cat) => (
+                  <button key={cat.label} onClick={() => handleBrowseCategory(cat)}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border bg-card hover:bg-secondary hover:border-primary/30 transition-all text-center group">
+                    <span className="text-2xl">{cat.emoji}</span>
+                    <span className="text-xs font-medium leading-tight text-muted-foreground group-hover:text-foreground transition-colors">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-5 text-center">Or type in the search bar above to find specific works</p>
+            </div>
+          )}
+
+          {/* Results + preview (two-panel) — shown when loading or results available */}
+          {!browsing && (
+            <div className="flex flex-1 min-h-0">
+              {/* Results list */}
+              <div className="w-52 shrink-0 border-r overflow-y-auto">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground">
+                    <Loader2 size={18} className="animate-spin" />
+                    <p className="text-xs">{activeCategory ? `Loading ${activeCategory.label}…` : "Searching…"}</p>
                   </div>
-                </div>
-                {selected.sourceUrl && (
-                  <a
-                    href={selected.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink size={11} /> View on museum website
-                  </a>
                 )}
-                <Button size="sm" className="w-full" onClick={() => handleAdd(selected)}>
-                  Add to My Art
-                </Button>
+                {!loading && results.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-8 px-3">No results with images found</p>
+                )}
+                {results.map((r) => (
+                  <button key={r.id} onClick={() => setSelected(r)}
+                    className={`w-full text-left p-3 border-b transition-colors flex gap-2 ${selected?.id === r.id ? "bg-secondary" : "hover:bg-secondary/50"}`}>
+                    {r.imageUrl && (
+                      <img src={r.imageUrl} alt={r.title} className="w-10 h-10 object-cover rounded shrink-0 bg-muted" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium line-clamp-2 leading-snug">{r.title}</p>
+                      {r.artistName && <p className="text-xs text-muted-foreground truncate mt-0.5">{r.artistName}</p>}
+                      {r.yearCreated && <p className="text-xs text-muted-foreground">{r.yearCreated}</p>}
+                    </div>
+                  </button>
+                ))}
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Select a result to preview
+
+              {/* Preview panel */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {selected ? (
+                  <div className="space-y-4">
+                    {selected.imageUrl && (
+                      <img src={selected.imageUrl} alt={selected.title}
+                        className="w-full max-h-60 object-contain rounded-lg bg-muted" />
+                    )}
+                    <div>
+                      <h3 className="font-semibold text-sm leading-snug">{selected.title}</h3>
+                      {selected.artistName && <p className="text-sm text-muted-foreground mt-0.5">{selected.artistName}</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {selected.yearCreated && (
+                        <div><span className="text-muted-foreground font-medium block">Date</span>{selected.yearCreated}</div>
+                      )}
+                      {selected.medium && (
+                        <div><span className="text-muted-foreground font-medium block">Medium</span><span className="line-clamp-2">{selected.medium}</span></div>
+                      )}
+                      {selected.movement && (
+                        <div><span className="text-muted-foreground font-medium block">Dept. / Style</span>{selected.movement}</div>
+                      )}
+                      <div><span className="text-muted-foreground font-medium block">Museum</span>{selected.museum}</div>
+                    </div>
+                    {selected.sourceUrl && (
+                      <a href={selected.sourceUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                        <ExternalLink size={11} /> View on museum website
+                      </a>
+                    )}
+                    <Button size="sm" className="w-full" onClick={() => handleAdd(selected)}>
+                      Add to My Art
+                    </Button>
+                  </div>
+                ) : (
+                  !loading && <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Select a result to preview</div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

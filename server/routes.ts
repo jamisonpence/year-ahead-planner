@@ -1102,25 +1102,63 @@ Return exactly this structure:
 
   // ── Museum search proxies ─────────────────────────────────────────────────────
 
+  // ── Shared helper: map Met object to result shape ────────────────────────────
+  function mapMetObject(d: any) {
+    return {
+      id: String(d.objectID),
+      title: d.title || "Untitled",
+      artistName: d.artistDisplayName || null,
+      yearCreated: d.objectDate || null,
+      medium: d.medium || null,
+      movement: d.department || null,
+      imageUrl: d.primaryImageSmall || null,
+      sourceUrl: d.objectURL || null,
+      museum: "The Metropolitan Museum of Art",
+      city: "New York",
+    };
+  }
+
   // The Metropolitan Museum of Art
   app.get("/api/museum/met/search", requireAuth, async (req, res) => {
     try {
       const q = String(req.query.q ?? "").trim();
-      if (!q) return res.status(400).json({ error: "q is required" });
+      const departmentId = req.query.departmentId ? parseInt(String(req.query.departmentId)) : null;
+      if (!q && !departmentId) return res.json([]);
 
-      // Step 1: search for object IDs
-      const searchUrl = new URL("https://collectionapi.metmuseum.org/public/collection/v1/search");
-      searchUrl.searchParams.set("q", q);
-      searchUrl.searchParams.set("hasImages", "true");
-      const searchRes = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json" } });
-      if (!searchRes.ok) return res.status(searchRes.status).json({ error: "Met API error" });
-      const searchData = await searchRes.json() as { total: number; objectIDs: number[] | null };
-      if (!searchData.objectIDs || searchData.objectIDs.length === 0) return res.json([]);
+      let objectIds: number[] = [];
 
-      // Step 2: fetch details for first 10 IDs in parallel, keep those with images
-      const ids = searchData.objectIDs.slice(0, 10);
+      if (departmentId && !q) {
+        // Browse by department: fetch all IDs for the dept, then random-sample
+        const objRes = await fetch(
+          `https://collectionapi.metmuseum.org/public/collection/v1/objects?departmentIds=${departmentId}`,
+          { headers: { "Accept": "application/json" } }
+        );
+        if (!objRes.ok) return res.status(objRes.status).json({ error: "Met API error" });
+        const objData = await objRes.json() as { total: number; objectIDs: number[] | null };
+        const allIds = objData.objectIDs ?? [];
+        if (allIds.length === 0) return res.json([]);
+        // Pick 14 IDs spread randomly across the full list
+        const stride = Math.max(1, Math.floor(allIds.length / 14));
+        const offset = Math.floor(Math.random() * stride);
+        for (let i = offset; objectIds.length < 14 && i < allIds.length; i += stride) {
+          objectIds.push(allIds[i]);
+        }
+      } else {
+        // Text search (optionally within a department)
+        const searchUrl = new URL("https://collectionapi.metmuseum.org/public/collection/v1/search");
+        searchUrl.searchParams.set("q", q);
+        searchUrl.searchParams.set("hasImages", "true");
+        if (departmentId) searchUrl.searchParams.set("departmentId", String(departmentId));
+        const searchRes = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json" } });
+        if (!searchRes.ok) return res.status(searchRes.status).json({ error: "Met API error" });
+        const searchData = await searchRes.json() as { total: number; objectIDs: number[] | null };
+        if (!searchData.objectIDs?.length) return res.json([]);
+        objectIds = searchData.objectIDs.slice(0, 14);
+      }
+
+      // Fetch object details in parallel, keep those with a small image
       const details = await Promise.all(
-        ids.map(async (id) => {
+        objectIds.map(async (id) => {
           try {
             const r = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`);
             if (!r.ok) return null;
@@ -1128,24 +1166,7 @@ Return exactly this structure:
           } catch { return null; }
         })
       );
-      const results = details
-        .filter((d) => d && d.primaryImageSmall)
-        .slice(0, 8)
-        .map((d: any) => ({
-          id: String(d.objectID),
-          title: d.title || "Untitled",
-          artistName: d.artistDisplayName || null,
-          yearCreated: d.objectDate ? d.objectDate.replace(/[^0-9\-–]/g, "").trim() || d.objectDate : null,
-          medium: d.medium || null,
-          movement: d.department || null,
-          imageUrl: d.primaryImageSmall || null,
-          sourceUrl: d.objectURL || null,
-          museum: "The Metropolitan Museum of Art",
-          city: "New York",
-          culture: d.culture || null,
-          classification: d.classification || null,
-        }));
-      res.json(results);
+      res.json(details.filter((d) => d?.primaryImageSmall).slice(0, 9).map(mapMetObject));
     } catch (e) { handleError(res, e); }
   });
 
@@ -1153,20 +1174,44 @@ Return exactly this structure:
   app.get("/api/museum/aic/search", requireAuth, async (req, res) => {
     try {
       const q = String(req.query.q ?? "").trim();
-      if (!q) return res.status(400).json({ error: "q is required" });
+      const artworkType = String(req.query.artworkType ?? "").trim();
+      if (!q && !artworkType) return res.json([]);
 
-      const searchUrl = new URL("https://api.artic.edu/api/v1/artworks/search");
-      searchUrl.searchParams.set("q", q);
-      searchUrl.searchParams.set("limit", "10");
-      searchUrl.searchParams.set("fields", "id,title,artist_display,date_display,medium_display,style_title,department_title,image_id,artwork_type_title,place_of_origin");
-      const searchRes = await fetch(searchUrl.toString(), {
-        headers: { "Accept": "application/json", "AIC-User-Agent": "YearAheadPlanner/1.0 (personal life planner app)" }
-      });
-      if (!searchRes.ok) return res.status(searchRes.status).json({ error: "AIC API error" });
-      const searchData = await searchRes.json() as { data: any[] };
-      const results = (searchData.data || [])
+      const AIC_FIELDS = "id,title,artist_display,date_display,medium_display,style_title,department_title,image_id,artwork_type_title,place_of_origin";
+      const headers = { "Accept": "application/json", "AIC-User-Agent": "YearAheadPlanner/1.0 (personal life planner app)" };
+
+      let data: any[] = [];
+
+      if (artworkType && !q) {
+        // Browse by artwork type — use the artworks list endpoint with an ES query filter
+        // Random page (1–8) for variety each browse
+        const page = Math.floor(Math.random() * 8) + 1;
+        const browseUrl = `https://api.artic.edu/api/v1/artworks/search?fields=${AIC_FIELDS}&limit=18&page=${page}`;
+        const body = JSON.stringify({
+          query: { term: { artwork_type_title: artworkType } },
+          fields: AIC_FIELDS.split(","),
+          limit: 18,
+          from: (page - 1) * 18,
+        });
+        const browseRes = await fetch(browseUrl, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body });
+        if (!browseRes.ok) return res.status(browseRes.status).json({ error: "AIC API error" });
+        data = (await browseRes.json() as { data: any[] }).data ?? [];
+      } else {
+        // Text search (optionally within an artwork type)
+        const searchUrl = new URL("https://api.artic.edu/api/v1/artworks/search");
+        searchUrl.searchParams.set("q", q);
+        searchUrl.searchParams.set("limit", "18");
+        searchUrl.searchParams.set("fields", AIC_FIELDS);
+        const searchRes = await fetch(searchUrl.toString(), { headers });
+        if (!searchRes.ok) return res.status(searchRes.status).json({ error: "AIC API error" });
+        let allData = (await searchRes.json() as { data: any[] }).data ?? [];
+        if (artworkType) allData = allData.filter((d: any) => d.artwork_type_title === artworkType);
+        data = allData;
+      }
+
+      const results = data
         .filter((d: any) => d.image_id)
-        .slice(0, 8)
+        .slice(0, 9)
         .map((d: any) => ({
           id: String(d.id),
           title: d.title || "Untitled",
@@ -1174,12 +1219,10 @@ Return exactly this structure:
           yearCreated: d.date_display || null,
           medium: d.medium_display || null,
           movement: d.style_title || d.department_title || null,
-          imageUrl: d.image_id ? `https://www.artic.edu/iiif/2/${d.image_id}/full/400,/0/default.jpg` : null,
+          imageUrl: `https://www.artic.edu/iiif/2/${d.image_id}/full/400,/0/default.jpg`,
           sourceUrl: `https://www.artic.edu/artworks/${d.id}`,
           museum: "Art Institute of Chicago",
           city: "Chicago",
-          artworkType: d.artwork_type_title || null,
-          placeOfOrigin: d.place_of_origin || null,
         }));
       res.json(results);
     } catch (e) { handleError(res, e); }
