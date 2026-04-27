@@ -4,23 +4,24 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
   Plus, BookOpen, BookMarked, Check, Trash2, Pencil, MoreHorizontal,
-  Flame, Star, Search, Clock, X,
+  Flame, Search, Clock, X, Send, Users, Inbox, CornerUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { bookProgress, daysUntil, BOOK_STATUSES, GENRE_TAGS, readingStreak } from "@/lib/plannerUtils";
 import BookFormModal from "@/components/modals/BookFormModal";
 import ReadingSessionModal from "@/components/modals/ReadingSessionModal";
-import type { BookWithSessions, Book, ReadingSession } from "@shared/schema";
+import type { BookWithSessions, Book, ReadingSession, BookRecommendationWithUser, PublicUser } from "@shared/schema";
 
 const STATUS_TABS = [
   { value: "current",  label: "Reading"   },
   { value: "backlog",  label: "Up Next"   },
   { value: "paused",   label: "Paused"    },
   { value: "finished", label: "Finished"  },
+  { value: "recommendations", label: "Recommendations" },
 ];
 
 // ── Google Books Search Modal ─────────────────────────────────────────────────
@@ -205,6 +206,288 @@ function GoogleBooksModal({
   );
 }
 
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ user }: { user: { name: string; avatarUrl?: string | null } }) {
+  if (user.avatarUrl) return <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover shrink-0" />;
+  return (
+    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold shrink-0">
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Recommend Modal ───────────────────────────────────────────────────────────
+function RecommendModal({ open, onClose, book }: {
+  open: boolean;
+  onClose: () => void;
+  book: BookWithSessions | null;
+}) {
+  const { toast } = useToast();
+  const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (open) { setSelectedFriendId(null); setNote(""); }
+  }, [open, book]);
+
+  const sendMut = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/book-recommendations", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/book-recommendations"] });
+      toast({ title: `Recommended "${book?.title}"` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to send recommendation", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!book || !selectedFriendId) return;
+    sendMut.mutate({
+      toUserId: selectedFriendId,
+      bookTitle: book.title,
+      bookAuthor: book.author || null,
+      coverUrl: (book as any).coverUrl || null,
+      notes: note.trim() || null,
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Send size={15} /> Recommend a Book
+          </DialogTitle>
+        </DialogHeader>
+
+        {book && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border">
+            {(book as any).coverUrl ? (
+              <img src={(book as any).coverUrl} alt={book.title} className="w-10 h-14 object-cover rounded shrink-0" />
+            ) : (
+              <div className="w-10 h-14 rounded bg-muted flex items-center justify-center shrink-0">
+                <BookOpen size={16} className="opacity-30" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold line-clamp-2">{book.title}</p>
+              {book.author && <p className="text-xs text-muted-foreground">{book.author}</p>}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Send to</label>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-3 border rounded-lg">
+                <Users size={18} className="mx-auto mb-1 opacity-30" />
+                No friends yet — connect with people in the Relationships tab
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFriendId(f.id === selectedFriendId ? null : f.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors ${
+                      selectedFriendId === f.id
+                        ? "border-primary bg-primary/10"
+                        : "hover:bg-secondary border-border"
+                    }`}
+                  >
+                    <Avatar user={f} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                    </div>
+                    {selectedFriendId === f.id && <Check size={14} className="text-primary shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
+            <textarea
+              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              rows={3}
+              placeholder="Why you'd recommend it…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSend} disabled={!selectedFriendId || sendMut.isPending} className="gap-1.5">
+            <Send size={13} /> Send Recommendation
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Recommendations Tab ───────────────────────────────────────────────────────
+function RecommendationsTab({ books }: { books: BookWithSessions[] }) {
+  const { toast } = useToast();
+
+  const { data: recs } = useQuery<{ received: BookRecommendationWithUser[]; sent: BookRecommendationWithUser[] }>({
+    queryKey: ["/api/book-recommendations"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/book-recommendations"); return r.json(); },
+  });
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/book-recommendations/${id}/dismiss`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-recommendations"] }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/book-recommendations/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-recommendations"] }),
+  });
+
+  const addToListMut = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/books", body),
+    onSuccess: (_, vars: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/books"] });
+      toast({ title: `Added "${vars.title}" to your reading list` });
+    },
+  });
+
+  function handleAddToList(rec: BookRecommendationWithUser) {
+    addToListMut.mutate({
+      title: rec.bookTitle,
+      author: rec.bookAuthor || null,
+      coverUrl: rec.coverUrl || null,
+      status: "backlog",
+      pagesRead: 0,
+    } as any);
+  }
+
+  const received = recs?.received ?? [];
+  const sent = recs?.sent ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Received */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Inbox size={15} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Recommended to You</h3>
+          {received.length > 0 && (
+            <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-medium">{received.length}</span>
+          )}
+        </div>
+        {received.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            No recommendations yet — friends can recommend books to you from their reading list
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {received.map((rec) => (
+              <div key={rec.id} className="border rounded-xl bg-card overflow-hidden">
+                <div className="flex gap-3 p-4">
+                  {rec.coverUrl ? (
+                    <img src={rec.coverUrl} alt={rec.bookTitle} className="w-12 h-16 object-cover rounded shrink-0" />
+                  ) : (
+                    <div className="w-12 h-16 bg-muted rounded flex items-center justify-center shrink-0">
+                      <BookOpen size={18} className="opacity-20" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm line-clamp-2">{rec.bookTitle}</p>
+                    {rec.bookAuthor && <p className="text-xs text-muted-foreground mt-0.5">{rec.bookAuthor}</p>}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <Avatar user={rec.fromUser} />
+                      <span className="text-xs text-muted-foreground">from <span className="font-medium text-foreground">{rec.fromUser.name}</span></span>
+                    </div>
+                    {rec.notes && (
+                      <p className="text-xs italic text-muted-foreground mt-1.5 line-clamp-2">"{rec.notes}"</p>
+                    )}
+                  </div>
+                </div>
+                <div className="px-4 pb-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1.5 h-7 text-xs"
+                    onClick={() => handleAddToList(rec)}
+                    disabled={addToListMut.isPending}
+                  >
+                    <Plus size={12} /> Add to Reading List
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => dismissMut.mutate(rec.id)}
+                  >
+                    <X size={12} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sent */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <CornerUpRight size={15} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Sent by You</h3>
+        </div>
+        {sent.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            You haven't recommended any books yet — use the ··· menu on any book
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((rec) => (
+              <div key={rec.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+                {rec.coverUrl ? (
+                  <img src={rec.coverUrl} alt={rec.bookTitle} className="w-8 h-11 object-cover rounded shrink-0" />
+                ) : (
+                  <div className="w-8 h-11 bg-muted rounded flex items-center justify-center shrink-0">
+                    <BookOpen size={12} className="opacity-20" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium line-clamp-1">{rec.bookTitle}</p>
+                  {rec.bookAuthor && <p className="text-xs text-muted-foreground">{rec.bookAuthor}</p>}
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-xs text-muted-foreground">to <span className="font-medium text-foreground">{rec.toUser.name}</span></span>
+                    <span className="text-xs text-muted-foreground">· {format(parseISO(rec.createdAt), "MMM d")}</span>
+                  </div>
+                </div>
+                {rec.notes && <p className="text-xs italic text-muted-foreground max-w-32 line-clamp-2 hidden sm:block">"{rec.notes}"</p>}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => deleteMut.mutate(rec.id)}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ReadingPage() {
   const { toast } = useToast();
@@ -216,6 +499,7 @@ export default function ReadingPage() {
   const [editBook, setEditBook] = useState<Book | null>(null);
   const [editSession, setEditSession] = useState<ReadingSession | null>(null);
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
+  const [recommendBook, setRecommendBook] = useState<BookWithSessions | null>(null);
 
   const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
 
@@ -250,6 +534,8 @@ export default function ReadingPage() {
     books.forEach((b) => { m[b.status] = (m[b.status] ?? 0) + 1; });
     return m;
   }, [books]);
+
+  const isRecsTab = tab === "recommendations";
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -287,16 +573,21 @@ export default function ReadingPage() {
         ))}
       </div>
 
-      {/* Genre filter */}
-      <div className="flex gap-2 flex-wrap">
-        <button onClick={() => setGenreFilter("all")} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${genreFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>All</button>
-        {GENRE_TAGS.map((g) => (
-          <button key={g} onClick={() => setGenreFilter(g)} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${genreFilter === g ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>{g}</button>
-        ))}
-      </div>
+      {/* Genre filter — hidden on Recommendations tab */}
+      {!isRecsTab && (
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setGenreFilter("all")} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${genreFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>All</button>
+          {GENRE_TAGS.map((g) => (
+            <button key={g} onClick={() => setGenreFilter(g)} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${genreFilter === g ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>{g}</button>
+          ))}
+        </div>
+      )}
 
-      {/* Book grid */}
-      {filtered.length === 0 ? (
+      {/* Recommendations tab */}
+      {isRecsTab && <RecommendationsTab books={books} />}
+
+      {/* Book grid — hidden on Recommendations tab */}
+      {!isRecsTab && (filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen size={40} className="mx-auto mb-4 opacity-20" />
           <p className="font-medium">No books here yet</p>
@@ -350,6 +641,8 @@ export default function ReadingPage() {
                             <BookOpen size={13} className="mr-2" />Start Reading
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setRecommendBook(book)}><Send size={13} className="mr-2" />Recommend to Friend</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteMut.mutate(book.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -393,7 +686,7 @@ export default function ReadingPage() {
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* Modals */}
       <BookFormModal open={bookModal} onClose={() => { setBookModal(false); setEditBook(null); }} editBook={editBook} />
@@ -402,6 +695,11 @@ export default function ReadingPage() {
         open={gbooksOpen}
         onClose={() => setGbooksOpen(false)}
         onAdd={(payload) => createMut.mutate(payload)}
+      />
+      <RecommendModal
+        open={!!recommendBook}
+        onClose={() => setRecommendBook(null)}
+        book={recommendBook}
       />
     </div>
   );

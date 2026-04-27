@@ -1602,6 +1602,46 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Book Recommendations ──────────────────────────────────────────────────────
+  app.get("/api/book-recommendations", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getBookRecommendations((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/book-recommendations", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { toUserId, bookTitle, bookAuthor, coverUrl, notes } = req.body;
+      if (!toUserId || !bookTitle) return res.status(400).json({ error: "toUserId and bookTitle required" });
+      const rec = await storage.sendBookRecommendation({
+        fromUserId: userId,
+        toUserId,
+        bookTitle,
+        bookAuthor: bookAuthor || null,
+        coverUrl: coverUrl || null,
+        notes: notes || null,
+        createdAt: new Date().toISOString(),
+        isDismissed: false,
+      });
+      res.status(201).json(rec);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/book-recommendations/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissBookRecommendation(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/book-recommendations/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteBookRecommendation(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
