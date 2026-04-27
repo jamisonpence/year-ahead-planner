@@ -792,6 +792,17 @@ export async function initializeStorage() {
     );
   `);
 
+  // Ensure is_dismissed column exists on all share tables (handles tables created before the column was added)
+  await pool.query(`
+    ALTER TABLE book_recommendations    ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE music_recommendations   ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE recipe_shares           ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE quote_shares            ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE art_shares              ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE spot_shares             ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE movie_shares            ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS friend_requests (
       id SERIAL PRIMARY KEY,
