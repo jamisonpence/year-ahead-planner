@@ -1729,6 +1729,51 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Spot Shares ───────────────────────────────────────────────────────────────
+  app.get("/api/spot-shares", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getSpotShares((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/spot-shares", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const data = {
+        fromUserId: userId,
+        toUserId: req.body.toUserId,
+        name: req.body.name,
+        type: req.body.type ?? "restaurant",
+        address: req.body.address ?? null,
+        neighborhood: req.body.neighborhood ?? null,
+        city: req.body.city ?? null,
+        website: req.body.website ?? null,
+        priceRange: req.body.priceRange ?? null,
+        tags: req.body.tags ?? null,
+        openingHours: req.body.openingHours ?? null,
+        rating: req.body.rating ?? null,
+        spotNotes: req.body.spotNotes ?? null,
+        notes: req.body.notes ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      res.status(201).json(await storage.sendSpotShare(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/spot-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissSpotShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/spot-shares/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteSpotShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Movie Shares ──────────────────────────────────────────────────────────────
   app.get("/api/movie-shares", requireAuth, async (req, res) => {
     try {

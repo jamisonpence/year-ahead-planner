@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -39,6 +39,7 @@ import type {
   InsertMusicRecommendation, MusicRecommendation, MusicRecommendationWithUser,
   InsertRecipeShare, RecipeShare, RecipeShareWithUser,
   InsertMovieShare, MovieShare, MovieShareWithUser,
+  InsertSpotShare, SpotShare, SpotShareWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -711,6 +712,28 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS spot_shares (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'restaurant',
+      address TEXT,
+      neighborhood TEXT,
+      city TEXT,
+      website TEXT,
+      price_range INTEGER,
+      tags TEXT,
+      opening_hours TEXT,
+      rating INTEGER,
+      spot_notes TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS movie_shares (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -933,6 +956,11 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Spot Shares
+  sendSpotShare(data: InsertSpotShare): Promise<SpotShare>;
+  getSpotShares(userId: number): Promise<{ received: SpotShareWithUser[]; sent: SpotShareWithUser[] }>;
+  dismissSpotShare(id: number, userId: number): Promise<boolean>;
+  deleteSpotShare(id: number, userId: number): Promise<boolean>;
   // Movie Shares
   sendMovieShare(data: InsertMovieShare): Promise<MovieShare>;
   getMovieShares(userId: number): Promise<{ received: MovieShareWithUser[]; sent: MovieShareWithUser[] }>;
@@ -2038,6 +2066,67 @@ export const storage: IStorage = {
   async deleteBookRecommendation(id, userId) {
     const result = await pool.query(
       `DELETE FROM book_recommendations WHERE id = $1 AND from_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Spot Shares ─────────────────────────────────────────────────────────────
+  async sendSpotShare(data) {
+    const result = await db.insert(spotShares).values(data).returning();
+    return result[0];
+  },
+
+  async getSpotShares(userId) {
+    const rows = await pool.query(`
+      SELECT ss.*,
+        fu.id as from_id, fu.name as from_name, fu.avatar_url as from_avatar,
+        tu.id as to_id, tu.name as to_name, tu.avatar_url as to_avatar
+      FROM spot_shares ss
+      JOIN users fu ON ss.from_user_id = fu.id
+      JOIN users tu ON ss.to_user_id = tu.id
+      WHERE ss.from_user_id = $1 OR ss.to_user_id = $1
+      ORDER BY ss.created_at DESC
+    `, [userId]);
+
+    const toShare = (r: any): SpotShareWithUser => ({
+      id: r.id,
+      fromUserId: r.from_user_id,
+      toUserId: r.to_user_id,
+      name: r.name,
+      type: r.type,
+      address: r.address,
+      neighborhood: r.neighborhood,
+      city: r.city,
+      website: r.website,
+      priceRange: r.price_range,
+      tags: r.tags,
+      openingHours: r.opening_hours,
+      rating: r.rating,
+      spotNotes: r.spot_notes,
+      notes: r.notes,
+      createdAt: r.created_at,
+      isDismissed: r.is_dismissed,
+      fromUser: { id: r.from_id, name: r.from_name, avatarUrl: r.from_avatar },
+      toUser: { id: r.to_id, name: r.to_name, avatarUrl: r.to_avatar },
+    });
+
+    const received = rows.rows.filter((r: any) => r.to_user_id === userId && !r.is_dismissed).map(toShare);
+    const sent = rows.rows.filter((r: any) => r.from_user_id === userId).map(toShare);
+    return { received, sent };
+  },
+
+  async dismissSpotShare(id, userId) {
+    const result = await pool.query(
+      `UPDATE spot_shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async deleteSpotShare(id, userId) {
+    const result = await pool.query(
+      `DELETE FROM spot_shares WHERE id = $1 AND from_user_id = $2`,
       [id, userId]
     );
     return (result.rowCount ?? 0) > 0;
