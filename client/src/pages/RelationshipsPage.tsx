@@ -1,11 +1,12 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
-  UserPlus, FolderPlus, X, Check,
+  UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
+  UserX, Send, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import type {
   RelationshipGroup, InsertRelationshipGroup,
   PersonWithSpouse, Person, InsertPerson,
+  FriendRequestWithUser, PublicUser,
 } from "@shared/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -662,9 +664,296 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
   );
 }
 
+// ── Avatar ─────────────────────────────────────────────────────────────────────
+function Avatar({ user, size = 36 }: { user: { name: string; avatarUrl?: string | null }; size?: number }) {
+  if (user.avatarUrl) {
+    return <img src={user.avatarUrl} alt={user.name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  }
+  return (
+    <div className="rounded-full bg-primary/15 flex items-center justify-center font-semibold text-primary shrink-0 select-none"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}>
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Friends Tab ─────────────────────────────────────────────────────────────────
+function FriendsTab({ onBadgeClear }: { onBadgeClear: () => void }) {
+  const { toast } = useToast();
+  const [subTab, setSubTab] = useState<"friends" | "requests" | "search">("friends");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<(PublicUser & { relationshipStatus: string; incomingRequestId: number | null })[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: friends = [], refetch: refetchFriends } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
+  });
+
+  const { data: requests = { incoming: [], outgoing: [] }, refetch: refetchRequests } = useQuery<{ incoming: FriendRequestWithUser[]; outgoing: FriendRequestWithUser[] }>({
+    queryKey: ["/api/friend-requests"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friend-requests"); return r.json(); },
+  });
+
+  // Clear badge on mount
+  useEffect(() => { onBadgeClear(); }, []);
+
+  const sendMut = useMutation({
+    mutationFn: (toUserId: number) => apiRequest("POST", "/api/friend-requests", { toUserId }),
+    onSuccess: () => {
+      refetchRequests();
+      doSearch(searchQuery); // refresh status chips in search results
+      toast({ title: "Friend request sent" });
+      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
+    },
+    onError: () => toast({ title: "Couldn't send request", variant: "destructive" }),
+  });
+
+  const respondMut = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "accepted" | "declined" }) =>
+      apiRequest("PATCH", `/api/friend-requests/${id}`, { status }),
+    onSuccess: () => {
+      refetchFriends(); refetchRequests();
+      doSearch(searchQuery);
+      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
+    },
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/friend-requests/${id}`),
+    onSuccess: () => { refetchRequests(); doSearch(searchQuery); },
+  });
+
+  const unfriendMut = useMutation({
+    mutationFn: (friendId: number) => apiRequest("DELETE", `/api/friends/${friendId}`),
+    onSuccess: () => { refetchFriends(); doSearch(searchQuery); toast({ title: "Removed from friends" }); },
+  });
+
+  const doSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    try {
+      const r = await apiRequest("GET", `/api/users/search?q=${encodeURIComponent(q)}`);
+      setSearchResults(await r.json());
+    } catch { setSearchResults([]); }
+    finally { setSearchLoading(false); }
+  }, []);
+
+  function handleSearchChange(val: string) {
+    setSearchQuery(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(val), 400);
+  }
+
+  const incomingCount = requests.incoming.length;
+
+  function StatusBadge({ status }: { status: string }) {
+    if (status === "friends") return <span className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1"><UserCheck size={11} />Friends</span>;
+    if (status === "outgoing_pending") return <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><Clock size={11} />Pending</span>;
+    if (status === "incoming") return <span className="text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"><Send size={11} />Sent you a request</span>;
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1">
+        {([
+          ["friends", "Friends", friends.length],
+          ["requests", "Requests", incomingCount],
+          ["search", "Search Users", null],
+        ] as const).map(([key, label, count]) => (
+          <button key={key} onClick={() => setSubTab(key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${subTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+            {label}
+            {count != null && count > 0 && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${key === "requests" ? "bg-red-500 text-white" : "bg-secondary text-muted-foreground"}`}>{count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Friends list */}
+      {subTab === "friends" && (
+        <div>
+          {friends.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No friends yet</p>
+              <p className="text-xs mt-1">Search for other users to send friend requests</p>
+              <button onClick={() => setSubTab("search")} className="mt-3 text-xs text-primary hover:underline">Search users →</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {friends.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                  <Avatar user={f} size={40} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{f.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                  </div>
+                  <button
+                    onClick={() => unfriendMut.mutate(f.id)}
+                    title="Remove friend"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                  >
+                    <UserX size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Requests */}
+      {subTab === "requests" && (
+        <div className="space-y-5">
+          {/* Incoming */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Incoming Requests {incomingCount > 0 && <span className="ml-1 text-red-500">{incomingCount}</span>}
+            </p>
+            {requests.incoming.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No incoming requests</p>
+            ) : (
+              <div className="space-y-2">
+                {requests.incoming.map((req) => (
+                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                    <Avatar user={req.otherUser} size={38} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{req.otherUser.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{req.otherUser.email}</p>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => respondMut.mutate({ id: req.id, status: "accepted" })}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                      >
+                        <Check size={12} /> Accept
+                      </button>
+                      <button
+                        onClick={() => respondMut.mutate({ id: req.id, status: "declined" })}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
+                      >
+                        <X size={12} /> Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Outgoing */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sent</p>
+            {requests.outgoing.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No outgoing requests</p>
+            ) : (
+              <div className="space-y-2">
+                {requests.outgoing.map((req) => (
+                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                    <Avatar user={req.otherUser} size={38} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{req.otherUser.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{req.otherUser.email}</p>
+                    </div>
+                    <button
+                      onClick={() => cancelMut.mutate(req.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors shrink-0"
+                    >
+                      <X size={12} /> Cancel
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Search */}
+      {subTab === "search" && (
+        <div className="space-y-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            {searchLoading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by name or email…"
+              className="w-full pl-9 pr-8 py-2.5 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {searchQuery.trim() && !searchLoading && searchResults.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6">No users found for "{searchQuery}"</p>
+          )}
+
+          {!searchQuery.trim() && (
+            <p className="text-sm text-muted-foreground text-center py-6">Type a name or email to find users</p>
+          )}
+
+          <div className="space-y-2">
+            {searchResults.map((u) => (
+              <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                <Avatar user={u} size={38} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{u.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  <div className="mt-0.5"><StatusBadge status={u.relationshipStatus} /></div>
+                </div>
+                <div className="shrink-0">
+                  {u.relationshipStatus === "none" && (
+                    <button
+                      onClick={() => sendMut.mutate(u.id)}
+                      disabled={sendMut.isPending}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      <UserPlus size={12} /> Add Friend
+                    </button>
+                  )}
+                  {u.relationshipStatus === "incoming" && u.incomingRequestId && (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => respondMut.mutate({ id: u.incomingRequestId!, status: "accepted" })}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+                      >
+                        <Check size={11} /> Accept
+                      </button>
+                      <button
+                        onClick={() => respondMut.mutate({ id: u.incomingRequestId!, status: "declined" })}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  )}
+                  {u.relationshipStatus === "friends" && (
+                    <button
+                      onClick={() => unfriendMut.mutate(u.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/30"
+                    >
+                      <UserX size={12} /> Unfriend
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RelationshipsPage() {
   const { toast } = useToast();
+  const [mainTab, setMainTab] = useState<"people" | "friends">("people");
   const [personModal, setPersonModal] = useState(false);
   const [groupModal, setGroupModal] = useState(false);
   const [editPerson, setEditPerson] = useState<Person | null>(null);
@@ -721,17 +1010,42 @@ export default function RelationshipsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Relationships</h1>
-          <span className="text-sm text-muted-foreground">{allPeople.length} people</span>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
-            <Plus size={13} /><FolderPlus size={13} />Group
-          </Button>
-          <Button size="sm" onClick={() => { setEditPerson(null); setPersonModal(true); }} className="gap-1.5">
-            <Plus size={13} /><UserPlus size={13} />Person
-          </Button>
-        </div>
+        {mainTab === "people" && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
+              <Plus size={13} /><FolderPlus size={13} />Group
+            </Button>
+            <Button size="sm" onClick={() => { setEditPerson(null); setPersonModal(true); }} className="gap-1.5">
+              <Plus size={13} /><UserPlus size={13} />Person
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Main tabs: People / Friends */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setMainTab("people")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${mainTab === "people" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-1.5"><Users size={14} />People ({allPeople.length})</span>
+        </button>
+        <button
+          onClick={() => setMainTab("friends")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${mainTab === "friends" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-1.5"><UserCheck size={14} />Friends</span>
+        </button>
+      </div>
+
+      {/* Friends tab */}
+      {mainTab === "friends" && (
+        <FriendsTab onBadgeClear={() => queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] })} />
+      )}
+
+      {/* People tab content below — only shown when mainTab === "people" */}
+      {mainTab === "people" && (<>
 
       {/* Upcoming birthdays strip */}
       {upcomingBirthdays.length > 0 && (
@@ -852,6 +1166,8 @@ export default function RelationshipsPage() {
           })()}
         </div>
       )}
+
+      </> )} {/* end mainTab === "people" */}
 
       <PersonFormModal
         open={personModal}

@@ -67,9 +67,9 @@ function useNavPrefs() {
 
 // ── Extracted nav components (must be top-level, not inside render) ───────────
 
-function NavLink({ path, label, icon: Icon, active, onClick }: {
+function NavLink({ path, label, icon: Icon, active, onClick, badge }: {
   path: string; label: string; icon: React.ElementType;
-  active: boolean; onClick?: () => void;
+  active: boolean; onClick?: () => void; badge?: number;
 }) {
   return (
     <Link href={path}>
@@ -77,7 +77,14 @@ function NavLink({ path, label, icon: Icon, active, onClick }: {
         onClick={onClick}
         className={`sidebar-item cursor-pointer ${active ? "active" : ""}`}
       >
-        <Icon size={17} />
+        <div className="relative shrink-0">
+          <Icon size={17} />
+          {badge != null && badge > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+              {badge > 9 ? "9+" : badge}
+            </span>
+          )}
+        </div>
         <span>{label}</span>
       </div>
     </Link>
@@ -131,6 +138,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { prefs, save } = useNavPrefs();
   const { user } = useAuth();
   const qc = useQueryClient();
+
+  // Pending friend-request badge
+  const { data: friendCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/friend-requests/count"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/friend-requests/count");
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const pendingFriendCount = friendCountData?.count ?? 0;
 
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
@@ -214,6 +233,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 label={tab.label}
                 icon={tab.icon}
                 active={location === tab.path}
+                badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
               />
             ))
           )}
@@ -284,6 +304,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 icon={tab.icon}
                 active={location === tab.path}
                 onClick={() => setMobileOpen(false)}
+                badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
               />
             ))}
             <div className="border-t pt-2 mt-2 space-y-1">
