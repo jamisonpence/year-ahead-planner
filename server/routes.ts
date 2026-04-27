@@ -1385,6 +1385,124 @@ Rules:
     }
   });
 
+  // ── Quotes / DummyJSON proxy ──────────────────────────────────────────────────
+
+  // Cache all DummyJSON quotes in memory (refreshed every 24 h)
+  let dummyQuotesCache: { id: number; quote: string; author: string }[] = [];
+  let dummyQuotesCacheTime = 0;
+
+  async function getDummyQuotes() {
+    const now = Date.now();
+    if (dummyQuotesCache.length > 0 && now - dummyQuotesCacheTime < 24 * 60 * 60 * 1000) {
+      return dummyQuotesCache;
+    }
+    // DummyJSON paginates — fetch in chunks of 150 until we have everything
+    const PAGE = 150;
+    const collected: { id: number; quote: string; author: string }[] = [];
+    let skip = 0;
+    let total = Infinity;
+    while (collected.length < total) {
+      const r = await fetch(`https://dummyjson.com/quotes?limit=${PAGE}&skip=${skip}`);
+      if (!r.ok) break;
+      const data = await r.json() as { quotes: { id: number; quote: string; author: string }[]; total: number };
+      total = data.total ?? 0;
+      collected.push(...(data.quotes ?? []));
+      if (data.quotes.length < PAGE) break; // last page
+      skip += PAGE;
+    }
+    if (collected.length > 0) {
+      dummyQuotesCache = collected;
+      dummyQuotesCacheTime = now;
+    }
+    return dummyQuotesCache;
+  }
+
+  // Predefined topic buckets (keyword → topic name)
+  const QUOTE_TOPICS = [
+    { name: "Inspiration",   keywords: ["inspir", "dream", "believe", "possibl", "hope", "courag"] },
+    { name: "Motivation",    keywords: ["motivat", "success", "work hard", "goal", "achiev", "effort", "persist"] },
+    { name: "Wisdom",        keywords: ["wisdom", "knowledge", "learn", "truth", "mind", "understand", "exper"] },
+    { name: "Happiness",     keywords: ["happi", "joy", "smile", "laugh", "content", "gratit", "peace"] },
+    { name: "Life",          keywords: ["life ", "living", "live ", "exist", "journey", "moment", "time"] },
+    { name: "Love",          keywords: ["love", "heart", "romance", "affection", "caring", "tender", "passion"] },
+    { name: "Friendship",    keywords: ["friend", "companion", "loyal", "trust", "bond", "togeth"] },
+    { name: "Change",        keywords: ["change", "growth", "transform", "adapt", "evolv", "new begin"] },
+    { name: "Philosophy",    keywords: ["philosoph", "meaning", "purpose", "soul", "exist", "virtue", "moral"] },
+    { name: "Humor",         keywords: ["humor", "funny", "laugh", "joke", "wit", "comic"] },
+    { name: "Perseverance",  keywords: ["persever", "never give up", "keep going", "resili", "endure", "determin"] },
+    { name: "Nature",        keywords: ["nature", "earth", "sky", "ocean", "tree", "mountain", "flower", "sun"] },
+  ];
+
+  app.get("/api/quotable/random", requireAuth, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit ?? "8")), 30);
+      // Try to use cached full set for better variety; fall back to DummyJSON /random
+      if (dummyQuotesCache.length > 0) {
+        const shuffled = [...dummyQuotesCache].sort(() => Math.random() - 0.5);
+        return res.json(shuffled.slice(0, limit).map(q => ({
+          _id: String(q.id), content: q.quote, author: q.author, tags: [],
+        })));
+      }
+      // Cache not ready — fetch random quotes directly (8 parallel calls)
+      const calls = Array.from({ length: limit }, () => fetch("https://dummyjson.com/quotes/random"));
+      const responses = await Promise.all(calls);
+      const quotes = await Promise.all(responses.map(r => r.json() as Promise<{ id: number; quote: string; author: string }>));
+      res.json(quotes.map(q => ({ _id: String(q.id), content: q.quote, author: q.author, tags: [] })));
+      // Prime the cache in background
+      getDummyQuotes().catch(() => {});
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/quotable/search", requireAuth, async (req, res) => {
+    try {
+      const query = String(req.query.query ?? "").toLowerCase().trim();
+      if (!query) return res.json([]);
+      const quotes = await getDummyQuotes();
+      const hits = quotes.filter(q =>
+        q.quote.toLowerCase().includes(query) || q.author.toLowerCase().includes(query)
+      ).slice(0, 30);
+      res.json(hits.map(q => ({
+        _id: String(q.id),
+        content: q.quote,
+        author: q.author,
+        tags: [],
+      })));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/quotable/topics", requireAuth, async (_req, res) => {
+    try {
+      // Return topic list with approximate quote counts
+      const quotes = await getDummyQuotes();
+      const topics = QUOTE_TOPICS.map(t => {
+        const count = quotes.filter(q =>
+          t.keywords.some(kw => q.quote.toLowerCase().includes(kw))
+        ).length;
+        return { _id: t.name, name: t.name, quoteCount: count };
+      });
+      res.json(topics.sort((a, b) => b.quoteCount - a.quoteCount));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/quotable/by-topic", requireAuth, async (req, res) => {
+    try {
+      const topic = String(req.query.topic ?? "").trim();
+      if (!topic) return res.json([]);
+      const bucket = QUOTE_TOPICS.find(t => t.name.toLowerCase() === topic.toLowerCase());
+      const quotes = await getDummyQuotes();
+      const filtered = bucket
+        ? quotes.filter(q => bucket.keywords.some(kw => q.quote.toLowerCase().includes(kw)))
+        : quotes.filter(q => q.quote.toLowerCase().includes(topic.toLowerCase()));
+      const shuffled = filtered.sort(() => Math.random() - 0.5).slice(0, 30);
+      res.json(shuffled.map(q => ({
+        _id: String(q.id),
+        content: q.quote,
+        author: q.author,
+        tags: [topic.toLowerCase()],
+      })));
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
