@@ -1729,6 +1729,50 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Art Shares ────────────────────────────────────────────────────────────────
+  app.get("/api/art-shares", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getArtShares((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/art-shares", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const data = {
+        fromUserId: userId,
+        toUserId: req.body.toUserId,
+        title: req.body.title,
+        artistName: req.body.artistName ?? null,
+        yearCreated: req.body.yearCreated ?? null,
+        medium: req.body.medium ?? null,
+        movement: req.body.movement ?? null,
+        whereViewed: req.body.whereViewed ?? null,
+        city: req.body.city ?? null,
+        accentColor: req.body.accentColor ?? null,
+        imageUrl: req.body.imageUrl ?? null,
+        artNotes: req.body.artNotes ?? null,
+        notes: req.body.notes ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      res.status(201).json(await storage.sendArtShare(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/art-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissArtShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/art-shares/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteArtShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Spot Shares ───────────────────────────────────────────────────────────────
   app.get("/api/spot-shares", requireAuth, async (req, res) => {
     try {

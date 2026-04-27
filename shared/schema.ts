@@ -759,6 +759,35 @@ export const insertArtPieceSchema = createInsertSchema(artPieces).omit({ id: tru
 export type InsertArtPiece = z.infer<typeof insertArtPieceSchema>;
 export type ArtPiece = typeof artPieces.$inferSelect;
 
+// ── ART SHARES ─────────────────────────────────────────────────────────────────
+export const artShares = pgTable("art_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  title: text("title").notNull(),
+  artistName: text("artist_name"),
+  yearCreated: integer("year_created"),
+  medium: text("medium"),
+  movement: text("movement"),
+  whereViewed: text("where_viewed"),
+  city: text("city"),
+  accentColor: text("accent_color"),
+  imageUrl: text("image_url"),
+  artNotes: text("art_notes"),   // original piece notes
+  notes: text("notes"),          // share message
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertArtShareSchema = createInsertSchema(artShares).omit({ id: true });
+export type InsertArtShare = z.infer<typeof insertArtShareSchema>;
+export type ArtShare = typeof artShares.$inferSelect;
+
+export type ArtShareWithUser = ArtShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── EQUIPMENT ────────────────────────────────────────────────────────────────────
 // category: "barbell" | "dumbbell" | "kettlebell" | "resistance_band" | "cable" | "machine" | "pullup_bar" | "bench" | "cardio" | "bodyweight" | "other"
 export const equipment = pgTable("equipment", {
