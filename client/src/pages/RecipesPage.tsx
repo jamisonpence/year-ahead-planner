@@ -7,6 +7,7 @@ import {
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
   RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
   Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle, Search,
+  Send, Users, Inbox, CornerUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType } from "@shared/schema";
+import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType, RecipeShareWithUser, PublicUser } from "@shared/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -481,10 +482,305 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
   );
 }
 
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ user }: { user: { name: string; avatarUrl?: string | null } }) {
+  if (user.avatarUrl) return <img src={user.avatarUrl} alt={user.name} className="w-7 h-7 rounded-full object-cover shrink-0" />;
+  return (
+    <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold shrink-0">
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Recipe Share Modal ────────────────────────────────────────────────────────
+function RecipeShareModal({ open, onClose, recipe }: {
+  open: boolean; onClose: () => void; recipe: Recipe | null;
+}) {
+  const { toast } = useToast();
+  const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
+    enabled: open,
+  });
+
+  useEffect(() => { if (open) { setSelectedFriendId(null); setNote(""); } }, [open, recipe]);
+
+  const sendMut = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/recipe-shares", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recipe-shares"] });
+      toast({ title: `Shared "${recipe?.name}"` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to share recipe", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!recipe || !selectedFriendId) return;
+    sendMut.mutate({
+      toUserId: selectedFriendId,
+      recipeName: recipe.name,
+      recipeEmoji: recipe.emoji,
+      recipeCategory: recipe.category,
+      recipeComponentType: recipe.componentType,
+      recipePrepTime: recipe.prepTime,
+      recipeCookTime: recipe.cookTime,
+      recipeServings: (recipe as any).servings ?? null,
+      recipeIngredients: recipe.ingredientsJson,
+      recipeInstructions: recipe.instructions,
+      recipeImageUrl: recipe.imageUrl,
+      notes: note.trim() || null,
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Send size={15} /> Share Recipe
+          </DialogTitle>
+        </DialogHeader>
+
+        {recipe && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border">
+            <span className="text-2xl shrink-0">{recipe.emoji}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold line-clamp-1">{recipe.name}</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                {recipe.prepTime != null && <span>Prep {recipe.prepTime}m</span>}
+                {recipe.cookTime != null && <span>Cook {recipe.cookTime}m</span>}
+                {recipe.category && <span>{recipe.category}</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Send to</label>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-3 border rounded-lg">
+                <Users size={18} className="mx-auto mb-1 opacity-30" />
+                No friends yet — connect with people in the Relationships tab
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFriendId(f.id === selectedFriendId ? null : f.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors ${
+                      selectedFriendId === f.id ? "border-primary bg-primary/10" : "hover:bg-secondary border-border"
+                    }`}
+                  >
+                    <Avatar user={f} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                    </div>
+                    {selectedFriendId === f.id && <Check size={14} className="text-primary shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
+            <textarea
+              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              rows={2}
+              placeholder="Why you're sharing this…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSend} disabled={!selectedFriendId || sendMut.isPending} className="gap-1.5">
+            <Send size={13} /> Share
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Shared Recipes Tab ────────────────────────────────────────────────────────
+function SharedRecipesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: shares } = useQuery<{ received: RecipeShareWithUser[]; sent: RecipeShareWithUser[] }>({
+    queryKey: ["/api/recipe-shares"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/recipe-shares"); return r.json(); },
+  });
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/recipe-shares/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/recipe-shares"] }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/recipe-shares/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/recipe-shares"] }),
+  });
+
+  const addToLibraryMut = useMutation({
+    mutationFn: (share: RecipeShareWithUser) => apiRequest("POST", "/api/recipes", {
+      name: share.recipeName,
+      emoji: share.recipeEmoji,
+      category: share.recipeCategory,
+      componentType: share.recipeComponentType,
+      prepTime: share.recipePrepTime,
+      cookTime: share.recipeCookTime,
+      servings: share.recipeServings,
+      ingredientsJson: share.recipeIngredients,
+      instructions: share.recipeInstructions,
+      imageUrl: share.recipeImageUrl,
+      notes: share.notes ? `Shared by ${share.fromUser.name}: ${share.notes}` : `Shared by ${share.fromUser.name}`,
+      isFavorite: false,
+    }),
+    onSuccess: (_, share) => {
+      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: `Added "${share.recipeName}" to your library` });
+    },
+    onError: () => toast({ title: "Failed to add recipe", variant: "destructive" }),
+  });
+
+  const received = shares?.received ?? [];
+  const sent = shares?.sent ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Received */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Inbox size={14} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Shared with You</h3>
+          {received.length > 0 && (
+            <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-medium">{received.length}</span>
+          )}
+        </div>
+        {received.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            No recipes shared with you yet — friends can share recipes from their library
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {received.map((share) => {
+              const totalTime = (share.recipePrepTime ?? 0) + (share.recipeCookTime ?? 0);
+              const info = getComponentInfo(share.recipeComponentType);
+              const ingredients = parseIngredients(share.recipeIngredients);
+              return (
+                <div key={share.id} className="border rounded-xl bg-card overflow-hidden">
+                  {share.recipeImageUrl ? (
+                    <div className="relative h-32 overflow-hidden">
+                      <img src={share.recipeImageUrl} alt={share.recipeName} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <span className="absolute bottom-2 left-3 text-white text-sm font-semibold line-clamp-1">{share.recipeName}</span>
+                    </div>
+                  ) : (
+                    <div className={`px-4 py-3 flex items-center gap-2 ${info ? info.bg : "bg-amber-50 dark:bg-amber-950/30"}`}>
+                      <span className="text-2xl">{share.recipeEmoji}</span>
+                      <p className="font-semibold text-sm line-clamp-1">{share.recipeName}</p>
+                    </div>
+                  )}
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+                      {totalTime > 0 && <span className="flex items-center gap-1"><Clock size={10} />{totalTime}m</span>}
+                      {share.recipeCategory && <span>{share.recipeCategory}</span>}
+                      {info && <span className={`font-medium ${info.color}`}>{info.label}</span>}
+                    </div>
+                    {ingredients.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {ingredients.slice(0, 4).map((ing, i) => (
+                          <span key={i} className="text-xs px-1.5 py-0.5 bg-secondary rounded-full text-muted-foreground">{ing.name}</span>
+                        ))}
+                        {ingredients.length > 4 && <span className="text-xs text-muted-foreground">+{ingredients.length - 4}</span>}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <Avatar user={share.fromUser} />
+                      <span className="text-xs text-muted-foreground">from <span className="font-medium text-foreground">{share.fromUser.name}</span></span>
+                    </div>
+                    {share.notes && <p className="text-xs italic text-muted-foreground line-clamp-2">"{share.notes}"</p>}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-7 text-xs gap-1"
+                        onClick={() => addToLibraryMut.mutate(share)}
+                        disabled={addToLibraryMut.isPending}
+                      >
+                        <Plus size={11} /> Add to Library
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={() => dismissMut.mutate(share.id)}
+                      >
+                        <X size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Sent */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <CornerUpRight size={14} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Shared by You</h3>
+        </div>
+        {sent.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            You haven't shared any recipes yet — use the ··· menu on any recipe
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((share) => (
+              <div key={share.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+                <span className="text-xl shrink-0">{share.recipeEmoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium line-clamp-1">{share.recipeName}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-muted-foreground">to <span className="font-medium text-foreground">{share.toUser.name}</span></span>
+                    <span className="text-xs text-muted-foreground">· {format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                </div>
+                {share.notes && <p className="text-xs italic text-muted-foreground max-w-32 line-clamp-2 hidden sm:block">"{share.notes}"</p>}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => deleteMut.mutate(share.id)}
+                >
+                  <Trash2 size={12} />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Recipe Card ───────────────────────────────────────────────────────────────
-function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, isOnWeek }: {
+function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, onShare, isOnWeek }: {
   recipe: Recipe; onDetail: () => void; onAssign: () => void;
-  onEdit: () => void; onDelete: () => void; isOnWeek: boolean;
+  onEdit: () => void; onDelete: () => void; onShare: () => void; isOnWeek: boolean;
 }) {
   const ingredients = parseIngredients(recipe.ingredientsJson);
   const info = getComponentInfo(recipe.componentType);
@@ -552,6 +848,9 @@ function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, isOnWeek }: 
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}><Pencil size={12} className="mr-2" />Edit</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onShare}><Send size={12} className="mr-2" />Share with Friend</DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
               <Trash2 size={12} className="mr-2" />Delete
             </DropdownMenuItem>
@@ -1072,7 +1371,7 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-type SubView = "library" | "bundles" | "week" | "grocery";
+type SubView = "library" | "bundles" | "week" | "grocery" | "shared";
 type LibFilter = ComponentType | "all" | "unclassified";
 
 export default function RecipesPage() {
@@ -1090,6 +1389,7 @@ export default function RecipesPage() {
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const [mealDbOpen, setMealDbOpen] = useState(false);
+  const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null);
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
@@ -1243,6 +1543,7 @@ export default function RecipesPage() {
     { id: "bundles" as SubView, label: "Bundles", icon: <Package size={14} />, count: bundles.length },
     { id: "week" as SubView, label: "This Week", icon: <CalendarDays size={14} />, count: weekPlan.length },
     { id: "grocery" as SubView, label: "Grocery", icon: <ShoppingCart size={14} />, count: totalGrocery },
+    { id: "shared" as SubView, label: "Shared", icon: <Send size={14} />, count: null },
   ];
 
   return (
@@ -1372,6 +1673,7 @@ export default function RecipesPage() {
                                       onAssign={() => setAssignRecipe(recipe)}
                                       onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
                                       onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                                    onShare={() => setShareRecipe(recipe)}
                                     />
                                   ))}
                                 </div>
@@ -1389,6 +1691,7 @@ export default function RecipesPage() {
                             onAssign={() => setAssignRecipe(recipe)}
                             onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
                             onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                            onShare={() => setShareRecipe(recipe)}
                           />
                         ))}
                       </div>
@@ -1411,6 +1714,7 @@ export default function RecipesPage() {
                         onAssign={() => setAssignRecipe(recipe)}
                         onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
                         onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                        onShare={() => setShareRecipe(recipe)}
                       />
                     ))}
                   </div>
@@ -1442,6 +1746,7 @@ export default function RecipesPage() {
                       onAssign={() => setAssignRecipe(recipe)}
                       onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
                       onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                      onShare={() => setShareRecipe(recipe)}
                     />
                   ))}
                 </div>
@@ -1697,6 +2002,13 @@ export default function RecipesPage() {
         </div>
       )}
 
+      {/* Shared recipes subView */}
+      {subView === "shared" && (
+        <div className="mt-2">
+          <SharedRecipesTab />
+        </div>
+      )}
+
       {/* Modals */}
       <MealDBSearchModal open={mealDbOpen} onClose={() => setMealDbOpen(false)} />
       <RecipeFormModal open={recipeModal} onClose={() => { setRecipeModal(false); setEditRecipe(null); }} editRecipe={editRecipe} />
@@ -1710,6 +2022,11 @@ export default function RecipesPage() {
       {assignBundle && (
         <AssignDayModal bundle={assignBundle} weekStart={weekStart} existingPlan={weekPlan} onClose={() => setAssignBundle(null)} />
       )}
+      <RecipeShareModal
+        open={!!shareRecipe}
+        onClose={() => setShareRecipe(null)}
+        recipe={shareRecipe}
+      />
 
       {/* CSV Format Info */}
       <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>

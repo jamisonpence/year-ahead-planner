@@ -783,6 +783,35 @@ export type BookRecommendationWithUser = BookRecommendation & {
   toUser: { id: number; name: string; avatarUrl: string | null };
 };
 
+// ── RECIPE SHARES ──────────────────────────────────────────────────────────────
+export const recipeShares = pgTable("recipe_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  recipeName: text("recipe_name").notNull(),
+  recipeEmoji: text("recipe_emoji").notNull().default("🍽️"),
+  recipeCategory: text("recipe_category"),
+  recipeComponentType: text("recipe_component_type"),
+  recipePrepTime: integer("recipe_prep_time"),
+  recipeCookTime: integer("recipe_cook_time"),
+  recipeServings: integer("recipe_servings"),
+  recipeIngredients: text("recipe_ingredients").notNull().default("[]"),
+  recipeInstructions: text("recipe_instructions"),
+  recipeImageUrl: text("recipe_image_url"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertRecipeShareSchema = createInsertSchema(recipeShares).omit({ id: true });
+export type InsertRecipeShare = z.infer<typeof insertRecipeShareSchema>;
+export type RecipeShare = typeof recipeShares.$inferSelect;
+
+export type RecipeShareWithUser = RecipeShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── MUSIC RECOMMENDATIONS ──────────────────────────────────────────────────────
 export const musicRecommendations = pgTable("music_recommendations", {
   id: serial("id").primaryKey(),

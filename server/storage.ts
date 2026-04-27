@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -37,6 +37,7 @@ import type {
   InsertFriendRequest, FriendRequest, FriendRequestWithUser, PublicUser,
   InsertBookRecommendation, BookRecommendation, BookRecommendationWithUser,
   InsertMusicRecommendation, MusicRecommendation, MusicRecommendationWithUser,
+  InsertRecipeShare, RecipeShare, RecipeShareWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -674,6 +675,27 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS recipe_shares (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      recipe_name TEXT NOT NULL,
+      recipe_emoji TEXT NOT NULL DEFAULT '🍽️',
+      recipe_category TEXT,
+      recipe_component_type TEXT,
+      recipe_prep_time INTEGER,
+      recipe_cook_time INTEGER,
+      recipe_servings INTEGER,
+      recipe_ingredients TEXT NOT NULL DEFAULT '[]',
+      recipe_instructions TEXT,
+      recipe_image_url TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS music_recommendations (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -891,6 +913,11 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Recipe Shares
+  sendRecipeShare(data: InsertRecipeShare): Promise<RecipeShare>;
+  getRecipeShares(userId: number): Promise<{ received: RecipeShareWithUser[]; sent: RecipeShareWithUser[] }>;
+  dismissRecipeShare(id: number, userId: number): Promise<boolean>;
+  deleteRecipeShare(id: number, userId: number): Promise<boolean>;
   // Music Recommendations
   sendMusicRecommendation(data: InsertMusicRecommendation): Promise<MusicRecommendation>;
   getMusicRecommendations(userId: number): Promise<{ received: MusicRecommendationWithUser[]; sent: MusicRecommendationWithUser[] }>;
@@ -1801,6 +1828,76 @@ export const storage: IStorage = {
       [userId]
     );
     return parseInt(result.rows[0].count, 10);
+  },
+
+  // ── Recipe Shares ───────────────────────────────────────────────────────────
+  async sendRecipeShare(data) {
+    const result = await db.insert(recipeShares).values(data).returning();
+    return result[0];
+  },
+
+  async getRecipeShares(userId) {
+    const rows = await pool.query<{
+      id: number; from_user_id: number; to_user_id: number;
+      recipe_name: string; recipe_emoji: string; recipe_category: string | null;
+      recipe_component_type: string | null; recipe_prep_time: number | null;
+      recipe_cook_time: number | null; recipe_servings: number | null;
+      recipe_ingredients: string; recipe_instructions: string | null;
+      recipe_image_url: string | null; notes: string | null;
+      created_at: string; is_dismissed: boolean;
+      from_id: number; from_name: string; from_avatar: string | null;
+      to_id: number; to_name: string; to_avatar: string | null;
+    }>(`
+      SELECT rs.*,
+        fu.id as from_id, fu.name as from_name, fu.avatar_url as from_avatar,
+        tu.id as to_id, tu.name as to_name, tu.avatar_url as to_avatar
+      FROM recipe_shares rs
+      JOIN users fu ON rs.from_user_id = fu.id
+      JOIN users tu ON rs.to_user_id = tu.id
+      WHERE rs.from_user_id = $1 OR rs.to_user_id = $1
+      ORDER BY rs.created_at DESC
+    `, [userId]);
+
+    const toShare = (r: typeof rows.rows[0]): RecipeShareWithUser => ({
+      id: r.id,
+      fromUserId: r.from_user_id,
+      toUserId: r.to_user_id,
+      recipeName: r.recipe_name,
+      recipeEmoji: r.recipe_emoji,
+      recipeCategory: r.recipe_category,
+      recipeComponentType: r.recipe_component_type,
+      recipePrepTime: r.recipe_prep_time,
+      recipeCookTime: r.recipe_cook_time,
+      recipeServings: r.recipe_servings,
+      recipeIngredients: r.recipe_ingredients,
+      recipeInstructions: r.recipe_instructions,
+      recipeImageUrl: r.recipe_image_url,
+      notes: r.notes,
+      createdAt: r.created_at,
+      isDismissed: r.is_dismissed,
+      fromUser: { id: r.from_id, name: r.from_name, avatarUrl: r.from_avatar },
+      toUser: { id: r.to_id, name: r.to_name, avatarUrl: r.to_avatar },
+    });
+
+    const received = rows.rows.filter((r) => r.to_user_id === userId && !r.is_dismissed).map(toShare);
+    const sent = rows.rows.filter((r) => r.from_user_id === userId).map(toShare);
+    return { received, sent };
+  },
+
+  async dismissRecipeShare(id, userId) {
+    const result = await pool.query(
+      `UPDATE recipe_shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async deleteRecipeShare(id, userId) {
+    const result = await pool.query(
+      `DELETE FROM recipe_shares WHERE id = $1 AND from_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Music Recommendations ───────────────────────────────────────────────────

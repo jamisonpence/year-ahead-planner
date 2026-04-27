@@ -1642,6 +1642,53 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Recipe Shares ─────────────────────────────────────────────────────────────
+  app.get("/api/recipe-shares", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getRecipeShares((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/recipe-shares", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { toUserId, recipeName, recipeEmoji, recipeCategory, recipeComponentType,
+              recipePrepTime, recipeCookTime, recipeServings, recipeIngredients,
+              recipeInstructions, recipeImageUrl, notes } = req.body;
+      if (!toUserId || !recipeName) return res.status(400).json({ error: "toUserId and recipeName required" });
+      const share = await storage.sendRecipeShare({
+        fromUserId: userId, toUserId,
+        recipeName, recipeEmoji: recipeEmoji || "🍽️",
+        recipeCategory: recipeCategory || null,
+        recipeComponentType: recipeComponentType || null,
+        recipePrepTime: recipePrepTime || null,
+        recipeCookTime: recipeCookTime || null,
+        recipeServings: recipeServings || null,
+        recipeIngredients: recipeIngredients || "[]",
+        recipeInstructions: recipeInstructions || null,
+        recipeImageUrl: recipeImageUrl || null,
+        notes: notes || null,
+        createdAt: new Date().toISOString(),
+        isDismissed: false,
+      });
+      res.status(201).json(share);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/recipe-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissRecipeShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/recipe-shares/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteRecipeShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Music Recommendations ─────────────────────────────────────────────────────
   app.get("/api/music-recommendations", requireAuth, async (req, res) => {
     try {
