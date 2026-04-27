@@ -810,6 +810,18 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  app.get("/api/tab-privacy", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getTabPrivacy((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+  app.put("/api/tab-privacy", requireAuth, async (req, res) => {
+    try {
+      await storage.saveTabPrivacy((req.user as User).id, req.body);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Receipts (file upload) ─────────────────────────────────────────────────────
   const UPLOADS_DIR = path.resolve("uploads/receipts");
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });

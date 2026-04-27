@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -20,7 +20,7 @@ import type {
   InsertTransaction, Transaction,
   InsertSubscription, Subscription,
   InsertReceipt, Receipt,
-  NavPref,
+  NavPref, TabPrivacySetting,
   User, InsertUser,
   InsertPlant, Plant,
   InsertMusicArtist, MusicArtist, InsertMusicSong, MusicSong, MusicArtistWithSongs,
@@ -389,6 +389,14 @@ export async function initializeStorage() {
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
       prefs_json TEXT NOT NULL DEFAULT '[]'
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tab_privacy (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE,
+      settings_json TEXT NOT NULL DEFAULT '[]'
     )
   `);
 
@@ -936,6 +944,8 @@ export interface IStorage {
   // Nav Prefs
   getNavPrefs(userId: number): Promise<NavPref[]>;
   saveNavPrefs(userId: number, prefs: NavPref[]): Promise<void>;
+  getTabPrivacy(userId: number): Promise<TabPrivacySetting[]>;
+  saveTabPrivacy(userId: number, settings: TabPrivacySetting[]): Promise<void>;
   // Users
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
@@ -1529,6 +1539,21 @@ export const storage: IStorage = {
       await db.update(navPrefs).set({ prefsJson: json }).where(eq(navPrefs.id, row[0].id));
     } else {
       await db.insert(navPrefs).values({ prefsJson: json, userId });
+    }
+  },
+
+  async getTabPrivacy(userId: number): Promise<TabPrivacySetting[]> {
+    const row = await db.select().from(tabPrivacy).where(eq(tabPrivacy.userId, userId)).limit(1);
+    if (!row[0]) return [];
+    try { return JSON.parse(row[0].settingsJson) as TabPrivacySetting[]; } catch { return []; }
+  },
+  async saveTabPrivacy(userId: number, settings: TabPrivacySetting[]) {
+    const row = await db.select().from(tabPrivacy).where(eq(tabPrivacy.userId, userId)).limit(1);
+    const json = JSON.stringify(settings);
+    if (row[0]) {
+      await db.update(tabPrivacy).set({ settingsJson: json }).where(eq(tabPrivacy.userId, userId));
+    } else {
+      await db.insert(tabPrivacy).values({ settingsJson: json, userId });
     }
   },
 
