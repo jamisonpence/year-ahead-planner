@@ -923,6 +923,7 @@ function ArtShareModal({ piece, onClose }: { piece: ArtPiece; onClose: () => voi
     mutationFn: (data: any) => apiRequest("POST", "/api/art-shares", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/art-shares"] });
+      qc.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: "Shared!", description: `"${piece.title}" shared with your friend.` });
       onClose();
     },

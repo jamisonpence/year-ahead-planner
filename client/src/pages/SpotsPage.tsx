@@ -934,6 +934,7 @@ function SpotShareModal({ spot, onClose }: { spot: Spot; onClose: () => void }) 
     mutationFn: (data: any) => apiRequest("POST", "/api/spot-shares", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/spot-shares"] });
+      qc.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: "Shared!", description: `${spot.name} shared with your friend.` });
       onClose();
     },

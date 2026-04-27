@@ -281,6 +281,7 @@ function MusicRecommendModal({ open, onClose, type, artistName, songTitle }: {
   songTitle?: string;
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
   const [note, setNote] = useState("");
 
@@ -297,6 +298,7 @@ function MusicRecommendModal({ open, onClose, type, artistName, songTitle }: {
   const sendMut = useMutation({
     mutationFn: (body: object) => apiRequest("POST", "/api/music-recommendations", body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/shares/count"] });
       const label = type === "song" ? `"${songTitle}"` : `${artistName}`;
       toast({ title: `Recommended ${label}` });
       onClose();

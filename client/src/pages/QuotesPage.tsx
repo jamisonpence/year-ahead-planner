@@ -869,6 +869,7 @@ function QuoteShareModal({ quote, onClose }: { quote: Quote; onClose: () => void
     mutationFn: (data: any) => apiRequest("POST", "/api/quote-shares", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/quote-shares"] });
+      qc.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: "Shared!", description: "Quote sent to your friend." });
       onClose();
     },
