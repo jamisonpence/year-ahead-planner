@@ -512,6 +512,7 @@ function RecipeShareModal({ open, onClose, recipe }: {
     mutationFn: (body: object) => apiRequest("POST", "/api/recipe-shares", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/recipe-shares"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: `Shared "${recipe?.name}"` });
       onClose();
     },

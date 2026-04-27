@@ -240,6 +240,7 @@ function RecommendModal({ open, onClose, book }: {
     mutationFn: (body: object) => apiRequest("POST", "/api/book-recommendations", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/book-recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: `Recommended "${book?.title}"` });
       onClose();
     },

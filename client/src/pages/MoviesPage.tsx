@@ -1020,6 +1020,7 @@ function MovieShareModal({ movie, onClose }: { movie: Movie; onClose: () => void
     mutationFn: (data: any) => apiRequest("POST", "/api/movie-shares", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/movie-shares"] });
+      qc.invalidateQueries({ queryKey: ["/api/shares/count"] });
       toast({ title: "Shared!", description: `${movie.title} shared with your friend.` });
       onClose();
     },
