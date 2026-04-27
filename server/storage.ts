@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -34,6 +34,7 @@ import type {
   InsertArtPiece, ArtPiece,
   InsertJournalEntry, JournalEntry,
   InsertEquipment, Equipment,
+  InsertFriendRequest, FriendRequest, FriendRequestWithUser, PublicUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -655,6 +656,19 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     );
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS friend_requests_pair_idx
+      ON friend_requests (LEAST(from_user_id, to_user_id), GREATEST(from_user_id, to_user_id))
+      WHERE status <> 'declined';
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -847,6 +861,15 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Friends
+  searchUsers(query: string, currentUserId: number): Promise<PublicUser[]>;
+  sendFriendRequest(fromUserId: number, toUserId: number): Promise<FriendRequest>;
+  getFriendRequests(userId: number): Promise<{ incoming: FriendRequestWithUser[]; outgoing: FriendRequestWithUser[] }>;
+  respondFriendRequest(id: number, status: "accepted" | "declined", userId: number): Promise<FriendRequest | null>;
+  cancelFriendRequest(id: number, fromUserId: number): Promise<boolean>;
+  getFriends(userId: number): Promise<PublicUser[]>;
+  unfriend(userId: number, friendId: number): Promise<boolean>;
+  getPendingIncomingCount(userId: number): Promise<number>;
 }
 
 export const storage: IStorage = {
@@ -1647,6 +1670,97 @@ export const storage: IStorage = {
   async deleteEquipment(id) {
     const result = await db.delete(equipment).where(eq(equipment.id, id));
     return result.rowCount > 0;
+  },
+
+  // ── Friends ────────────────────────────────────────────────────────────────
+  async searchUsers(query, currentUserId) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const all = await db.select({
+      id: users.id, name: users.name, email: users.email, avatarUrl: users.avatarUrl,
+    }).from(users);
+    return all
+      .filter((u) => u.id !== currentUserId)
+      .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+      .slice(0, 20);
+  },
+
+  async sendFriendRequest(fromUserId, toUserId) {
+    const now = new Date().toISOString();
+    const result = await db.insert(friendRequests).values({ fromUserId, toUserId, status: "pending", createdAt: now }).returning();
+    return result[0];
+  },
+
+  async getFriendRequests(userId) {
+    const all = await pool.query(`
+      SELECT fr.*,
+        u.id as other_id, u.name as other_name, u.email as other_email, u.avatar_url as other_avatar
+      FROM friend_requests fr
+      JOIN users u ON (
+        CASE WHEN fr.from_user_id = $1 THEN fr.to_user_id ELSE fr.from_user_id END = u.id
+      )
+      WHERE (fr.from_user_id = $1 OR fr.to_user_id = $1)
+        AND fr.status = 'pending'
+      ORDER BY fr.created_at DESC
+    `, [userId]);
+
+    const incoming: FriendRequestWithUser[] = [];
+    const outgoing: FriendRequestWithUser[] = [];
+    for (const row of all.rows) {
+      const req: FriendRequestWithUser = {
+        id: row.id, fromUserId: row.from_user_id, toUserId: row.to_user_id,
+        status: row.status, createdAt: row.created_at,
+        otherUser: { id: row.other_id, name: row.other_name, email: row.other_email, avatarUrl: row.other_avatar },
+      };
+      if (row.to_user_id === userId) incoming.push(req);
+      else outgoing.push(req);
+    }
+    return { incoming, outgoing };
+  },
+
+  async respondFriendRequest(id, status, userId) {
+    const existing = await db.select().from(friendRequests).where(eq(friendRequests.id, id)).limit(1);
+    if (!existing[0] || existing[0].toUserId !== userId) return null;
+    const result = await db.update(friendRequests).set({ status }).where(eq(friendRequests.id, id)).returning();
+    return result[0] ?? null;
+  },
+
+  async cancelFriendRequest(id, fromUserId) {
+    const existing = await db.select().from(friendRequests).where(eq(friendRequests.id, id)).limit(1);
+    if (!existing[0] || existing[0].fromUserId !== fromUserId) return false;
+    const result = await db.delete(friendRequests).where(eq(friendRequests.id, id));
+    return result.rowCount > 0;
+  },
+
+  async getFriends(userId) {
+    const rows = await pool.query(`
+      SELECT u.id, u.name, u.email, u.avatar_url as "avatarUrl"
+      FROM friend_requests fr
+      JOIN users u ON (
+        CASE WHEN fr.from_user_id = $1 THEN fr.to_user_id ELSE fr.from_user_id END = u.id
+      )
+      WHERE (fr.from_user_id = $1 OR fr.to_user_id = $1)
+        AND fr.status = 'accepted'
+      ORDER BY u.name ASC
+    `, [userId]);
+    return rows.rows as PublicUser[];
+  },
+
+  async unfriend(userId, friendId) {
+    const result = await pool.query(`
+      DELETE FROM friend_requests
+      WHERE status = 'accepted'
+        AND ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1))
+    `, [userId, friendId]);
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async getPendingIncomingCount(userId) {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM friend_requests WHERE to_user_id = $1 AND status = 'pending'`,
+      [userId]
+    );
+    return parseInt(result.rows[0].count, 10);
   },
 };
 

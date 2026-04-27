@@ -1521,6 +1521,87 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Friends ───────────────────────────────────────────────────────────────────
+
+  app.get("/api/users/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      if (!q) return res.json([]);
+      const userId = (req.user as User).id;
+      const results = await storage.searchUsers(q, userId);
+      // Attach relationship status for each result
+      const { incoming, outgoing } = await storage.getFriendRequests(userId);
+      const friends = await storage.getFriends(userId);
+      const friendIds = new Set(friends.map((f) => f.id));
+      const incomingIds = new Set(incoming.map((r) => r.otherUser.id));
+      const outgoingIds = new Set(outgoing.map((r) => r.otherUser.id));
+      const incomingReqIds = new Map(incoming.map((r) => [r.otherUser.id, r.id]));
+      const enriched = results.map((u) => ({
+        ...u,
+        relationshipStatus: friendIds.has(u.id) ? "friends"
+          : incomingIds.has(u.id) ? "incoming"
+          : outgoingIds.has(u.id) ? "outgoing_pending"
+          : "none",
+        incomingRequestId: incomingReqIds.get(u.id) ?? null,
+      }));
+      res.json(enriched);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/friend-requests/count", requireAuth, async (req, res) => {
+    try {
+      const count = await storage.getPendingIncomingCount((req.user as User).id);
+      res.json({ count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/friend-requests", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getFriendRequests((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/friend-requests", requireAuth, async (req, res) => {
+    try {
+      const { toUserId } = req.body;
+      if (!toUserId) return res.status(400).json({ error: "toUserId required" });
+      const fromUserId = (req.user as User).id;
+      if (fromUserId === toUserId) return res.status(400).json({ error: "Cannot friend yourself" });
+      const req_ = await storage.sendFriendRequest(fromUserId, Number(toUserId));
+      res.status(201).json(req_);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/friend-requests/:id", requireAuth, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (status !== "accepted" && status !== "declined") return res.status(400).json({ error: "status must be accepted or declined" });
+      const updated = await storage.respondFriendRequest(+req.params.id, status, (req.user as User).id);
+      if (!updated) return res.status(404).json({ error: "Not found or not authorized" });
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/friend-requests/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.cancelFriendRequest(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/friends", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getFriends((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/friends/:friendId", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.unfriend((req.user as User).id, +req.params.friendId);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }

@@ -761,6 +761,27 @@ export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit(
 export type InsertJournalEntry = z.infer<typeof insertJournalEntrySchema>;
 export type JournalEntry = typeof journalEntries.$inferSelect;
 
+// ── FRIEND REQUESTS ────────────────────────────────────────────────────────────
+export const friendRequests = pgTable("friend_requests", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  status: text("status").notNull().default("pending"), // pending | accepted | declined
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertFriendRequestSchema = createInsertSchema(friendRequests).omit({ id: true });
+export type InsertFriendRequest = z.infer<typeof insertFriendRequestSchema>;
+export type FriendRequest = typeof friendRequests.$inferSelect;
+
+// Enriched version with user info attached
+export type FriendRequestWithUser = FriendRequest & {
+  otherUser: { id: number; name: string; email: string; avatarUrl: string | null };
+};
+
+// Public user profile (no sensitive fields)
+export type PublicUser = { id: number; name: string; email: string; avatarUrl: string | null };
+
 // ── COMPOSITE TYPES ────────────────────────────────────────────────────────────
 export type EventWithTasks = Event & { tasks: Task[] };
 export type GoalWithTasks = Goal & { tasks: GoalTask[] }; // legacy
