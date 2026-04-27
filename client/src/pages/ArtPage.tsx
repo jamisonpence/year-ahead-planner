@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { ArtPiece } from "@shared/schema";
+import type { ArtPiece, ArtShareWithUser, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, parseISO } from "date-fns";
 import {
   Palette, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle, Landmark, Loader2, ExternalLink,
+  Send, Inbox, CornerUpRight, Check,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ const FILTER_TABS = [
   { value: "seen",        label: "Seen"        },
   { value: "own",         label: "Own"         },
   { value: "favorites",   label: "Favorites"   },
+  { value: "shared",      label: "Shared"      },
 ];
 
 const EMPTY_FORM = {
@@ -342,12 +345,13 @@ function MuseumSearchModal({
 // ── Art Card ──────────────────────────────────────────────────────────────────
 
 function ArtCard({
-  piece, onEdit, onDelete, onToggleFav,
+  piece, onEdit, onDelete, onToggleFav, onShare,
 }: {
   piece: ArtPiece;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
+  onShare: () => void;
 }) {
   const accentColor = piece.accentColor ?? "#6366f1";
   const mediumLabel = MEDIUMS.find((m) => m.value === piece.medium)?.label ?? piece.medium;
@@ -384,6 +388,9 @@ function ArtCard({
           <div className="flex items-center gap-1 shrink-0">
             <button onClick={onToggleFav} className="p-1.5 rounded hover:bg-secondary transition-colors">
               <Heart size={13} className={piece.isFavorite ? "text-rose-500 fill-rose-500" : "text-muted-foreground"} />
+            </button>
+            <button onClick={onShare} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
+              <Send size={12} className="text-muted-foreground" />
             </button>
             <button onClick={onEdit} className="p-1.5 rounded hover:bg-secondary transition-colors">
               <Pencil size={12} className="text-muted-foreground" />
@@ -423,6 +430,7 @@ export default function ArtPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [museumOpen, setMuseumOpen] = useState(false);
+  const [shareArtPiece, setShareArtPiece] = useState<ArtPiece | null>(null);
   const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allPieces = [] } = useQuery<ArtPiece[]>({
@@ -700,8 +708,10 @@ export default function ArtPage() {
         ))}
       </div>
 
-      {/* Art grid */}
-      {filtered.length === 0 ? (
+      {/* Art grid / Shared tab */}
+      {filterTab === "shared" ? (
+        <SharedArtTab />
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Palette size={48} className="mx-auto mb-4 opacity-20" />
           <p className="text-sm">{allPieces.length === 0 ? "No artworks yet. Add your first one!" : "No artworks match your filters."}</p>
@@ -720,6 +730,7 @@ export default function ArtPage() {
               onEdit={() => openEdit(p)}
               onDelete={() => deleteMut.mutate(p.id)}
               onToggleFav={() => toggleFav.mutate({ id: p.id, isFavorite: !p.isFavorite })}
+              onShare={() => setShareArtPiece(p)}
             />
           ))}
         </div>
@@ -839,6 +850,11 @@ export default function ArtPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Art Share Modal */}
+      {shareArtPiece && (
+        <ArtShareModal piece={shareArtPiece} onClose={() => setShareArtPiece(null)} />
+      )}
+
       {/* Museum Search */}
       <MuseumSearchModal
         open={museumOpen}
@@ -880,6 +896,279 @@ export default function ArtPage() {
           <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Avatar helper ──────────────────────────────────────────────────────────────
+function Avatar({ name, avatarUrl, size = 28 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0" />;
+  return (
+    <div style={{ width: size, height: size }} className="rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Art Share Modal ────────────────────────────────────────────────────────────
+function ArtShareModal({ piece, onClose }: { piece: ArtPiece; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedFriend, setSelectedFriend] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({ queryKey: ["/api/friends"] });
+
+  const sendMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/art-shares", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/art-shares"] });
+      toast({ title: "Shared!", description: `"${piece.title}" shared with your friend.` });
+      onClose();
+    },
+    onError: () => toast({ title: "Error sharing", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!selectedFriend) return;
+    sendMut.mutate({
+      toUserId: selectedFriend,
+      title: piece.title,
+      artistName: piece.artistName ?? null,
+      yearCreated: piece.yearCreated ?? null,
+      medium: piece.medium ?? null,
+      movement: piece.movement ?? null,
+      whereViewed: piece.whereViewed ?? null,
+      city: piece.city ?? null,
+      accentColor: piece.accentColor ?? null,
+      imageUrl: piece.imageUrl ?? null,
+      artNotes: piece.notes ?? null,
+      notes: note.trim() || null,
+    });
+  }
+
+  const accentColor = piece.accentColor ?? "#6366f1";
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send size={16} /> Share artwork
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          {/* Piece preview */}
+          <div className="rounded-lg border overflow-hidden">
+            <div className="h-1 w-full" style={{ background: accentColor }} />
+            {piece.imageUrl && (
+              <div className="h-28 overflow-hidden bg-muted">
+                <img src={piece.imageUrl} alt={piece.title} className="w-full h-full object-cover" />
+              </div>
+            )}
+            <div className="p-3">
+              <p className="font-semibold text-sm">{piece.title}</p>
+              {piece.artistName && <p className="text-xs text-muted-foreground">{piece.artistName}{piece.yearCreated ? `, ${piece.yearCreated}` : ""}</p>}
+              {(piece.whereViewed || piece.city) && (
+                <p className="text-xs text-muted-foreground">{[piece.whereViewed, piece.city].filter(Boolean).join(" · ")}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Send to a friend</p>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No friends yet. Add friends in the People section.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setSelectedFriend(f.id)}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
+                      selectedFriend === f.id ? "border-primary bg-primary/5" : "hover:bg-secondary"
+                    }`}
+                  >
+                    <Avatar name={f.name} avatarUrl={f.avatarUrl} size={32} />
+                    <span className="text-sm font-medium">{f.name}</span>
+                    {selectedFriend === f.id && <Check size={14} className="ml-auto text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Add a note (optional)</p>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Thought you'd love this…" rows={2} />
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={handleSend} disabled={!selectedFriend || sendMut.isPending} className="flex-1 gap-1.5">
+              <Send size={14} /> Send
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Shared Art Tab ─────────────────────────────────────────────────────────────
+function SharedArtTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [view, setView] = useState<"received" | "sent">("received");
+
+  const { data } = useQuery<{ received: ArtShareWithUser[]; sent: ArtShareWithUser[] }>({
+    queryKey: ["/api/art-shares"],
+  });
+  const received = data?.received ?? [];
+  const sent = data?.sent ?? [];
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/art-shares/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/art-shares"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/art-shares/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/art-shares"] }),
+  });
+  const addMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/art", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/art"] });
+      toast({ title: "Added to your Art!" });
+    },
+    onError: () => toast({ title: "Error adding", variant: "destructive" }),
+  });
+
+  function handleAdd(share: ArtShareWithUser) {
+    addMut.mutate({
+      title: share.title,
+      artistName: share.artistName ?? null,
+      yearCreated: share.yearCreated ?? null,
+      medium: share.medium ?? "other",
+      movement: share.movement ?? null,
+      whereViewed: share.whereViewed ?? null,
+      city: share.city ?? null,
+      accentColor: share.accentColor ?? ACCENT_COLORS[0],
+      imageUrl: share.imageUrl ?? null,
+      notes: share.artNotes ? `${share.artNotes} (shared by ${share.fromUser.name})` : `Shared by ${share.fromUser.name}`,
+      status: "want_to_see",
+      isFavorite: false,
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setView("received")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "received" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <Inbox size={14} /> Received {received.length > 0 && <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{received.length}</span>}
+        </button>
+        <button
+          onClick={() => setView("sent")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "sent" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <CornerUpRight size={14} /> Sent
+        </button>
+      </div>
+
+      {view === "received" && (
+        received.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Inbox size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No artworks shared with you yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {received.map((share) => {
+              const accentColor = share.accentColor ?? "#6366f1";
+              const mediumLabel = MEDIUMS.find((m) => m.value === share.medium)?.label ?? share.medium;
+              return (
+                <div key={share.id} className="rounded-xl border bg-card overflow-hidden">
+                  <div className="h-1.5 w-full" style={{ background: accentColor }} />
+                  {share.imageUrl && (
+                    <div className="h-36 overflow-hidden bg-muted">
+                      <img src={share.imageUrl} alt={share.title} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-sm">{share.title}</h3>
+                        {share.artistName && <p className="text-xs text-muted-foreground mt-0.5">{share.artistName}{share.yearCreated ? `, ${share.yearCreated}` : ""}</p>}
+                        {(share.whereViewed || share.city) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{[share.whereViewed, share.city].filter(Boolean).join(" · ")}</p>
+                        )}
+                      </div>
+                      <button onClick={() => dismissMut.mutate(share.id)} className="p-1 rounded hover:bg-secondary transition-colors shrink-0">
+                        <X size={13} className="text-muted-foreground" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {mediumLabel && <Badge variant="secondary" className="text-xs py-0 px-1.5">{mediumLabel}</Badge>}
+                      {share.movement && <Badge variant="outline" className="text-xs py-0 px-1.5">{share.movement}</Badge>}
+                    </div>
+
+                    {share.artNotes && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{share.artNotes}</p>}
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <Avatar name={share.fromUser.name} avatarUrl={share.fromUser.avatarUrl} size={20} />
+                      <span className="text-xs text-muted-foreground">from {share.fromUser.name}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{format(parseISO(share.createdAt), "MMM d")}</span>
+                    </div>
+                    {share.notes && <p className="text-xs italic text-muted-foreground mt-1">"{share.notes}"</p>}
+
+                    <Button size="sm" className="w-full gap-1.5 h-8 text-xs mt-3" onClick={() => handleAdd(share)} disabled={addMut.isPending}>
+                      <Plus size={12} /> Add to my Art
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {view === "sent" && (
+        sent.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <CornerUpRight size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">You haven't shared any artworks yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((share) => (
+              <div key={share.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card">
+                {share.imageUrl && (
+                  <img src={share.imageUrl} alt={share.title} className="w-12 h-12 rounded object-cover shrink-0" />
+                )}
+                {!share.imageUrl && (
+                  <div className="w-12 h-12 rounded shrink-0" style={{ background: share.accentColor ?? "#6366f1" }} />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{share.title}</p>
+                  {share.artistName && <p className="text-xs text-muted-foreground">{share.artistName}</p>}
+                  {share.notes && <p className="text-xs text-muted-foreground italic mt-0.5">"{share.notes}"</p>}
+                  <div className="flex items-center gap-2 mt-1">
+                    <Avatar name={share.toUser.name} avatarUrl={share.toUser.avatarUrl} size={18} />
+                    <span className="text-xs text-muted-foreground">to {share.toUser.name} · {format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                </div>
+                <button onClick={() => deleteMut.mutate(share.id)} className="p-1.5 rounded hover:bg-secondary transition-colors shrink-0">
+                  <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
