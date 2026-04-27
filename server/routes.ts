@@ -1906,7 +1906,10 @@ Rules:
       const userId = (req.user as User).id;
       const counts = await storage.getUnreadSharesCount(userId);
       res.json(counts);
-    } catch (e) { handleError(res, e); }
+    } catch (e) {
+      console.error("[shares/count error]", e);
+      handleError(res, e);
+    }
   });
 
   // ── Children ──────────────────────────────────────────────────────────────────
