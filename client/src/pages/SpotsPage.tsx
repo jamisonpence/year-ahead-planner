@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Spot } from "@shared/schema";
+import type { Spot, SpotShareWithUser, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { format, parseISO } from "date-fns";
 import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
   Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle, Loader2,
+  Send, Inbox, CornerUpRight, Check, X,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -413,11 +415,12 @@ function StarRating({ value, onChange, readonly = false }: { value: number | nul
 
 // ── Spot Card ─────────────────────────────────────────────────────────────────
 
-function SpotCard({ spot, onEdit, onDelete, onToggleFav }: {
+function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
   spot: Spot;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
+  onShare: () => void;
 }) {
   const tags = (spot.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
   const location = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
@@ -435,6 +438,9 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav }: {
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={onToggleFav} className={`p-1.5 rounded transition-colors ${spot.isFavorite ? "text-pink-500" : "text-muted-foreground/40 hover:text-pink-400"}`}>
             <Heart size={14} fill={spot.isFavorite ? "currentColor" : "none"} />
+          </button>
+          <button onClick={onShare} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
+            <Send size={13} className="text-muted-foreground" />
           </button>
           <button onClick={onEdit} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
           <button onClick={onDelete} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
@@ -484,6 +490,7 @@ export default function SpotsPage() {
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState("all");
+  const [shareSpot, setShareSpot] = useState<Spot | null>(null);
 
   const { data: spots = [] } = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
 
@@ -696,6 +703,7 @@ export default function SpotsPage() {
           <TabsTrigger value="want_to_visit">Want to Visit <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "want_to_visit").length})</span></TabsTrigger>
           <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
           <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
+          <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -733,7 +741,9 @@ export default function SpotsPage() {
       </div>
 
       {/* Results */}
-      {displaySpots.length === 0 ? (
+      {activeTab === "shared" ? (
+        <SharedSpotsTab />
+      ) : displaySpots.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <MapPin size={36} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No spots yet. Start adding places!</p>
@@ -746,6 +756,7 @@ export default function SpotsPage() {
               spot={spot}
               onEdit={() => openEdit(spot)}
               onDelete={() => deleteMut.mutate(spot.id)}
+              onShare={() => setShareSpot(spot)}
               onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
             />
           ))}
@@ -860,6 +871,11 @@ export default function SpotsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Spot Share Modal */}
+      {shareSpot && (
+        <SpotShareModal spot={shareSpot} onClose={() => setShareSpot(null)} />
+      )}
+
       {/* CSV Format Info Dialog */}
       <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
         <DialogContent className="max-w-lg">
@@ -891,6 +907,288 @@ export default function SpotsPage() {
           <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Avatar helper ──────────────────────────────────────────────────────────────
+function Avatar({ name, avatarUrl, size = 28 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0" />;
+  return (
+    <div style={{ width: size, height: size }} className="rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Spot Share Modal ───────────────────────────────────────────────────────────
+function SpotShareModal({ spot, onClose }: { spot: Spot; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedFriend, setSelectedFriend] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({ queryKey: ["/api/friends"] });
+
+  const sendMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/spot-shares", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/spot-shares"] });
+      toast({ title: "Shared!", description: `${spot.name} shared with your friend.` });
+      onClose();
+    },
+    onError: () => toast({ title: "Error sharing", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!selectedFriend) return;
+    sendMut.mutate({
+      toUserId: selectedFriend,
+      name: spot.name,
+      type: spot.type,
+      address: spot.address ?? null,
+      neighborhood: spot.neighborhood ?? null,
+      city: spot.city ?? null,
+      website: spot.website ?? null,
+      priceRange: spot.priceRange ?? null,
+      tags: spot.tags ?? null,
+      openingHours: spot.openingHours ?? null,
+      rating: spot.rating ?? null,
+      spotNotes: spot.notes ?? null,
+      notes: note.trim() || null,
+    });
+  }
+
+  const emoji = SPOT_TYPES.find((t) => t.value === spot.type)?.emoji ?? "📍";
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send size={16} /> Share "{spot.name}"
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50 text-sm">
+            <span className="text-xl">{emoji}</span>
+            <div>
+              <p className="font-medium leading-tight">{spot.name}</p>
+              {(spot.neighborhood || spot.city) && (
+                <p className="text-xs text-muted-foreground">{[spot.neighborhood, spot.city].filter(Boolean).join(", ")}</p>
+              )}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Send to a friend</p>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No friends yet. Add friends in the People section.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setSelectedFriend(f.id)}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
+                      selectedFriend === f.id ? "border-primary bg-primary/5" : "hover:bg-secondary"
+                    }`}
+                  >
+                    <Avatar name={f.name} avatarUrl={f.avatarUrl} size={32} />
+                    <span className="text-sm font-medium">{f.name}</span>
+                    {selectedFriend === f.id && <Check size={14} className="ml-auto text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Add a note (optional)</p>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="You'd love this place…" rows={2} />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSend} disabled={!selectedFriend || sendMut.isPending} className="flex-1 gap-1.5">
+              <Send size={14} /> Send
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Shared Spots Tab ───────────────────────────────────────────────────────────
+const PRICE_LABELS_LOCAL = ["", "$", "$$", "$$$", "$$$$"];
+
+function SharedSpotsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [view, setView] = useState<"received" | "sent">("received");
+
+  const { data } = useQuery<{ received: SpotShareWithUser[]; sent: SpotShareWithUser[] }>({
+    queryKey: ["/api/spot-shares"],
+  });
+  const received = data?.received ?? [];
+  const sent = data?.sent ?? [];
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/spot-shares/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spot-shares"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/spot-shares/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spot-shares"] }),
+  });
+
+  const addMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/spots", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/spots"] });
+      toast({ title: "Added to your Spots!" });
+    },
+    onError: () => toast({ title: "Error adding", variant: "destructive" }),
+  });
+
+  function handleAddToSpots(share: SpotShareWithUser) {
+    addMut.mutate({
+      name: share.name,
+      type: share.type,
+      address: share.address ?? null,
+      neighborhood: share.neighborhood ?? null,
+      city: share.city ?? null,
+      website: share.website ?? null,
+      priceRange: share.priceRange ?? null,
+      tags: share.tags ?? null,
+      openingHours: share.openingHours ?? null,
+      rating: share.rating ?? null,
+      notes: share.spotNotes ? `${share.spotNotes} (shared by ${share.fromUser.name})` : `Shared by ${share.fromUser.name}`,
+      status: "want_to_visit",
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setView("received")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "received" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <Inbox size={14} /> Received {received.length > 0 && <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{received.length}</span>}
+        </button>
+        <button
+          onClick={() => setView("sent")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "sent" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <CornerUpRight size={14} /> Sent
+        </button>
+      </div>
+
+      {view === "received" && (
+        received.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Inbox size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No spots shared with you yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {received.map((share) => {
+              const emoji = SPOT_TYPES.find((t) => t.value === share.type)?.emoji ?? "📍";
+              const typeLabel = SPOT_TYPES.find((t) => t.value === share.type)?.label ?? share.type;
+              const location = [share.neighborhood, share.city].filter(Boolean).join(", ");
+              const tags = (share.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+              return (
+                <div key={share.id} className="p-4 rounded-lg border bg-card space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <span className="text-xl shrink-0 mt-0.5">{emoji}</span>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm leading-tight">{share.name}</p>
+                        {location && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Navigation size={10} />{location}</p>}
+                      </div>
+                    </div>
+                    <button onClick={() => dismissMut.mutate(share.id)} className="p-1 rounded hover:bg-secondary transition-colors shrink-0">
+                      <X size={13} className="text-muted-foreground" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className="text-xs">{typeLabel}</Badge>
+                    {share.priceRange && <span className="text-xs font-medium text-muted-foreground">{PRICE_LABELS_LOCAL[share.priceRange]}</span>}
+                    {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
+                  </div>
+
+                  {share.rating != null && (
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map((n) => (
+                        <span key={n} className={`text-sm ${(share.rating ?? 0) >= n ? "text-yellow-400" : "text-muted-foreground/30"}`}>★</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {share.address && <p className="flex items-center gap-1"><MapPin size={10} />{share.address}</p>}
+                    {share.openingHours && <p className="flex items-center gap-1"><Clock size={10} />{share.openingHours}</p>}
+                    {share.website && (
+                      <a href={share.website.startsWith("http") ? share.website : `https://${share.website}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-blue-500 hover:underline">
+                        <Globe size={10} />{share.website}
+                      </a>
+                    )}
+                  </div>
+
+                  {share.spotNotes && <p className="text-xs text-muted-foreground border-t pt-1">{share.spotNotes}</p>}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Avatar name={share.fromUser.name} avatarUrl={share.fromUser.avatarUrl} size={20} />
+                    <span className="text-xs text-muted-foreground">from {share.fromUser.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                  {share.notes && <p className="text-xs italic text-muted-foreground">"{share.notes}"</p>}
+
+                  <Button size="sm" className="w-full gap-1.5 h-8 text-xs" onClick={() => handleAddToSpots(share)} disabled={addMut.isPending}>
+                    <Plus size={12} /> Add to my Spots
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {view === "sent" && (
+        sent.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <CornerUpRight size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">You haven't shared any spots yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((share) => {
+              const emoji = SPOT_TYPES.find((t) => t.value === share.type)?.emoji ?? "📍";
+              return (
+                <div key={share.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card">
+                  <span className="text-lg shrink-0">{emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{share.name}</p>
+                    {(share.neighborhood || share.city) && (
+                      <p className="text-xs text-muted-foreground">{[share.neighborhood, share.city].filter(Boolean).join(", ")}</p>
+                    )}
+                    {share.notes && <p className="text-xs text-muted-foreground italic mt-0.5">"{share.notes}"</p>}
+                    <div className="flex items-center gap-2 mt-1">
+                      <Avatar name={share.toUser.name} avatarUrl={share.toUser.avatarUrl} size={18} />
+                      <span className="text-xs text-muted-foreground">to {share.toUser.name} · {format(parseISO(share.createdAt), "MMM d")}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => deleteMut.mutate(share.id)} className="p-1.5 rounded hover:bg-secondary transition-colors shrink-0">
+                    <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
     </div>
   );
 }

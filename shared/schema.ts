@@ -620,6 +620,36 @@ export const insertSpotSchema = createInsertSchema(spots).omit({ id: true });
 export type InsertSpot = z.infer<typeof insertSpotSchema>;
 export type Spot = typeof spots.$inferSelect;
 
+// ── SPOT SHARES ────────────────────────────────────────────────────────────────
+export const spotShares = pgTable("spot_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("restaurant"),
+  address: text("address"),
+  neighborhood: text("neighborhood"),
+  city: text("city"),
+  website: text("website"),
+  priceRange: integer("price_range"),
+  tags: text("tags"),
+  openingHours: text("opening_hours"),
+  rating: integer("rating"),
+  spotNotes: text("spot_notes"),    // original spot notes
+  notes: text("notes"),             // share message/note
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertSpotShareSchema = createInsertSchema(spotShares).omit({ id: true });
+export type InsertSpotShare = z.infer<typeof insertSpotShareSchema>;
+export type SpotShare = typeof spotShares.$inferSelect;
+
+export type SpotShareWithUser = SpotShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── KIDS ─────────────────────────────────────────────────────────────────────
 export const children = pgTable("children", {
   id: serial("id").primaryKey(),
