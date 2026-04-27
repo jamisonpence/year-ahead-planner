@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Movie } from "@shared/schema";
+import type { Movie, MovieShareWithUser, PublicUser } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,9 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { format, parseISO } from "date-fns";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
   Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle, Clapperboard,
+  Send, Inbox, CornerUpRight,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -70,6 +72,7 @@ export default function MoviesPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [tmdbOpen, setTmdbOpen] = useState(false);
+  const [shareMovie, setShareMovie] = useState<Movie | null>(null);
 
   const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
 
@@ -375,6 +378,9 @@ export default function MoviesPage() {
                 className="p-1.5 rounded hover:bg-secondary transition-colors">
                 <Heart size={14} className={movie.isFavorite ? "text-rose-500 fill-rose-500" : "text-muted-foreground"} />
               </button>
+              <button onClick={() => setShareMovie(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
+                <Send size={13} className="text-muted-foreground" />
+              </button>
               <button onClick={() => open_edit(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors">
                 <Pencil size={13} className="text-muted-foreground" />
               </button>
@@ -641,6 +647,9 @@ export default function MoviesPage() {
           <TabsTrigger value="favorites" className="gap-1.5">
             <Heart size={14} /> Favorites <span className="ml-1 text-xs opacity-60">{favorites.length}</span>
           </TabsTrigger>
+          <TabsTrigger value="shared" className="gap-1.5">
+            <Inbox size={14} /> Shared
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="backlog">
@@ -703,6 +712,10 @@ export default function MoviesPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="shared">
+          <SharedMoviesTab />
         </TabsContent>
       </Tabs>
       </>}
@@ -957,6 +970,256 @@ export default function MoviesPage() {
         onAdd={(payload) => createMut.mutate(payload)}
         posterColors={POSTER_COLORS}
       />
+
+      {/* Movie Share Modal */}
+      {shareMovie && (
+        <MovieShareModal movie={shareMovie} onClose={() => setShareMovie(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ name, avatarUrl, size = 28 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0" />;
+  return (
+    <div style={{ width: size, height: size }} className="rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Movie Share Modal ──────────────────────────────────────────────────────────
+function MovieShareModal({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedFriend, setSelectedFriend] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({ queryKey: ["/api/friends"] });
+
+  const sendMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/movie-shares", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/movie-shares"] });
+      toast({ title: "Shared!", description: `${movie.title} shared with your friend.` });
+      onClose();
+    },
+    onError: () => toast({ title: "Error sharing", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!selectedFriend) return;
+    sendMut.mutate({
+      toUserId: selectedFriend,
+      mediaType: movie.mediaType ?? "movie",
+      title: movie.title,
+      year: movie.year ?? null,
+      director: movie.director ?? null,
+      genres: movie.genres ?? null,
+      streamingOn: movie.streamingOn ?? null,
+      posterColor: movie.posterColor ?? null,
+      posterUrl: (movie as any).posterUrl ?? null,
+      notes: note.trim() || null,
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Send size={16} /> Share "{movie.title}"</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Send to a friend</p>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No friends yet. Add friends in the People section.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setSelectedFriend(f.id)}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
+                      selectedFriend === f.id ? "border-primary bg-primary/5" : "hover:bg-secondary"
+                    }`}
+                  >
+                    <Avatar name={f.name} avatarUrl={f.avatarUrl} size={32} />
+                    <span className="text-sm font-medium">{f.name}</span>
+                    {selectedFriend === f.id && <Check size={14} className="ml-auto text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Add a note (optional)</p>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="You'd love this one…" rows={2} />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSend} disabled={!selectedFriend || sendMut.isPending} className="flex-1 gap-1.5">
+              <Send size={14} /> Send
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Shared Movies Tab ──────────────────────────────────────────────────────────
+function SharedMoviesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [view, setView] = useState<"received" | "sent">("received");
+
+  const { data } = useQuery<{ received: MovieShareWithUser[]; sent: MovieShareWithUser[] }>({
+    queryKey: ["/api/movie-shares"],
+  });
+  const received = data?.received ?? [];
+  const sent = data?.sent ?? [];
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/movie-shares/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movie-shares"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/movie-shares/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movie-shares"] }),
+  });
+
+  const addMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/movies", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/movies"] });
+      toast({ title: "Added to your list!" });
+    },
+    onError: () => toast({ title: "Error adding", variant: "destructive" }),
+  });
+
+  function handleAddToList(share: MovieShareWithUser) {
+    addMut.mutate({
+      mediaType: share.mediaType ?? "movie",
+      title: share.title,
+      year: share.year ?? null,
+      director: share.director ?? null,
+      genres: share.genres ?? null,
+      streamingOn: share.streamingOn ?? null,
+      posterColor: share.posterColor ?? null,
+      posterUrl: share.posterUrl ?? null,
+      status: "backlog",
+      notes: share.notes ? `Shared by ${share.fromUser.name}: ${share.notes}` : `Shared by ${share.fromUser.name}`,
+    });
+  }
+
+  const isMovie = (share: MovieShareWithUser) => (share.mediaType ?? "movie") !== "show";
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setView("received")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "received" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <Inbox size={14} /> Received {received.length > 0 && <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{received.length}</span>}
+        </button>
+        <button
+          onClick={() => setView("sent")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "sent" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <CornerUpRight size={14} /> Sent
+        </button>
+      </div>
+
+      {view === "received" && (
+        received.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Inbox size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No shared movies or shows yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {received.map((share) => (
+              <div key={share.id} className="rounded-xl border bg-card overflow-hidden">
+                {share.posterUrl ? (
+                  <div className="relative h-40 bg-muted overflow-hidden">
+                    <img src={share.posterUrl} alt={share.title} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                    <div className="absolute bottom-2 left-3 right-3">
+                      <p className="text-white font-semibold text-sm line-clamp-1">{share.title}</p>
+                      {share.year && <p className="text-white/70 text-xs">{share.year}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-1.5 w-full" style={{ background: share.posterColor ?? "hsl(210 80% 48%)" }} />
+                )}
+                <div className="p-3">
+                  {!share.posterUrl && (
+                    <p className="font-semibold text-sm">{share.title}{share.year ? ` (${share.year})` : ""}</p>
+                  )}
+                  {share.director && <p className="text-xs text-muted-foreground">{isMovie(share) ? "Dir." : "By"} {share.director}</p>}
+                  {share.genres && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {share.genres.split(",").map((g) => (
+                        <Badge key={g} variant="secondary" className="text-xs py-0 px-1.5">{g}</Badge>
+                      ))}
+                    </div>
+                  )}
+                  {share.streamingOn && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Tv2 size={11} className="text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{share.streamingOn}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    <Avatar name={share.fromUser.name} avatarUrl={share.fromUser.avatarUrl} size={22} />
+                    <span className="text-xs text-muted-foreground">from {share.fromUser.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                  {share.notes && <p className="text-xs italic text-muted-foreground mt-1 line-clamp-2">"{share.notes}"</p>}
+                  <div className="flex gap-2 mt-3">
+                    <Button size="sm" className="flex-1 gap-1.5 h-8 text-xs" onClick={() => handleAddToList(share)} disabled={addMut.isPending}>
+                      <Plus size={12} /> Add to list
+                    </Button>
+                    <button onClick={() => dismissMut.mutate(share.id)} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Dismiss">
+                      <X size={14} className="text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {view === "sent" && (
+        sent.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <CornerUpRight size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">You haven't shared any movies or shows yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((share) => (
+              <div key={share.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{share.title}{share.year ? ` (${share.year})` : ""}</p>
+                  {share.notes && <p className="text-xs text-muted-foreground italic mt-0.5">"{share.notes}"</p>}
+                  <div className="flex items-center gap-2 mt-1">
+                    <Avatar name={share.toUser.name} avatarUrl={share.toUser.avatarUrl} size={18} />
+                    <span className="text-xs text-muted-foreground">to {share.toUser.name} · {format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                </div>
+                <button onClick={() => deleteMut.mutate(share.id)} className="p-1.5 rounded hover:bg-secondary transition-colors shrink-0">
+                  <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }

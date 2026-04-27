@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -38,6 +38,7 @@ import type {
   InsertBookRecommendation, BookRecommendation, BookRecommendationWithUser,
   InsertMusicRecommendation, MusicRecommendation, MusicRecommendationWithUser,
   InsertRecipeShare, RecipeShare, RecipeShareWithUser,
+  InsertMovieShare, MovieShare, MovieShareWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -710,6 +711,25 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS movie_shares (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      media_type TEXT NOT NULL DEFAULT 'movie',
+      title TEXT NOT NULL,
+      year INTEGER,
+      director TEXT,
+      genres TEXT,
+      streaming_on TEXT,
+      poster_color TEXT,
+      poster_url TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS friend_requests (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -913,6 +933,11 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Movie Shares
+  sendMovieShare(data: InsertMovieShare): Promise<MovieShare>;
+  getMovieShares(userId: number): Promise<{ received: MovieShareWithUser[]; sent: MovieShareWithUser[] }>;
+  dismissMovieShare(id: number, userId: number): Promise<boolean>;
+  deleteMovieShare(id: number, userId: number): Promise<boolean>;
   // Recipe Shares
   sendRecipeShare(data: InsertRecipeShare): Promise<RecipeShare>;
   getRecipeShares(userId: number): Promise<{ received: RecipeShareWithUser[]; sent: RecipeShareWithUser[] }>;
@@ -2013,6 +2038,64 @@ export const storage: IStorage = {
   async deleteBookRecommendation(id, userId) {
     const result = await pool.query(
       `DELETE FROM book_recommendations WHERE id = $1 AND from_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Movie Shares ────────────────────────────────────────────────────────────
+  async sendMovieShare(data) {
+    const result = await db.insert(movieShares).values(data).returning();
+    return result[0];
+  },
+
+  async getMovieShares(userId) {
+    const rows = await pool.query(`
+      SELECT ms.*,
+        fu.id as from_id, fu.name as from_name, fu.avatar_url as from_avatar,
+        tu.id as to_id, tu.name as to_name, tu.avatar_url as to_avatar
+      FROM movie_shares ms
+      JOIN users fu ON ms.from_user_id = fu.id
+      JOIN users tu ON ms.to_user_id = tu.id
+      WHERE ms.from_user_id = $1 OR ms.to_user_id = $1
+      ORDER BY ms.created_at DESC
+    `, [userId]);
+
+    const toShare = (r: any): MovieShareWithUser => ({
+      id: r.id,
+      fromUserId: r.from_user_id,
+      toUserId: r.to_user_id,
+      mediaType: r.media_type,
+      title: r.title,
+      year: r.year,
+      director: r.director,
+      genres: r.genres,
+      streamingOn: r.streaming_on,
+      posterColor: r.poster_color,
+      posterUrl: r.poster_url,
+      notes: r.notes,
+      createdAt: r.created_at,
+      isDismissed: r.is_dismissed,
+      fromUser: { id: r.from_id, name: r.from_name, avatarUrl: r.from_avatar },
+      toUser: { id: r.to_id, name: r.to_name, avatarUrl: r.to_avatar },
+    });
+
+    const received = rows.rows.filter((r: any) => r.to_user_id === userId && !r.is_dismissed).map(toShare);
+    const sent = rows.rows.filter((r: any) => r.from_user_id === userId).map(toShare);
+    return { received, sent };
+  },
+
+  async dismissMovieShare(id, userId) {
+    const result = await pool.query(
+      `UPDATE movie_shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async deleteMovieShare(id, userId) {
+    const result = await pool.query(
+      `DELETE FROM movie_shares WHERE id = $1 AND from_user_id = $2`,
       [id, userId]
     );
     return (result.rowCount ?? 0) > 0;

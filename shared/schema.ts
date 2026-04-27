@@ -783,6 +783,33 @@ export type BookRecommendationWithUser = BookRecommendation & {
   toUser: { id: number; name: string; avatarUrl: string | null };
 };
 
+// ── MOVIE SHARES ───────────────────────────────────────────────────────────────
+export const movieShares = pgTable("movie_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  mediaType: text("media_type").notNull().default("movie"), // movie | show
+  title: text("title").notNull(),
+  year: integer("year"),
+  director: text("director"),
+  genres: text("genres"),
+  streamingOn: text("streaming_on"),
+  posterColor: text("poster_color"),
+  posterUrl: text("poster_url"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertMovieShareSchema = createInsertSchema(movieShares).omit({ id: true });
+export type InsertMovieShare = z.infer<typeof insertMovieShareSchema>;
+export type MovieShare = typeof movieShares.$inferSelect;
+
+export type MovieShareWithUser = MovieShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── RECIPE SHARES ──────────────────────────────────────────────────────────────
 export const recipeShares = pgTable("recipe_shares", {
   id: serial("id").primaryKey(),
