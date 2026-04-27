@@ -716,6 +716,14 @@ export default function MusicPage() {
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState("artists");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("recommendations");
+  }, []);
+  useEffect(() => {
+    if (tab !== "recommendations") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "music" })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [tab]);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [lastfmOpen, setLastfmOpen] = useState(false);

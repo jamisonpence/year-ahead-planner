@@ -494,6 +494,14 @@ export default function ReadingPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState("current");
   const [genreFilter, setGenreFilter] = useState("all");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("recommendations");
+  }, []);
+  useEffect(() => {
+    if (tab !== "recommendations") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "books" })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [tab]);
   const [bookModal, setBookModal] = useState(false);
   const [sessionModal, setSessionModal] = useState(false);
   const [gbooksOpen, setGbooksOpen] = useState(false);

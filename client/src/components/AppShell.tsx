@@ -294,13 +294,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="divide-y max-h-80 overflow-y-auto">
                   {[
-                    { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading", emoji: "📚" },
-                    { label: "Music", count: sharesCountData?.music ?? 0, path: "/music", emoji: "🎵" },
-                    { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes", emoji: "🍽️" },
-                    { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies", emoji: "🎬" },
-                    { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots", emoji: "📍" },
-                    { label: "Art", count: sharesCountData?.art ?? 0, path: "/art", emoji: "🎨" },
-                    { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes", emoji: "💬" },
+                    { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
+                    { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
+                    { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes?shared=1", emoji: "🍽️" },
+                    { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies?shared=1", emoji: "🎬" },
+                    { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
+                    { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
+                    { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
                   ]
                     .filter((item) => item.count > 0)
                     .map((item) => (
@@ -434,13 +434,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="divide-y max-h-80 overflow-y-auto">
               {[
-                { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading", emoji: "📚" },
-                { label: "Music", count: sharesCountData?.music ?? 0, path: "/music", emoji: "🎵" },
-                { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes", emoji: "🍽️" },
-                { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies", emoji: "🎬" },
-                { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots", emoji: "📍" },
-                { label: "Art", count: sharesCountData?.art ?? 0, path: "/art", emoji: "🎨" },
-                { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes", emoji: "💬" },
+                { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
+                { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
+                { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes?shared=1", emoji: "🍽️" },
+                { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies?shared=1", emoji: "🎬" },
+                { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
+                { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
+                { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
               ]
                 .filter((item) => item.count > 0)
                 .map((item) => (
