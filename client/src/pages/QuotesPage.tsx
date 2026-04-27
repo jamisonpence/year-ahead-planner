@@ -172,7 +172,7 @@ function QuotableModal({ open, onClose, onAdd }: {
           <DialogTitle className="flex items-center gap-2">
             <QuoteIcon size={15} /> Find Quotes
           </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">Browse 1,400+ quotes by topic or search by keyword. Click Add to save.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Browse 3,000+ quotes by topic or search by keyword. Click Add to save.</p>
         </DialogHeader>
 
         {/* Mode tabs */}
