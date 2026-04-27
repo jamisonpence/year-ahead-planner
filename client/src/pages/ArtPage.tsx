@@ -425,6 +425,14 @@ export default function ArtPage() {
   const [search, setSearch] = useState("");
   const [filterTab, setFilterTab] = useState("all");
   const [mediumFilter, setMediumFilter] = useState<string | null>(null);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setFilterTab("shared");
+  }, []);
+  useEffect(() => {
+    if (filterTab !== "shared") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "art" })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [filterTab]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ArtPiece | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });

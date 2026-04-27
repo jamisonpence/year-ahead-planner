@@ -1912,6 +1912,14 @@ Rules:
     }
   });
 
+  app.post("/api/shares/mark-read", requireAuth, async (req, res) => {
+    try {
+      const { type } = req.body as { type: string };
+      await storage.markSharesRead(type, (req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }

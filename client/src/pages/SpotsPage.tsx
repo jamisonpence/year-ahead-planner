@@ -491,6 +491,14 @@ export default function SpotsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setActiveTab("shared");
+  }, []);
+  useEffect(() => {
+    if (activeTab !== "shared") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "spots" })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [activeTab]);
 
   const { data: spots = [] } = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
 

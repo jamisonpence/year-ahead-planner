@@ -792,15 +792,22 @@ export async function initializeStorage() {
     );
   `);
 
-  // Ensure is_dismissed column exists on all share tables (handles tables created before the column was added)
+  // Ensure is_dismissed and is_read columns exist on all share tables
   await pool.query(`
     ALTER TABLE book_recommendations    ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE book_recommendations    ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE music_recommendations   ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE music_recommendations   ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE recipe_shares           ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE recipe_shares           ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE quote_shares            ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE quote_shares            ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE art_shares              ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE art_shares              ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE spot_shares             ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE spot_shares             ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE movie_shares            ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE movie_shares            ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
   await pool.query(`
@@ -1052,6 +1059,7 @@ export interface IStorage {
   unfriend(userId: number, friendId: number): Promise<boolean>;
   getPendingIncomingCount(userId: number): Promise<number>;
   getUnreadSharesCount(userId: number): Promise<{ total: number; books: number; music: number; recipes: number; movies: number; spots: number; art: number; quotes: number }>;
+  markSharesRead(type: string, userId: number): Promise<void>;
 }
 
 export const storage: IStorage = {
@@ -2371,19 +2379,37 @@ export const storage: IStorage = {
   async getUnreadSharesCount(userId) {
     const result = await pool.query(
       `SELECT
-        (SELECT COUNT(*) FROM book_recommendations WHERE to_user_id = $1 AND is_dismissed = false)::int  AS books,
-        (SELECT COUNT(*) FROM music_recommendations WHERE to_user_id = $1 AND is_dismissed = false)::int AS music,
-        (SELECT COUNT(*) FROM recipe_shares WHERE to_user_id = $1 AND is_dismissed = false)::int         AS recipes,
-        (SELECT COUNT(*) FROM movie_shares WHERE to_user_id = $1 AND is_dismissed = false)::int          AS movies,
-        (SELECT COUNT(*) FROM spot_shares WHERE to_user_id = $1 AND is_dismissed = false)::int           AS spots,
-        (SELECT COUNT(*) FROM art_shares WHERE to_user_id = $1 AND is_dismissed = false)::int            AS art,
-        (SELECT COUNT(*) FROM quote_shares WHERE to_user_id = $1 AND is_dismissed = false)::int          AS quotes`,
+        (SELECT COUNT(*) FROM book_recommendations WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int  AS books,
+        (SELECT COUNT(*) FROM music_recommendations WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int AS music,
+        (SELECT COUNT(*) FROM recipe_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int         AS recipes,
+        (SELECT COUNT(*) FROM movie_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int          AS movies,
+        (SELECT COUNT(*) FROM spot_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int           AS spots,
+        (SELECT COUNT(*) FROM art_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int            AS art,
+        (SELECT COUNT(*) FROM quote_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int          AS quotes`,
       [userId]
     );
     const row = result.rows[0];
     const books = row.books, music = row.music, recipes = row.recipes,
           movies = row.movies, spots = row.spots, art = row.art, quotes = row.quotes;
     return { total: books + music + recipes + movies + spots + art + quotes, books, music, recipes, movies, spots, art, quotes };
+  },
+
+  async markSharesRead(type, userId) {
+    const tableMap: Record<string, string> = {
+      books: "book_recommendations",
+      music: "music_recommendations",
+      recipes: "recipe_shares",
+      movies: "movie_shares",
+      spots: "spot_shares",
+      art: "art_shares",
+      quotes: "quote_shares",
+    };
+    const table = tableMap[type];
+    if (!table) return;
+    await pool.query(
+      `UPDATE ${table} SET is_read = true WHERE to_user_id = $1 AND is_read = false`,
+      [userId]
+    );
   },
 };
 

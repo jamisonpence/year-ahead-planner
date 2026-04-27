@@ -1379,6 +1379,14 @@ export default function RecipesPage() {
   const { toast } = useToast();
   const [subView, setSubView] = useState<SubView>("library");
   const [libFilter, setLibFilter] = useState<LibFilter>("all");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setSubView("shared");
+  }, []);
+  useEffect(() => {
+    if (subView !== "shared") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "recipes" })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [subView]);
   const [recipeModal, setRecipeModal] = useState(false);
   const [editRecipe, setEditRecipe] = useState<Recipe | null>(null);
   const [detailRecipe, setDetailRecipe] = useState<Recipe | null>(null);

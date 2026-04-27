@@ -63,6 +63,14 @@ export default function MoviesPage() {
   const [mediaTypeView, setMediaTypeView] = useState<"movie" | "show" | "video">("movie");
   const [tab, setTab] = useState("backlog");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("shared");
+  }, []);
+  useEffect(() => {
+    if (tab !== "shared") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "movies" })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [tab]);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [listFilter, setListFilter] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);

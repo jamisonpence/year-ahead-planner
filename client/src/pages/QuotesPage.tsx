@@ -418,6 +418,14 @@ export default function QuotesPage() {
   const [shareQuote, setShareQuote] = useState<Quote | null>(null);
   const [showShared, setShowShared] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setShowShared(true);
+  }, []);
+  useEffect(() => {
+    if (!showShared) return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "quotes" })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [showShared]);
 
   const { data: allQuotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
