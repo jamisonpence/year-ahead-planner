@@ -736,6 +736,31 @@ export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true });
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 export type Quote = typeof quotes.$inferSelect;
 
+// ── QUOTE SHARES ───────────────────────────────────────────────────────────────
+export const quoteShares = pgTable("quote_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  text: text("text").notNull(),
+  author: text("author"),
+  source: text("source"),
+  category: text("category"),
+  tags: text("tags"),
+  quoteNotes: text("quote_notes"),  // original quote notes
+  notes: text("notes"),             // share message
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertQuoteShareSchema = createInsertSchema(quoteShares).omit({ id: true });
+export type InsertQuoteShare = z.infer<typeof insertQuoteShareSchema>;
+export type QuoteShare = typeof quoteShares.$inferSelect;
+
+export type QuoteShareWithUser = QuoteShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── ART ───────────────────────────────────────────────────────────────────────
 export const artPieces = pgTable("art_pieces", {
   id: serial("id").primaryKey(),

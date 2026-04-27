@@ -1729,6 +1729,46 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Quote Shares ──────────────────────────────────────────────────────────────
+  app.get("/api/quote-shares", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getQuoteShares((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/quote-shares", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const data = {
+        fromUserId: userId,
+        toUserId: req.body.toUserId,
+        text: req.body.text,
+        author: req.body.author ?? null,
+        source: req.body.source ?? null,
+        category: req.body.category ?? null,
+        tags: req.body.tags ?? null,
+        quoteNotes: req.body.quoteNotes ?? null,
+        notes: req.body.notes ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      res.status(201).json(await storage.sendQuoteShare(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/quote-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissQuoteShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/quote-shares/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteQuoteShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Art Shares ────────────────────────────────────────────────────────────────
   app.get("/api/art-shares", requireAuth, async (req, res) => {
     try {
