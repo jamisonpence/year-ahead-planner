@@ -1040,6 +1040,7 @@ export interface IStorage {
   getFriends(userId: number): Promise<PublicUser[]>;
   unfriend(userId: number, friendId: number): Promise<boolean>;
   getPendingIncomingCount(userId: number): Promise<number>;
+  getUnreadSharesCount(userId: number): Promise<{ total: number; books: number; music: number; recipes: number; movies: number; spots: number; art: number; quotes: number }>;
 }
 
 export const storage: IStorage = {
@@ -2354,6 +2355,24 @@ export const storage: IStorage = {
       [id, userId]
     );
     return (result.rowCount ?? 0) > 0;
+  },
+
+  async getUnreadSharesCount(userId) {
+    const result = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM book_recommendations WHERE to_user_id = $1 AND is_dismissed = false)::int  AS books,
+        (SELECT COUNT(*) FROM music_recommendations WHERE to_user_id = $1 AND is_dismissed = false)::int AS music,
+        (SELECT COUNT(*) FROM recipe_shares WHERE to_user_id = $1 AND is_dismissed = false)::int         AS recipes,
+        (SELECT COUNT(*) FROM movie_shares WHERE to_user_id = $1 AND is_dismissed = false)::int          AS movies,
+        (SELECT COUNT(*) FROM spot_shares WHERE to_user_id = $1 AND is_dismissed = false)::int           AS spots,
+        (SELECT COUNT(*) FROM art_shares WHERE to_user_id = $1 AND is_dismissed = false)::int            AS art,
+        (SELECT COUNT(*) FROM quote_shares WHERE to_user_id = $1 AND is_dismissed = false)::int          AS quotes`,
+      [userId]
+    );
+    const row = result.rows[0];
+    const books = row.books, music = row.music, recipes = row.recipes,
+          movies = row.movies, spots = row.spots, art = row.art, quotes = row.quotes;
+    return { total: books + music + recipes + movies + spots + art + quotes, books, music, recipes, movies, spots, art, quotes };
   },
 };
 

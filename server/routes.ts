@@ -1900,6 +1900,15 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Shares: unified unread count ──────────────────────────────────────────────
+  app.get("/api/shares/count", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const counts = await storage.getUnreadSharesCount(userId);
+      res.json(counts);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }

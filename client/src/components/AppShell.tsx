@@ -9,6 +9,7 @@ import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
+  Bell, ChevronRight,
 } from "lucide-react";
 
 const ALL_TABS = [
@@ -151,6 +152,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   });
   const pendingFriendCount = friendCountData?.count ?? 0;
 
+  // Unread shares count
+  const { data: sharesCountData } = useQuery<{
+    total: number; books: number; music: number; recipes: number;
+    movies: number; spots: number; art: number; quotes: number;
+  }>({
+    queryKey: ["/api/shares/count"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/shares/count");
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const unreadSharesTotal = sharesCountData?.total ?? 0;
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [notifOpen]);
+
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
     qc.clear();
@@ -240,6 +268,67 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-3 border-t space-y-1">
+          {/* Notifications bell */}
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setNotifOpen(!notifOpen)}
+              className={`sidebar-item w-full ${notifOpen ? "active" : ""}`}
+            >
+              <div className="relative shrink-0">
+                <Bell size={15} />
+                {unreadSharesTotal > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {unreadSharesTotal > 9 ? "9+" : unreadSharesTotal}
+                  </span>
+                )}
+              </div>
+              <span>Notifications</span>
+            </button>
+            {notifOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-72 bg-card border rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b">
+                  <h3 className="font-semibold text-sm">Shared with you</h3>
+                  {unreadSharesTotal === 0 && (
+                    <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
+                  )}
+                </div>
+                <div className="divide-y max-h-80 overflow-y-auto">
+                  {[
+                    { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading", emoji: "📚" },
+                    { label: "Music", count: sharesCountData?.music ?? 0, path: "/music", emoji: "🎵" },
+                    { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes", emoji: "🍽️" },
+                    { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies", emoji: "🎬" },
+                    { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots", emoji: "📍" },
+                    { label: "Art", count: sharesCountData?.art ?? 0, path: "/art", emoji: "🎨" },
+                    { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes", emoji: "💬" },
+                  ]
+                    .filter((item) => item.count > 0)
+                    .map((item) => (
+                      <Link key={item.path} href={item.path}>
+                        <div
+                          onClick={() => setNotifOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors"
+                        >
+                          <span className="text-lg leading-none">{item.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium">{item.label}</span>
+                            <p className="text-xs text-muted-foreground">
+                              {item.count} new {item.count === 1 ? "item" : "items"}
+                            </p>
+                          </div>
+                          <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                        </div>
+                      </Link>
+                    ))}
+                  {unreadSharesTotal === 0 && (
+                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                      Nothing new to see here
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setManageMode(!manageMode)}
             className={`sidebar-item w-full ${manageMode ? "active" : ""}`}
@@ -286,6 +375,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <button onClick={toggle} className="p-2 rounded-lg hover:bg-secondary transition-colors">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+          <button
+            onClick={() => setNotifOpen(!notifOpen)}
+            className="relative p-2 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <Bell size={16} />
+            {unreadSharesTotal > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {unreadSharesTotal > 9 ? "9+" : unreadSharesTotal}
+              </span>
+            )}
+          </button>
           <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -316,6 +416,54 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground">
                   <LogOut size={14} /><span>Sign out</span>
                 </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile notifications panel */}
+      {notifOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setNotifOpen(false)}>
+          <div className="absolute right-4 top-16 w-72 bg-card border rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Shared with you</h3>
+              <button onClick={() => setNotifOpen(false)} className="p-1 rounded hover:bg-secondary transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="divide-y max-h-80 overflow-y-auto">
+              {[
+                { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading", emoji: "📚" },
+                { label: "Music", count: sharesCountData?.music ?? 0, path: "/music", emoji: "🎵" },
+                { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes", emoji: "🍽️" },
+                { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies", emoji: "🎬" },
+                { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots", emoji: "📍" },
+                { label: "Art", count: sharesCountData?.art ?? 0, path: "/art", emoji: "🎨" },
+                { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes", emoji: "💬" },
+              ]
+                .filter((item) => item.count > 0)
+                .map((item) => (
+                  <Link key={item.path} href={item.path}>
+                    <div
+                      onClick={() => setNotifOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors"
+                    >
+                      <span className="text-lg leading-none">{item.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium">{item.label}</span>
+                        <p className="text-xs text-muted-foreground">
+                          {item.count} new {item.count === 1 ? "item" : "items"}
+                        </p>
+                      </div>
+                      <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                    </div>
+                  </Link>
+                ))}
+              {unreadSharesTotal === 0 && (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  Nothing new to see here
+                </div>
               )}
             </div>
           </div>
