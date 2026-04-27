@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Quote } from "@shared/schema";
+import type { Quote, QuoteShareWithUser, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, parseISO } from "date-fns";
 import {
   Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download,
-  HelpCircle, Shuffle, CheckCircle2, Loader2, Tag,
+  HelpCircle, Shuffle, CheckCircle2, Loader2, Tag, Send, Inbox, CornerUpRight, Check,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -344,12 +345,13 @@ function QuotableModal({ open, onClose, onAdd }: {
 // ── Quote Card ────────────────────────────────────────────────────────────────
 
 function QuoteCard({
-  quote, onEdit, onDelete, onToggleFav,
+  quote, onEdit, onDelete, onToggleFav, onShare,
 }: {
   quote: Quote;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
+  onShare: () => void;
 }) {
   const catColor = CATEGORY_COLORS[quote.category] ?? CATEGORY_COLORS.other;
   const tags = quote.tags ? quote.tags.split(",").map((t) => t.trim()).filter(Boolean) : [];
@@ -365,6 +367,9 @@ function QuoteCard({
               size={14}
               className={quote.isFavorite ? "text-rose-500 fill-rose-500" : "text-muted-foreground"}
             />
+          </button>
+          <button onClick={onShare} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
+            <Send size={13} className="text-muted-foreground" />
           </button>
           <button onClick={onEdit} className="p-1.5 rounded hover:bg-secondary transition-colors">
             <Pencil size={13} className="text-muted-foreground" />
@@ -410,6 +415,8 @@ export default function QuotesPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [quotableOpen, setQuotableOpen] = useState(false);
+  const [shareQuote, setShareQuote] = useState<Quote | null>(null);
+  const [showShared, setShowShared] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allQuotes = [] } = useQuery<Quote[]>({
@@ -631,12 +638,20 @@ export default function QuotesPage() {
             variant={favOnly ? "default" : "outline"}
             size="sm"
             className="h-8 gap-1.5"
-            onClick={() => setFavOnly(!favOnly)}
+            onClick={() => { setFavOnly(!favOnly); setShowShared(false); }}
           >
             <Heart size={13} className={favOnly ? "fill-current" : ""} />
             Favorites
           </Button>
-          {(search || categoryFilter !== "all" || favOnly) && (
+          <Button
+            variant={showShared ? "default" : "outline"}
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => { setShowShared(!showShared); setFavOnly(false); }}
+          >
+            <Inbox size={13} /> Shared
+          </Button>
+          {(search || categoryFilter !== "all" || favOnly) && !showShared && (
             <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setCategoryFilter("all"); setFavOnly(false); }}>
               <X size={13} /> Clear
             </Button>
@@ -661,8 +676,10 @@ export default function QuotesPage() {
         </div>
       </div>
 
-      {/* Quote list */}
-      {filtered.length === 0 ? (
+      {/* Quote list / Shared tab */}
+      {showShared ? (
+        <SharedQuotesTab />
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <QuoteIcon size={48} className="mx-auto mb-4 opacity-20" />
           <p className="text-sm">{allQuotes.length === 0 ? "No quotes yet. Add your first one!" : "No quotes match your filters."}</p>
@@ -681,9 +698,15 @@ export default function QuotesPage() {
               onEdit={() => openEdit(q)}
               onDelete={() => deleteMut.mutate(q.id)}
               onToggleFav={() => toggleFav.mutate({ id: q.id, isFavorite: !q.isFavorite })}
+              onShare={() => setShareQuote(q)}
             />
           ))}
         </div>
+      )}
+
+      {/* Quote Share Modal */}
+      {shareQuote && (
+        <QuoteShareModal quote={shareQuote} onClose={() => setShareQuote(null)} />
       )}
 
       {/* Quotable search */}
@@ -819,6 +842,247 @@ export default function QuotesPage() {
           <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Avatar helper ──────────────────────────────────────────────────────────────
+function Avatar({ name, avatarUrl, size = 28 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover shrink-0" />;
+  return (
+    <div style={{ width: size, height: size }} className="rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Quote Share Modal ──────────────────────────────────────────────────────────
+function QuoteShareModal({ quote, onClose }: { quote: Quote; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedFriend, setSelectedFriend] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({ queryKey: ["/api/friends"] });
+
+  const sendMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/quote-shares", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/quote-shares"] });
+      toast({ title: "Shared!", description: "Quote sent to your friend." });
+      onClose();
+    },
+    onError: () => toast({ title: "Error sharing", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!selectedFriend) return;
+    sendMut.mutate({
+      toUserId: selectedFriend,
+      text: quote.text,
+      author: quote.author ?? null,
+      source: quote.source ?? null,
+      category: quote.category ?? null,
+      tags: quote.tags ?? null,
+      quoteNotes: quote.notes ?? null,
+      notes: note.trim() || null,
+    });
+  }
+
+  const catColor = CATEGORY_COLORS[quote.category] ?? CATEGORY_COLORS.other;
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send size={16} /> Share quote
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          {/* Quote preview */}
+          <div className="rounded-lg border bg-secondary/30 p-4">
+            <p className="text-sm italic leading-relaxed">&ldquo;{quote.text}&rdquo;</p>
+            {quote.author && <p className="text-xs font-semibold mt-2">&mdash; {quote.author}</p>}
+            {quote.source && <p className="text-xs text-muted-foreground">{quote.source}</p>}
+            <Badge className={`mt-2 text-xs py-0 px-1.5 border-0 ${catColor}`}>{quote.category}</Badge>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Send to a friend</p>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No friends yet. Add friends in the People section.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setSelectedFriend(f.id)}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
+                      selectedFriend === f.id ? "border-primary bg-primary/5" : "hover:bg-secondary"
+                    }`}
+                  >
+                    <Avatar name={f.name} avatarUrl={f.avatarUrl} size={32} />
+                    <span className="text-sm font-medium">{f.name}</span>
+                    {selectedFriend === f.id && <Check size={14} className="ml-auto text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Add a note (optional)</p>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Thought of you when I read this…" rows={2} />
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={handleSend} disabled={!selectedFriend || sendMut.isPending} className="flex-1 gap-1.5">
+              <Send size={14} /> Send
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Shared Quotes Tab ──────────────────────────────────────────────────────────
+function SharedQuotesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [view, setView] = useState<"received" | "sent">("received");
+
+  const { data } = useQuery<{ received: QuoteShareWithUser[]; sent: QuoteShareWithUser[] }>({
+    queryKey: ["/api/quote-shares"],
+  });
+  const received = data?.received ?? [];
+  const sent = data?.sent ?? [];
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/quote-shares/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/quote-shares"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/quote-shares/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/quote-shares"] }),
+  });
+  const addMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/quotes", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Added to your Quotes!" });
+    },
+    onError: () => toast({ title: "Error adding", variant: "destructive" }),
+  });
+
+  function handleAdd(share: QuoteShareWithUser) {
+    addMut.mutate({
+      text: share.text,
+      author: share.author ?? null,
+      source: share.source ?? null,
+      category: share.category ?? "other",
+      tags: share.tags ?? null,
+      notes: share.quoteNotes ?? null,
+      isFavorite: false,
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setView("received")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "received" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <Inbox size={14} /> Received {received.length > 0 && <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{received.length}</span>}
+        </button>
+        <button
+          onClick={() => setView("sent")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "sent" ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+        >
+          <CornerUpRight size={14} /> Sent
+        </button>
+      </div>
+
+      {view === "received" && (
+        received.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Inbox size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No quotes shared with you yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {received.map((share) => {
+              const catColor = CATEGORY_COLORS[share.category ?? "other"] ?? CATEGORY_COLORS.other;
+              const tags = share.tags ? share.tags.split(",").map((t) => t.trim()).filter(Boolean) : [];
+              return (
+                <div key={share.id} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <QuoteIcon size={16} className="text-muted-foreground/40 shrink-0 mt-1" />
+                    <p className="flex-1 text-base italic leading-relaxed">&ldquo;{share.text}&rdquo;</p>
+                    <button onClick={() => dismissMut.mutate(share.id)} className="p-1 rounded hover:bg-secondary transition-colors shrink-0">
+                      <X size={13} className="text-muted-foreground" />
+                    </button>
+                  </div>
+
+                  {(share.author || share.source) && (
+                    <div className="pl-5">
+                      {share.author && <p className="text-sm font-semibold">&mdash; {share.author}</p>}
+                      {share.source && <p className="text-xs text-muted-foreground">{share.source}</p>}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 pl-5">
+                    {share.category && <Badge className={`text-xs py-0 px-1.5 border-0 ${catColor}`}>{share.category}</Badge>}
+                    {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs py-0 px-1.5">{t}</Badge>)}
+                  </div>
+
+                  <div className="flex items-center gap-2 pl-5">
+                    <Avatar name={share.fromUser.name} avatarUrl={share.fromUser.avatarUrl} size={20} />
+                    <span className="text-xs text-muted-foreground">from {share.fromUser.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                  {share.notes && <p className="text-xs italic text-muted-foreground pl-5 border-l-2 border-muted">"{share.notes}"</p>}
+
+                  <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => handleAdd(share)} disabled={addMut.isPending}>
+                    <Plus size={12} /> Save to my Quotes
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {view === "sent" && (
+        sent.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <CornerUpRight size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">You haven't shared any quotes yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {sent.map((share) => (
+              <div key={share.id} className="rounded-xl border bg-card p-4 flex flex-col gap-2">
+                <p className="text-sm italic leading-relaxed line-clamp-3">&ldquo;{share.text}&rdquo;</p>
+                {share.author && <p className="text-xs font-semibold">&mdash; {share.author}</p>}
+                {share.notes && <p className="text-xs text-muted-foreground italic">"{share.notes}"</p>}
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <div className="flex items-center gap-2">
+                    <Avatar name={share.toUser.name} avatarUrl={share.toUser.avatarUrl} size={18} />
+                    <span className="text-xs text-muted-foreground">to {share.toUser.name} · {format(parseISO(share.createdAt), "MMM d")}</span>
+                  </div>
+                  <button onClick={() => deleteMut.mutate(share.id)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                    <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
