@@ -538,6 +538,17 @@ export const navPrefs = pgTable("nav_prefs", {
 
 export type NavPref = { path: string; hidden: boolean };
 
+// ── TAB PRIVACY ───────────────────────────────────────────────────────────────
+// Stores which tabs friends can see — default "private" for all
+export const tabPrivacy = pgTable("tab_privacy", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique(),
+  // JSON: [{path, visibility}] where visibility = "private" | "friends"
+  settingsJson: text("settings_json").notNull().default("[]"),
+});
+
+export type TabPrivacySetting = { path: string; visibility: "private" | "friends" };
+
 // ── INSERT SCHEMAS & TYPES ─────────────────────────────────────────────────────
 export const insertEventSchema = createInsertSchema(events).omit({ id: true });
 export type InsertEvent = z.infer<typeof insertEventSchema>;

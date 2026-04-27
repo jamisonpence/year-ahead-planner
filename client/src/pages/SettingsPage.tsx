@@ -4,11 +4,146 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import {
+  KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
+  Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
+  ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
+} from "lucide-react";
+import type { TabPrivacySetting } from "@shared/schema";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type ApiKeyStatus = { hasKey: boolean; encryptionConfigured: boolean };
+
+const PRIVACY_TABS = [
+  { path: "/",              label: "Dashboard",          icon: LayoutDashboard },
+  { path: "/calendar",      label: "Calendar",           icon: Calendar        },
+  { path: "/goals",         label: "Goals & Projects",   icon: Target          },
+  { path: "/reading",       label: "Reading",            icon: BookOpen        },
+  { path: "/workouts",      label: "Workouts",           icon: Dumbbell        },
+  { path: "/recipes",       label: "Recipes",            icon: ChefHat         },
+  { path: "/movies",        label: "Movies & Shows",     icon: Film            },
+  { path: "/music",         label: "Music",              icon: Music2          },
+  { path: "/budget",        label: "Budget",             icon: Wallet          },
+  { path: "/plants",        label: "Plants",             icon: Leaf            },
+  { path: "/housekeeping",  label: "Housekeeping",       icon: Home            },
+  { path: "/spots",         label: "Spots",              icon: MapPin          },
+  { path: "/kids",          label: "Kids",               icon: Baby            },
+  { path: "/quotes",        label: "Quotes",             icon: Quote           },
+  { path: "/art",           label: "Art",                icon: Palette         },
+];
+
+// ── Tab Privacy Section ───────────────────────────────────────────────────────
+
+function TabPrivacySection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: savedSettings = [] } = useQuery<TabPrivacySetting[]>({
+    queryKey: ["/api/tab-privacy"],
+    queryFn: () => apiRequest("GET", "/api/tab-privacy").then(r => r.json()),
+  });
+
+  // Build effective settings map: default "private" for all tabs
+  const settingsMap = Object.fromEntries(
+    PRIVACY_TABS.map(t => [t.path, "private" as "private" | "friends"])
+  );
+  savedSettings.forEach(s => { settingsMap[s.path] = s.visibility; });
+
+  const saveMut = useMutation({
+    mutationFn: (settings: TabPrivacySetting[]) =>
+      apiRequest("PUT", "/api/tab-privacy", settings),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/tab-privacy"] });
+      toast({ title: "Privacy settings saved" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  function toggle(path: string) {
+    const current = settingsMap[path] ?? "private";
+    const next = current === "private" ? "friends" : "private";
+    const newSettings: TabPrivacySetting[] = PRIVACY_TABS.map(t => ({
+      path: t.path,
+      visibility: t.path === path ? next : (settingsMap[t.path] ?? "private"),
+    }));
+    saveMut.mutate(newSettings);
+  }
+
+  function setAll(visibility: "private" | "friends") {
+    const newSettings: TabPrivacySetting[] = PRIVACY_TABS.map(t => ({ path: t.path, visibility }));
+    saveMut.mutate(newSettings);
+  }
+
+  const friendsCount = PRIVACY_TABS.filter(t => (settingsMap[t.path] ?? "private") === "friends").length;
+
+  return (
+    <section className="rounded-xl border bg-card p-6 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users size={18} className="text-blue-500" />
+          <h2 className="font-semibold text-base">Profile Privacy</h2>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setAll("private")}
+            className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground"
+          >
+            All private
+          </button>
+          <button
+            onClick={() => setAll("friends")}
+            className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground"
+          >
+            All friends
+          </button>
+        </div>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Choose which tabs friends can see when they view your profile.
+        {friendsCount > 0
+          ? ` ${friendsCount} tab${friendsCount === 1 ? " is" : "s are"} visible to friends.`
+          : " All tabs are currently private."}
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        {PRIVACY_TABS.map(tab => {
+          const Icon = tab.icon;
+          const vis = settingsMap[tab.path] ?? "private";
+          const isFriends = vis === "friends";
+          return (
+            <button
+              key={tab.path}
+              onClick={() => toggle(tab.path)}
+              disabled={saveMut.isPending}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                isFriends
+                  ? "border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800"
+                  : "border-transparent bg-secondary/50 hover:bg-secondary"
+              }`}
+            >
+              <Icon size={15} className={isFriends ? "text-blue-500" : "text-muted-foreground"} />
+              <span className={`text-sm flex-1 ${isFriends ? "font-medium text-blue-700 dark:text-blue-300" : "text-muted-foreground"}`}>
+                {tab.label}
+              </span>
+              {isFriends ? (
+                <Users size={13} className="text-blue-500 shrink-0" />
+              ) : (
+                <Lock size={13} className="text-muted-foreground/50 shrink-0" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {saveMut.isPending && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 size={12} className="animate-spin" /> Saving…
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Settings Page ─────────────────────────────────────────────────────────────
 
@@ -67,6 +202,9 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your account preferences and integrations.</p>
       </div>
+
+      {/* Tab Privacy */}
+      <TabPrivacySection />
 
       {/* Anthropic API Key */}
       <section className="rounded-xl border bg-card p-6 space-y-4">
