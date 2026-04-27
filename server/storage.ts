@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, children, childMilestones, childMemories, childPrepItems, quotes, artPieces, journalEntries, equipment, friendRequests, bookRecommendations } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -35,6 +35,7 @@ import type {
   InsertJournalEntry, JournalEntry,
   InsertEquipment, Equipment,
   InsertFriendRequest, FriendRequest, FriendRequestWithUser, PublicUser,
+  InsertBookRecommendation, BookRecommendation, BookRecommendationWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -658,6 +659,20 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS book_recommendations (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      book_title TEXT NOT NULL,
+      book_author TEXT,
+      cover_url TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS friend_requests (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -861,6 +876,11 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Book Recommendations
+  sendBookRecommendation(data: InsertBookRecommendation): Promise<BookRecommendation>;
+  getBookRecommendations(userId: number): Promise<{ received: BookRecommendationWithUser[]; sent: BookRecommendationWithUser[] }>;
+  dismissBookRecommendation(id: number, userId: number): Promise<boolean>;
+  deleteBookRecommendation(id: number, userId: number): Promise<boolean>;
   // Friends
   searchUsers(query: string, currentUserId: number): Promise<PublicUser[]>;
   sendFriendRequest(fromUserId: number, toUserId: number): Promise<FriendRequest>;
@@ -1761,6 +1781,65 @@ export const storage: IStorage = {
       [userId]
     );
     return parseInt(result.rows[0].count, 10);
+  },
+
+  // ── Book Recommendations ────────────────────────────────────────────────────
+  async sendBookRecommendation(data) {
+    const result = await db.insert(bookRecommendations).values(data).returning();
+    return result[0];
+  },
+
+  async getBookRecommendations(userId) {
+    const rows = await pool.query<{
+      id: number; from_user_id: number; to_user_id: number;
+      book_title: string; book_author: string | null; cover_url: string | null;
+      notes: string | null; created_at: string; is_dismissed: boolean;
+      from_id: number; from_name: string; from_email: string; from_avatar: string | null;
+      to_id: number; to_name: string; to_email: string; to_avatar: string | null;
+    }>(`
+      SELECT br.*,
+        fu.id as from_id, fu.name as from_name, fu.email as from_email, fu.avatar_url as from_avatar,
+        tu.id as to_id, tu.name as to_name, tu.email as to_email, tu.avatar_url as to_avatar
+      FROM book_recommendations br
+      JOIN users fu ON br.from_user_id = fu.id
+      JOIN users tu ON br.to_user_id = tu.id
+      WHERE br.from_user_id = $1 OR br.to_user_id = $1
+      ORDER BY br.created_at DESC
+    `, [userId]);
+
+    const toRec = (r: typeof rows.rows[0]): BookRecommendationWithUser => ({
+      id: r.id,
+      fromUserId: r.from_user_id,
+      toUserId: r.to_user_id,
+      bookTitle: r.book_title,
+      bookAuthor: r.book_author,
+      coverUrl: r.cover_url,
+      notes: r.notes,
+      createdAt: r.created_at,
+      isDismissed: r.is_dismissed,
+      fromUser: { id: r.from_id, name: r.from_name, avatarUrl: r.from_avatar },
+      toUser: { id: r.to_id, name: r.to_name, avatarUrl: r.to_avatar },
+    });
+
+    const received = rows.rows.filter((r) => r.to_user_id === userId && !r.is_dismissed).map(toRec);
+    const sent = rows.rows.filter((r) => r.from_user_id === userId).map(toRec);
+    return { received, sent };
+  },
+
+  async dismissBookRecommendation(id, userId) {
+    const result = await pool.query(
+      `UPDATE book_recommendations SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async deleteBookRecommendation(id, userId) {
+    const result = await pool.query(
+      `DELETE FROM book_recommendations WHERE id = $1 AND from_user_id = $2`,
+      [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
   },
 };
 

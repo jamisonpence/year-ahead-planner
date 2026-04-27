@@ -761,6 +761,28 @@ export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit(
 export type InsertJournalEntry = z.infer<typeof insertJournalEntrySchema>;
 export type JournalEntry = typeof journalEntries.$inferSelect;
 
+// ── BOOK RECOMMENDATIONS ──────────────────────────────────────────────────────
+export const bookRecommendations = pgTable("book_recommendations", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  bookTitle: text("book_title").notNull(),
+  bookAuthor: text("book_author"),
+  coverUrl: text("cover_url"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertBookRecommendationSchema = createInsertSchema(bookRecommendations).omit({ id: true });
+export type InsertBookRecommendation = z.infer<typeof insertBookRecommendationSchema>;
+export type BookRecommendation = typeof bookRecommendations.$inferSelect;
+
+export type BookRecommendationWithUser = BookRecommendation & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── FRIEND REQUESTS ────────────────────────────────────────────────────────────
 export const friendRequests = pgTable("friend_requests", {
   id: serial("id").primaryKey(),
