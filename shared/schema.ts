@@ -783,6 +783,28 @@ export type BookRecommendationWithUser = BookRecommendation & {
   toUser: { id: number; name: string; avatarUrl: string | null };
 };
 
+// ── MUSIC RECOMMENDATIONS ──────────────────────────────────────────────────────
+export const musicRecommendations = pgTable("music_recommendations", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  type: text("type").notNull(), // "artist" | "song"
+  artistName: text("artist_name").notNull(),
+  songTitle: text("song_title"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+});
+
+export const insertMusicRecommendationSchema = createInsertSchema(musicRecommendations).omit({ id: true });
+export type InsertMusicRecommendation = z.infer<typeof insertMusicRecommendationSchema>;
+export type MusicRecommendation = typeof musicRecommendations.$inferSelect;
+
+export type MusicRecommendationWithUser = MusicRecommendation & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+  toUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 // ── FRIEND REQUESTS ────────────────────────────────────────────────────────────
 export const friendRequests = pgTable("friend_requests", {
   id: serial("id").primaryKey(),

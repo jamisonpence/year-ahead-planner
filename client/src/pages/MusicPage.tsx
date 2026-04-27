@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { MusicArtistWithSongs, MusicSong } from "@shared/schema";
+import { format, parseISO } from "date-fns";
+import type { MusicArtistWithSongs, MusicSong, MusicRecommendationWithUser, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
   Trash2, Pencil, Search, Music, Upload, Download, HelpCircle, Loader2, Users, Mic2,
+  Send, Check, X, Inbox, CornerUpRight,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -89,14 +91,18 @@ function StarRating({
 
 function SongRow({
   song,
+  artistName,
   onEdit,
   onDelete,
   onStatusChange,
+  onRecommend,
 }: {
   song: MusicSong;
+  artistName?: string;
   onEdit: (s: MusicSong) => void;
   onDelete: (id: number) => void;
   onStatusChange: (id: number, status: string) => void;
+  onRecommend?: (songTitle: string, artistName: string) => void;
 }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
@@ -123,6 +129,11 @@ function SongRow({
       </Select>
 
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {onRecommend && artistName && (
+          <button onClick={() => onRecommend(song.title, artistName)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend to friend">
+            <Send className="h-3 w-3" />
+          </button>
+        )}
         <button onClick={() => onEdit(song)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
           <Pencil className="h-3 w-3" />
         </button>
@@ -145,6 +156,8 @@ function ArtistCard({
   onEditSong,
   onDeleteSong,
   onSongStatusChange,
+  onRecommendArtist,
+  onRecommendSong,
 }: {
   artist: MusicArtistWithSongs;
   onEditArtist: (a: MusicArtistWithSongs) => void;
@@ -154,6 +167,8 @@ function ArtistCard({
   onEditSong: (s: MusicSong) => void;
   onDeleteSong: (id: number) => void;
   onSongStatusChange: (id: number, status: string) => void;
+  onRecommendArtist?: (artistName: string) => void;
+  onRecommendSong?: (songTitle: string, artistName: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const accent = artist.accentColor ?? "#6366f1";
@@ -201,6 +216,11 @@ function ArtistCard({
           >
             <Heart className="h-4 w-4" fill={artist.isFavorite ? "currentColor" : "none"} />
           </button>
+          {onRecommendArtist && (
+            <button onClick={() => onRecommendArtist(artist.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend artist to friend">
+              <Send className="h-4 w-4" />
+            </button>
+          )}
           <button onClick={() => onAddSong(artist.id)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Add song">
             <Plus className="h-4 w-4" />
           </button>
@@ -227,15 +247,282 @@ function ArtistCard({
                 <SongRow
                   key={s.id}
                   song={s}
+                  artistName={artist.name}
                   onEdit={onEditSong}
                   onDelete={onDeleteSong}
                   onStatusChange={onSongStatusChange}
+                  onRecommend={onRecommendSong}
                 />
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ user }: { user: { name: string; avatarUrl?: string | null } }) {
+  if (user.avatarUrl) return <img src={user.avatarUrl} alt={user.name} className="w-7 h-7 rounded-full object-cover shrink-0" />;
+  return (
+    <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold shrink-0">
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ── Music Recommend Modal ─────────────────────────────────────────────────────
+function MusicRecommendModal({ open, onClose, type, artistName, songTitle }: {
+  open: boolean;
+  onClose: () => void;
+  type: "artist" | "song";
+  artistName: string;
+  songTitle?: string;
+}) {
+  const { toast } = useToast();
+  const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (open) { setSelectedFriendId(null); setNote(""); }
+  }, [open, artistName, songTitle]);
+
+  const sendMut = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/music-recommendations", body),
+    onSuccess: () => {
+      const label = type === "song" ? `"${songTitle}"` : `${artistName}`;
+      toast({ title: `Recommended ${label}` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to send recommendation", variant: "destructive" }),
+  });
+
+  function handleSend() {
+    if (!selectedFriendId || !artistName) return;
+    sendMut.mutate({ toUserId: selectedFriendId, type, artistName, songTitle: songTitle || null, notes: note.trim() || null });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Send size={15} /> Recommend {type === "song" ? "a Song" : "an Artist"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border">
+          <div className="w-9 h-9 rounded-full bg-violet-500/15 flex items-center justify-center shrink-0">
+            {type === "song" ? <Music size={16} className="text-violet-500" /> : <Music2 size={16} className="text-violet-500" />}
+          </div>
+          <div className="min-w-0">
+            {type === "song" && <p className="text-sm font-semibold line-clamp-1">{songTitle}</p>}
+            <p className={`line-clamp-1 ${type === "song" ? "text-xs text-muted-foreground" : "text-sm font-semibold"}`}>{artistName}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Send to</label>
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-3 border rounded-lg">
+                <Users size={18} className="mx-auto mb-1 opacity-30" />
+                No friends yet — connect with people in the Relationships tab
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {friends.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFriendId(f.id === selectedFriendId ? null : f.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors ${
+                      selectedFriendId === f.id ? "border-primary bg-primary/10" : "hover:bg-secondary border-border"
+                    }`}
+                  >
+                    <Avatar user={f} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                    </div>
+                    {selectedFriendId === f.id && <Check size={14} className="text-primary shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
+            <textarea
+              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              rows={2}
+              placeholder="Why you'd recommend it…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSend} disabled={!selectedFriendId || sendMut.isPending} className="gap-1.5">
+            <Send size={13} /> Send
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Music Recommendations Tab ─────────────────────────────────────────────────
+function MusicRecommendationsTab({ artists, onRecommendOpen }: {
+  artists: MusicArtistWithSongs[];
+  onRecommendOpen: (type: "artist" | "song", artistName: string, songTitle?: string) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: recs } = useQuery<{ received: MusicRecommendationWithUser[]; sent: MusicRecommendationWithUser[] }>({
+    queryKey: ["/api/music-recommendations"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/music-recommendations"); return r.json(); },
+  });
+
+  const dismissMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/music-recommendations/${id}/dismiss`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/music-recommendations"] }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/music-recommendations/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/music-recommendations"] }),
+  });
+
+  async function handleAddToLibrary(rec: MusicRecommendationWithUser) {
+    try {
+      if (rec.type === "artist") {
+        const existing = artists.find((a) => a.name.toLowerCase() === rec.artistName.toLowerCase());
+        if (existing) { toast({ title: `${rec.artistName} is already in your library` }); return; }
+        await apiRequest("POST", "/api/music/artists", {
+          name: rec.artistName, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false,
+        });
+        toast({ title: `Added ${rec.artistName} to your library` });
+      } else {
+        const existing = artists.find((a) => a.name.toLowerCase() === rec.artistName.toLowerCase());
+        let artistId: number;
+        if (existing) {
+          artistId = existing.id;
+        } else {
+          const r = await apiRequest("POST", "/api/music/artists", {
+            name: rec.artistName, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false,
+          });
+          const created = await r.json();
+          artistId = created.id;
+        }
+        await apiRequest("POST", "/api/music/songs", {
+          artistId, title: rec.songTitle, album: null, genre: null,
+          year: null, status: "want_to_listen", isFavorite: false, rating: null, notes: null,
+        });
+        toast({ title: `Added "${rec.songTitle}" to your library` });
+      }
+      qc.invalidateQueries({ queryKey: ["/api/music/artists"] });
+    } catch {
+      toast({ title: "Failed to add to library", variant: "destructive" });
+    }
+  }
+
+  const received = recs?.received ?? [];
+  const sent = recs?.sent ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Received */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Inbox size={14} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Recommended to You</h3>
+          {received.length > 0 && (
+            <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-medium">{received.length}</span>
+          )}
+        </div>
+        {received.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            No recommendations yet — friends can recommend artists and songs to you
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {received.map((rec) => (
+              <div key={rec.id} className="flex items-center gap-3 p-3 border rounded-xl bg-card">
+                <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                  {rec.type === "song"
+                    ? <Music size={16} className="text-violet-500" />
+                    : <Music2 size={16} className="text-violet-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {rec.type === "song" && <p className="text-sm font-semibold line-clamp-1">{rec.songTitle}</p>}
+                  <p className={`line-clamp-1 ${rec.type === "song" ? "text-xs text-muted-foreground" : "text-sm font-semibold"}`}>{rec.artistName}</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Avatar user={rec.fromUser} />
+                    <span className="text-xs text-muted-foreground">from <span className="font-medium text-foreground">{rec.fromUser.name}</span></span>
+                    <Badge variant="secondary" className="text-[10px] ml-1">{rec.type}</Badge>
+                  </div>
+                  {rec.notes && <p className="text-xs italic text-muted-foreground mt-1 line-clamp-1">"{rec.notes}"</p>}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleAddToLibrary(rec)}>
+                    <Plus size={11} /> Add
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => dismissMut.mutate(rec.id)}>
+                    <X size={12} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sent */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <CornerUpRight size={14} className="text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Sent by You</h3>
+        </div>
+        {sent.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg border-dashed">
+            You haven't recommended any music yet — click the <Send size={11} className="inline" /> icon on an artist or song
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {sent.map((rec) => (
+              <div key={rec.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+                <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                  {rec.type === "song" ? <Music size={13} className="text-violet-500" /> : <Music2 size={13} className="text-violet-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {rec.type === "song" && <p className="text-sm font-medium line-clamp-1">{rec.songTitle}</p>}
+                  <p className={`line-clamp-1 ${rec.type === "song" ? "text-xs text-muted-foreground" : "text-sm font-medium"}`}>{rec.artistName}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-muted-foreground">to <span className="font-medium text-foreground">{rec.toUser.name}</span></span>
+                    <span className="text-xs text-muted-foreground">· {format(parseISO(rec.createdAt), "MMM d")}</span>
+                  </div>
+                </div>
+                {rec.notes && <p className="text-xs italic text-muted-foreground max-w-28 line-clamp-2 hidden sm:block">"{rec.notes}"</p>}
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => deleteMut.mutate(rec.id)}>
+                  <Trash2 size={12} />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -430,6 +717,19 @@ export default function MusicPage() {
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [lastfmOpen, setLastfmOpen] = useState(false);
+
+  // Recommend state
+  const [recommendOpen, setRecommendOpen] = useState(false);
+  const [recommendType, setRecommendType] = useState<"artist" | "song">("artist");
+  const [recommendArtistName, setRecommendArtistName] = useState("");
+  const [recommendSongTitle, setRecommendSongTitle] = useState<string | undefined>();
+
+  function openRecommend(type: "artist" | "song", artistName: string, songTitle?: string) {
+    setRecommendType(type);
+    setRecommendArtistName(artistName);
+    setRecommendSongTitle(songTitle);
+    setRecommendOpen(true);
+  }
 
   // Artist modal
   const [artistModal, setArtistModal] = useState(false);
@@ -773,6 +1073,9 @@ export default function MusicPage() {
           <TabsTrigger value="favorites" className="text-xs">
             Favorites ({favoriteArtists.length})
           </TabsTrigger>
+          <TabsTrigger value="recommendations" className="text-xs">
+            Recommendations
+          </TabsTrigger>
         </TabsList>
 
         {/* Artists tab */}
@@ -804,6 +1107,8 @@ export default function MusicPage() {
                   onEditSong={openEditSong}
                   onDeleteSong={(id) => deleteSong.mutate(id)}
                   onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
+                  onRecommendArtist={(name) => openRecommend("artist", name)}
+                  onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                 />
               ))}
             </div>
@@ -869,6 +1174,8 @@ export default function MusicPage() {
                         onEditSong={openEditSong}
                         onDeleteSong={(id) => deleteSong.mutate(id)}
                         onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
+                        onRecommendArtist={(name) => openRecommend("artist", name)}
+                        onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                       />
                     ))}
                   </div>
@@ -876,6 +1183,11 @@ export default function MusicPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Recommendations tab */}
+        <TabsContent value="recommendations">
+          <MusicRecommendationsTab artists={artists} onRecommendOpen={openRecommend} />
         </TabsContent>
       </Tabs>
 
@@ -1052,6 +1364,15 @@ export default function MusicPage() {
         onClose={() => setLastfmOpen(false)}
         artists={artists}
         onAdded={() => qc.invalidateQueries({ queryKey: ["/api/music/artists"] })}
+      />
+
+      {/* Music Recommend Modal */}
+      <MusicRecommendModal
+        open={recommendOpen}
+        onClose={() => setRecommendOpen(false)}
+        type={recommendType}
+        artistName={recommendArtistName}
+        songTitle={recommendSongTitle}
       />
 
       {/* CSV Format Info Dialog */}
