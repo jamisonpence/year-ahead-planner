@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Quote } from "@shared/schema";
@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle,
+  Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download,
+  HelpCircle, Shuffle, CheckCircle2, Loader2, Tag,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -51,6 +52,294 @@ const EMPTY_FORM = {
   notes: "",
   isFavorite: false,
 };
+
+// ── Quotable Modal ────────────────────────────────────────────────────────────
+
+const QUOTABLE_BASE = "https://api.quotable.io";
+
+type QuotableQuote = {
+  _id: string; content: string; author: string;
+  authorSlug: string; tags: string[]; length: number;
+};
+type QuotableTag = { _id: string; name: string; quoteCount: number };
+
+// Map Quotable tags → our category system
+function inferCategoryFromTags(tags: string[]): string {
+  const t = tags.join(" ").toLowerCase();
+  if (/inspir|motivat|success|courag|persever|leadership|ambition/.test(t)) return "motivation";
+  if (/wisdom|knowledge|truth|mind|learning|education/.test(t)) return "wisdom";
+  if (/humor|funny|comedy|wit|humorous/.test(t)) return "humor";
+  if (/love|friendship|family|heart|relationship|romance/.test(t)) return "love";
+  if (/life|happiness|joy|hope|peace|living|gratitude/.test(t)) return "life";
+  if (/philosophy|god|religion|faith|spirit|meaning|soul/.test(t)) return "philosophy";
+  return "other";
+}
+
+function QuotableModal({ open, onClose, onAdd }: {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (q: { text: string; author: string; tags: string; category: string }) => void;
+}) {
+  const [mode, setMode] = useState<"random" | "search" | "tags">("random");
+  const [query, setQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [results, setResults] = useState<QuotableQuote[]>([]);
+  const [availableTags, setAvailableTags] = useState<QuotableTag[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const fetchRandom = useCallback(async () => {
+    setLoading(true); setResults([]);
+    try {
+      const r = await fetch(`${QUOTABLE_BASE}/quotes/random?limit=8`);
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setResults(Array.isArray(data) ? data : [data]);
+    } catch { /* network issues — quotable may be down */ }
+    finally { setLoading(false); }
+  }, []);
+
+  const fetchByTag = useCallback(async (tag: string) => {
+    setLoading(true); setResults([]);
+    try {
+      const r = await fetch(`${QUOTABLE_BASE}/quotes?tags=${encodeURIComponent(tag)}&limit=20&sortBy=quoteCount&order=desc`);
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setResults(data.results ?? []);
+    } catch { }
+    finally { setLoading(false); }
+  }, []);
+
+  const fetchSearch = useCallback(async (q: string) => {
+    if (!q.trim()) return;
+    setLoading(true); setResults([]);
+    try {
+      const r = await fetch(`${QUOTABLE_BASE}/search/quotes?query=${encodeURIComponent(q.trim())}&limit=20`);
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setResults(data.results ?? []);
+    } catch { }
+    finally { setLoading(false); }
+  }, []);
+
+  const loadTags = useCallback(async () => {
+    if (availableTags.length > 0) return;
+    setTagsLoading(true);
+    try {
+      const r = await fetch(`${QUOTABLE_BASE}/tags?sortBy=quoteCount&order=desc`);
+      if (!r.ok) throw new Error();
+      const data: QuotableTag[] = await r.json();
+      setAvailableTags(data.slice(0, 40)); // top 40 tags by quote count
+    } catch { }
+    finally { setTagsLoading(false); }
+  }, [availableTags.length]);
+
+  // On open / mode change
+  useEffect(() => {
+    if (!open) { setSavedIds(new Set()); return; }
+    if (mode === "random") fetchRandom();
+    if (mode === "search") setTimeout(() => searchRef.current?.focus(), 80);
+    if (mode === "tags") { loadTags(); setSelectedTag(null); setResults([]); }
+  }, [open, mode]);
+
+  function switchMode(m: "random" | "search" | "tags") {
+    setMode(m); setResults([]); setQuery(""); setSelectedTag(null);
+  }
+
+  function handleTagClick(tag: string) {
+    setSelectedTag(tag);
+    fetchByTag(tag);
+  }
+
+  function handleAdd(q: QuotableQuote) {
+    onAdd({
+      text: q.content,
+      author: q.author,
+      tags: q.tags.slice(0, 4).join(", "),
+      category: inferCategoryFromTags(q.tags),
+    });
+    setSavedIds(s => new Set([...s, q._id]));
+  }
+
+  const showTagGrid = mode === "tags" && !selectedTag;
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-xl max-h-[88vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <QuoteIcon size={15} /> Find Quotes — Quotable
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Browse 10,000+ curated quotes. Click Add to save instantly.</p>
+        </DialogHeader>
+
+        {/* Mode tabs */}
+        <div className="flex gap-1 bg-muted rounded-lg p-1 mx-5 mt-3 mb-1 shrink-0">
+          {([
+            ["random", "Random",     Shuffle],
+            ["search", "Search",     Search],
+            ["tags",   "Browse Tags",Tag],
+          ] as const).map(([key, label, Icon]) => (
+            <button key={key} onClick={() => switchMode(key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
+                mode === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}>
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search bar — only visible in search mode */}
+        {mode === "search" && (
+          <div className="flex gap-2 px-5 py-2.5 shrink-0">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") fetchSearch(query); }}
+                placeholder="Search by keyword, topic, or phrase…"
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            <Button size="sm" className="h-8" onClick={() => fetchSearch(query)} disabled={loading || !query.trim()}>
+              {loading ? <Loader2 size={13} className="animate-spin" /> : "Search"}
+            </Button>
+          </div>
+        )}
+
+        {/* Active tag chip + clear */}
+        {mode === "tags" && selectedTag && (
+          <div className="px-5 py-2 shrink-0 flex items-center gap-2">
+            <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 capitalize">
+              #{selectedTag}
+              <button onClick={() => { setSelectedTag(null); setResults([]); }} className="hover:opacity-60"><X size={10} /></button>
+            </span>
+          </div>
+        )}
+
+        {/* Random header with refresh */}
+        {mode === "random" && !loading && results.length > 0 && (
+          <div className="px-5 py-2 shrink-0 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{results.length} random quotes</span>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={fetchRandom}>
+              <Shuffle size={11} /> Shuffle
+            </Button>
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto border-t">
+          {/* Loading spinner */}
+          {loading && (
+            <div className="flex items-center justify-center h-28 text-muted-foreground gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm">Loading…</span>
+            </div>
+          )}
+
+          {/* Tag browser grid */}
+          {!loading && showTagGrid && (
+            <div className="p-5">
+              {tagsLoading && (
+                <div className="flex items-center justify-center h-24"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>
+              )}
+              {!tagsLoading && availableTags.length > 0 && (
+                <>
+                  <p className="text-xs text-muted-foreground mb-3">Click a tag to browse quotes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map(tag => (
+                      <button key={tag._id} onClick={() => handleTagClick(tag.name)}
+                        className="px-3 py-1.5 rounded-full border bg-card hover:bg-secondary hover:border-primary/30 transition-all text-sm capitalize flex items-center gap-1.5">
+                        <span>{tag.name}</span>
+                        <span className="text-xs text-muted-foreground">{tag.quoteCount}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {!tagsLoading && availableTags.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-6">Couldn't load tags. Check your connection.</p>
+              )}
+            </div>
+          )}
+
+          {/* Empty state for search */}
+          {!loading && mode === "search" && results.length === 0 && query.trim() === "" && (
+            <div className="flex flex-col items-center justify-center h-28 text-muted-foreground gap-1">
+              <Search size={20} className="opacity-25" />
+              <p className="text-sm">Type something and hit Search</p>
+            </div>
+          )}
+          {!loading && mode === "search" && results.length === 0 && query.trim() !== "" && (
+            <p className="text-sm text-muted-foreground text-center py-8">No quotes found for "{query}"</p>
+          )}
+
+          {/* Quote results list */}
+          {!loading && results.length > 0 && (
+            <div className="divide-y">
+              {results.map(q => {
+                const saved = savedIds.has(q._id);
+                return (
+                  <div key={q._id} className="p-4 flex flex-col gap-2 hover:bg-muted/30 transition-colors group">
+                    <p className="text-sm italic leading-relaxed text-foreground/90">
+                      &ldquo;{q.content}&rdquo;
+                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-muted-foreground">— {q.author}</p>
+                        {q.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {q.tags.slice(0, 4).map(t => (
+                              <span key={t} className="text-[10px] bg-secondary px-1.5 py-0.5 rounded-full capitalize text-muted-foreground">{t}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => !saved && handleAdd(q)}
+                        disabled={saved}
+                        className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          saved
+                            ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800 cursor-default"
+                            : "bg-card hover:bg-primary hover:text-primary-foreground hover:border-primary border-border"
+                        }`}
+                      >
+                        {saved ? <><CheckCircle2 size={12} /> Saved</> : <><Plus size={12} /> Add</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Load more for tag browsing */}
+          {!loading && mode === "tags" && selectedTag && results.length >= 20 && (
+            <div className="p-4 text-center">
+              <Button size="sm" variant="outline" onClick={() => fetchByTag(selectedTag)}>Shuffle same tag</Button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-2.5 border-t bg-muted/20 shrink-0 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            Powered by <a href="https://github.com/lukePeavey/quotable" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Quotable</a>
+          </span>
+          {savedIds.size > 0 && (
+            <span className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
+              <CheckCircle2 size={11} /> {savedIds.size} added
+            </span>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── Quote Card ────────────────────────────────────────────────────────────────
 
@@ -120,6 +409,7 @@ export default function QuotesPage() {
   const [editing, setEditing] = useState<Quote | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
+  const [quotableOpen, setQuotableOpen] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
 
   const { data: allQuotes = [] } = useQuery<Quote[]>({
@@ -299,7 +589,10 @@ export default function QuotesPage() {
             {allQuotes.length} quote{allQuotes.length !== 1 ? "s" : ""} · {favoriteCount} favorited
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={() => setQuotableOpen(true)} className="gap-1.5">
+            <Search size={13} /> Find Quotes
+          </Button>
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
           </Button>
@@ -392,6 +685,23 @@ export default function QuotesPage() {
           ))}
         </div>
       )}
+
+      {/* Quotable search */}
+      <QuotableModal
+        open={quotableOpen}
+        onClose={() => setQuotableOpen(false)}
+        onAdd={({ text, author, tags, category }) => {
+          createMut.mutate({
+            text,
+            author: author || null,
+            source: null,
+            category,
+            tags: tags || null,
+            notes: null,
+            isFavorite: false,
+          });
+        }}
+      />
 
       {/* Add/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
