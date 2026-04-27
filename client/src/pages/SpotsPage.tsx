@@ -114,23 +114,39 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
 }) {
   const [query, setQuery] = useState("");
   const [near, setNear] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<NominatimResult | null>(null);
   const queryRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Nominatim-friendly search terms per category
+  const CATEGORY_SEARCH_TERMS: Record<string, string> = {
+    restaurant: "restaurant",
+    bar: "bar pub",
+    cafe: "cafe coffee shop",
+    park: "park",
+    trail: "trail hiking path",
+    shop: "shop store",
+    service: "service",
+    attraction: "attraction museum",
+    hotel: "hotel",
+    other: "",
+  };
+
   useEffect(() => {
-    if (!open) { setQuery(""); setNear(""); setResults([]); setSelected(null); }
+    if (!open) { setQuery(""); setNear(""); setCategoryFilter(null); setResults([]); setSelected(null); }
     else setTimeout(() => queryRef.current?.focus(), 80);
   }, [open]);
 
-  async function doSearch(q: string, nearVal: string) {
-    const trimmed = q.trim();
-    if (!trimmed) { setResults([]); return; }
+  async function doSearch(q: string, nearVal: string, cat: string | null) {
+    // Use category label as query if query is empty and a category is selected
+    const searchTerm = q.trim() || (cat ? (CATEGORY_SEARCH_TERMS[cat] ?? cat) : "");
+    if (!searchTerm) { setResults([]); return; }
     setLoading(true); setSelected(null);
     try {
-      const combined = nearVal.trim() ? `${trimmed} ${nearVal.trim()}` : trimmed;
+      const combined = nearVal.trim() ? `${searchTerm} ${nearVal.trim()}` : searchTerm;
       const r = await apiRequest("GET", `/api/nominatim/search?q=${encodeURIComponent(combined)}`);
       const data: NominatimResult[] = await r.json();
       setResults(data);
@@ -139,19 +155,27 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
     } finally { setLoading(false); }
   }
 
-  function scheduleSearch(q: string, nearVal: string) {
+  function scheduleSearch(q: string, nearVal: string, cat: string | null) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(q, nearVal), 480);
+    debounceRef.current = setTimeout(() => doSearch(q, nearVal, cat), 480);
   }
 
   function handleQueryChange(val: string) {
     setQuery(val);
-    scheduleSearch(val, near);
+    scheduleSearch(val, near, categoryFilter);
   }
 
   function handleNearChange(val: string) {
     setNear(val);
-    scheduleSearch(query, val);
+    scheduleSearch(query, val, categoryFilter);
+  }
+
+  function handleCategoryToggle(cat: string) {
+    const next = categoryFilter === cat ? null : cat;
+    setCategoryFilter(next);
+    // Immediately search if near is set or query is set
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    doSearch(query, near, next);
   }
 
   function buildPrefill(r: NominatimResult): Partial<typeof EMPTY_FORM> {
@@ -209,7 +233,7 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
               placeholder="Restaurant, park, hotel, attraction…"
               value={query}
               onChange={e => handleQueryChange(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near); } }}
+              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near, categoryFilter); } }}
               className="text-sm pl-9 pr-8"
             />
           </div>
@@ -219,24 +243,50 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
               placeholder="Near city (optional) — e.g. Austin, Chicago, NYC…"
               value={near}
               onChange={e => handleNearChange(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near); } }}
+              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near, categoryFilter); } }}
               className="text-sm pl-9 h-8 text-muted-foreground placeholder:text-muted-foreground/60"
             />
+          </div>
+
+          {/* Category filter pills */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {SPOT_TYPES.filter(t => t.value !== "other").map(t => (
+              <button
+                key={t.value}
+                onClick={() => handleCategoryToggle(t.value)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-all ${
+                  categoryFilter === t.value
+                    ? "bg-primary text-primary-foreground border-primary font-medium"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                <span>{t.emoji}</span> {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden border-t">
           {/* Results list */}
+          {(() => {
+            const displayed = categoryFilter
+              ? results.filter(r => nominatimToSpotType(r.class, r.type) === categoryFilter)
+              : results;
+            return (
           <div className={`overflow-y-auto py-2 space-y-0.5 ${selected ? "w-[280px] border-r shrink-0 px-2" : "flex-1 px-3"}`}>
-            {results.length === 0 && !loading && (
+            {displayed.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center h-28 text-muted-foreground gap-1.5 px-6">
                 <MapPin size={22} className="opacity-20" />
                 <p className="text-xs text-center">
-                  {query.trim() ? "No results — try adding a city name in the \"Near\" field" : "Type a place name above — results appear automatically"}
+                  {(query.trim() || categoryFilter)
+                    ? categoryFilter && results.length > 0
+                      ? `No ${SPOT_TYPES.find(t => t.value === categoryFilter)?.label ?? categoryFilter} results — try a broader search`
+                      : "No results — try adding a city name in the \"Near\" field"
+                    : "Type a place name or pick a category above"}
                 </p>
               </div>
             )}
-            {results.map(r => {
+            {displayed.map(r => {
               const name = r.name ?? r.display_name.split(",")[0];
               const sub = resultSubtitle(r);
               const spotType = nominatimToSpotType(r.class, r.type);
@@ -265,6 +315,8 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
               );
             })}
           </div>
+            );
+          })()}
 
           {/* Preview panel */}
           {selected && (
