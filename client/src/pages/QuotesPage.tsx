@@ -55,11 +55,11 @@ const EMPTY_FORM = {
 
 // ── Quotable Modal ────────────────────────────────────────────────────────────
 
-const QUOTABLE_BASE = "https://api.quotable.io";
+const QUOTABLE_BASE = "/api/quotable";
 
 type QuotableQuote = {
   _id: string; content: string; author: string;
-  authorSlug: string; tags: string[]; length: number;
+  tags: string[];
 };
 type QuotableTag = { _id: string; name: string; quoteCount: number };
 
@@ -80,7 +80,7 @@ function QuotableModal({ open, onClose, onAdd }: {
   onClose: () => void;
   onAdd: (q: { text: string; author: string; tags: string; category: string }) => void;
 }) {
-  const [mode, setMode] = useState<"random" | "search" | "tags">("random");
+  const [mode, setMode] = useState<"random" | "search" | "topics">("random");
   const [query, setQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [results, setResults] = useState<QuotableQuote[]>([]);
@@ -93,21 +93,21 @@ function QuotableModal({ open, onClose, onAdd }: {
   const fetchRandom = useCallback(async () => {
     setLoading(true); setResults([]);
     try {
-      const r = await fetch(`${QUOTABLE_BASE}/quotes/random?limit=8`);
+      const r = await fetch(`${QUOTABLE_BASE}/random?limit=8`);
       if (!r.ok) throw new Error();
       const data = await r.json();
       setResults(Array.isArray(data) ? data : [data]);
-    } catch { /* network issues — quotable may be down */ }
+    } catch { /* server proxy unavailable */ }
     finally { setLoading(false); }
   }, []);
 
   const fetchByTag = useCallback(async (tag: string) => {
     setLoading(true); setResults([]);
     try {
-      const r = await fetch(`${QUOTABLE_BASE}/quotes?tags=${encodeURIComponent(tag)}&limit=20&sortBy=quoteCount&order=desc`);
+      const r = await fetch(`${QUOTABLE_BASE}/by-topic?topic=${encodeURIComponent(tag)}`);
       if (!r.ok) throw new Error();
       const data = await r.json();
-      setResults(data.results ?? []);
+      setResults(Array.isArray(data) ? data : []);
     } catch { }
     finally { setLoading(false); }
   }, []);
@@ -116,10 +116,10 @@ function QuotableModal({ open, onClose, onAdd }: {
     if (!q.trim()) return;
     setLoading(true); setResults([]);
     try {
-      const r = await fetch(`${QUOTABLE_BASE}/search/quotes?query=${encodeURIComponent(q.trim())}&limit=20`);
+      const r = await fetch(`${QUOTABLE_BASE}/search?query=${encodeURIComponent(q.trim())}`);
       if (!r.ok) throw new Error();
       const data = await r.json();
-      setResults(data.results ?? []);
+      setResults(Array.isArray(data) ? data : []);
     } catch { }
     finally { setLoading(false); }
   }, []);
@@ -128,10 +128,10 @@ function QuotableModal({ open, onClose, onAdd }: {
     if (availableTags.length > 0) return;
     setTagsLoading(true);
     try {
-      const r = await fetch(`${QUOTABLE_BASE}/tags?sortBy=quoteCount&order=desc`);
+      const r = await fetch(`${QUOTABLE_BASE}/topics`);
       if (!r.ok) throw new Error();
       const data: QuotableTag[] = await r.json();
-      setAvailableTags(data.slice(0, 40)); // top 40 tags by quote count
+      setAvailableTags(data);
     } catch { }
     finally { setTagsLoading(false); }
   }, [availableTags.length]);
@@ -141,10 +141,10 @@ function QuotableModal({ open, onClose, onAdd }: {
     if (!open) { setSavedIds(new Set()); return; }
     if (mode === "random") fetchRandom();
     if (mode === "search") setTimeout(() => searchRef.current?.focus(), 80);
-    if (mode === "tags") { loadTags(); setSelectedTag(null); setResults([]); }
+    if (mode === "topics") { loadTags(); setSelectedTag(null); setResults([]); }
   }, [open, mode]);
 
-  function switchMode(m: "random" | "search" | "tags") {
+  function switchMode(m: "random" | "search" | "topics") {
     setMode(m); setResults([]); setQuery(""); setSelectedTag(null);
   }
 
@@ -163,24 +163,24 @@ function QuotableModal({ open, onClose, onAdd }: {
     setSavedIds(s => new Set([...s, q._id]));
   }
 
-  const showTagGrid = mode === "tags" && !selectedTag;
+  const showTagGrid = mode === "topics" && !selectedTag;
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent className="max-w-xl max-h-[88vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <QuoteIcon size={15} /> Find Quotes — Quotable
+            <QuoteIcon size={15} /> Find Quotes
           </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">Browse 10,000+ curated quotes. Click Add to save instantly.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Browse 1,400+ quotes by topic or search by keyword. Click Add to save.</p>
         </DialogHeader>
 
         {/* Mode tabs */}
         <div className="flex gap-1 bg-muted rounded-lg p-1 mx-5 mt-3 mb-1 shrink-0">
           {([
-            ["random", "Random",     Shuffle],
-            ["search", "Search",     Search],
-            ["tags",   "Browse Tags",Tag],
+            ["random", "Random",        Shuffle],
+            ["search", "Search",        Search],
+            ["topics", "Browse Topics", Tag],
           ] as const).map(([key, label, Icon]) => (
             <button key={key} onClick={() => switchMode(key)}
               className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -212,7 +212,7 @@ function QuotableModal({ open, onClose, onAdd }: {
         )}
 
         {/* Active tag chip + clear */}
-        {mode === "tags" && selectedTag && (
+        {mode === "topics" && selectedTag && (
           <div className="px-5 py-2 shrink-0 flex items-center gap-2">
             <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 capitalize">
               #{selectedTag}
@@ -249,7 +249,7 @@ function QuotableModal({ open, onClose, onAdd }: {
               )}
               {!tagsLoading && availableTags.length > 0 && (
                 <>
-                  <p className="text-xs text-muted-foreground mb-3">Click a tag to browse quotes</p>
+                  <p className="text-xs text-muted-foreground mb-3">Click a topic to browse quotes</p>
                   <div className="flex flex-wrap gap-2">
                     {availableTags.map(tag => (
                       <button key={tag._id} onClick={() => handleTagClick(tag.name)}
@@ -262,7 +262,7 @@ function QuotableModal({ open, onClose, onAdd }: {
                 </>
               )}
               {!tagsLoading && availableTags.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-6">Couldn't load tags. Check your connection.</p>
+                <p className="text-xs text-muted-foreground text-center py-6">Couldn't load topics. Check your connection.</p>
               )}
             </div>
           )}
@@ -317,10 +317,10 @@ function QuotableModal({ open, onClose, onAdd }: {
             </div>
           )}
 
-          {/* Load more for tag browsing */}
-          {!loading && mode === "tags" && selectedTag && results.length >= 20 && (
+          {/* Shuffle for topic browsing */}
+          {!loading && mode === "topics" && selectedTag && results.length > 0 && (
             <div className="p-4 text-center">
-              <Button size="sm" variant="outline" onClick={() => fetchByTag(selectedTag)}>Shuffle same tag</Button>
+              <Button size="sm" variant="outline" onClick={() => fetchByTag(selectedTag)}>Shuffle same topic</Button>
             </div>
           )}
         </div>
