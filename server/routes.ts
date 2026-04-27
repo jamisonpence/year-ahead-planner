@@ -1085,7 +1085,7 @@ Return exactly this structure:
       url.searchParams.set("q", q);
       url.searchParams.set("format", "json");
       url.searchParams.set("addressdetails", "1");
-      url.searchParams.set("limit", "10");
+      url.searchParams.set("limit", "15");
       url.searchParams.set("extratags", "1");   // website, opening_hours, phone
       const r = await fetch(url.toString(), {
         headers: {

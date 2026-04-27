@@ -113,96 +113,155 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
   onSelect: (form: Partial<typeof EMPTY_FORM>) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [near, setNear] = useState("");
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<NominatimResult | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const queryRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { if (!open) { setQuery(""); setResults([]); setSelected(null); } }, [open]);
-  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 80); }, [open]);
+  useEffect(() => {
+    if (!open) { setQuery(""); setNear(""); setResults([]); setSelected(null); }
+    else setTimeout(() => queryRef.current?.focus(), 80);
+  }, [open]);
 
-  async function doSearch() {
-    const q = query.trim();
-    if (!q) return;
+  async function doSearch(q: string, nearVal: string) {
+    const trimmed = q.trim();
+    if (!trimmed) { setResults([]); return; }
     setLoading(true); setSelected(null);
     try {
-      const r = await apiRequest("GET", `/api/nominatim/search?q=${encodeURIComponent(q)}`);
+      const combined = nearVal.trim() ? `${trimmed} ${nearVal.trim()}` : trimmed;
+      const r = await apiRequest("GET", `/api/nominatim/search?q=${encodeURIComponent(combined)}`);
       const data: NominatimResult[] = await r.json();
       setResults(data);
-      if (data.length === 0) setResults([]);
     } catch {
       setResults([]);
     } finally { setLoading(false); }
   }
 
-  function handleAdd() {
-    if (!selected) return;
-    const addr = selected.address ?? {};
-    const name = selected.name ?? selected.display_name.split(",")[0].trim();
-    const website = selected.extratags?.website ?? selected.extratags?.["contact:website"] ?? "";
-    const openingHours = selected.extratags?.opening_hours ?? "";
+  function scheduleSearch(q: string, nearVal: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(q, nearVal), 480);
+  }
 
-    onSelect({
-      name,
-      type: nominatimToSpotType(selected.class, selected.type),
+  function handleQueryChange(val: string) {
+    setQuery(val);
+    scheduleSearch(val, near);
+  }
+
+  function handleNearChange(val: string) {
+    setNear(val);
+    scheduleSearch(query, val);
+  }
+
+  function buildPrefill(r: NominatimResult): Partial<typeof EMPTY_FORM> {
+    const addr = r.address ?? {};
+    return {
+      name: r.name ?? r.display_name.split(",")[0].trim(),
+      type: nominatimToSpotType(r.class, r.type),
       address: buildAddress(addr),
       neighborhood: buildNeighborhood(addr),
       city: buildCity(addr),
-      website,
-      openingHours,
-    });
+      website: r.extratags?.website ?? r.extratags?.["contact:website"] ?? "",
+      openingHours: r.extratags?.opening_hours ?? "",
+    };
+  }
+
+  function handleQuickAdd(r: NominatimResult) {
+    onSelect(buildPrefill(r));
     onClose();
+  }
+
+  function handleAddSelected() {
+    if (!selected) return;
+    onSelect(buildPrefill(selected));
+    onClose();
+  }
+
+  // Subtitle for each result: city + state/country context
+  function resultSubtitle(r: NominatimResult) {
+    const addr = r.address ?? {};
+    const parts = [
+      addr.suburb ?? addr.neighbourhood ?? addr.quarter,
+      addr.city ?? addr.town ?? addr.village ?? addr.municipality,
+      addr.state,
+      addr.country,
+    ].filter(Boolean);
+    return parts.slice(0, 3).join(", ");
   }
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-2xl max-h-[82vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <MapPin size={16} className="text-primary" /> Search Places
           </DialogTitle>
         </DialogHeader>
 
-        {/* Search bar */}
-        <div className="px-5 pb-3 shrink-0 flex gap-2">
-          <Input
-            ref={inputRef}
-            placeholder="e.g. Franklin Barbecue Austin, Millennium Park Chicago…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && doSearch()}
-            className="text-sm"
-          />
-          <Button size="sm" onClick={doSearch} disabled={loading || !query.trim()} className="shrink-0">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-          </Button>
+        {/* Search inputs */}
+        <div className="px-5 pb-3 shrink-0 space-y-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            {loading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+            <Input
+              ref={queryRef}
+              placeholder="Restaurant, park, hotel, attraction…"
+              value={query}
+              onChange={e => handleQueryChange(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near); } }}
+              className="text-sm pl-9 pr-8"
+            />
+          </div>
+          <div className="relative">
+            <Navigation size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Near city (optional) — e.g. Austin, Chicago, NYC…"
+              value={near}
+              onChange={e => handleNearChange(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { if (debounceRef.current) clearTimeout(debounceRef.current); doSearch(query, near); } }}
+              className="text-sm pl-9 h-8 text-muted-foreground placeholder:text-muted-foreground/60"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden border-t">
           {/* Results list */}
-          <div className={`overflow-y-auto px-3 pb-4 space-y-1 ${selected ? "w-72 border-r shrink-0" : "flex-1 px-5"}`}>
+          <div className={`overflow-y-auto py-2 space-y-0.5 ${selected ? "w-[280px] border-r shrink-0 px-2" : "flex-1 px-3"}`}>
             {results.length === 0 && !loading && (
-              <p className="text-center text-xs text-muted-foreground pt-6 px-4">
-                {query ? "No results — try a more specific search, e.g. include the city name" : "Search for any place — restaurants, parks, hotels, shops, attractions…"}
-              </p>
+              <div className="flex flex-col items-center justify-center h-28 text-muted-foreground gap-1.5 px-6">
+                <MapPin size={22} className="opacity-20" />
+                <p className="text-xs text-center">
+                  {query.trim() ? "No results — try adding a city name in the \"Near\" field" : "Type a place name above — results appear automatically"}
+                </p>
+              </div>
             )}
             {results.map(r => {
               const name = r.name ?? r.display_name.split(",")[0];
-              const sub = r.display_name.split(",").slice(1, 3).join(",").trim();
+              const sub = resultSubtitle(r);
               const spotType = nominatimToSpotType(r.class, r.type);
               const emoji = SPOT_TYPES.find(t => t.value === spotType)?.emoji ?? "📍";
+              const isSelected = selected?.place_id === r.place_id;
               return (
-                <button
+                <div
                   key={r.place_id}
-                  onClick={() => setSelected(r)}
-                  className={`w-full text-left flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${selected?.place_id === r.place_id ? "bg-primary/5 border-primary/30" : "bg-card hover:bg-muted/40 border-transparent"}`}
+                  onClick={() => setSelected(isSelected ? null : r)}
+                  className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors group ${isSelected ? "bg-primary/5 border-primary/30" : "bg-transparent hover:bg-muted/40 border-transparent"}`}
                 >
-                  <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
-                  <div className="min-w-0">
+                  <span className="text-base shrink-0">{emoji}</span>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium leading-snug truncate">{name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{sub}</p>
+                    {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
                   </div>
-                </button>
+                  {/* Quick-add button */}
+                  <button
+                    onClick={e => { e.stopPropagation(); handleQuickAdd(r); }}
+                    title="Add to My Spots"
+                    className="shrink-0 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-primary hover:text-primary-foreground text-muted-foreground transition-all"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -233,7 +292,7 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
                     </div>
 
                     <div className="space-y-1.5 text-sm">
-                      {fullAddress && (
+                      {(fullAddress || city) && (
                         <p className="flex items-start gap-2 text-muted-foreground">
                           <MapPin size={13} className="shrink-0 mt-0.5" />
                           <span>{[fullAddress, neighborhood, city, addr.state, addr.postcode].filter(Boolean).join(", ")}</span>
@@ -260,7 +319,7 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
                       </p>
                     </div>
 
-                    <Button className="w-full" size="sm" onClick={handleAdd}>
+                    <Button className="w-full" size="sm" onClick={handleAddSelected}>
                       <Plus size={13} className="mr-1.5" /> Add to My Spots
                     </Button>
                     <p className="text-xs text-center text-muted-foreground">
