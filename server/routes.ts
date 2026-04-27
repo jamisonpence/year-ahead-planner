@@ -1729,6 +1729,48 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Movie Shares ──────────────────────────────────────────────────────────────
+  app.get("/api/movie-shares", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getMovieShares((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/movie-shares", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const data = {
+        fromUserId: userId,
+        toUserId: req.body.toUserId,
+        mediaType: req.body.mediaType ?? "movie",
+        title: req.body.title,
+        year: req.body.year ?? null,
+        director: req.body.director ?? null,
+        genres: req.body.genres ?? null,
+        streamingOn: req.body.streamingOn ?? null,
+        posterColor: req.body.posterColor ?? null,
+        posterUrl: req.body.posterUrl ?? null,
+        notes: req.body.notes ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      res.status(201).json(await storage.sendMovieShare(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/movie-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissMovieShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/movie-shares/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteMovieShare(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
