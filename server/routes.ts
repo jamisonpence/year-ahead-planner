@@ -1642,6 +1642,46 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Music Recommendations ─────────────────────────────────────────────────────
+  app.get("/api/music-recommendations", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getMusicRecommendations((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/music-recommendations", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { toUserId, type, artistName, songTitle, notes } = req.body;
+      if (!toUserId || !artistName || !type) return res.status(400).json({ error: "toUserId, type, and artistName required" });
+      const rec = await storage.sendMusicRecommendation({
+        fromUserId: userId,
+        toUserId,
+        type,
+        artistName,
+        songTitle: songTitle || null,
+        notes: notes || null,
+        createdAt: new Date().toISOString(),
+        isDismissed: false,
+      });
+      res.status(201).json(rec);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/music-recommendations/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.dismissMusicRecommendation(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/music-recommendations/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteMusicRecommendation(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
