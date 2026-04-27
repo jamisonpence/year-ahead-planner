@@ -481,6 +481,9 @@ export default function MoviesPage() {
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => setShareMovie(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
+                <Send size={13} className="text-muted-foreground" />
+              </button>
               <button onClick={() => open_edit(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors">
                 <Pencil size={13} className="text-muted-foreground" />
               </button>
@@ -572,30 +575,45 @@ export default function MoviesPage() {
       {/* Video view */}
       {isVideoView && (
         <div>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <div className="relative flex-1 min-w-48">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search videos…"
-                className="pl-8 h-8 text-sm" />
-            </div>
-            {search && (
-              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => setSearch("")}>
-                <X size={13} /> Clear
-              </Button>
-            )}
-          </div>
-          {filtered.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Video size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No videos yet.</p>
-              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add Video</Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map((m) => <VideoCard key={m.id} movie={m} />)}
-            </div>
-          )}
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="backlog" className="gap-1.5">
+                <Clock size={14} /> All Videos <span className="ml-1 text-xs opacity-60">{filtered.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="shared" className="gap-1.5">
+                <Inbox size={14} /> Shared
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="backlog">
+              <div className="flex flex-wrap gap-2 mb-4">
+                <div className="relative flex-1 min-w-48">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search videos…"
+                    className="pl-8 h-8 text-sm" />
+                </div>
+                {search && (
+                  <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => setSearch("")}>
+                    <X size={13} /> Clear
+                  </Button>
+                )}
+              </div>
+              {filtered.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Video size={40} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-sm">No videos yet.</p>
+                  <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add Video</Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filtered.map((m) => <VideoCard key={m.id} movie={m} />)}
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="shared">
+              <SharedMoviesTab />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
