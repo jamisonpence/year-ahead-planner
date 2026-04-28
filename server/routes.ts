@@ -832,6 +832,16 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  app.post("/api/copy-from-profile", requireAuth, async (req, res) => {
+    try {
+      const viewerId = (req.user as User).id;
+      const { sourceUserId, type, data } = req.body;
+      if (!sourceUserId || !type || !data) return res.status(400).json({ error: "Missing sourceUserId, type, or data" });
+      const result = await storage.copyFromProfile(viewerId, parseInt(sourceUserId), type, data);
+      res.status(201).json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Receipts (file upload) ─────────────────────────────────────────────────────
   const UPLOADS_DIR = path.resolve("uploads/receipts");
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
