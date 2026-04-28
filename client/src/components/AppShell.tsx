@@ -301,6 +301,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
                     { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
                     { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
+                    { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/workouts?shared=1", emoji: "🏋️" },
                   ]
                     .filter((item) => item.count > 0)
                     .map((item) => (
@@ -441,6 +442,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 { label: "Spots", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
                 { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
                 { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
+                { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/workouts?shared=1", emoji: "🏋️" },
               ]
                 .filter((item) => item.count > 0)
                 .map((item) => (

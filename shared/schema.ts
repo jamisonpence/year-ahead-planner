@@ -574,6 +574,47 @@ export const insertWorkoutLogSchema = createInsertSchema(workoutLogs).omit({ id:
 export type InsertWorkoutLog = z.infer<typeof insertWorkoutLogSchema>;
 export type WorkoutLog = typeof workoutLogs.$inferSelect;
 
+// ── WORKOUT PLANS ─────────────────────────────────────────────────────────────
+// A named collection of templates arranged into a weekly repeating schedule
+export const workoutPlans = pgTable("workout_plans", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  description: text("description"),
+  durationWeeks: integer("duration_weeks").notNull().default(4),
+  // JSON: [{ dayOfWeek: "monday"|"tuesday"|..., templateId: number, templateName: string }]
+  scheduleJson: text("schedule_json").notNull().default("[]"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertWorkoutPlanSchema = createInsertSchema(workoutPlans).omit({ id: true });
+export type InsertWorkoutPlan = z.infer<typeof insertWorkoutPlanSchema>;
+export type WorkoutPlan = typeof workoutPlans.$inferSelect;
+export type WorkoutPlanDayEntry = { dayOfWeek: string; templateId: number; templateName: string };
+
+// ── WORKOUT SHARES ────────────────────────────────────────────────────────────
+// Share a template or plan with a friend
+export const workoutShares = pgTable("workout_shares", {
+  id: serial("id").primaryKey(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  shareType: text("share_type").notNull().default("template"), // "template" | "plan"
+  // template: { name, workoutType, exercisesJson, notes }
+  // plan: { name, description, durationWeeks, schedule: [{dayOfWeek, templateName, workoutType, exercisesJson}] }
+  contentJson: text("content_json").notNull(),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+  isRead: boolean("is_read").notNull().default(false),
+});
+
+export const insertWorkoutShareSchema = createInsertSchema(workoutShares).omit({ id: true });
+export type InsertWorkoutShare = z.infer<typeof insertWorkoutShareSchema>;
+export type WorkoutShare = typeof workoutShares.$inferSelect;
+export type WorkoutShareWithUser = WorkoutShare & {
+  fromUser: { id: number; name: string; avatarUrl: string | null };
+};
+
 export const insertGoalSchema = createInsertSchema(goals).omit({ id: true });
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
 export type Goal = typeof goals.$inferSelect;

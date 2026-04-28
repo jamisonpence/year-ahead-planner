@@ -367,6 +367,54 @@ Return exactly this structure:
     (await storage.deleteWorkoutTemplate(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
+  // ── Workout Plans ─────────────────────────────────────────────────────────────
+  app.get("/api/workout-plans", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllWorkoutPlans((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/workout-plans", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = { ...req.body, userId: uid, createdAt: new Date().toISOString() };
+      res.status(201).json(await storage.createWorkoutPlan(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/workout-plans/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateWorkoutPlan(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/workout-plans/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteWorkoutPlan(+req.params.id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Workout Shares ────────────────────────────────────────────────────────────
+  app.get("/api/workout-shares", requireAuth, async (req, res) => {
+    try { res.json(await storage.getWorkoutShares((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/workout-shares", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { toUserId, shareType, contentJson, notes } = req.body;
+      const share = await storage.createWorkoutShare({
+        fromUserId: uid, toUserId, shareType, contentJson, notes: notes ?? null,
+        createdAt: new Date().toISOString(),
+      });
+      res.status(201).json(share);
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/workout-shares/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      await storage.dismissWorkoutShare(+req.params.id, (req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Workout Logs ──────────────────────────────────────────────────────────────
   app.get("/api/workout-logs", async (req, res) => {
     try {
