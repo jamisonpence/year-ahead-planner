@@ -1563,76 +1563,109 @@ export const storage: IStorage = {
   },
 
   async getFriendProfile(viewerId, targetId) {
-    // Verify friendship
-    const friendship = await pool.query(
-      `SELECT id FROM friend_requests WHERE status = 'accepted'
-       AND ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1))`,
-      [viewerId, targetId]
-    );
-    if (!friendship.rows[0]) return null;
+    try {
+      // Verify friendship
+      const friendship = await pool.query(
+        `SELECT id FROM friend_requests WHERE status = 'accepted'
+         AND ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1))`,
+        [viewerId, targetId]
+      );
+      if (!friendship.rows[0]) {
+        console.error(`[getFriendProfile] No accepted friendship between viewer=${viewerId} and target=${targetId}`);
+        return null;
+      }
 
-    const userRows = await db.select().from(users).where(eq(users.id, targetId)).limit(1);
-    if (!userRows[0]) return null;
-    const u = userRows[0];
+      const userRows = await db.select().from(users).where(eq(users.id, targetId)).limit(1);
+      if (!userRows[0]) {
+        console.error(`[getFriendProfile] Target user ${targetId} not found`);
+        return null;
+      }
+      const u = userRows[0];
 
-    // Get visible tabs
-    const privacyRow = await db.select().from(tabPrivacy).where(eq(tabPrivacy.userId, targetId)).limit(1);
-    let visibleTabs: string[] = [];
-    if (privacyRow[0]) {
-      try {
-        const s = JSON.parse(privacyRow[0].settingsJson) as TabPrivacySetting[];
-        visibleTabs = s.filter(x => x.visibility === "friends").map(x => x.path);
-      } catch {}
-    }
+      // Get visible tabs
+      const privacyRow = await db.select().from(tabPrivacy).where(eq(tabPrivacy.userId, targetId)).limit(1);
+      let visibleTabs: string[] = [];
+      if (privacyRow[0]) {
+        try {
+          const s = JSON.parse(privacyRow[0].settingsJson) as TabPrivacySetting[];
+          visibleTabs = s.filter(x => x.visibility === "friends").map(x => x.path);
+        } catch (e) {
+          console.error(`[getFriendProfile] Failed to parse tab privacy for user ${targetId}:`, e);
+        }
+      }
 
-    const data: Record<string, any> = {};
+      const data: Record<string, any> = {};
 
-    if (visibleTabs.includes("/reading")) {
-      const r = await pool.query(`SELECT id, title, author, status, rating, is_favorite, cover_url FROM books WHERE user_id = $1 ORDER BY title`, [targetId]);
-      data.reading = r.rows.map(x => ({ id: x.id, title: x.title, author: x.author, status: x.status, rating: x.rating, isFavorite: x.is_favorite, coverUrl: x.cover_url }));
-    }
-    if (visibleTabs.includes("/movies")) {
-      const r = await pool.query(`SELECT id, title, media_type, status, rating, is_favorite, poster_url, poster_color FROM movies WHERE user_id = $1 ORDER BY title`, [targetId]);
-      data.movies = r.rows.map(x => ({ id: x.id, title: x.title, mediaType: x.media_type, status: x.status, rating: x.rating, isFavorite: x.is_favorite, posterUrl: x.poster_url, posterColor: x.poster_color }));
-    }
-    if (visibleTabs.includes("/music")) {
-      const r = await pool.query(
-        `SELECT a.id, a.name, a.is_favorite, a.genre,
-          COALESCE(json_agg(json_build_object('id',s.id,'title',s.title,'isFavorite',s.is_favorite)) FILTER (WHERE s.id IS NOT NULL),'[]') AS songs
-         FROM music_artists a LEFT JOIN music_songs s ON s.artist_id = a.id
-         WHERE a.user_id = $1 GROUP BY a.id ORDER BY a.name`, [targetId]);
-      data.music = r.rows.map(x => ({ id: x.id, name: x.name, isFavorite: x.is_favorite, genre: x.genre, songs: x.songs }));
-    }
-    if (visibleTabs.includes("/recipes")) {
-      const r = await pool.query(`SELECT id, name, emoji, category, tags FROM recipes WHERE user_id = $1 ORDER BY name`, [targetId]);
-      data.recipes = r.rows.map(x => ({ id: x.id, name: x.name, emoji: x.emoji, category: x.category, tags: x.tags }));
-    }
-    if (visibleTabs.includes("/spots")) {
-      const r = await pool.query(`SELECT id, name, type, city, neighborhood, rating, is_favorite FROM spots WHERE user_id = $1 ORDER BY name`, [targetId]);
-      data.spots = r.rows.map(x => ({ id: x.id, name: x.name, type: x.type, city: x.city, neighborhood: x.neighborhood, rating: x.rating, isFavorite: x.is_favorite }));
-    }
-    if (visibleTabs.includes("/art")) {
-      const r = await pool.query(`SELECT id, title, artist_name, medium, image_url, accent_color, where_viewed FROM art_pieces WHERE user_id = $1 ORDER BY title`, [targetId]);
-      data.art = r.rows.map(x => ({ id: x.id, title: x.title, artistName: x.artist_name, medium: x.medium, imageUrl: x.image_url, accentColor: x.accent_color, whereViewed: x.where_viewed }));
-    }
-    if (visibleTabs.includes("/quotes")) {
-      const r = await pool.query(`SELECT id, text, author, category, is_favorite FROM quotes WHERE user_id = $1 ORDER BY created_at DESC`, [targetId]);
-      data.quotes = r.rows.map(x => ({ id: x.id, text: x.text, author: x.author, category: x.category, isFavorite: x.is_favorite }));
-    }
-    if (visibleTabs.includes("/goals")) {
-      const r = await pool.query(`SELECT id, name, status, category FROM goals WHERE user_id = $1 ORDER BY name`, [targetId]);
-      data.goals = r.rows.map(x => ({ id: x.id, name: x.name, status: x.status, category: x.category }));
-    }
-    if (visibleTabs.includes("/workouts")) {
-      const r = await pool.query(`SELECT id, name, muscle_group FROM workout_templates WHERE user_id = $1 ORDER BY name`, [targetId]);
-      data.workouts = r.rows.map(x => ({ id: x.id, name: x.name, muscleGroup: x.muscle_group }));
-    }
-    if (visibleTabs.includes("/plants")) {
-      const r = await pool.query(`SELECT id, name, species, image_url FROM plants WHERE user_id = $1 ORDER BY name`, [targetId]);
-      data.plants = r.rows.map(x => ({ id: x.id, name: x.name, species: x.species, imageUrl: x.image_url }));
-    }
+      if (visibleTabs.includes("/reading")) {
+        try {
+          const r = await pool.query(`SELECT id, title, author, status, rating, is_favorite, cover_url FROM books WHERE user_id = $1 ORDER BY title`, [targetId]);
+          data.reading = r.rows.map(x => ({ id: x.id, title: x.title, author: x.author, status: x.status, rating: x.rating, isFavorite: x.is_favorite, coverUrl: x.cover_url }));
+        } catch (e) { console.error(`[getFriendProfile] reading query failed:`, e); data.reading = []; }
+      }
+      if (visibleTabs.includes("/movies")) {
+        try {
+          const r = await pool.query(`SELECT id, title, media_type, status, rating, is_favorite, poster_url, poster_color FROM movies WHERE user_id = $1 ORDER BY title`, [targetId]);
+          data.movies = r.rows.map(x => ({ id: x.id, title: x.title, mediaType: x.media_type, status: x.status, rating: x.rating, isFavorite: x.is_favorite, posterUrl: x.poster_url, posterColor: x.poster_color }));
+        } catch (e) { console.error(`[getFriendProfile] movies query failed:`, e); data.movies = []; }
+      }
+      if (visibleTabs.includes("/music")) {
+        try {
+          const r = await pool.query(
+            `SELECT a.id, a.name, a.is_favorite, a.genre,
+              COALESCE(json_agg(json_build_object('id',s.id,'title',s.title,'isFavorite',s.is_favorite)) FILTER (WHERE s.id IS NOT NULL),'[]'::json) AS songs
+             FROM music_artists a LEFT JOIN music_songs s ON s.artist_id = a.id
+             WHERE a.user_id = $1 GROUP BY a.id ORDER BY a.name`, [targetId]);
+          data.music = r.rows.map(x => ({ id: x.id, name: x.name, isFavorite: x.is_favorite, genre: x.genre, songs: x.songs }));
+        } catch (e) { console.error(`[getFriendProfile] music query failed:`, e); data.music = []; }
+      }
+      if (visibleTabs.includes("/recipes")) {
+        try {
+          const r = await pool.query(`SELECT id, name, emoji, category, tags FROM recipes WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.recipes = r.rows.map(x => ({ id: x.id, name: x.name, emoji: x.emoji, category: x.category, tags: x.tags }));
+        } catch (e) { console.error(`[getFriendProfile] recipes query failed:`, e); data.recipes = []; }
+      }
+      if (visibleTabs.includes("/spots")) {
+        try {
+          const r = await pool.query(`SELECT id, name, type, city, neighborhood, rating, is_favorite FROM spots WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.spots = r.rows.map(x => ({ id: x.id, name: x.name, type: x.type, city: x.city, neighborhood: x.neighborhood, rating: x.rating, isFavorite: x.is_favorite }));
+        } catch (e) { console.error(`[getFriendProfile] spots query failed:`, e); data.spots = []; }
+      }
+      if (visibleTabs.includes("/art")) {
+        try {
+          const r = await pool.query(`SELECT id, title, artist_name, medium, image_url, accent_color, where_viewed FROM art_pieces WHERE user_id = $1 ORDER BY title`, [targetId]);
+          data.art = r.rows.map(x => ({ id: x.id, title: x.title, artistName: x.artist_name, medium: x.medium, imageUrl: x.image_url, accentColor: x.accent_color, whereViewed: x.where_viewed }));
+        } catch (e) { console.error(`[getFriendProfile] art query failed:`, e); data.art = []; }
+      }
+      if (visibleTabs.includes("/quotes")) {
+        try {
+          const r = await pool.query(`SELECT id, text, author, category, is_favorite FROM quotes WHERE user_id = $1 ORDER BY created_at DESC`, [targetId]);
+          data.quotes = r.rows.map(x => ({ id: x.id, text: x.text, author: x.author, category: x.category, isFavorite: x.is_favorite }));
+        } catch (e) { console.error(`[getFriendProfile] quotes query failed:`, e); data.quotes = []; }
+      }
+      if (visibleTabs.includes("/goals")) {
+        try {
+          const r = await pool.query(`SELECT id, name, status, category FROM goals WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.goals = r.rows.map(x => ({ id: x.id, name: x.name, status: x.status, category: x.category }));
+        } catch (e) { console.error(`[getFriendProfile] goals query failed:`, e); data.goals = []; }
+      }
+      if (visibleTabs.includes("/workouts")) {
+        try {
+          const r = await pool.query(`SELECT id, name, muscle_group FROM workout_templates WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.workouts = r.rows.map(x => ({ id: x.id, name: x.name, muscleGroup: x.muscle_group }));
+        } catch (e) { console.error(`[getFriendProfile] workouts query failed:`, e); data.workouts = []; }
+      }
+      if (visibleTabs.includes("/plants")) {
+        try {
+          const r = await pool.query(`SELECT id, name, species, image_url FROM plants WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.plants = r.rows.map(x => ({ id: x.id, name: x.name, species: x.species, imageUrl: x.image_url }));
+        } catch (e) { console.error(`[getFriendProfile] plants query failed:`, e); data.plants = []; }
+      }
 
-    return { user: { id: u.id, name: u.name, avatarUrl: u.avatarUrl, email: u.email }, visibleTabs, data };
+      return { user: { id: u.id, name: u.name, avatarUrl: u.avatarUrl, email: u.email }, visibleTabs, data };
+    } catch (e) {
+      console.error(`[getFriendProfile] Unexpected error for viewer=${viewerId} target=${targetId}:`, e);
+      return null;
+    }
   },
 
   // ── Users ────────────────────────────────────────────────────────────
