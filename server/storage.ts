@@ -1638,26 +1638,34 @@ export const storage: IStorage = {
       }
       if (visibleTabs.includes("/quotes")) {
         try {
-          const r = await pool.query(`SELECT id, text, author, category, is_favorite FROM quotes WHERE user_id = $1 ORDER BY created_at DESC`, [targetId]);
+          const r = await pool.query(`SELECT id, text, author, category, is_favorite FROM quotes WHERE user_id = $1 ORDER BY id DESC`, [targetId]);
           data.quotes = r.rows.map(x => ({ id: x.id, text: x.text, author: x.author, category: x.category, isFavorite: x.is_favorite }));
         } catch (e) { console.error(`[getFriendProfile] quotes query failed:`, e); data.quotes = []; }
       }
       if (visibleTabs.includes("/goals")) {
         try {
-          const r = await pool.query(`SELECT id, name, status, category FROM goals WHERE user_id = $1 ORDER BY name`, [targetId]);
-          data.goals = r.rows.map(x => ({ id: x.id, name: x.name, status: x.status, category: x.category }));
+          const r = await pool.query(
+            `SELECT id, title, category, priority, progress_current, progress_target FROM goals WHERE user_id = $1 ORDER BY title`,
+            [targetId]
+          );
+          data.goals = r.rows.map(x => ({
+            id: x.id,
+            name: x.title,
+            category: x.category,
+            status: x.progress_current >= x.progress_target ? "completed" : "active",
+          }));
         } catch (e) { console.error(`[getFriendProfile] goals query failed:`, e); data.goals = []; }
       }
       if (visibleTabs.includes("/workouts")) {
         try {
-          const r = await pool.query(`SELECT id, name, muscle_group FROM workout_templates WHERE user_id = $1 ORDER BY name`, [targetId]);
-          data.workouts = r.rows.map(x => ({ id: x.id, name: x.name, muscleGroup: x.muscle_group }));
+          const r = await pool.query(`SELECT id, name, workout_type FROM workout_templates WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.workouts = r.rows.map(x => ({ id: x.id, name: x.name, muscleGroup: x.workout_type }));
         } catch (e) { console.error(`[getFriendProfile] workouts query failed:`, e); data.workouts = []; }
       }
       if (visibleTabs.includes("/plants")) {
         try {
-          const r = await pool.query(`SELECT id, name, species, image_url FROM plants WHERE user_id = $1 ORDER BY name`, [targetId]);
-          data.plants = r.rows.map(x => ({ id: x.id, name: x.name, species: x.species, imageUrl: x.image_url }));
+          const r = await pool.query(`SELECT id, name, species, photo_url FROM plants WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.plants = r.rows.map(x => ({ id: x.id, name: x.name, species: x.species, imageUrl: x.photo_url }));
         } catch (e) { console.error(`[getFriendProfile] plants query failed:`, e); data.plants = []; }
       }
 
