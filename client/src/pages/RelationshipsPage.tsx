@@ -6,7 +6,7 @@ import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
-  UserX, Send, Loader2,
+  UserX, Send, Loader2, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -787,12 +787,18 @@ function FriendsTab({ onBadgeClear }: { onBadgeClear: () => void }) {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {friends.map((f) => (
-                <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                  <Avatar user={f} size={40} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{f.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{f.email}</p>
-                  </div>
+                <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-secondary/40 transition-colors group">
+                  <button
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    onClick={() => window.location.hash = `#/profile/${f.id}`}
+                  >
+                    <Avatar user={f} size={40} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{f.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
+                  </button>
                   <button
                     onClick={() => unfriendMut.mutate(f.id)}
                     title="Remove friend"

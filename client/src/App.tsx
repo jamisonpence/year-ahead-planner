@@ -24,6 +24,7 @@ import ArtPage from "@/pages/ArtPage";
 import JournalPage from "@/pages/JournalPage";
 import LoginPage from "@/pages/LoginPage";
 import SettingsPage from "@/pages/SettingsPage";
+import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -49,6 +50,7 @@ function AuthenticatedApp() {
         <Route path="/art" component={ArtPage} />
         <Route path="/journal" component={JournalPage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/profile/:userId" component={ProfilePage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
