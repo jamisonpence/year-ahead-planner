@@ -7,6 +7,7 @@ import {
   Plus, Dumbbell, Flame, Star, Pencil, Trash2, MoreHorizontal,
   LayoutTemplate, ClipboardList, Zap, Package, Search, Loader2,
   Sparkles, ChevronRight, CheckCircle2, X, Info, ExternalLink,
+  CalendarDays, Share2, Users, Send, CheckCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,13 @@ import { useToast } from "@/hooks/use-toast";
 import { workoutStreak, weeklyWorkoutStats, getRecentPRs, WORKOUT_TYPE_LABELS, WORKOUT_TYPES } from "@/lib/plannerUtils";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import WorkoutTemplateModal from "@/components/modals/WorkoutTemplateModal";
-import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects } from "@shared/schema";
+import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser } from "@shared/schema";
+
+type PlanDayEntry = { dayOfWeek: string; templateId: number; templateName: string };
+type PublicUser = { id: number; name: string; avatarUrl: string | null; email: string };
+
+const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -667,11 +674,225 @@ function EquipmentModal({ open, onClose, editing }: {
   );
 }
 
+// ── Plan Builder Modal ────────────────────────────────────────────────────────
+
+function PlanBuilderModal({ open, onClose, editing, templates }: {
+  open: boolean; onClose: () => void;
+  editing: WorkoutPlan | null; templates: WorkoutTemplate[];
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [durationWeeks, setDurationWeeks] = useState("4");
+  const [schedule, setSchedule] = useState<PlanDayEntry[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(editing?.name ?? "");
+    setDescription(editing?.description ?? "");
+    setDurationWeeks(String(editing?.durationWeeks ?? 4));
+    try { setSchedule(editing ? JSON.parse(editing.scheduleJson) : []); } catch { setSchedule([]); }
+  }, [open, editing]);
+
+  const createMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/workout-plans", d).then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan created!" }); onClose(); },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+  const updateMut = useMutation({
+    mutationFn: (d: any) => apiRequest("PATCH", `/api/workout-plans/${editing?.id}`, d).then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan updated!" }); onClose(); },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  function setDay(day: string, templateId: number | null) {
+    if (templateId === null) {
+      setSchedule(s => s.filter(e => e.dayOfWeek !== day));
+    } else {
+      const tmpl = templates.find(t => t.id === templateId);
+      if (!tmpl) return;
+      setSchedule(s => {
+        const without = s.filter(e => e.dayOfWeek !== day);
+        return [...without, { dayOfWeek: day, templateId, templateName: tmpl.name }];
+      });
+    }
+  }
+
+  function handleSave() {
+    if (!name.trim()) return;
+    const payload = { name: name.trim(), description: description.trim() || null, durationWeeks: parseInt(durationWeeks), scheduleJson: JSON.stringify(schedule) };
+    editing ? updateMut.mutate(payload) : createMut.mutate(payload);
+  }
+
+  const activeDays = schedule.length;
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarDays size={16} /> {editing ? "Edit Plan" : "New Workout Plan"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Plan Name *</label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. 4-Week Strength Builder" autoFocus />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span></label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="What's the goal of this plan?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Duration</label>
+            <Select value={durationWeeks} onValueChange={setDurationWeeks}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["1","2","3","4","6","8","10","12","16"].map(w => <SelectItem key={w} value={w}>{w} week{+w > 1 ? "s" : ""}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Weekly Schedule <span className="font-normal">({activeDays} workout{activeDays !== 1 ? "s" : ""}/week)</span></p>
+            {templates.length === 0 ? (
+              <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">Create templates first to assign them to days.</p>
+            ) : (
+              <div className="grid grid-cols-7 gap-1">
+                {DAYS_OF_WEEK.map(day => {
+                  const entry = schedule.find(e => e.dayOfWeek === day);
+                  const tmplId = entry?.templateId ?? null;
+                  return (
+                    <div key={day} className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
+                      <Select
+                        value={String(tmplId ?? "__rest__")}
+                        onValueChange={v => setDay(day, v === "__rest__" ? null : parseInt(v))}
+                      >
+                        <SelectTrigger className={`h-16 w-full flex-col items-center justify-center text-center text-[10px] leading-tight px-1 py-1 gap-0 ${entry ? "border-primary/50 bg-primary/5 text-primary" : "text-muted-foreground"}`}>
+                          <SelectValue>
+                            {entry ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <Dumbbell size={12} />
+                                <span className="line-clamp-2 text-center">{entry.templateName}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground/50">Rest</span>
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__rest__">Rest day</SelectItem>
+                          {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button className="flex-1" onClick={handleSave} disabled={!name.trim() || createMut.isPending || updateMut.isPending}>
+              {editing ? "Save Changes" : "Create Plan"}
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Share Modal ───────────────────────────────────────────────────────────────
+
+function ShareWorkoutModal({ open, onClose, shareType, contentJson, itemName }: {
+  open: boolean; onClose: () => void;
+  shareType: "template" | "plan"; contentJson: string; itemName: string;
+}) {
+  const { toast } = useToast();
+  const [note, setNote] = useState("");
+  const [selectedFriendId, setSelectedFriendId] = useState<string>("");
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()),
+    enabled: open,
+  });
+
+  useEffect(() => { if (open) { setNote(""); setSelectedFriendId(""); } }, [open]);
+
+  const shareMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/workout-shares", d).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] });
+      toast({ title: "Shared!", description: `${friends.find(f => f.id === parseInt(selectedFriendId))?.name ?? "Your friend"} will see it in their Workouts.` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to share", variant: "destructive" }),
+  });
+
+  function handleShare() {
+    if (!selectedFriendId) return;
+    shareMut.mutate({ toUserId: parseInt(selectedFriendId), shareType, contentJson, notes: note.trim() || null });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Share2 size={15} /> Share {shareType === "plan" ? "Plan" : "Template"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="rounded-lg bg-secondary p-3">
+            <p className="text-sm font-medium truncate">{itemName}</p>
+            <p className="text-xs text-muted-foreground capitalize">{shareType}</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Send to</label>
+            {friends.length === 0 ? (
+              <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">No friends yet. Add friends in Relationships.</p>
+            ) : (
+              <Select value={selectedFriendId} onValueChange={setSelectedFriendId}>
+                <SelectTrigger><SelectValue placeholder="Select a friend…" /></SelectTrigger>
+                <SelectContent>
+                  {friends.map(f => (
+                    <SelectItem key={f.id} value={String(f.id)}>
+                      <div className="flex items-center gap-2">
+                        {f.avatarUrl
+                          ? <img src={f.avatarUrl} className="w-5 h-5 rounded-full" />
+                          : <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">{f.name[0]}</div>
+                        }
+                        {f.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Note <span className="font-normal">(optional)</span></label>
+            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. This is great for beginners!" />
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex-1 gap-1.5" onClick={handleShare} disabled={!selectedFriendId || shareMut.isPending || friends.length === 0}>
+              {shareMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Share
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function WorkoutsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"logs" | "templates" | "equipment">("logs");
+  const [tab, setTab] = useState<"logs" | "templates" | "plans" | "shared" | "equipment">("logs");
   const [logModal, setLogModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
   const [editLog, setEditLog] = useState<WorkoutLog | null>(null);
@@ -680,11 +901,27 @@ export default function WorkoutsPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [equipmentModal, setEquipmentModal] = useState(false);
   const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
+  const [planModal, setPlanModal] = useState(false);
+  const [editPlan, setEditPlan] = useState<WorkoutPlan | null>(null);
+  const [shareModal, setShareModal] = useState(false);
+  const [sharePayload, setSharePayload] = useState<{ type: "template" | "plan"; contentJson: string; name: string } | null>(null);
 
   const { data: logs = [] } = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
   const { data: templates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
+  const { data: plans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
+  const { data: sharedItems = [] } = useQuery<WorkoutShareWithUser[]>({ queryKey: ["/api/workout-shares"] });
   const { data: equipmentList = [] } = useQuery<Equipment[]>({ queryKey: ["/api/equipment"] });
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+
+  // Auto-switch to shared tab from notification
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("shared");
+  }, []);
+  useEffect(() => {
+    if (tab !== "shared") return;
+    apiRequest("POST", "/api/shares/mark-read", { type: "workouts" })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
+  }, [tab]);
 
   const streak = workoutStreak(logs);
   const { completed: wkCompleted, planned: wkPlanned } = weeklyWorkoutStats(logs, templates);
@@ -698,10 +935,79 @@ export default function WorkoutsPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-templates/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] }); toast({ title: "Template deleted" }); }
   });
+  const deletePlan = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-plans/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan deleted" }); }
+  });
   const deleteEquipment = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/equipment/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/equipment"] }),
   });
+  const dismissShare = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/workout-shares/${id}/dismiss`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workout-shares"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shares/count"] });
+    },
+  });
+  const saveSharedTemplate = useMutation({
+    mutationFn: ({ content }: { content: any }) => apiRequest("POST", "/api/workout-templates", {
+      name: content.name, workoutType: content.workoutType ?? "custom",
+      exercisesJson: content.exercisesJson ?? "[]", notes: content.notes ?? null,
+      scheduledDay: null, recurring: "none", linkedGoalId: null,
+    }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] }); toast({ title: "Template saved to your library!" }); },
+    onError: () => toast({ title: "Failed to save template", variant: "destructive" }),
+  });
+  const saveSharedPlan = useMutation({
+    mutationFn: async ({ content }: { content: any }) => {
+      // Save each template in the plan's schedule first, then create the plan
+      const scheduleWithNewIds: PlanDayEntry[] = [];
+      const savedTemplates: Record<string, number> = {};
+      for (const day of (content.schedule ?? [])) {
+        if (!savedTemplates[day.templateName]) {
+          const res = await apiRequest("POST", "/api/workout-templates", {
+            name: day.templateName, workoutType: day.workoutType ?? "custom",
+            exercisesJson: day.exercisesJson ?? "[]", notes: null,
+            scheduledDay: null, recurring: "none", linkedGoalId: null,
+          });
+          const t = await res.json();
+          savedTemplates[day.templateName] = t.id;
+        }
+        scheduleWithNewIds.push({ dayOfWeek: day.dayOfWeek, templateId: savedTemplates[day.templateName], templateName: day.templateName });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] });
+      return apiRequest("POST", "/api/workout-plans", {
+        name: content.name, description: content.description ?? null,
+        durationWeeks: content.durationWeeks ?? 4, scheduleJson: JSON.stringify(scheduleWithNewIds),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] });
+      toast({ title: "Plan + templates saved to your library!" });
+    },
+    onError: () => toast({ title: "Failed to save plan", variant: "destructive" }),
+  });
+
+  function openShareModal(type: "template" | "plan", item: WorkoutTemplate | WorkoutPlan) {
+    let contentJson: string;
+    if (type === "template") {
+      const t = item as WorkoutTemplate;
+      contentJson = JSON.stringify({ name: t.name, workoutType: t.workoutType, exercisesJson: t.exercisesJson, notes: t.notes });
+    } else {
+      const p = item as WorkoutPlan;
+      let schedule: any[] = [];
+      try { schedule = JSON.parse(p.scheduleJson); } catch {}
+      // Enrich with full template data
+      const enriched = schedule.map((entry: PlanDayEntry) => {
+        const tmpl = templates.find(t => t.id === entry.templateId);
+        return { dayOfWeek: entry.dayOfWeek, templateName: entry.templateName, workoutType: tmpl?.workoutType ?? "custom", exercisesJson: tmpl?.exercisesJson ?? "[]" };
+      });
+      contentJson = JSON.stringify({ name: p.name, description: p.description, durationWeeks: p.durationWeeks, schedule: enriched });
+    }
+    setSharePayload({ type, contentJson, name: item.name });
+    setShareModal(true);
+  }
 
   // Group equipment by category
   const equipmentByCategory = useMemo(() => {
@@ -780,13 +1086,21 @@ export default function WorkoutsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
+      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 flex-wrap">
         <button onClick={() => setTab("logs")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "logs" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-          <ClipboardList size={14} /> Workout Logs <span className="text-xs opacity-60">{logs.length}</span>
+          <ClipboardList size={14} /> Logs <span className="text-xs opacity-60">{logs.length}</span>
         </button>
         <button onClick={() => setTab("templates")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "templates" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
           <LayoutTemplate size={14} /> Templates <span className="text-xs opacity-60">{templates.length}</span>
         </button>
+        <button onClick={() => setTab("plans")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "plans" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+          <CalendarDays size={14} /> Plans <span className="text-xs opacity-60">{plans.length}</span>
+        </button>
+        {sharedItems.length > 0 && (
+          <button onClick={() => setTab("shared")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "shared" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+            <Users size={14} /> Shared <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{sharedItems.length}</span>
+          </button>
+        )}
         <button onClick={() => setTab("equipment")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "equipment" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
           <Package size={14} /> Equipment <span className="text-xs opacity-60">{equipmentList.length}</span>
         </button>
@@ -889,9 +1203,165 @@ export default function WorkoutsPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => { setEditLog(null); setLogModal(true); }}><ClipboardList size={13} className="mr-2" />Log this workout</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => { setEditTemplate(t); setTemplateModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openShareModal("template", t)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
                       <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteTemplate.mutate(t.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Plans */}
+      {tab === "plans" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Group templates into a repeating weekly schedule.</p>
+            <Button size="sm" className="gap-1.5" onClick={() => { setEditPlan(null); setPlanModal(true); }}>
+              <Plus size={13} /><CalendarDays size={13} /> New Plan
+            </Button>
+          </div>
+          {plans.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground border rounded-xl border-dashed">
+              <CalendarDays size={40} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium">No plans yet</p>
+              <p className="text-sm mt-1">Group your templates into a weekly training plan</p>
+              <Button variant="outline" size="sm" className="mt-4 gap-1" onClick={() => { setEditPlan(null); setPlanModal(true); }}>
+                <Plus size={13} /> Create Plan
+              </Button>
+            </div>
+          ) : plans.map(plan => {
+            let schedule: PlanDayEntry[] = [];
+            try { schedule = JSON.parse(plan.scheduleJson); } catch {}
+            const activeDays = schedule.length;
+            return (
+              <div key={plan.id} className="bg-card border rounded-xl overflow-hidden">
+                <div className="flex items-start justify-between gap-3 p-4 pb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm">{plan.name}</p>
+                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">{plan.durationWeeks}w</span>
+                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">{activeDays} day{activeDays !== 1 ? "s" : ""}/week</span>
+                    </div>
+                    {plan.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{plan.description}</p>}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => { setEditPlan(plan); setPlanModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openShareModal("plan", plan)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deletePlan.mutate(plan.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                {schedule.length > 0 && (
+                  <div className="px-4 pb-4">
+                    <div className="grid grid-cols-7 gap-1">
+                      {DAYS_OF_WEEK.map(day => {
+                        const entry = schedule.find(e => e.dayOfWeek === day);
+                        return (
+                          <div key={day} className={`rounded-lg p-1.5 text-center flex flex-col items-center gap-0.5 ${entry ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
+                            {entry ? (
+                              <>
+                                <Dumbbell size={10} className="text-primary" />
+                                <span className="text-[8px] leading-tight text-center line-clamp-2 font-medium">{entry.templateName}</span>
+                              </>
+                            ) : (
+                              <span className="text-[9px] text-muted-foreground/40 mt-0.5">—</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Shared */}
+      {tab === "shared" && (
+        <div className="space-y-3">
+          {sharedItems.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Users size={40} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium">No shared workouts yet</p>
+              <p className="text-sm mt-1">When friends share templates or plans, they'll appear here</p>
+            </div>
+          ) : sharedItems.map(item => {
+            let content: any = {};
+            try { content = JSON.parse(item.contentJson); } catch {}
+            const isPlan = item.shareType === "plan";
+            return (
+              <div key={item.id} className="bg-card border rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                      {item.fromUser.avatarUrl
+                        ? <img src={item.fromUser.avatarUrl} className="w-9 h-9 rounded-full object-cover" />
+                        : <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{item.fromUser.name[0]}</span>
+                      }
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{content.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isPlan ? <><CalendarDays size={10} className="inline mr-1" />Plan</> : <><LayoutTemplate size={10} className="inline mr-1" />Template</>}
+                        {" · "}from <span className="font-medium">{item.fromUser.name}</span>
+                      </p>
+                      {item.notes && <p className="text-xs text-muted-foreground/80 italic mt-0.5">"{item.notes}"</p>}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => dismissShare.mutate(item.id)} className="text-muted-foreground/40 hover:text-muted-foreground p-1 rounded shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {/* Preview */}
+                {!isPlan && content.exercisesJson && (() => {
+                  let exs: any[] = [];
+                  try { exs = JSON.parse(content.exercisesJson); } catch {}
+                  return exs.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 pl-12">
+                      {exs.slice(0, 5).map((ex: any, i: number) => (
+                        <span key={i} className="text-xs bg-secondary px-2 py-0.5 rounded-full text-muted-foreground">{ex.name}</span>
+                      ))}
+                      {exs.length > 5 && <span className="text-xs text-muted-foreground">+{exs.length - 5}</span>}
+                    </div>
+                  ) : null;
+                })()}
+
+                {isPlan && content.schedule?.length > 0 && (
+                  <div className="grid grid-cols-7 gap-1 pl-12">
+                    {DAYS_OF_WEEK.map(day => {
+                      const entry = content.schedule.find((e: any) => e.dayOfWeek === day);
+                      return (
+                        <div key={day} className={`rounded p-1 text-center ${entry ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase block">{DAY_LABELS[day]}</span>
+                          {entry ? (
+                            <span className="text-[8px] leading-tight line-clamp-2 font-medium">{entry.templateName}</span>
+                          ) : (
+                            <span className="text-[9px] text-muted-foreground/40">—</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pl-12">
+                  <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                    disabled={isPlan ? saveSharedPlan.isPending : saveSharedTemplate.isPending}
+                    onClick={() => isPlan ? saveSharedPlan.mutate({ content }) : saveSharedTemplate.mutate({ content })}>
+                    {(isPlan ? saveSharedPlan.isPending : saveSharedTemplate.isPending)
+                      ? <Loader2 size={11} className="animate-spin" />
+                      : <Plus size={11} />}
+                    Save to my {isPlan ? "Plans" : "Templates"}
+                  </Button>
                 </div>
               </div>
             );
@@ -984,6 +1454,13 @@ export default function WorkoutsPage() {
       <ExerciseSearchModal open={exerciseSearchOpen} onClose={() => setExerciseSearchOpen(false)} templates={templates} />
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
       <EquipmentModal open={equipmentModal} onClose={() => { setEquipmentModal(false); setEditEquipment(null); }} editing={editEquipment} />
+      <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} />
+      {sharePayload && (
+        <ShareWorkoutModal
+          open={shareModal} onClose={() => { setShareModal(false); setSharePayload(null); }}
+          shareType={sharePayload.type} contentJson={sharePayload.contentJson} itemName={sharePayload.name}
+        />
+      )}
     </div>
   );
 }

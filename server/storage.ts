@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -42,6 +42,8 @@ import type {
   InsertSpotShare, SpotShare, SpotShareWithUser,
   InsertArtShare, ArtShare, ArtShareWithUser,
   InsertQuoteShare, QuoteShare, QuoteShareWithUser,
+  InsertWorkoutPlan, WorkoutPlan,
+  InsertWorkoutShare, WorkoutShare, WorkoutShareWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -830,6 +832,32 @@ export async function initializeStorage() {
       ON friend_requests (LEAST(from_user_id, to_user_id), GREATEST(from_user_id, to_user_id))
       WHERE status <> 'declined';
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workout_plans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      description TEXT,
+      duration_weeks INTEGER NOT NULL DEFAULT 4,
+      schedule_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workout_shares (
+      id SERIAL PRIMARY KEY,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      share_type TEXT NOT NULL DEFAULT 'template',
+      content_json TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1073,8 +1101,17 @@ export interface IStorage {
   getFriends(userId: number): Promise<PublicUser[]>;
   unfriend(userId: number, friendId: number): Promise<boolean>;
   getPendingIncomingCount(userId: number): Promise<number>;
-  getUnreadSharesCount(userId: number): Promise<{ total: number; books: number; music: number; recipes: number; movies: number; spots: number; art: number; quotes: number }>;
+  getUnreadSharesCount(userId: number): Promise<{ total: number; books: number; music: number; recipes: number; movies: number; spots: number; art: number; quotes: number; workouts: number }>;
   markSharesRead(type: string, userId: number): Promise<void>;
+  // Workout Plans
+  getAllWorkoutPlans(userId: number): Promise<WorkoutPlan[]>;
+  createWorkoutPlan(data: InsertWorkoutPlan, userId: number): Promise<WorkoutPlan>;
+  updateWorkoutPlan(id: number, data: Partial<InsertWorkoutPlan>): Promise<WorkoutPlan | null>;
+  deleteWorkoutPlan(id: number): Promise<boolean>;
+  // Workout Shares
+  createWorkoutShare(data: InsertWorkoutShare): Promise<WorkoutShare>;
+  getWorkoutShares(userId: number): Promise<WorkoutShareWithUser[]>;
+  dismissWorkoutShare(id: number, userId: number): Promise<void>;
 }
 
 export const storage: IStorage = {
@@ -2610,16 +2647,20 @@ export const storage: IStorage = {
         (SELECT COUNT(*) FROM movie_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int          AS movies,
         (SELECT COUNT(*) FROM spot_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int           AS spots,
         (SELECT COUNT(*) FROM art_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int            AS art,
-        (SELECT COUNT(*) FROM quote_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int          AS quotes`,
+        (SELECT COUNT(*) FROM quote_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int          AS quotes,
+        (SELECT COUNT(*) FROM workout_shares WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false)::int        AS workouts`,
       [userId]
     );
     const row = result.rows[0];
-    const books = row.books, music = row.music, recipes = row.recipes,
-          movies = row.movies, spots = row.spots, art = row.art, quotes = row.quotes;
-    return { total: books + music + recipes + movies + spots + art + quotes, books, music, recipes, movies, spots, art, quotes };
+    const { books, music, recipes, movies, spots, art, quotes, workouts } = row;
+    return { total: books + music + recipes + movies + spots + art + quotes + workouts, books, music, recipes, movies, spots, art, quotes, workouts };
   },
 
   async markSharesRead(type, userId) {
+    if (type === "workouts") {
+      await pool.query(`UPDATE workout_shares SET is_read = true WHERE to_user_id = $1 AND is_read = false`, [userId]);
+      return;
+    }
     const tableMap: Record<string, string> = {
       books: "book_recommendations",
       music: "music_recommendations",
@@ -2631,10 +2672,49 @@ export const storage: IStorage = {
     };
     const table = tableMap[type];
     if (!table) return;
-    await pool.query(
-      `UPDATE ${table} SET is_read = true WHERE to_user_id = $1 AND is_read = false`,
+    await pool.query(`UPDATE ${table} SET is_read = true WHERE to_user_id = $1 AND is_read = false`, [userId]);
+  },
+
+  // ── Workout Plans ────────────────────────────────────────────────────────────
+  async getAllWorkoutPlans(userId) {
+    return db.select().from(workoutPlans).where(eq(workoutPlans.userId, userId)).orderBy(desc(workoutPlans.createdAt));
+  },
+  async createWorkoutPlan(data, userId) {
+    const result = await db.insert(workoutPlans).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateWorkoutPlan(id, data) {
+    const result = await db.update(workoutPlans).set(data).where(eq(workoutPlans.id, id)).returning();
+    return result[0] ?? null;
+  },
+  async deleteWorkoutPlan(id) {
+    const result = await db.delete(workoutPlans).where(eq(workoutPlans.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Workout Shares ───────────────────────────────────────────────────────────
+  async createWorkoutShare(data) {
+    const result = await db.insert(workoutShares).values(data).returning();
+    return result[0];
+  },
+  async getWorkoutShares(userId) {
+    const rows = await pool.query(
+      `SELECT ws.*, u.name AS from_name, u.avatar_url AS from_avatar
+       FROM workout_shares ws
+       JOIN users u ON u.id = ws.from_user_id
+       WHERE ws.to_user_id = $1 AND ws.is_dismissed = false
+       ORDER BY ws.created_at DESC`,
       [userId]
     );
+    return rows.rows.map((r: any) => ({
+      id: r.id, fromUserId: r.from_user_id, toUserId: r.to_user_id,
+      shareType: r.share_type, contentJson: r.content_json, notes: r.notes,
+      createdAt: r.created_at, isDismissed: r.is_dismissed, isRead: r.is_read,
+      fromUser: { id: r.from_user_id, name: r.from_name, avatarUrl: r.from_avatar },
+    }));
+  },
+  async dismissWorkoutShare(id, userId) {
+    await pool.query(`UPDATE workout_shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`, [id, userId]);
   },
 };
 
