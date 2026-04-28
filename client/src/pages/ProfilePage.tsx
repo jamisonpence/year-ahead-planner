@@ -14,10 +14,10 @@ type ProfileData = {
   user: { id: number; name: string; avatarUrl: string | null; email: string };
   visibleTabs: string[];
   data: {
-    reading?: Array<{ id: number; title: string; author: string | null; status: string; rating: number | null; isFavorite: boolean; coverUrl: string | null }>;
+    reading?: Array<{ id: number; title: string; author: string | null; status: string; coverUrl: string | null }>;
     movies?: Array<{ id: number; title: string; mediaType: string; status: string; rating: number | null; isFavorite: boolean; posterUrl: string | null; posterColor: string | null }>;
     music?: Array<{ id: number; name: string; isFavorite: boolean; genres: string | null; songs: Array<{ id: number; title: string; isFavorite: boolean }> }>;
-    recipes?: Array<{ id: number; name: string; emoji: string; category: string | null; tags: string | null }>;
+    recipes?: Array<{ id: number; name: string; emoji: string; category: string | null }>;
     spots?: Array<{ id: number; name: string; type: string; city: string | null; neighborhood: string | null; rating: number | null; isFavorite: boolean }>;
     art?: Array<{ id: number; title: string; artistName: string | null; medium: string | null; imageUrl: string | null; accentColor: string | null; whereViewed: string | null }>;
     quotes?: Array<{ id: number; text: string; author: string | null; category: string | null; isFavorite: boolean }>;
@@ -125,10 +125,6 @@ function BookGroup({ label, books, onAdd, added }: {
               <div className="min-w-0 flex-1 pt-0.5">
                 <p className="text-sm font-medium leading-snug truncate">{b.title}</p>
                 {b.author && <p className="text-xs text-muted-foreground truncate">{b.author}</p>}
-                <div className="flex items-center gap-2 mt-1">
-                  <Stars rating={b.rating} />
-                  {b.isFavorite && <Heart size={10} className="fill-red-400 text-red-400" />}
-                </div>
               </div>
               <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("book", { title: b.title, author: b.author, coverUrl: b.coverUrl }, key)} />
             </div>
@@ -255,7 +251,7 @@ function RecipesPanel({ recipes, onAdd, added }: {
               <p className="text-sm font-medium truncate">{r.name}</p>
               {r.category && <p className="text-xs text-muted-foreground capitalize">{r.category.replace(/_/g, " ")}</p>}
             </div>
-            <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("recipe", { name: r.name, emoji: r.emoji, category: r.category, tags: r.tags }, key)} />
+            <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("recipe", { name: r.name, emoji: r.emoji, category: r.category }, key)} />
           </div>
         );
       })}
