@@ -87,14 +87,16 @@ function ReadingPanel({ books, onAdd, added }: {
   added: Set<string>;
 }) {
   if (!books?.length) return <Empty label="No books yet" />;
-  const current = books.filter(b => b.status === "reading");
-  const read = books.filter(b => b.status === "read");
-  const want = books.filter(b => b.status === "want_to_read");
+  const current = books.filter(b => b.status === "current");
+  const read = books.filter(b => b.status === "finished" || b.status === "paused");
+  const want = books.filter(b => b.status === "backlog");
+  const other = books.filter(b => !["current","finished","paused","backlog"].includes(b.status));
   return (
     <div className="space-y-6">
       {current.length > 0 && <BookGroup label="Currently Reading" books={current} onAdd={onAdd} added={added} />}
-      {read.length > 0 && <BookGroup label="Read" books={read} onAdd={onAdd} added={added} />}
+      {read.length > 0 && <BookGroup label="Finished" books={read} onAdd={onAdd} added={added} />}
       {want.length > 0 && <BookGroup label="Want to Read" books={want} onAdd={onAdd} added={added} />}
+      {other.length > 0 && <BookGroup label="Other" books={other} onAdd={onAdd} added={added} />}
     </div>
   );
 }
