@@ -822,6 +822,16 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  app.get("/api/profile/:userId", requireAuth, async (req, res) => {
+    try {
+      const targetId = parseInt(req.params.userId);
+      if (isNaN(targetId)) return res.status(400).json({ error: "Invalid userId" });
+      const profile = await storage.getFriendProfile((req.user as User).id, targetId);
+      if (!profile) return res.status(404).json({ error: "Profile not found or not a friend" });
+      res.json(profile);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Receipts (file upload) ─────────────────────────────────────────────────────
   const UPLOADS_DIR = path.resolve("uploads/receipts");
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
