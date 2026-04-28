@@ -65,7 +65,8 @@ function Stars({ rating }: { rating: number | null }) {
 function AddButton({ itemKey, onAdd, added }: { itemKey: string; onAdd: () => void; added: boolean }) {
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); if (!added) onAdd(); }}
+      type="button"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!added) onAdd(); }}
       className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
         added
           ? "bg-green-500 text-white cursor-default"
@@ -449,14 +450,14 @@ export default function ProfilePage() {
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
   const copyMut = useMutation({
-    mutationFn: ({ type, data }: { type: string; data: any }) =>
+    mutationFn: ({ type, data, key }: { type: string; data: any; key: string }) =>
       apiRequest("POST", "/api/copy-from-profile", {
         sourceUserId: userId,
         type,
         data,
       }).then(r => r.json()),
-    onSuccess: (_result, variables, context: any) => {
-      setAddedKeys(prev => new Set([...prev, context.key]));
+    onSuccess: (_result, variables) => {
+      setAddedKeys(prev => new Set([...prev, variables.key]));
       const labels: Record<string, string> = {
         book: "book", movie: "movie", music_artist: "artist",
         recipe: "recipe", spot: "spot", art: "piece", quote: "quote", plant: "plant",
@@ -470,7 +471,7 @@ export default function ProfilePage() {
 
   function handleAdd(type: string, data: any, key: string) {
     if (addedKeys.has(key)) return;
-    copyMut.mutate({ type, data }, { context: { key } } as any);
+    copyMut.mutate({ type, data, key });
   }
 
   const displayTabs = (profile?.visibleTabs ?? [])
