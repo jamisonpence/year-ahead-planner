@@ -1635,8 +1635,8 @@ export const storage: IStorage = {
 
       if (visibleTabs.includes("/reading")) {
         try {
-          const r = await pool.query(`SELECT id, title, author, status, rating, is_favorite, cover_url FROM books WHERE user_id = $1 ORDER BY title`, [targetId]);
-          data.reading = r.rows.map(x => ({ id: x.id, title: x.title, author: x.author, status: x.status, rating: x.rating, isFavorite: x.is_favorite, coverUrl: x.cover_url }));
+          const r = await pool.query(`SELECT id, title, author, status, cover_url FROM books WHERE user_id = $1 ORDER BY title`, [targetId]);
+          data.reading = r.rows.map(x => ({ id: x.id, title: x.title, author: x.author, status: x.status, coverUrl: x.cover_url }));
         } catch (e) { console.error(`[getFriendProfile] reading query failed:`, e); data.reading = []; }
       }
       if (visibleTabs.includes("/movies")) {
@@ -1657,8 +1657,8 @@ export const storage: IStorage = {
       }
       if (visibleTabs.includes("/recipes")) {
         try {
-          const r = await pool.query(`SELECT id, name, emoji, category, tags FROM recipes WHERE user_id = $1 ORDER BY name`, [targetId]);
-          data.recipes = r.rows.map(x => ({ id: x.id, name: x.name, emoji: x.emoji, category: x.category, tags: x.tags }));
+          const r = await pool.query(`SELECT id, name, emoji, category FROM recipes WHERE user_id = $1 ORDER BY name`, [targetId]);
+          data.recipes = r.rows.map(x => ({ id: x.id, name: x.name, emoji: x.emoji, category: x.category }));
         } catch (e) { console.error(`[getFriendProfile] recipes query failed:`, e); data.recipes = []; }
       }
       if (visibleTabs.includes("/spots")) {
