@@ -1611,11 +1611,11 @@ export const storage: IStorage = {
       if (visibleTabs.includes("/music")) {
         try {
           const r = await pool.query(
-            `SELECT a.id, a.name, a.is_favorite, a.genre,
+            `SELECT a.id, a.name, a.is_favorite, a.genres,
               COALESCE(json_agg(json_build_object('id',s.id,'title',s.title,'isFavorite',s.is_favorite)) FILTER (WHERE s.id IS NOT NULL),'[]'::json) AS songs
              FROM music_artists a LEFT JOIN music_songs s ON s.artist_id = a.id
              WHERE a.user_id = $1 GROUP BY a.id ORDER BY a.name`, [targetId]);
-          data.music = r.rows.map(x => ({ id: x.id, name: x.name, isFavorite: x.is_favorite, genre: x.genre, songs: x.songs }));
+          data.music = r.rows.map(x => ({ id: x.id, name: x.name, isFavorite: x.is_favorite, genres: x.genres, songs: x.songs }));
         } catch (e) { console.error(`[getFriendProfile] music query failed:`, e); data.music = []; }
       }
       if (visibleTabs.includes("/recipes")) {
@@ -1665,6 +1665,87 @@ export const storage: IStorage = {
     } catch (e) {
       console.error(`[getFriendProfile] Unexpected error for viewer=${viewerId} target=${targetId}:`, e);
       return null;
+    }
+  },
+
+  async copyFromProfile(viewerId: number, sourceUserId: number, type: string, data: any) {
+    // Verify friendship first
+    const friendship = await pool.query(
+      `SELECT id FROM friend_requests WHERE status = 'accepted'
+       AND ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1))`,
+      [viewerId, sourceUserId]
+    );
+    if (!friendship.rows[0]) throw new Error("Not friends with that user");
+
+    switch (type) {
+      case "book": {
+        const result = await db.insert(books).values({
+          userId: viewerId, title: data.title, author: data.author ?? null,
+          coverUrl: data.coverUrl ?? null, status: "want_to_read", isFavorite: false,
+        }).returning();
+        return result[0];
+      }
+      case "movie": {
+        const result = await db.insert(movies).values({
+          userId: viewerId, title: data.title, mediaType: data.mediaType ?? "movie",
+          posterUrl: data.posterUrl ?? null, posterColor: data.posterColor ?? null,
+          status: "backlog", isFavorite: false,
+        }).returning();
+        return result[0];
+      }
+      case "music_artist": {
+        const artist = await db.insert(musicArtists).values({
+          userId: viewerId, name: data.name, genres: data.genres ?? null, isFavorite: false,
+        }).returning().then(r => r[0]);
+        if (data.songs?.length) {
+          for (const song of data.songs) {
+            await db.insert(musicSongs).values({
+              userId: viewerId, artistId: artist.id, title: song.title, isFavorite: false,
+            }).catch(() => {});
+          }
+        }
+        return artist;
+      }
+      case "recipe": {
+        const result = await db.insert(recipes).values({
+          userId: viewerId, name: data.name, emoji: data.emoji ?? "🍽️",
+          category: data.category ?? null, tags: data.tags ?? null,
+        }).returning();
+        return result[0];
+      }
+      case "spot": {
+        const result = await db.insert(spots).values({
+          userId: viewerId, name: data.name, type: data.type ?? "restaurant",
+          city: data.city ?? null, neighborhood: data.neighborhood ?? null,
+          status: "want_to_visit", isFavorite: false,
+        }).returning();
+        return result[0];
+      }
+      case "art": {
+        const result = await db.insert(artPieces).values({
+          userId: viewerId, title: data.title, artistName: data.artistName ?? null,
+          medium: data.medium ?? "other", imageUrl: data.imageUrl ?? null,
+          accentColor: data.accentColor ?? null, whereViewed: data.whereViewed ?? null,
+          status: "want_to_see", isFavorite: false,
+        }).returning();
+        return result[0];
+      }
+      case "quote": {
+        const result = await db.insert(quotes).values({
+          userId: viewerId, text: data.text, author: data.author ?? null,
+          category: data.category ?? "other", isFavorite: false,
+        }).returning();
+        return result[0];
+      }
+      case "plant": {
+        const result = await db.insert(plants).values({
+          userId: viewerId, name: data.name, species: data.species ?? null,
+          photoUrl: data.imageUrl ?? null,
+        }).returning();
+        return result[0];
+      }
+      default:
+        throw new Error(`Unknown copy type: ${type}`);
     }
   },
 

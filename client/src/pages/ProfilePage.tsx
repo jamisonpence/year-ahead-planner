@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette, Quote,
-  Target, Dumbbell, Leaf, Star, Heart, Lock, ChevronRight,
+  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ type ProfileData = {
   data: {
     reading?: Array<{ id: number; title: string; author: string | null; status: string; rating: number | null; isFavorite: boolean; coverUrl: string | null }>;
     movies?: Array<{ id: number; title: string; mediaType: string; status: string; rating: number | null; isFavorite: boolean; posterUrl: string | null; posterColor: string | null }>;
-    music?: Array<{ id: number; name: string; isFavorite: boolean; genre: string | null; songs: Array<{ id: number; title: string; isFavorite: boolean }> }>;
+    music?: Array<{ id: number; name: string; isFavorite: boolean; genres: string | null; songs: Array<{ id: number; title: string; isFavorite: boolean }> }>;
     recipes?: Array<{ id: number; name: string; emoji: string; category: string | null; tags: string | null }>;
     spots?: Array<{ id: number; name: string; type: string; city: string | null; neighborhood: string | null; rating: number | null; isFavorite: boolean }>;
     art?: Array<{ id: number; title: string; artistName: string | null; medium: string | null; imageUrl: string | null; accentColor: string | null; whereViewed: string | null }>;
@@ -59,207 +60,297 @@ function Stars({ rating }: { rating: number | null }) {
   );
 }
 
+// ── Add Button ────────────────────────────────────────────────────────────────
+
+function AddButton({ itemKey, onAdd, added }: { itemKey: string; onAdd: () => void; added: boolean }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); if (!added) onAdd(); }}
+      className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+        added
+          ? "bg-green-500 text-white cursor-default"
+          : "bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground"
+      }`}
+      title={added ? "Added to your list" : "Add to my list"}
+    >
+      {added ? <Check size={11} strokeWidth={3} /> : <Plus size={11} strokeWidth={2.5} />}
+    </button>
+  );
+}
+
 // ── Tab content panels ────────────────────────────────────────────────────────
 
-function ReadingPanel({ books }: { books: ProfileData["data"]["reading"] }) {
+function ReadingPanel({ books, onAdd, added }: {
+  books: ProfileData["data"]["reading"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!books?.length) return <Empty label="No books yet" />;
   const current = books.filter(b => b.status === "reading");
   const read = books.filter(b => b.status === "read");
   const want = books.filter(b => b.status === "want_to_read");
   return (
     <div className="space-y-6">
-      {current.length > 0 && <BookGroup label="Currently Reading" books={current} />}
-      {read.length > 0 && <BookGroup label="Read" books={read} />}
-      {want.length > 0 && <BookGroup label="Want to Read" books={want} />}
+      {current.length > 0 && <BookGroup label="Currently Reading" books={current} onAdd={onAdd} added={added} />}
+      {read.length > 0 && <BookGroup label="Read" books={read} onAdd={onAdd} added={added} />}
+      {want.length > 0 && <BookGroup label="Want to Read" books={want} onAdd={onAdd} added={added} />}
     </div>
   );
 }
 
-function BookGroup({ label, books }: { label: string; books: NonNullable<ProfileData["data"]["reading"]> }) {
+function BookGroup({ label, books, onAdd, added }: {
+  label: string;
+  books: NonNullable<ProfileData["data"]["reading"]>;
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   return (
     <div>
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{label} ({books.length})</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {books.map(b => (
-          <div key={b.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
-            {b.coverUrl ? (
-              <img src={b.coverUrl} alt={b.title} className="w-10 h-14 object-cover rounded shrink-0" />
-            ) : (
-              <div className="w-10 h-14 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen size={16} className="text-primary/50" />
+        {books.map(b => {
+          const key = `book-${b.id}`;
+          return (
+            <div key={b.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
+              {b.coverUrl ? (
+                <img src={b.coverUrl} alt={b.title} className="w-10 h-14 object-cover rounded shrink-0" />
+              ) : (
+                <div className="w-10 h-14 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                  <BookOpen size={16} className="text-primary/50" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className="text-sm font-medium leading-snug truncate">{b.title}</p>
+                {b.author && <p className="text-xs text-muted-foreground truncate">{b.author}</p>}
+                <div className="flex items-center gap-2 mt-1">
+                  <Stars rating={b.rating} />
+                  {b.isFavorite && <Heart size={10} className="fill-red-400 text-red-400" />}
+                </div>
               </div>
-            )}
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-sm font-medium leading-snug truncate">{b.title}</p>
-              {b.author && <p className="text-xs text-muted-foreground truncate">{b.author}</p>}
-              <div className="flex items-center gap-2 mt-1">
-                <Stars rating={b.rating} />
-                {b.isFavorite && <Heart size={10} className="fill-red-400 text-red-400" />}
-              </div>
+              <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("book", { title: b.title, author: b.author, coverUrl: b.coverUrl }, key)} />
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function MoviesPanel({ items }: { items: ProfileData["data"]["movies"] }) {
+function MoviesPanel({ items, onAdd, added }: {
+  items: ProfileData["data"]["movies"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!items?.length) return <Empty label="No movies or shows yet" />;
   const movies = items.filter(m => m.mediaType !== "show");
   const shows = items.filter(m => m.mediaType === "show");
   return (
     <div className="space-y-6">
-      {movies.length > 0 && <MediaGroup label="Movies" items={movies} />}
-      {shows.length > 0 && <MediaGroup label="Shows" items={shows} />}
+      {movies.length > 0 && <MediaGroup label="Movies" items={movies} onAdd={onAdd} added={added} />}
+      {shows.length > 0 && <MediaGroup label="Shows" items={shows} onAdd={onAdd} added={added} />}
     </div>
   );
 }
 
-function MediaGroup({ label, items }: { label: string; items: NonNullable<ProfileData["data"]["movies"]> }) {
+function MediaGroup({ label, items, onAdd, added }: {
+  label: string;
+  items: NonNullable<ProfileData["data"]["movies"]>;
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   return (
     <div>
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{label} ({items.length})</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {items.map(m => (
-          <div key={m.id} className="rounded-xl border bg-card overflow-hidden">
-            {m.posterUrl ? (
-              <img src={m.posterUrl} alt={m.title} className="w-full aspect-[2/3] object-cover" />
-            ) : (
-              <div className="w-full aspect-[2/3] flex items-center justify-center" style={{ backgroundColor: m.posterColor || "hsl(var(--secondary))" }}>
-                <Film size={24} className="text-white/50" />
+        {items.map(m => {
+          const key = `movie-${m.id}`;
+          return (
+            <div key={m.id} className="rounded-xl border bg-card overflow-hidden relative">
+              <div className="absolute top-1.5 right-1.5 z-10">
+                <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("movie", { title: m.title, mediaType: m.mediaType, posterUrl: m.posterUrl, posterColor: m.posterColor }, key)} />
               </div>
-            )}
-            <div className="p-2">
-              <p className="text-xs font-medium leading-snug line-clamp-2">{m.title}</p>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${m.status === "watched" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
-                  {m.status === "watched" ? "Watched" : "Watchlist"}
-                </span>
-                {m.isFavorite && <Heart size={9} className="fill-red-400 text-red-400" />}
+              {m.posterUrl ? (
+                <img src={m.posterUrl} alt={m.title} className="w-full aspect-[2/3] object-cover" />
+              ) : (
+                <div className="w-full aspect-[2/3] flex items-center justify-center" style={{ backgroundColor: m.posterColor || "hsl(var(--secondary))" }}>
+                  <Film size={24} className="text-white/50" />
+                </div>
+              )}
+              <div className="p-2">
+                <p className="text-xs font-medium leading-snug line-clamp-2">{m.title}</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${m.status === "watched" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
+                    {m.status === "watched" ? "Watched" : "Watchlist"}
+                  </span>
+                  {m.isFavorite && <Heart size={9} className="fill-red-400 text-red-400" />}
+                </div>
+                <Stars rating={m.rating} />
               </div>
-              <Stars rating={m.rating} />
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function MusicPanel({ artists }: { artists: ProfileData["data"]["music"] }) {
+function MusicPanel({ artists, onAdd, added }: {
+  artists: ProfileData["data"]["music"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!artists?.length) return <Empty label="No music yet" />;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {artists.map(a => (
-        <div key={a.id} className="p-3 rounded-xl border bg-card">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-              <Music2 size={14} className="text-purple-500" />
+      {artists.map(a => {
+        const key = `music_artist-${a.id}`;
+        return (
+          <div key={a.id} className="p-3 rounded-xl border bg-card">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+                <Music2 size={14} className="text-purple-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold truncate">{a.name}</p>
+                {a.genres && <p className="text-xs text-muted-foreground">{a.genres}</p>}
+              </div>
+              {a.isFavorite && <Heart size={12} className="fill-red-400 text-red-400 shrink-0" />}
+              <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("music_artist", { name: a.name, genres: a.genres, songs: a.songs }, key)} />
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{a.name}</p>
-              {a.genre && <p className="text-xs text-muted-foreground">{a.genre}</p>}
-            </div>
-            {a.isFavorite && <Heart size={12} className="fill-red-400 text-red-400 ml-auto shrink-0" />}
+            {a.songs.length > 0 && (
+              <div className="space-y-1 pl-2 border-l ml-4">
+                {a.songs.slice(0, 4).map((s: any) => (
+                  <p key={s.id} className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    {s.isFavorite && <Heart size={8} className="fill-red-400 text-red-400 shrink-0" />}
+                    {s.title}
+                  </p>
+                ))}
+                {a.songs.length > 4 && <p className="text-xs text-muted-foreground/60">+{a.songs.length - 4} more</p>}
+              </div>
+            )}
           </div>
-          {a.songs.length > 0 && (
-            <div className="space-y-1 pl-2 border-l ml-4">
-              {a.songs.slice(0, 4).map((s: any) => (
-                <p key={s.id} className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                  {s.isFavorite && <Heart size={8} className="fill-red-400 text-red-400 shrink-0" />}
-                  {s.title}
-                </p>
-              ))}
-              {a.songs.length > 4 && <p className="text-xs text-muted-foreground/60">+{a.songs.length - 4} more</p>}
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function RecipesPanel({ recipes }: { recipes: ProfileData["data"]["recipes"] }) {
+function RecipesPanel({ recipes, onAdd, added }: {
+  recipes: ProfileData["data"]["recipes"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!recipes?.length) return <Empty label="No recipes yet" />;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-      {recipes.map(r => (
-        <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-          <span className="text-2xl leading-none shrink-0">{r.emoji || "🍽️"}</span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{r.name}</p>
-            {r.category && <p className="text-xs text-muted-foreground capitalize">{r.category.replace(/_/g, " ")}</p>}
+      {recipes.map(r => {
+        const key = `recipe-${r.id}`;
+        return (
+          <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+            <span className="text-2xl leading-none shrink-0">{r.emoji || "🍽️"}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{r.name}</p>
+              {r.category && <p className="text-xs text-muted-foreground capitalize">{r.category.replace(/_/g, " ")}</p>}
+            </div>
+            <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("recipe", { name: r.name, emoji: r.emoji, category: r.category, tags: r.tags }, key)} />
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function SpotsPanel({ spots }: { spots: ProfileData["data"]["spots"] }) {
+function SpotsPanel({ spots, onAdd, added }: {
+  spots: ProfileData["data"]["spots"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!spots?.length) return <Empty label="No spots yet" />;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-      {spots.map(s => (
-        <div key={s.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
-          <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0 mt-0.5">
-            <MapPin size={14} className="text-orange-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <p className="text-sm font-medium truncate">{s.name}</p>
-              {s.isFavorite && <Heart size={10} className="fill-red-400 text-red-400 shrink-0" />}
+      {spots.map(s => {
+        const key = `spot-${s.id}`;
+        return (
+          <div key={s.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
+            <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0 mt-0.5">
+              <MapPin size={14} className="text-orange-500" />
             </div>
-            <p className="text-xs text-muted-foreground capitalize">{s.type.replace(/_/g, " ")}{s.city ? ` · ${s.city}` : ""}</p>
-            <Stars rating={s.rating} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium truncate">{s.name}</p>
+                {s.isFavorite && <Heart size={10} className="fill-red-400 text-red-400 shrink-0" />}
+              </div>
+              <p className="text-xs text-muted-foreground capitalize">{s.type.replace(/_/g, " ")}{s.city ? ` · ${s.city}` : ""}</p>
+              <Stars rating={s.rating} />
+            </div>
+            <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("spot", { name: s.name, type: s.type, city: s.city, neighborhood: s.neighborhood }, key)} />
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function ArtPanel({ pieces }: { pieces: ProfileData["data"]["art"] }) {
+function ArtPanel({ pieces, onAdd, added }: {
+  pieces: ProfileData["data"]["art"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!pieces?.length) return <Empty label="No art yet" />;
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {pieces.map(p => (
-        <div key={p.id} className="rounded-xl border bg-card overflow-hidden">
-          {p.imageUrl ? (
-            <img src={p.imageUrl} alt={p.title} className="w-full aspect-square object-cover" />
-          ) : (
-            <div className="w-full aspect-square flex items-center justify-center" style={{ backgroundColor: p.accentColor || "hsl(var(--secondary))" }}>
-              <Palette size={24} className="text-white/50" />
+      {pieces.map(p => {
+        const key = `art-${p.id}`;
+        return (
+          <div key={p.id} className="rounded-xl border bg-card overflow-hidden relative">
+            <div className="absolute top-1.5 right-1.5 z-10">
+              <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("art", { title: p.title, artistName: p.artistName, medium: p.medium, imageUrl: p.imageUrl, accentColor: p.accentColor, whereViewed: p.whereViewed }, key)} />
             </div>
-          )}
-          <div className="p-2">
-            <p className="text-xs font-semibold leading-snug line-clamp-2">{p.title}</p>
-            {p.artistName && <p className="text-[10px] text-muted-foreground truncate">{p.artistName}</p>}
-            {p.whereViewed && <p className="text-[10px] text-muted-foreground/60 truncate">{p.whereViewed}</p>}
+            {p.imageUrl ? (
+              <img src={p.imageUrl} alt={p.title} className="w-full aspect-square object-cover" />
+            ) : (
+              <div className="w-full aspect-square flex items-center justify-center" style={{ backgroundColor: p.accentColor || "hsl(var(--secondary))" }}>
+                <Palette size={24} className="text-white/50" />
+              </div>
+            )}
+            <div className="p-2">
+              <p className="text-xs font-semibold leading-snug line-clamp-2">{p.title}</p>
+              {p.artistName && <p className="text-[10px] text-muted-foreground truncate">{p.artistName}</p>}
+              {p.whereViewed && <p className="text-[10px] text-muted-foreground/60 truncate">{p.whereViewed}</p>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function QuotesPanel({ quotes }: { quotes: ProfileData["data"]["quotes"] }) {
+function QuotesPanel({ quotes, onAdd, added }: {
+  quotes: ProfileData["data"]["quotes"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!quotes?.length) return <Empty label="No quotes yet" />;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {quotes.map(q => (
-        <div key={q.id} className="p-4 rounded-xl border bg-card flex flex-col gap-2">
-          <p className="text-sm italic leading-relaxed text-foreground">"{q.text}"</p>
-          <div className="flex items-center justify-between mt-auto">
-            <div>
-              {q.author && <p className="text-xs font-medium text-muted-foreground">— {q.author}</p>}
-              {q.category && <p className="text-xs text-muted-foreground/60 capitalize">{q.category}</p>}
+      {quotes.map(q => {
+        const key = `quote-${q.id}`;
+        return (
+          <div key={q.id} className="p-4 rounded-xl border bg-card flex flex-col gap-2">
+            <p className="text-sm italic leading-relaxed text-foreground">"{q.text}"</p>
+            <div className="flex items-center justify-between mt-auto">
+              <div>
+                {q.author && <p className="text-xs font-medium text-muted-foreground">— {q.author}</p>}
+                {q.category && <p className="text-xs text-muted-foreground/60 capitalize">{q.category}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                {q.isFavorite && <Heart size={12} className="fill-red-400 text-red-400 shrink-0" />}
+                <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("quote", { text: q.text, author: q.author, category: q.category }, key)} />
+              </div>
             </div>
-            {q.isFavorite && <Heart size={12} className="fill-red-400 text-red-400 shrink-0" />}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -303,25 +394,35 @@ function WorkoutsPanel({ workouts }: { workouts: ProfileData["data"]["workouts"]
   );
 }
 
-function PlantsPanel({ plants }: { plants: ProfileData["data"]["plants"] }) {
+function PlantsPanel({ plants, onAdd, added }: {
+  plants: ProfileData["data"]["plants"];
+  onAdd: (type: string, data: any, key: string) => void;
+  added: Set<string>;
+}) {
   if (!plants?.length) return <Empty label="No plants yet" />;
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-      {plants.map(p => (
-        <div key={p.id} className="rounded-xl border bg-card overflow-hidden">
-          {p.imageUrl ? (
-            <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover" />
-          ) : (
-            <div className="w-full aspect-square bg-green-50 dark:bg-green-950/20 flex items-center justify-center">
-              <Leaf size={28} className="text-green-400" />
+      {plants.map(p => {
+        const key = `plant-${p.id}`;
+        return (
+          <div key={p.id} className="rounded-xl border bg-card overflow-hidden relative">
+            <div className="absolute top-1.5 right-1.5 z-10">
+              <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("plant", { name: p.name, species: p.species, imageUrl: p.imageUrl }, key)} />
             </div>
-          )}
-          <div className="p-2">
-            <p className="text-xs font-semibold truncate">{p.name}</p>
-            {p.species && <p className="text-[10px] text-muted-foreground truncate italic">{p.species}</p>}
+            {p.imageUrl ? (
+              <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover" />
+            ) : (
+              <div className="w-full aspect-square bg-green-50 dark:bg-green-950/20 flex items-center justify-center">
+                <Leaf size={28} className="text-green-400" />
+              </div>
+            )}
+            <div className="p-2">
+              <p className="text-xs font-semibold truncate">{p.name}</p>
+              {p.species && <p className="text-[10px] text-muted-foreground truncate italic">{p.species}</p>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -335,6 +436,7 @@ function Empty({ label }: { label: string }) {
 export default function ProfilePage() {
   const params = useParams<{ userId: string }>();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const userId = parseInt(params.userId ?? "0");
 
   const { data: profile, isLoading, isError } = useQuery<ProfileData>({
@@ -342,6 +444,34 @@ export default function ProfilePage() {
     queryFn: () => apiRequest("GET", `/api/profile/${userId}`).then(r => r.json()),
     enabled: !!userId,
   });
+
+  // Track which items have been added
+  const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
+
+  const copyMut = useMutation({
+    mutationFn: ({ type, data }: { type: string; data: any }) =>
+      apiRequest("POST", "/api/copy-from-profile", {
+        sourceUserId: userId,
+        type,
+        data,
+      }).then(r => r.json()),
+    onSuccess: (_result, variables, context: any) => {
+      setAddedKeys(prev => new Set([...prev, context.key]));
+      const labels: Record<string, string> = {
+        book: "book", movie: "movie", music_artist: "artist",
+        recipe: "recipe", spot: "spot", art: "piece", quote: "quote", plant: "plant",
+      };
+      toast({ title: `Added to your ${labels[variables.type] ?? "list"}!`, description: "You can find it in your own tab." });
+    },
+    onError: () => {
+      toast({ title: "Couldn't add item", description: "Something went wrong. Try again.", variant: "destructive" });
+    },
+  });
+
+  function handleAdd(type: string, data: any, key: string) {
+    if (addedKeys.has(key)) return;
+    copyMut.mutate({ type, data }, { context: { key } } as any);
+  }
 
   const displayTabs = (profile?.visibleTabs ?? [])
     .filter(path => TAB_META[path])
@@ -386,17 +516,18 @@ export default function ProfilePage() {
         <p className="text-muted-foreground text-sm">{user.name} hasn't made any tabs public yet.</p>
       </div>
     );
+    const panelProps = { onAdd: handleAdd, added: addedKeys };
     switch (currentTab) {
-      case "/reading":   return <ReadingPanel books={data.reading} />;
-      case "/movies":    return <MoviesPanel items={data.movies} />;
-      case "/music":     return <MusicPanel artists={data.music} />;
-      case "/recipes":   return <RecipesPanel recipes={data.recipes} />;
-      case "/spots":     return <SpotsPanel spots={data.spots} />;
-      case "/art":       return <ArtPanel pieces={data.art} />;
-      case "/quotes":    return <QuotesPanel quotes={data.quotes} />;
+      case "/reading":   return <ReadingPanel books={data.reading} {...panelProps} />;
+      case "/movies":    return <MoviesPanel items={data.movies} {...panelProps} />;
+      case "/music":     return <MusicPanel artists={data.music} {...panelProps} />;
+      case "/recipes":   return <RecipesPanel recipes={data.recipes} {...panelProps} />;
+      case "/spots":     return <SpotsPanel spots={data.spots} {...panelProps} />;
+      case "/art":       return <ArtPanel pieces={data.art} {...panelProps} />;
+      case "/quotes":    return <QuotesPanel quotes={data.quotes} {...panelProps} />;
       case "/goals":     return <GoalsPanel goals={data.goals} />;
       case "/workouts":  return <WorkoutsPanel workouts={data.workouts} />;
-      case "/plants":    return <PlantsPanel plants={data.plants} />;
+      case "/plants":    return <PlantsPanel plants={data.plants} {...panelProps} />;
       default:           return <Empty label="Content coming soon" />;
     }
   }
