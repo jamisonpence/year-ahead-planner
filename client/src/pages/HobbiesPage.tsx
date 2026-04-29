@@ -441,6 +441,7 @@ function HobbyFormDialog({
   onClose,
   initial,
   onSave,
+  isEdit = false,
 }: {
   open: boolean;
   onClose: () => void;
