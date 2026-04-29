@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Hobby, InsertHobby } from "@shared/schema";
@@ -453,13 +453,6 @@ function HobbyFormDialog({
   const [extra, setExtra] = useState<Record<string, any>>(() => parseExtra(initial.extraJson ?? "{}"));
   const [showPresets, setShowPresets] = useState(false);
 
-  // Sync state whenever `initial` changes (e.g. different hobby opened for edit)
-  useEffect(() => {
-    setForm(initial);
-    setExtra(parseExtra(initial.extraJson ?? "{}"));
-    setShowPresets(false);
-  }, [initial]);
-
   const set = (key: keyof InsertHobby, val: any) => setForm(f => ({ ...f, [key]: val }));
   const setExtraKey = (key: string, val: any) => setExtra(e => ({ ...e, [key]: val }));
 
@@ -674,17 +667,30 @@ export default function HobbiesPage() {
   });
 
   const createMut = useMutation({
-    mutationFn: (data: Partial<InsertHobby>) => apiRequest("POST", "/api/hobbies", data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/hobbies"] }); },
+    mutationFn: async (data: Partial<InsertHobby>) => {
+      const r = await apiRequest("POST", "/api/hobbies", data);
+      return r.json() as Promise<Hobby>;
+    },
+    onSuccess: (created) => {
+      qc.setQueryData<Hobby[]>(["/api/hobbies"], (old = []) => [...old, created]);
+    },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<InsertHobby> }) =>
-      apiRequest("PATCH", `/api/hobbies/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/hobbies"] }); },
+    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertHobby> }) => {
+      const r = await apiRequest("PATCH", `/api/hobbies/${id}`, data);
+      return r.json() as Promise<Hobby>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<Hobby[]>(["/api/hobbies"], (old = []) =>
+        old.map(h => h.id === updated.id ? updated : h)
+      );
+    },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/hobbies/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/hobbies"] }); },
+    onSuccess: (_, id) => {
+      qc.setQueryData<Hobby[]>(["/api/hobbies"], (old = []) => old.filter(h => h.id !== id));
+    },
   });
 
   const [search, setSearch] = useState("");
