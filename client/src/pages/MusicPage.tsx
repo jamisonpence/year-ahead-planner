@@ -18,7 +18,7 @@ import {
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
   Trash2, Pencil, Search, Music, Upload, Download, HelpCircle, Loader2, Users, Mic2,
-  Send, Check, X, Inbox, CornerUpRight,
+  Send, Check, X, Inbox, CornerUpRight, Radio,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -158,6 +158,7 @@ function ArtistCard({
   onSongStatusChange,
   onRecommendArtist,
   onRecommendSong,
+  onOpenSpotify,
 }: {
   artist: MusicArtistWithSongs;
   onEditArtist: (a: MusicArtistWithSongs) => void;
@@ -169,6 +170,7 @@ function ArtistCard({
   onSongStatusChange: (id: number, status: string) => void;
   onRecommendArtist?: (artistName: string) => void;
   onRecommendSong?: (songTitle: string, artistName: string) => void;
+  onOpenSpotify?: (artistName: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const accent = artist.accentColor ?? "#6366f1";
@@ -219,6 +221,11 @@ function ArtistCard({
           {onRecommendArtist && (
             <button onClick={() => onRecommendArtist(artist.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend artist to friend">
               <Send className="h-4 w-4" />
+            </button>
+          )}
+          {onOpenSpotify && (
+            <button onClick={() => onOpenSpotify(artist.name)} className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-500 transition-colors" title="Find on YouTube">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
             </button>
           )}
           <button onClick={() => onAddSong(artist.id)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Add song">
@@ -699,6 +706,118 @@ function LastFmModal({ open, onClose, artists, onAdded }: {
   );
 }
 
+// ── YouTube Tab ───────────────────────────────────────────────────────────────
+
+type YtVideo = { videoId: string; title: string; channel: string; thumbnail: string };
+
+function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
+  const { toast } = useToast();
+  const [query, setQuery]               = useState(initialArtistName ?? "");
+  const [videos, setVideos]             = useState<YtVideo[]>([]);
+  const [loading, setLoading]           = useState(false);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+
+  useEffect(() => {
+    if (initialArtistName) {
+      setQuery(initialArtistName);
+      doSearch(initialArtistName);
+    }
+  }, [initialArtistName]);
+
+  async function doSearch(q: string = query) {
+    if (!q.trim()) return;
+    setLoading(true);
+    setVideos([]);
+    setActiveVideoId(null);
+    setNotConfigured(false);
+    try {
+      const r = await apiRequest("GET", `/api/youtube/search?q=${encodeURIComponent(q)}`);
+      if (r.status === 503) { setNotConfigured(true); return; }
+      const vids: YtVideo[] = await r.json();
+      setVideos(vids);
+      if (vids.length > 0) setActiveVideoId(vids[0].videoId);
+    } catch {
+      toast({ title: "Search failed", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Search */}
+      <div className="flex gap-2">
+        <input
+          className="flex-1 text-sm border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Search for an artist, song, or album…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && doSearch()}
+        />
+        <button
+          type="button"
+          onClick={() => doSearch()}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground transition-colors"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+        </button>
+      </div>
+
+      {notConfigured && (
+        <div className="text-center py-8 border rounded-xl bg-card space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">YouTube API key not configured</p>
+          <p className="text-xs text-muted-foreground">Add <code className="bg-secondary px-1 rounded">YOUTUBE_API_KEY</code> to your Railway environment variables.</p>
+        </div>
+      )}
+
+      {!notConfigured && !loading && videos.length === 0 && !query.trim() && (
+        <div className="text-center py-12 text-muted-foreground">
+          <svg className="w-10 h-10 mx-auto mb-3 opacity-20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+          <p className="text-sm">Search for music to play it here</p>
+        </div>
+      )}
+
+      {/* Player */}
+      {activeVideoId && (
+        <div className="rounded-xl overflow-hidden border shadow-sm" style={{ aspectRatio: "16/9" }}>
+          <iframe
+            key={activeVideoId}
+            src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&rel=0`}
+            width="100%"
+            height="100%"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ display: "block", border: "none" }}
+          />
+        </div>
+      )}
+
+      {/* Video list */}
+      {videos.length > 0 && (
+        <div className="space-y-1.5">
+          {videos.map(v => (
+            <button
+              key={v.videoId}
+              type="button"
+              onClick={() => setActiveVideoId(v.videoId)}
+              className={`w-full flex items-center gap-3 p-2 rounded-xl border text-left transition-colors ${activeVideoId === v.videoId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+            >
+              <img src={v.thumbnail} alt={v.title} className="w-20 h-12 rounded-lg object-cover shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium line-clamp-2 leading-snug">{v.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{v.channel}</p>
+              </div>
+              {activeVideoId === v.videoId && <Check size={14} className="text-primary shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MusicPage() {
@@ -716,6 +835,7 @@ export default function MusicPage() {
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState("artists");
   const [search, setSearch] = useState("");
+  const [spotifyArtistName, setSpotifyArtistName] = useState<string | undefined>();
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("recommendations");
   }, []);
@@ -1086,6 +1206,10 @@ export default function MusicPage() {
           <TabsTrigger value="recommendations" className="text-xs">
             Recommendations
           </TabsTrigger>
+          <TabsTrigger value="spotify" className="text-xs flex items-center gap-1">
+            <Radio size={11} />
+            Discover
+          </TabsTrigger>
         </TabsList>
 
         {/* Artists tab */}
@@ -1119,6 +1243,7 @@ export default function MusicPage() {
                   onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
                   onRecommendArtist={(name) => openRecommend("artist", name)}
                   onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
+                  onOpenSpotify={(name) => { setSpotifyArtistName(name); setTab("spotify"); }}
                 />
               ))}
             </div>
@@ -1198,6 +1323,11 @@ export default function MusicPage() {
         {/* Recommendations tab */}
         <TabsContent value="recommendations">
           <MusicRecommendationsTab artists={artists} onRecommendOpen={openRecommend} />
+        </TabsContent>
+
+        {/* Discover tab */}
+        <TabsContent value="spotify">
+          <LastFmTab initialArtistName={spotifyArtistName} />
         </TabsContent>
       </Tabs>
 
