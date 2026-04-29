@@ -732,8 +732,13 @@ function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
     setActiveVideoId(null);
     setNotConfigured(false);
     try {
-      const r = await apiRequest("GET", `/api/youtube/search?q=${encodeURIComponent(q)}`);
+      const r = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`);
       if (r.status === 503) { setNotConfigured(true); return; }
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as any;
+        toast({ title: "Search failed", description: err.error || `Error ${r.status}`, variant: "destructive" });
+        return;
+      }
       const vids: YtVideo[] = await r.json();
       setVideos(vids);
       if (vids.length > 0) setActiveVideoId(vids[0].videoId);
