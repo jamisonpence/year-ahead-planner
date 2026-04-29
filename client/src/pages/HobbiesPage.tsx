@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Hobby, InsertHobby } from "@shared/schema";
@@ -446,17 +446,18 @@ function HobbyFormDialog({
   onClose: () => void;
   initial: Partial<InsertHobby>;
   onSave: (data: Partial<InsertHobby>) => void;
+  isEdit?: boolean;
 }) {
   const [form, setForm] = useState<Partial<InsertHobby>>(initial);
   const [extra, setExtra] = useState<Record<string, any>>(() => parseExtra(initial.extraJson ?? "{}"));
   const [showPresets, setShowPresets] = useState(false);
-  const isEdit = !!(initial as any)?.id === undefined ? false : !!(initial as any)?.id;
 
-  // Sync form when dialog opens with new initial
-  useState(() => {
+  // Sync state whenever `initial` changes (e.g. different hobby opened for edit)
+  useEffect(() => {
     setForm(initial);
     setExtra(parseExtra(initial.extraJson ?? "{}"));
-  });
+    setShowPresets(false);
+  }, [initial]);
 
   const set = (key: keyof InsertHobby, val: any) => setForm(f => ({ ...f, [key]: val }));
   const setExtraKey = (key: string, val: any) => setExtra(e => ({ ...e, [key]: val }));
@@ -473,7 +474,7 @@ function HobbyFormDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Hobby" : "Add Hobby"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Hobby" : "Add a Hobby"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 mt-2">
 
@@ -648,7 +649,7 @@ function HobbyFormDialog({
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={handleSave} disabled={!form.name?.trim()}>
-              {isEdit ? "Save Changes" : "Add Hobby"}
+              {isEdit ? "Save Changes" : "Add"}
             </Button>
           </div>
         </div>
@@ -692,6 +693,7 @@ export default function HobbiesPage() {
   const [editHobby, setEditHobby] = useState<Hobby | null>(null);
   const [detailHobby, setDetailHobby] = useState<Hobby | null>(null);
   const [formInitial, setFormInitial] = useState<Partial<InsertHobby>>(EMPTY_FORM);
+  const [formKey, setFormKey] = useState(0);
 
   const filtered = useMemo(() => {
     return hobbies.filter(h => {
@@ -718,6 +720,7 @@ export default function HobbiesPage() {
   const openAdd = (type?: HobbyType) => {
     setFormInitial({ ...EMPTY_FORM, hobbyType: type ?? "creative" });
     setEditHobby(null);
+    setFormKey(k => k + 1);
     setShowForm(true);
   };
   const openEdit = (h: Hobby) => {
@@ -728,6 +731,7 @@ export default function HobbiesPage() {
       isFavorite: h.isFavorite, coverUrl: h.coverUrl ?? "",
     });
     setEditHobby(h);
+    setFormKey(k => k + 1);
     setShowForm(true);
   };
 
@@ -926,11 +930,12 @@ export default function HobbiesPage() {
 
       {/* Dialogs */}
       <HobbyFormDialog
-        key={editHobby?.id ?? "new"}
+        key={formKey}
         open={showForm}
         onClose={() => { setShowForm(false); setEditHobby(null); }}
         initial={formInitial}
         onSave={handleSave}
+        isEdit={!!editHobby}
       />
 
       <HobbyDetailDialog
