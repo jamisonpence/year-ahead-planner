@@ -813,6 +813,65 @@ export type QuoteShareWithUser = QuoteShare & {
   toUser: { id: number; name: string; avatarUrl: string | null };
 };
 
+// ── HOBBIES ───────────────────────────────────────────────────────────────────
+// hobbyType: "creative" | "collection" | "outdoor" | "games" | "learning" | "performance"
+// skillLevel: "beginner" | "intermediate" | "advanced" | "expert"
+// status: "active" | "on_pause" | "retired"
+// extraJson stores type-specific fields as JSON
+export const hobbies = pgTable("hobbies", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  hobbyType: text("hobby_type").notNull().default("creative"),
+  category: text("category"),                // e.g. "Photography", "Chess", etc.
+  coverUrl: text("cover_url"),
+  description: text("description"),
+  skillLevel: text("skill_level").notNull().default("beginner"),
+  dateStarted: text("date_started"),         // ISO date
+  status: text("status").notNull().default("active"),
+  notes: text("notes"),
+  // Type-specific extra data as JSON — shape varies by hobbyType
+  extraJson: text("extra_json").notNull().default("{}"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+});
+
+export const insertHobbySchema = createInsertSchema(hobbies).omit({ id: true });
+export type InsertHobby = z.infer<typeof insertHobbySchema>;
+export type Hobby = typeof hobbies.$inferSelect;
+
+// Type-specific extra field shapes
+export type HobbyExtraCollection = {
+  itemCount?: number;
+  estimatedValue?: string;
+  mostPrizedItem?: string;
+};
+export type HobbyExtraOutdoor = {
+  favoriteLocations?: string;
+  gearList?: string;
+  personalBests?: string;
+};
+export type HobbyExtraCreative = {
+  portfolioUrls?: string[];   // multiple photo URLs
+  materialsTools?: string;
+  worksInProgress?: string;
+};
+export type HobbyExtraGames = {
+  favoriteGames?: string;
+  ratingElo?: string;
+  playFrequency?: string;
+};
+export type HobbyExtraLearning = {
+  currentLevel?: string;
+  goals?: string;
+  resources?: string;
+};
+export type HobbyExtraPerformance = {
+  instrumentStyle?: string;
+  yearsPlaying?: number;
+  favoritePieces?: string;
+};
+
 // ── ART ───────────────────────────────────────────────────────────────────────
 export const artPieces = pgTable("art_pieces", {
   id: serial("id").primaryKey(),
