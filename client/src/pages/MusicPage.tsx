@@ -166,6 +166,7 @@ function ArtistCard({
   onRecommendArtist,
   onRecommendSong,
   onOpenSpotify,
+  onOpenYouTube,
 }: {
   artist: MusicArtistWithSongs;
   onEditArtist: (a: MusicArtistWithSongs) => void;
