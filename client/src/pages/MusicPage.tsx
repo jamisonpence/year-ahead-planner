@@ -96,6 +96,7 @@ function SongRow({
   onDelete,
   onStatusChange,
   onRecommend,
+  onOpenYouTube,
 }: {
   song: MusicSong;
   artistName?: string;
@@ -103,6 +104,7 @@ function SongRow({
   onDelete: (id: number) => void;
   onStatusChange: (id: number, status: string) => void;
   onRecommend?: (songTitle: string, artistName: string) => void;
+  onOpenYouTube?: (query: string) => void;
 }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
@@ -129,6 +131,11 @@ function SongRow({
       </Select>
 
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {onOpenYouTube && artistName && (
+          <button onClick={() => onOpenYouTube(`${artistName} ${song.title}`)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-500 transition-colors" title="Find on YouTube">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+          </button>
+        )}
         {onRecommend && artistName && (
           <button onClick={() => onRecommend(song.title, artistName)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend to friend">
             <Send className="h-3 w-3" />
@@ -171,6 +178,7 @@ function ArtistCard({
   onRecommendArtist?: (artistName: string) => void;
   onRecommendSong?: (songTitle: string, artistName: string) => void;
   onOpenSpotify?: (artistName: string) => void;
+  onOpenYouTube?: (query: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const accent = artist.accentColor ?? "#6366f1";
@@ -259,6 +267,7 @@ function ArtistCard({
                   onDelete={onDeleteSong}
                   onStatusChange={onSongStatusChange}
                   onRecommend={onRecommendSong}
+                  onOpenYouTube={onOpenYouTube}
                 />
               ))}
             </div>
@@ -710,13 +719,20 @@ function LastFmModal({ open, onClose, artists, onAdded }: {
 
 type YtVideo = { videoId: string; title: string; channel: string; thumbnail: string };
 
-function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
+function LastFmTab({ initialArtistName, allArtists }: { initialArtistName?: string; allArtists: MusicArtistWithSongs[] }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [query, setQuery]               = useState(initialArtistName ?? "");
   const [videos, setVideos]             = useState<YtVideo[]>([]);
   const [loading, setLoading]           = useState(false);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
+
+  // Add-to-library state
+  const [addSongForm, setAddSongForm]   = useState<{ videoTitle: string } | null>(null);
+  const [songArtistInput, setSongArtistInput] = useState("");
+  const [songTitleInput, setSongTitleInput]   = useState("");
+  const [adding, setAdding]             = useState(false);
 
   useEffect(() => {
     if (initialArtistName) {
@@ -724,6 +740,51 @@ function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
       doSearch(initialArtistName);
     }
   }, [initialArtistName]);
+
+  async function addArtistToLibrary() {
+    const name = query.trim();
+    if (!name) return;
+    if (allArtists.some(a => a.name.toLowerCase() === name.toLowerCase())) {
+      toast({ title: `${name} is already in your library` }); return;
+    }
+    setAdding(true);
+    try {
+      await apiRequest("POST", "/api/music/artists", { name, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false });
+      qc.invalidateQueries({ queryKey: ["/api/music/artists"] });
+      toast({ title: `Added "${name}" to your library` });
+    } catch { toast({ title: "Failed to add artist", variant: "destructive" }); }
+    finally { setAdding(false); }
+  }
+
+  function openAddSong(videoTitle: string) {
+    // Guess artist = query, song title = first part of video title before " - " or full title
+    const guessedTitle = videoTitle.replace(/\(.*?\)/g, "").replace(/\[.*?\]/g, "").replace(/official.*$/i, "").replace(/lyrics.*$/i, "").replace(/audio.*$/i, "").trim();
+    setSongArtistInput(query.trim());
+    setSongTitleInput(guessedTitle);
+    setAddSongForm({ videoTitle });
+  }
+
+  async function submitAddSong() {
+    const artistName = songArtistInput.trim();
+    const songTitle  = songTitleInput.trim();
+    if (!artistName || !songTitle) return;
+    setAdding(true);
+    try {
+      const existing = allArtists.find(a => a.name.toLowerCase() === artistName.toLowerCase());
+      let artistId: number;
+      if (existing) {
+        artistId = existing.id;
+      } else {
+        const r = await apiRequest("POST", "/api/music/artists", { name: artistName, genres: null, notes: null, accentColor: ACCENT_COLORS[0], isFavorite: false });
+        artistId = (await r.json()).id;
+      }
+      await apiRequest("POST", "/api/music/songs", { artistId, title: songTitle, album: null, genre: null, year: null, status: "want_to_listen", isFavorite: false, rating: null, notes: null });
+      qc.invalidateQueries({ queryKey: ["/api/music/artists"] });
+      toast({ title: `Added "${songTitle}" to your library` });
+      setAddSongForm(null);
+    } catch { toast({ title: "Failed to add song", variant: "destructive" }); }
+    finally { setAdding(false); }
+  }
 
   async function doSearch(q: string = query) {
     if (!q.trim()) return;
@@ -770,10 +831,73 @@ function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
         </button>
       </div>
 
+      {/* Add artist shortcut */}
+      {query.trim() && !notConfigured && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-muted-foreground">
+            {allArtists.some(a => a.name.toLowerCase() === query.trim().toLowerCase())
+              ? <span className="text-green-600 flex items-center gap-1"><Check size={11} /> "{query.trim()}" is in your library</span>
+              : `Add "${query.trim()}" as an artist?`
+            }
+          </span>
+          {!allArtists.some(a => a.name.toLowerCase() === query.trim().toLowerCase()) && (
+            <button
+              type="button"
+              onClick={addArtistToLibrary}
+              disabled={adding}
+              className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50"
+            >
+              {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+              Add Artist
+            </button>
+          )}
+        </div>
+      )}
+
       {notConfigured && (
         <div className="text-center py-8 border rounded-xl bg-card space-y-2">
           <p className="text-sm font-medium text-muted-foreground">YouTube API key not configured</p>
           <p className="text-xs text-muted-foreground">Add <code className="bg-secondary px-1 rounded">YOUTUBE_API_KEY</code> to your Railway environment variables.</p>
+        </div>
+      )}
+
+      {/* Add Song inline form */}
+      {addSongForm && (
+        <div className="border rounded-xl bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Add to Library</p>
+            <button type="button" onClick={() => setAddSongForm(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Artist</label>
+              <input
+                className="w-full text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                value={songArtistInput}
+                onChange={e => setSongArtistInput(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Song Title</label>
+              <input
+                className="w-full text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                value={songTitleInput}
+                onChange={e => setSongTitleInput(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setAddSongForm(null)} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-muted transition-colors">Cancel</button>
+            <button
+              type="button"
+              onClick={submitAddSong}
+              disabled={adding || !songArtistInput.trim() || !songTitleInput.trim()}
+              className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1"
+            >
+              {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+              Add Song
+            </button>
+          </div>
         </div>
       )}
 
@@ -803,19 +927,29 @@ function LastFmTab({ initialArtistName }: { initialArtistName?: string }) {
       {videos.length > 0 && (
         <div className="space-y-1.5">
           {videos.map(v => (
-            <button
+            <div
               key={v.videoId}
-              type="button"
-              onClick={() => setActiveVideoId(v.videoId)}
-              className={`w-full flex items-center gap-3 p-2 rounded-xl border text-left transition-colors ${activeVideoId === v.videoId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+              className={`flex items-center gap-3 p-2 rounded-xl border transition-colors ${activeVideoId === v.videoId ? "border-primary bg-primary/5" : "border-border"}`}
             >
-              <img src={v.thumbnail} alt={v.title} className="w-20 h-12 rounded-lg object-cover shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium line-clamp-2 leading-snug">{v.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{v.channel}</p>
+              <button type="button" onClick={() => setActiveVideoId(v.videoId)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                <img src={v.thumbnail} alt={v.title} className="w-20 h-12 rounded-lg object-cover shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium line-clamp-2 leading-snug">{v.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{v.channel}</p>
+                </div>
+              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                {activeVideoId === v.videoId && <Check size={14} className="text-primary" />}
+                <button
+                  type="button"
+                  onClick={() => openAddSong(v.title)}
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                  title="Add song to library"
+                >
+                  <Plus size={14} />
+                </button>
               </div>
-              {activeVideoId === v.videoId && <Check size={14} className="text-primary shrink-0" />}
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -1249,6 +1383,7 @@ export default function MusicPage() {
                   onRecommendArtist={(name) => openRecommend("artist", name)}
                   onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                   onOpenSpotify={(name) => { setSpotifyArtistName(name); setTab("spotify"); }}
+                  onOpenYouTube={(q) => { setSpotifyArtistName(q); setTab("spotify"); }}
                 />
               ))}
             </div>
@@ -1332,7 +1467,7 @@ export default function MusicPage() {
 
         {/* Discover tab */}
         <TabsContent value="spotify">
-          <LastFmTab initialArtistName={spotifyArtistName} />
+          <LastFmTab initialArtistName={spotifyArtistName} allArtists={artists} />
         </TabsContent>
       </Tabs>
 
