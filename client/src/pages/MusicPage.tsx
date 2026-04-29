@@ -18,8 +18,9 @@ import {
 import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
   Trash2, Pencil, Search, Music, Upload, Download, HelpCircle, Loader2, Users, Mic2,
-  Send, Check, X, Inbox, CornerUpRight, Radio,
+  Send, Check, X, Inbox, CornerUpRight, Radio, ListMusic, ChevronUp, Share2,
 } from "lucide-react";
+import type { MusicCollectionWithItems, MusicCollectionItemWithData } from "@shared/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -958,6 +959,592 @@ function LastFmTab({ initialArtistName, allArtists }: { initialArtistName?: stri
   );
 }
 
+// ── Collections ───────────────────────────────────────────────────────────────
+
+const COVER_COLORS = [
+  "#6366f1", "#8b5cf6", "#ec4899", "#f97316",
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444",
+  "#14b8a6", "#84cc16", "#f43f5e", "#06b6d4",
+];
+
+const COVER_EMOJIS = ["🎵", "🎶", "🎸", "🎹", "🥁", "🎺", "🎻", "🎤", "🎧", "🎼", "🎷", "🪗", "🎙️", "🎚️", "🪘", "🪕", "⭐", "🔥", "💿", "📼", "🌙", "☀️", "🌊", "🍂"];
+
+const EMPTY_COL_FORM = {
+  name: "",
+  description: "",
+  coverColor: COVER_COLORS[0],
+  coverEmoji: "🎵",
+  sharedWithFriends: false,
+};
+
+// Collection form modal (create / edit)
+function CollectionFormDialog({
+  open,
+  onClose,
+  onSubmit,
+  initial,
+  isPending,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: typeof EMPTY_COL_FORM) => void;
+  initial?: typeof EMPTY_COL_FORM;
+  isPending?: boolean;
+}) {
+  const [form, setForm] = useState(initial ?? { ...EMPTY_COL_FORM });
+  const isEdit = !!initial;
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) setForm(initial ?? { ...EMPTY_COL_FORM });
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Collection" : "New Collection"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          {/* Cover preview */}
+          <div className="flex items-center gap-4">
+            <div
+              className="h-16 w-16 rounded-xl flex items-center justify-center text-3xl shrink-0 shadow-sm"
+              style={{ background: form.coverColor }}
+            >
+              {form.coverEmoji}
+            </div>
+            <div className="flex-1 space-y-2">
+              <div>
+                <label className="text-xs font-medium mb-1 block">Color</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {COVER_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, coverColor: c }))}
+                      className={`h-5 w-5 rounded-full border-2 transition-all ${form.coverColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">Emoji</label>
+                <div className="flex gap-1 flex-wrap max-h-12 overflow-y-auto">
+                  {COVER_EMOJIS.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, coverEmoji: e }))}
+                      className={`h-7 w-7 rounded text-sm transition-all flex items-center justify-center ${form.coverEmoji === e ? "ring-2 ring-primary bg-primary/10" : "hover:bg-muted"}`}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium mb-1 block">Name *</label>
+            <Input
+              placeholder="My collection name…"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium mb-1 block">Description</label>
+            <Textarea
+              placeholder="What's this collection about…"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="col-shared"
+              checked={form.sharedWithFriends}
+              onChange={(e) => setForm((f) => ({ ...f, sharedWithFriends: e.target.checked }))}
+              className="accent-primary"
+            />
+            <label htmlFor="col-shared" className="text-sm cursor-pointer flex items-center gap-1.5">
+              <Share2 size={13} className="text-muted-foreground" /> Share with friends
+            </label>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={() => onSubmit(form)}
+              disabled={!form.name.trim() || isPending}
+            >
+              {isEdit ? "Save" : "Create"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Item picker — lets user pick a song or artist to add to a collection
+function ItemPickerModal({
+  open,
+  onClose,
+  artists,
+  existingItemIds,
+  onAdd,
+}: {
+  open: boolean;
+  onClose: () => void;
+  artists: MusicArtistWithSongs[];
+  existingItemIds: { songs: Set<number>; artists: Set<number> };
+  onAdd: (itemType: string, songId?: number, artistId?: number) => void;
+}) {
+  const [pickType, setPickType] = useState<"song" | "artist">("song");
+  const [query, setQuery] = useState("");
+  const q = query.toLowerCase();
+
+  useEffect(() => { if (!open) setQuery(""); }, [open]);
+
+  const allSongs = useMemo(
+    () => artists.flatMap((a) => a.songs.map((s) => ({ ...s, artistName: a.name }))),
+    [artists]
+  );
+
+  const filteredSongs = useMemo(() =>
+    allSongs.filter((s) =>
+      !existingItemIds.songs.has(s.id) &&
+      (!q || s.title.toLowerCase().includes(q) || s.artistName.toLowerCase().includes(q))
+    ),
+    [allSongs, existingItemIds, q]
+  );
+
+  const filteredArtists = useMemo(() =>
+    artists.filter((a) =>
+      !existingItemIds.artists.has(a.id) &&
+      (!q || a.name.toLowerCase().includes(q))
+    ),
+    [artists, existingItemIds, q]
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="text-base flex items-center gap-2">
+            <Plus size={15} /> Add to Collection
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="px-5 pb-3 shrink-0 flex gap-2">
+          <button
+            onClick={() => { setPickType("song"); setQuery(""); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${pickType === "song" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Music size={11} /> Songs
+          </button>
+          <button
+            onClick={() => { setPickType("artist"); setQuery(""); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${pickType === "artist" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Music2 size={11} /> Artists
+          </button>
+        </div>
+
+        <div className="px-5 pb-3 shrink-0">
+          <Input
+            placeholder={pickType === "song" ? "Search songs…" : "Search artists…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="text-sm h-8"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-1">
+          {pickType === "song" && (
+            filteredSongs.length === 0
+              ? <p className="text-xs text-muted-foreground text-center py-6">{q ? "No matching songs" : "All songs already in collection"}</p>
+              : filteredSongs.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => { onAdd("song", s.id, undefined); }}
+                  className="w-full flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/60 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                    <Music size={13} className="text-violet-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{s.artistName}</p>
+                  </div>
+                  <Plus size={13} className="text-muted-foreground shrink-0" />
+                </button>
+              ))
+          )}
+          {pickType === "artist" && (
+            filteredArtists.length === 0
+              ? <p className="text-xs text-muted-foreground text-center py-6">{q ? "No matching artists" : "All artists already in collection"}</p>
+              : filteredArtists.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => { onAdd("artist", undefined, a.id); }}
+                  className="w-full flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/60 transition-colors text-left"
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                    style={{ background: a.accentColor ?? "#6366f1" }}
+                  >
+                    {a.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{a.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{a.songs.length} songs</p>
+                  </div>
+                  <Plus size={13} className="text-muted-foreground shrink-0" />
+                </button>
+              ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Single collection detail view
+function CollectionDetail({
+  collection,
+  artists,
+  onBack,
+  onEdit,
+  onDelete,
+  onAddItem,
+  onRemoveItem,
+  onMoveItem,
+}: {
+  collection: MusicCollectionWithItems;
+  artists: MusicArtistWithSongs[];
+  onBack: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAddItem: (itemType: string, songId?: number, artistId?: number) => void;
+  onRemoveItem: (itemId: number) => void;
+  onMoveItem: (itemId: number, direction: "up" | "down") => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const existingItemIds = useMemo(() => ({
+    songs: new Set(collection.items.filter((i) => i.itemType === "song").map((i) => i.songId!).filter(Boolean)),
+    artists: new Set(collection.items.filter((i) => i.itemType === "artist").map((i) => i.artistId!).filter(Boolean)),
+  }), [collection.items]);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 text-sm"
+        >
+          <ChevronRight size={14} className="rotate-180" /> Back
+        </button>
+        <div className="flex-1" />
+        <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)} className="gap-1.5 h-8 text-xs">
+          <Plus size={13} /> Add Item
+        </Button>
+        <Button size="sm" variant="outline" onClick={onEdit} className="h-8 text-xs gap-1.5">
+          <Pencil size={13} /> Edit
+        </Button>
+        <Button size="sm" variant="outline" onClick={onDelete} className="h-8 text-xs gap-1.5 text-red-500 hover:text-red-600 hover:border-red-300">
+          <Trash2 size={13} /> Delete
+        </Button>
+      </div>
+
+      {/* Collection header card */}
+      <div className="rounded-xl overflow-hidden border bg-card">
+        <div className="h-2 w-full" style={{ background: collection.coverColor }} />
+        <div className="flex items-center gap-4 p-4">
+          <div
+            className="h-14 w-14 rounded-xl flex items-center justify-center text-2xl shrink-0 shadow-sm"
+            style={{ background: collection.coverColor }}
+          >
+            {collection.coverEmoji}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="font-semibold text-base">{collection.name}</h2>
+              {collection.sharedWithFriends && (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Share2 size={9} /> Shared
+                </Badge>
+              )}
+            </div>
+            {collection.description && (
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">{collection.items.length} {collection.items.length === 1 ? "item" : "items"}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Items list */}
+      {collection.items.length === 0 ? (
+        <div className="text-center py-12 border rounded-xl border-dashed">
+          <ListMusic size={28} className="text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No items yet</p>
+          <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => setPickerOpen(true)}>
+            <Plus size={13} /> Add songs or artists
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {collection.items.map((item, idx) => (
+            <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card group hover:bg-muted/30 transition-colors">
+              <span className="text-xs text-muted-foreground w-5 text-center shrink-0">{idx + 1}</span>
+              {item.itemType === "song" && item.song ? (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                    <Music size={13} className="text-violet-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{item.song.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{item.song.artistName}</p>
+                  </div>
+                </>
+              ) : item.itemType === "artist" && item.artist ? (
+                <>
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                    style={{ background: item.artist.accentColor ?? "#6366f1" }}
+                  >
+                    {item.artist.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{item.artist.name}</p>
+                    <Badge variant="secondary" className="text-[10px] mt-0.5">Artist</Badge>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 text-xs text-muted-foreground italic">Unknown item</div>
+              )}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button
+                  disabled={idx === 0}
+                  onClick={() => onMoveItem(item.id, "up")}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                  title="Move up"
+                >
+                  <ChevronUp size={13} />
+                </button>
+                <button
+                  disabled={idx === collection.items.length - 1}
+                  onClick={() => onMoveItem(item.id, "down")}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                  title="Move down"
+                >
+                  <ChevronDown size={13} />
+                </button>
+                <button
+                  onClick={() => onRemoveItem(item.id)}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                  title="Remove"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ItemPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        artists={artists}
+        existingItemIds={existingItemIds}
+        onAdd={(itemType, songId, artistId) => {
+          onAddItem(itemType, songId, artistId);
+          // keep picker open so user can add multiple
+        }}
+      />
+    </div>
+  );
+}
+
+// Collections tab main component
+function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: collections = [], isLoading } = useQuery<MusicCollectionWithItems[]>({
+    queryKey: ["/api/music/collections"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/music/collections"); return r.json(); },
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/music/collections"] });
+
+  const createMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/music/collections", d),
+    onSuccess: () => { invalidate(); setFormOpen(false); toast({ title: "Collection created" }); },
+    onError: () => toast({ title: "Failed to create collection", variant: "destructive" }),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/music/collections/${id}`, d),
+    onSuccess: () => { invalidate(); setFormOpen(false); },
+    onError: () => toast({ title: "Failed to update collection", variant: "destructive" }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/music/collections/${id}`),
+    onSuccess: () => { invalidate(); setSelectedId(null); toast({ title: "Collection deleted" }); },
+  });
+  const addItemMut = useMutation({
+    mutationFn: ({ colId, itemType, songId, artistId }: any) =>
+      apiRequest("POST", `/api/music/collections/${colId}/items`, { itemType, songId: songId ?? null, artistId: artistId ?? null }),
+    onSuccess: () => invalidate(),
+    onError: () => toast({ title: "Failed to add item", variant: "destructive" }),
+  });
+  const removeItemMut = useMutation({
+    mutationFn: ({ colId, itemId }: any) => apiRequest("DELETE", `/api/music/collections/${colId}/items/${itemId}`),
+    onSuccess: () => invalidate(),
+  });
+  const reorderMut = useMutation({
+    mutationFn: ({ colId, itemIds }: any) => apiRequest("PUT", `/api/music/collections/${colId}/items/order`, { itemIds }),
+    onSuccess: () => invalidate(),
+  });
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingCol, setEditingCol] = useState<MusicCollectionWithItems | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const selectedCollection = collections.find((c) => c.id === selectedId) ?? null;
+
+  function openCreate() { setEditingCol(null); setFormOpen(true); }
+  function openEdit(col: MusicCollectionWithItems) { setEditingCol(col); setFormOpen(true); }
+
+  function handleFormSubmit(data: typeof EMPTY_COL_FORM) {
+    if (editingCol) {
+      updateMut.mutate({ id: editingCol.id, d: data });
+    } else {
+      createMut.mutate(data);
+    }
+  }
+
+  function handleMoveItem(col: MusicCollectionWithItems, itemId: number, direction: "up" | "down") {
+    const items = [...col.items];
+    const idx = items.findIndex((i) => i.id === itemId);
+    if (idx < 0) return;
+    const newIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= items.length) return;
+    [items[idx], items[newIdx]] = [items[newIdx], items[idx]];
+    reorderMut.mutate({ colId: col.id, itemIds: items.map((i) => i.id) });
+  }
+
+  if (selectedCollection) {
+    return (
+      <CollectionDetail
+        collection={selectedCollection}
+        artists={artists}
+        onBack={() => setSelectedId(null)}
+        onEdit={() => openEdit(selectedCollection)}
+        onDelete={() => deleteMut.mutate(selectedCollection.id)}
+        onAddItem={(itemType, songId, artistId) => addItemMut.mutate({ colId: selectedCollection.id, itemType, songId, artistId })}
+        onRemoveItem={(itemId) => removeItemMut.mutate({ colId: selectedCollection.id, itemId })}
+        onMoveItem={(itemId, dir) => handleMoveItem(selectedCollection, itemId, dir)}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{collections.length} {collections.length === 1 ? "collection" : "collections"}</p>
+        <Button size="sm" onClick={openCreate} className="gap-1.5">
+          <Plus size={13} /> New Collection
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">Loading…</div>
+      ) : collections.length === 0 ? (
+        <div className="text-center py-16 border rounded-xl border-dashed">
+          <ListMusic size={32} className="text-muted-foreground/30 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No collections yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Create a collection to group songs and artists together</p>
+          <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={openCreate}>
+            <Plus size={13} /> Create your first collection
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {collections.map((col) => (
+            <button
+              key={col.id}
+              type="button"
+              onClick={() => setSelectedId(col.id)}
+              className="rounded-xl border bg-card overflow-hidden text-left hover:shadow-md transition-shadow group"
+            >
+              <div className="h-1.5 w-full" style={{ background: col.coverColor }} />
+              <div className="flex items-center gap-3 p-4">
+                <div
+                  className="h-12 w-12 rounded-lg flex items-center justify-center text-2xl shrink-0 shadow-sm"
+                  style={{ background: col.coverColor }}
+                >
+                  {col.coverEmoji}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-semibold text-sm truncate">{col.name}</span>
+                    {col.sharedWithFriends && (
+                      <Share2 size={11} className="text-muted-foreground shrink-0" />
+                    )}
+                  </div>
+                  {col.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{col.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {col.items.length} {col.items.length === 1 ? "item" : "items"}
+                    {col.items.filter((i) => i.itemType === "song").length > 0 && (
+                      <span> · {col.items.filter((i) => i.itemType === "song").length} songs</span>
+                    )}
+                    {col.items.filter((i) => i.itemType === "artist").length > 0 && (
+                      <span> · {col.items.filter((i) => i.itemType === "artist").length} artists</span>
+                    )}
+                  </p>
+                </div>
+                <ChevronRight size={14} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <CollectionFormDialog
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSubmit={handleFormSubmit}
+        initial={editingCol ? {
+          name: editingCol.name,
+          description: editingCol.description ?? "",
+          coverColor: editingCol.coverColor,
+          coverEmoji: editingCol.coverEmoji,
+          sharedWithFriends: editingCol.sharedWithFriends,
+        } : undefined}
+        isPending={createMut.isPending || updateMut.isPending}
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MusicPage() {
@@ -1350,6 +1937,10 @@ export default function MusicPage() {
             <Radio size={11} />
             Discover
           </TabsTrigger>
+          <TabsTrigger value="collections" className="text-xs flex items-center gap-1">
+            <ListMusic size={11} />
+            Collections
+          </TabsTrigger>
         </TabsList>
 
         {/* Artists tab */}
@@ -1469,6 +2060,11 @@ export default function MusicPage() {
         {/* Discover tab */}
         <TabsContent value="spotify">
           <LastFmTab initialArtistName={spotifyArtistName} allArtists={artists} />
+        </TabsContent>
+
+        {/* Collections tab */}
+        <TabsContent value="collections">
+          <CollectionsTab artists={artists} />
         </TabsContent>
       </Tabs>
 
