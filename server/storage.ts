@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -45,6 +45,8 @@ import type {
   InsertWorkoutPlan, WorkoutPlan,
   InsertWorkoutShare, WorkoutShare, WorkoutShareWithUser,
   InsertHobby, Hobby,
+  InsertMusicCollection, MusicCollection, MusicCollectionWithItems,
+  InsertMusicCollectionItem, MusicCollectionItem,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -878,6 +880,30 @@ export async function initializeStorage() {
       is_favorite BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS music_collections (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      description TEXT,
+      cover_color TEXT NOT NULL DEFAULT '#6366f1',
+      cover_emoji TEXT NOT NULL DEFAULT '🎵',
+      shared_with_friends BOOLEAN NOT NULL DEFAULT FALSE,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS music_collection_items (
+      id SERIAL PRIMARY KEY,
+      collection_id INTEGER NOT NULL,
+      item_type TEXT NOT NULL DEFAULT 'song',
+      song_id INTEGER,
+      artist_id INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1082,6 +1108,14 @@ export interface IStorage {
   createHobby(data: InsertHobby, userId: number): Promise<Hobby>;
   updateHobby(id: number, data: Partial<InsertHobby>): Promise<Hobby | undefined>;
   deleteHobby(id: number): Promise<boolean>;
+  // Music Collections
+  getAllCollections(userId: number): Promise<MusicCollectionWithItems[]>;
+  createCollection(data: Partial<InsertMusicCollection>, userId: number): Promise<MusicCollection>;
+  updateCollection(id: number, data: Partial<InsertMusicCollection>): Promise<MusicCollection | undefined>;
+  deleteCollection(id: number): Promise<boolean>;
+  addCollectionItem(collectionId: number, itemType: string, songId?: number | null, artistId?: number | null): Promise<MusicCollectionItem>;
+  removeCollectionItem(itemId: number): Promise<boolean>;
+  reorderCollectionItems(collectionId: number, itemIds: number[]): Promise<void>;
   // Quote Shares
   sendQuoteShare(data: InsertQuoteShare): Promise<QuoteShare>;
   getQuoteShares(userId: number): Promise<{ received: QuoteShareWithUser[]; sent: QuoteShareWithUser[] }>;
@@ -2777,6 +2811,125 @@ export const storage: IStorage = {
   async deleteHobby(id) {
     const result = await db.delete(hobbies).where(eq(hobbies.id, id));
     return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Music Collections ─────────────────────────────────────────────────────────
+  async getAllCollections(userId: number): Promise<MusicCollectionWithItems[]> {
+    const cols = await db.select().from(musicCollections).where(eq(musicCollections.userId, userId)).orderBy(asc(musicCollections.sortOrder), asc(musicCollections.name));
+    if (cols.length === 0) return [];
+    // Load all items for these collections plus song/artist data
+    const colIds = cols.map(c => c.id);
+    const itemsRaw = await pool.query(
+      `SELECT mci.*,
+         ms.title as song_title, ms.album as song_album, ms.genre as song_genre,
+         ms.year as song_year, ms.status as song_status, ms.is_favorite as song_is_favorite,
+         ms.rating as song_rating, ms.notes as song_notes, ms.artist_id as song_artist_id,
+         ma_song.name as song_artist_name,
+         ma.name as artist_name, ma.genres as artist_genres, ma.is_favorite as artist_is_favorite, ma.accent_color as artist_accent_color
+       FROM music_collection_items mci
+       LEFT JOIN music_songs ms ON ms.id = mci.song_id AND mci.item_type = 'song'
+       LEFT JOIN music_artists ma_song ON ma_song.id = ms.artist_id
+       LEFT JOIN music_artists ma ON ma.id = mci.artist_id AND mci.item_type = 'artist'
+       WHERE mci.collection_id = ANY($1)
+       ORDER BY mci.collection_id, mci.sort_order`,
+      [colIds]
+    );
+    const itemsByCollection = new Map<number, any[]>();
+    for (const row of itemsRaw.rows) {
+      if (!itemsByCollection.has(row.collection_id)) itemsByCollection.set(row.collection_id, []);
+      const item: any = {
+        id: row.id,
+        collectionId: row.collection_id,
+        itemType: row.item_type,
+        songId: row.song_id,
+        artistId: row.artist_id,
+        sortOrder: row.sort_order,
+      };
+      if (row.item_type === 'song' && row.song_id) {
+        item.song = {
+          id: row.song_id,
+          userId: null,
+          artistId: row.song_artist_id,
+          title: row.song_title,
+          album: row.song_album,
+          genre: row.song_genre,
+          year: row.song_year,
+          status: row.song_status,
+          isFavorite: row.song_is_favorite,
+          rating: row.song_rating,
+          notes: row.song_notes,
+          artistName: row.song_artist_name,
+        };
+      } else if (row.item_type === 'artist' && row.artist_id) {
+        item.artist = {
+          id: row.artist_id,
+          userId: null,
+          name: row.artist_name,
+          genres: row.artist_genres,
+          isFavorite: row.artist_is_favorite,
+          accentColor: row.artist_accent_color,
+          notes: null,
+        };
+      }
+      itemsByCollection.get(row.collection_id)!.push(item);
+    }
+    return cols.map(c => ({ ...c, items: itemsByCollection.get(c.id) ?? [] }));
+  },
+
+  async createCollection(data, userId) {
+    const result = await db.insert(musicCollections).values({
+      userId,
+      name: (data as any).name,
+      description: (data as any).description ?? null,
+      coverColor: (data as any).coverColor ?? '#6366f1',
+      coverEmoji: (data as any).coverEmoji ?? '🎵',
+      sharedWithFriends: (data as any).sharedWithFriends ?? false,
+      sortOrder: (data as any).sortOrder ?? 0,
+    }).returning();
+    return result[0];
+  },
+
+  async updateCollection(id, data) {
+    const existing = await db.select().from(musicCollections).where(eq(musicCollections.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(musicCollections).set(data as any).where(eq(musicCollections.id, id)).returning();
+    return result[0];
+  },
+
+  async deleteCollection(id) {
+    await pool.query(`DELETE FROM music_collection_items WHERE collection_id = $1`, [id]);
+    const result = await db.delete(musicCollections).where(eq(musicCollections.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async addCollectionItem(collectionId, itemType, songId, artistId) {
+    // Get current max sort_order for this collection
+    const maxRes = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), -1) as max_order FROM music_collection_items WHERE collection_id = $1`,
+      [collectionId]
+    );
+    const nextOrder = (maxRes.rows[0]?.max_order ?? -1) + 1;
+    const result = await db.insert(musicCollectionItems).values({
+      collectionId,
+      itemType,
+      songId: songId ?? null,
+      artistId: artistId ?? null,
+      sortOrder: nextOrder,
+    }).returning();
+    return result[0];
+  },
+
+  async removeCollectionItem(itemId) {
+    const result = await db.delete(musicCollectionItems).where(eq(musicCollectionItems.id, itemId));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async reorderCollectionItems(collectionId, itemIds) {
+    for (let i = 0; i < itemIds.length; i++) {
+      await db.update(musicCollectionItems)
+        .set({ sortOrder: i })
+        .where(eq(musicCollectionItems.id, itemIds[i]));
+    }
   },
 };
 

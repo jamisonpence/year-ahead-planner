@@ -2351,4 +2351,62 @@ Rules:
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Music Collections ─────────────────────────────────────────────────────────
+  app.get("/api/music/collections", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = await storage.getAllCollections(uid);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/music/collections", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const col = await storage.createCollection(req.body, uid);
+      res.json(col);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/music/collections/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateCollection(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/music/collections/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteCollection(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Add item to collection
+  app.post("/api/music/collections/:id/items", requireAuth, async (req, res) => {
+    try {
+      const { itemType, songId, artistId } = req.body;
+      const item = await storage.addCollectionItem(Number(req.params.id), itemType, songId ?? null, artistId ?? null);
+      res.json(item);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Remove item from collection
+  app.delete("/api/music/collections/:id/items/:itemId", requireAuth, async (req, res) => {
+    try {
+      await storage.removeCollectionItem(Number(req.params.itemId));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Reorder items in collection
+  app.put("/api/music/collections/:id/items/order", requireAuth, async (req, res) => {
+    try {
+      const { itemIds } = req.body; // ordered array of item IDs
+      await storage.reorderCollectionItems(Number(req.params.id), itemIds);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
 }

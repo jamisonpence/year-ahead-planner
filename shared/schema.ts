@@ -1056,6 +1056,46 @@ export type MusicRecommendationWithUser = MusicRecommendation & {
   toUser: { id: number; name: string; avatarUrl: string | null };
 };
 
+// ── MUSIC COLLECTIONS ─────────────────────────────────────────────────────────
+// A named list of songs and/or artists with a cover color/emoji
+export const musicCollections = pgTable("music_collections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  description: text("description"),
+  coverColor: text("cover_color").notNull().default("#6366f1"),
+  coverEmoji: text("cover_emoji").notNull().default("🎵"),
+  sharedWithFriends: boolean("shared_with_friends").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// Items inside a collection — either a song or an artist
+export const musicCollectionItems = pgTable("music_collection_items", {
+  id: serial("id").primaryKey(),
+  collectionId: integer("collection_id").notNull(),
+  itemType: text("item_type").notNull().default("song"), // "song" | "artist"
+  songId: integer("song_id"),     // set when itemType = "song"
+  artistId: integer("artist_id"), // set when itemType = "artist"
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertMusicCollectionSchema = createInsertSchema(musicCollections).omit({ id: true });
+export type InsertMusicCollection = z.infer<typeof insertMusicCollectionSchema>;
+export type MusicCollection = typeof musicCollections.$inferSelect;
+
+export const insertMusicCollectionItemSchema = createInsertSchema(musicCollectionItems).omit({ id: true });
+export type InsertMusicCollectionItem = z.infer<typeof insertMusicCollectionItemSchema>;
+export type MusicCollectionItem = typeof musicCollectionItems.$inferSelect;
+
+// Enriched item with song/artist data attached
+export type MusicCollectionItemWithData = MusicCollectionItem & {
+  song?: MusicSong & { artistName: string };
+  artist?: MusicArtist;
+};
+export type MusicCollectionWithItems = MusicCollection & {
+  items: MusicCollectionItemWithData[];
+};
+
 // ── FRIEND REQUESTS ────────────────────────────────────────────────────────────
 export const friendRequests = pgTable("friend_requests", {
   id: serial("id").primaryKey(),
