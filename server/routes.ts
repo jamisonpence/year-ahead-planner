@@ -2323,16 +2323,16 @@ Rules:
   // ── Hobbies ──────────────────────────────────────────────────────────────────
   app.get("/api/hobbies", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).userId;
-      const data = await storage.getAllHobbies(userId);
+      const uid = (req.user as User).id;
+      const data = await storage.getAllHobbies(uid);
       res.json(data);
     } catch (e) { handleError(res, e); }
   });
 
   app.post("/api/hobbies", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).userId;
-      const hobby = await storage.createHobby(req.body, userId);
+      const uid = (req.user as User).id;
+      const hobby = await storage.createHobby(req.body, uid);
       res.json(hobby);
     } catch (e) { handleError(res, e); }
   });
