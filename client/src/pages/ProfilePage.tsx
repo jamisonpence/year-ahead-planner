@@ -5,7 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette, Quote,
-  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check,
+  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ type ProfileData = {
     goals?: Array<{ id: number; name: string; status: string; category: string }>;
     workouts?: Array<{ id: number; name: string; muscleGroup: string | null }>;
     plants?: Array<{ id: number; name: string; species: string | null; imageUrl: string | null }>;
+    hobbies?: Array<{ id: number; name: string; hobbyType: string; category: string | null; skillLevel: string; status: string; description: string | null; coverUrl: string | null; isFavorite: boolean }>;
   };
 };
 
@@ -38,6 +39,7 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType; key: st
   "/goals":      { label: "Goals",         icon: Target,    key: "goals"    },
   "/workouts":   { label: "Workouts",      icon: Dumbbell,  key: "workouts" },
   "/plants":     { label: "Plants",        icon: Leaf,      key: "plants"   },
+  "/hobbies":    { label: "Hobbies",       icon: Sparkles,  key: "hobbies"  },
 };
 
 function Avatar({ name, avatarUrl, size = 48 }: { name: string; avatarUrl: string | null; size?: number }) {
@@ -430,6 +432,76 @@ function Empty({ label }: { label: string }) {
   return <p className="text-sm text-muted-foreground py-8 text-center">{label}</p>;
 }
 
+// ── Hobby type metadata (mirrors HobbiesPage constants) ───────────────────────
+const HOBBY_TYPE_COLORS: Record<string, string> = {
+  creative: "#ec4899", collection: "#f97316", outdoor: "#10b981",
+  games: "#6366f1", learning: "#3b82f6", performance: "#8b5cf6",
+};
+const HOBBY_TYPE_LABELS: Record<string, string> = {
+  creative: "Creative", collection: "Collection", outdoor: "Outdoor & Active",
+  games: "Games & Mind", learning: "Learning & Making", performance: "Performance",
+};
+const SKILL_COLORS: Record<string, string> = {
+  beginner: "bg-green-500/15 text-green-700 dark:text-green-400",
+  intermediate: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  advanced: "bg-purple-500/15 text-purple-700 dark:text-purple-400",
+  expert: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+};
+
+function HobbiesPanel({ hobbies }: { hobbies: ProfileData["data"]["hobbies"] }) {
+  if (!hobbies?.length) return <Empty label="No hobbies yet" />;
+
+  // Group by hobbyType
+  const groups: Record<string, typeof hobbies> = {};
+  for (const h of hobbies) {
+    if (!groups[h.hobbyType]) groups[h.hobbyType] = [];
+    groups[h.hobbyType].push(h);
+  }
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(groups).map(([type, items]) => {
+        const color = HOBBY_TYPE_COLORS[type] ?? "#6366f1";
+        const label = HOBBY_TYPE_LABELS[type] ?? type;
+        return (
+          <div key={type}>
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5" style={{ color }}>
+              <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: color }} />
+              {label} ({items!.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {items!.map(h => (
+                <div key={h.id} className="rounded-xl border bg-card overflow-hidden">
+                  <div className="h-1" style={{ backgroundColor: color }} />
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate flex items-center gap-1">
+                          {h.name}
+                          {h.isFavorite && <Heart size={10} className="fill-pink-500 text-pink-500 shrink-0" />}
+                        </p>
+                        {h.category && <p className="text-xs text-muted-foreground truncate">{h.category}</p>}
+                      </div>
+                      {SKILL_COLORS[h.skillLevel] && (
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${SKILL_COLORS[h.skillLevel]}`}>
+                          {h.skillLevel.charAt(0).toUpperCase() + h.skillLevel.slice(1)}
+                        </span>
+                      )}
+                    </div>
+                    {h.description && (
+                      <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{h.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main Profile Page ─────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -527,6 +599,7 @@ export default function ProfilePage() {
       case "/goals":     return <GoalsPanel goals={data.goals} />;
       case "/workouts":  return <WorkoutsPanel workouts={data.workouts} />;
       case "/plants":    return <PlantsPanel plants={data.plants} {...panelProps} />;
+      case "/hobbies":   return <HobbiesPanel hobbies={data.hobbies} />;
       default:           return <Empty label="Content coming soon" />;
     }
   }
