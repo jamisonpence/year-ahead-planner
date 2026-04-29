@@ -1730,6 +1730,21 @@ export const storage: IStorage = {
           data.plants = r.rows.map(x => ({ id: x.id, name: x.name, species: x.species, imageUrl: x.photo_url }));
         } catch (e) { console.error(`[getFriendProfile] plants query failed:`, e); data.plants = []; }
       }
+      if (visibleTabs.includes("/hobbies")) {
+        try {
+          const r = await pool.query(
+            `SELECT id, name, hobby_type, category, skill_level, status, description, cover_url, is_favorite
+             FROM hobbies WHERE user_id = $1 ORDER BY sort_order, name`,
+            [targetId]
+          );
+          data.hobbies = r.rows.map(x => ({
+            id: x.id, name: x.name, hobbyType: x.hobby_type,
+            category: x.category, skillLevel: x.skill_level,
+            status: x.status, description: x.description,
+            coverUrl: x.cover_url, isFavorite: x.is_favorite,
+          }));
+        } catch (e) { console.error(`[getFriendProfile] hobbies query failed:`, e); data.hobbies = []; }
+      }
 
       return { user: { id: u.id, name: u.name, avatarUrl: u.avatarUrl, email: u.email }, visibleTabs, data };
     } catch (e) {
