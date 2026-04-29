@@ -6,7 +6,7 @@ import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
-  UserX, Send, Loader2, ChevronRight,
+  UserX, Send, Loader2, ChevronRight, Link,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -896,7 +896,22 @@ function FriendsTab({ onBadgeClear }: { onBadgeClear: () => void }) {
           </div>
 
           {searchQuery.trim() && !searchLoading && searchResults.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-6">No users found for "{searchQuery}"</p>
+            <div className="text-center py-6 space-y-3">
+              <p className="text-sm text-muted-foreground">No users found for "{searchQuery}"</p>
+              <p className="text-xs text-muted-foreground/70">They may not have signed up yet. Send them an invite!</p>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.origin).then(() =>
+                    toast({ title: "Link copied!", description: "Share this link so they can sign up." })
+                  );
+                }}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Link size={12} />
+                Copy invite link
+              </button>
+            </div>
           )}
 
           {!searchQuery.trim() && (

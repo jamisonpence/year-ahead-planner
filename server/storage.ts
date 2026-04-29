@@ -2126,15 +2126,18 @@ export const storage: IStorage = {
 
   // ── Friends ────────────────────────────────────────────────────────────────
   async searchUsers(query, currentUserId) {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return [];
-    const all = await db.select({
-      id: users.id, name: users.name, email: users.email, avatarUrl: users.avatarUrl,
-    }).from(users);
-    return all
-      .filter((u) => u.id !== currentUserId)
-      .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
-      .slice(0, 20);
+    const r = await pool.query(
+      `SELECT id, name, email, avatar_url AS "avatarUrl"
+       FROM users
+       WHERE id != $1
+         AND (LOWER(name) LIKE $2 OR LOWER(email) LIKE $2)
+       ORDER BY name
+       LIMIT 20`,
+      [currentUserId, `%${q.toLowerCase()}%`]
+    );
+    return r.rows;
   },
 
   async sendFriendRequest(fromUserId, toUserId) {

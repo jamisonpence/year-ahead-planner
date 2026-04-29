@@ -2190,6 +2190,65 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── YouTube video search ──────────────────────────────────────────────────────
+
+  app.get("/api/youtube/search", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.YOUTUBE_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "YOUTUBE_API_KEY not configured" });
+      const q = String(req.query.q ?? "").trim();
+      if (!q) return res.json([]);
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&videoCategoryId=10&maxResults=8&key=${apiKey}`;
+      const r = await fetch(url);
+      if (!r.ok) return res.status(r.status).json({ error: "YouTube API error" });
+      const d = await r.json() as any;
+      const items = (d.items ?? []).map((item: any) => ({
+        videoId: item.id?.videoId,
+        title: item.snippet?.title,
+        channel: item.snippet?.channelTitle,
+        thumbnail: item.snippet?.thumbnails?.medium?.url ?? item.snippet?.thumbnails?.default?.url,
+      })).filter((i: any) => i.videoId);
+      res.json(items);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Last.fm artist info + top tracks ─────────────────────────────────────────
+
+  app.get("/api/lastfm/artist-info", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.LASTFM_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "LASTFM_API_KEY not configured" });
+      const artist = String(req.query.artist ?? "").trim();
+      if (!artist) return res.status(400).json({ error: "artist is required" });
+      const [infoRes, tracksRes] = await Promise.all([
+        fetch(`https://ws.audioscrobbler.com/2.0/?method=artist.getInfo&artist=${encodeURIComponent(artist)}&api_key=${apiKey}&format=json&autocorrect=1`),
+        fetch(`https://ws.audioscrobbler.com/2.0/?method=artist.getTopTracks&artist=${encodeURIComponent(artist)}&api_key=${apiKey}&format=json&autocorrect=1&limit=10`),
+      ]);
+      const [info, tracks] = await Promise.all([infoRes.json() as any, tracksRes.json() as any]);
+      const a = info.artist;
+      if (!a) return res.status(404).json({ error: "Artist not found" });
+      const similar = (a.similar?.artist ?? []).slice(0, 6).map((s: any) => ({ name: s.name, imageUrl: s.image?.find((i: any) => i.size === "medium")?.["#text"] || null }));
+      const tags = (a.tags?.tag ?? []).slice(0, 8).map((t: any) => t.name);
+      const topTracks = (tracks.toptracks?.track ?? []).slice(0, 10).map((t: any) => ({
+        name: t.name,
+        playcount: parseInt(t.playcount ?? "0"),
+        listeners: parseInt(t.listeners ?? "0"),
+        url: t.url,
+      }));
+      res.json({
+        name: a.name,
+        listeners: parseInt(a.stats?.listeners ?? "0"),
+        playcount: parseInt(a.stats?.playcount ?? "0"),
+        imageUrl: a.image?.find((i: any) => i.size === "extralarge")?.["#text"] || a.image?.find((i: any) => i.size === "large")?.["#text"] || null,
+        bio: a.bio?.summary?.replace(/<a[^>]*>.*?<\/a>/g, "").replace(/<[^>]*>/g, "").trim() || null,
+        tags,
+        similar,
+        topTracks,
+        url: a.url,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Perenual plant API proxy ──────────────────────────────────────────────────
   app.get("/api/perenual/search", requireAuth, async (req, res) => {
     try {
