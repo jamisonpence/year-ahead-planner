@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -44,6 +44,7 @@ import type {
   InsertQuoteShare, QuoteShare, QuoteShareWithUser,
   InsertWorkoutPlan, WorkoutPlan,
   InsertWorkoutShare, WorkoutShare, WorkoutShareWithUser,
+  InsertHobby, Hobby,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -858,6 +859,25 @@ export async function initializeStorage() {
       is_read BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS hobbies (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      hobby_type TEXT NOT NULL DEFAULT 'creative',
+      category TEXT,
+      cover_url TEXT,
+      description TEXT,
+      skill_level TEXT NOT NULL DEFAULT 'beginner',
+      date_started TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      extra_json TEXT NOT NULL DEFAULT '{}',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_favorite BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1057,6 +1077,11 @@ export interface IStorage {
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
   updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
   deleteEquipment(id: number): Promise<boolean>;
+  // Hobbies
+  getAllHobbies(userId: number): Promise<Hobby[]>;
+  createHobby(data: InsertHobby, userId: number): Promise<Hobby>;
+  updateHobby(id: number, data: Partial<InsertHobby>): Promise<Hobby | undefined>;
+  deleteHobby(id: number): Promise<boolean>;
   // Quote Shares
   sendQuoteShare(data: InsertQuoteShare): Promise<QuoteShare>;
   getQuoteShares(userId: number): Promise<{ received: QuoteShareWithUser[]; sent: QuoteShareWithUser[] }>;
@@ -2718,6 +2743,25 @@ export const storage: IStorage = {
   },
   async dismissWorkoutShare(id, userId) {
     await pool.query(`UPDATE workout_shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2`, [id, userId]);
+  },
+
+  // ── Hobbies ───────────────────────────────────────────────────────────────────
+  async getAllHobbies(userId: number) {
+    return db.select().from(hobbies).where(eq(hobbies.userId, userId)).orderBy(asc(hobbies.sortOrder), asc(hobbies.name));
+  },
+  async createHobby(data, userId) {
+    const result = await db.insert(hobbies).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateHobby(id, data) {
+    const existing = await db.select().from(hobbies).where(eq(hobbies.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(hobbies).set(data).where(eq(hobbies.id, id)).returning();
+    return result[0];
+  },
+  async deleteHobby(id) {
+    const result = await db.delete(hobbies).where(eq(hobbies.id, id));
+    return (result.rowCount ?? 0) > 0;
   },
 };
 

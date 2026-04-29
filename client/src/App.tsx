@@ -22,6 +22,7 @@ import KidsPage from "@/pages/KidsPage";
 import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
 import JournalPage from "@/pages/JournalPage";
+import HobbiesPage from "@/pages/HobbiesPage";
 import LoginPage from "@/pages/LoginPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ProfilePage from "@/pages/ProfilePage";
@@ -49,6 +50,7 @@ function AuthenticatedApp() {
         <Route path="/quotes" component={QuotesPage} />
         <Route path="/art" component={ArtPage} />
         <Route path="/journal" component={JournalPage} />
+        <Route path="/hobbies" component={HobbiesPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/profile/:userId" component={ProfilePage} />
         <Route component={NotFound} />

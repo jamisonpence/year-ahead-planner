@@ -31,6 +31,7 @@ const PRIVACY_TABS = [
   { path: "/kids",          label: "Kids",               icon: Baby            },
   { path: "/quotes",        label: "Quotes",             icon: Quote           },
   { path: "/art",           label: "Art",                icon: Palette         },
+  { path: "/hobbies",       label: "Hobbies",            icon: Sparkles        },
 ];
 
 // ── Tab Privacy Section ───────────────────────────────────────────────────────

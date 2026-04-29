@@ -2319,4 +2319,36 @@ Rules:
       res.json(await tmdbRes.json());
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Hobbies ──────────────────────────────────────────────────────────────────
+  app.get("/api/hobbies", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const data = await storage.getAllHobbies(userId);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/hobbies", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const hobby = await storage.createHobby(req.body, userId);
+      res.json(hobby);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/hobbies/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateHobby(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/hobbies/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteHobby(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
 }
