@@ -153,6 +153,292 @@ function SongRow({
   );
 }
 
+// ── Add Song Modal (Last.fm auto-search + manual fallback) ────────────────────
+
+function AddSongModal({
+  open,
+  onClose,
+  artistId,
+  artistName,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  artistId: number;
+  artistName: string;
+  onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"search" | "manual">("search");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ name: string; artist: string; listeners: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  // Manual form state
+  const [manualForm, setManualForm] = useState({ ...EMPTY_SONG_FORM });
+
+  // Reset and auto-search when modal opens
+  useEffect(() => {
+    if (open) {
+      setActiveTab("search");
+      setQuery(artistName);
+      setResults([]);
+      setAdded(new Set());
+      setManualForm({ ...EMPTY_SONG_FORM });
+      // auto-trigger search
+      doSearch(artistName);
+    }
+  }, [open, artistName]);
+
+  async function doSearch(q: string) {
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const r = await apiRequest("GET", `/api/lastfm/search?q=${encodeURIComponent(q)}&type=track`);
+      setResults(await r.json());
+    } catch {
+      toast({ title: "Last.fm search failed", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addFromSearch(trackName: string) {
+    setAdding(trackName);
+    try {
+      await apiRequest("POST", "/api/music/songs", {
+        artistId,
+        title: trackName,
+        album: null,
+        genre: null,
+        year: null,
+        status: "want_to_listen",
+        isFavorite: false,
+        rating: null,
+        notes: null,
+      });
+      setAdded((s) => new Set([...s, trackName]));
+      onCreated();
+      toast({ title: `Added "${trackName}"` });
+    } catch {
+      toast({ title: "Failed to add song", variant: "destructive" });
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  async function submitManual() {
+    if (!manualForm.title.trim()) return;
+    setAdding("manual");
+    try {
+      await apiRequest("POST", "/api/music/songs", {
+        artistId,
+        title: manualForm.title.trim(),
+        album: manualForm.album.trim() || null,
+        genre: manualForm.genre.trim() || null,
+        year: manualForm.year ? parseInt(manualForm.year) : null,
+        status: manualForm.status,
+        isFavorite: manualForm.isFavorite,
+        rating: manualForm.rating ? parseInt(manualForm.rating) : null,
+        notes: manualForm.notes.trim() || null,
+      });
+      onCreated();
+      toast({ title: `Added "${manualForm.title.trim()}"` });
+      onClose();
+    } catch {
+      toast({ title: "Failed to add song", variant: "destructive" });
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Music size={15} /> Add Songs — <span className="text-muted-foreground font-normal">{artistName}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Tab toggle */}
+        <div className="px-5 pt-3 pb-3 shrink-0 flex gap-2 border-b">
+          <button
+            onClick={() => setActiveTab("search")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeTab === "search" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Search size={11} /> Search Last.fm
+          </button>
+          <button
+            onClick={() => setActiveTab("manual")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeTab === "manual" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            <Pencil size={11} /> Manual
+          </button>
+        </div>
+
+        {/* Search tab */}
+        {activeTab === "search" && (
+          <>
+            <div className="px-5 py-3 shrink-0 flex gap-2">
+              <Input
+                placeholder="Search for a song…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && doSearch(query)}
+                className="text-sm h-8"
+              />
+              <Button size="sm" className="h-8 shrink-0" onClick={() => doSearch(query)} disabled={loading}>
+                {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-1.5 min-h-0">
+              {loading && (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 size={20} className="animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {!loading && results.length === 0 && (
+                <p className="text-center text-xs text-muted-foreground pt-8">
+                  {query ? "No results — try a different search" : "Type a song name and press Search"}
+                </p>
+              )}
+              {!loading && results.map((t, i) => {
+                const isAdded = added.has(t.name);
+                const isAdding = adding === t.name;
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/40 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                      <Music size={13} className="text-violet-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.name}</p>
+                      {t.listeners && (
+                        <p className="text-xs text-muted-foreground">{Number(t.listeners).toLocaleString()} listeners</p>
+                      )}
+                    </div>
+                    {isAdded ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 font-medium shrink-0">
+                        <Check size={12} /> Added
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => addFromSearch(t.name)}
+                        disabled={isAdding}
+                        className="h-7 text-xs px-2.5 shrink-0"
+                      >
+                        {isAdding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                        {isAdding ? "" : " Add"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Manual tab */}
+        {activeTab === "manual" && (
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+            <div>
+              <label className="text-xs font-medium mb-1 block">Title *</label>
+              <Input
+                placeholder="Song title"
+                value={manualForm.title}
+                onChange={(e) => setManualForm((f) => ({ ...f, title: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium mb-1 block">Album</label>
+                <Input
+                  placeholder="Album name"
+                  value={manualForm.album}
+                  onChange={(e) => setManualForm((f) => ({ ...f, album: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">Year</label>
+                <Input
+                  type="number"
+                  placeholder="2024"
+                  value={manualForm.year}
+                  onChange={(e) => setManualForm((f) => ({ ...f, year: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Genre</label>
+              <Input
+                placeholder="e.g. Pop, Rock"
+                value={manualForm.genre}
+                onChange={(e) => setManualForm((f) => ({ ...f, genre: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Status</label>
+              <Select value={manualForm.status} onValueChange={(v) => setManualForm((f) => ({ ...f, status: v }))}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(SONG_STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">Rating</label>
+              <StarRating
+                value={manualForm.rating ? parseInt(manualForm.rating) : null}
+                onChange={(v) => setManualForm((f) => ({ ...f, rating: String(v) }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Notes</label>
+              <Textarea
+                placeholder="Thoughts, where you heard it…"
+                value={manualForm.notes}
+                onChange={(e) => setManualForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="add-song-fav"
+                checked={manualForm.isFavorite}
+                onChange={(e) => setManualForm((f) => ({ ...f, isFavorite: e.target.checked }))}
+                className="accent-pink-500"
+              />
+              <label htmlFor="add-song-fav" className="text-sm cursor-pointer">Mark as favorite</label>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+              <Button
+                size="sm"
+                onClick={submitManual}
+                disabled={!manualForm.title.trim() || adding === "manual"}
+              >
+                {adding === "manual" ? <Loader2 size={13} className="animate-spin mr-1" /> : null}
+                Add Song
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Artist card ───────────────────────────────────────────────────────────────
 
 function ArtistCard({
@@ -173,7 +459,7 @@ function ArtistCard({
   onEditArtist: (a: MusicArtistWithSongs) => void;
   onDeleteArtist: (id: number) => void;
   onToggleArtistFav: (a: MusicArtistWithSongs) => void;
-  onAddSong: (artistId: number) => void;
+  onAddSong: (artistId: number, artistName: string) => void;
   onEditSong: (s: MusicSong) => void;
   onDeleteSong: (id: number) => void;
   onSongStatusChange: (id: number, status: string) => void;
@@ -238,7 +524,7 @@ function ArtistCard({
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
             </button>
           )}
-          <button onClick={() => onAddSong(artist.id)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Add song">
+          <button onClick={() => onAddSong(artist.id, artist.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Add song">
             <Plus className="h-4 w-4" />
           </button>
           <button onClick={() => onEditArtist(artist)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
@@ -1593,7 +1879,12 @@ export default function MusicPage() {
   const [editingArtist, setEditingArtist] = useState<MusicArtistWithSongs | null>(null);
   const [artistForm, setArtistForm] = useState({ ...EMPTY_ARTIST_FORM });
 
-  // Song modal
+  // Add Song modal (new — Last.fm search + manual)
+  const [addSongModal, setAddSongModal] = useState(false);
+  const [addSongArtistId, setAddSongArtistId] = useState<number>(0);
+  const [addSongArtistName, setAddSongArtistName] = useState("");
+
+  // Edit Song modal (existing songs only)
   const [songModal, setSongModal] = useState(false);
   const [editingSong, setEditingSong] = useState<MusicSong | null>(null);
   const [songArtistId, setSongArtistId] = useState<number | null>(null);
@@ -1772,11 +2063,10 @@ export default function MusicPage() {
     }
   }
 
-  function openAddSong(artistId: number) {
-    setEditingSong(null);
-    setSongArtistId(artistId);
-    setSongForm({ ...EMPTY_SONG_FORM });
-    setSongModal(true);
+  function openAddSong(artistId: number, artistName: string) {
+    setAddSongArtistId(artistId);
+    setAddSongArtistName(artistName);
+    setAddSongModal(true);
   }
   function openEditSong(s: MusicSong) {
     setEditingSong(s);
@@ -2139,11 +2429,20 @@ export default function MusicPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Song Modal ───────────────────────────────────────────────────────────── */}
+      {/* ── Add Song Modal (smart: Last.fm + manual) ─────────────────────────────── */}
+      <AddSongModal
+        open={addSongModal}
+        onClose={() => setAddSongModal(false)}
+        artistId={addSongArtistId}
+        artistName={addSongArtistName}
+        onCreated={invalidate}
+      />
+
+      {/* ── Song Edit Modal ──────────────────────────────────────────────────────── */}
       <Dialog open={songModal} onOpenChange={(o) => { if (!o) closeSongModal(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingSong ? "Edit Song" : "Add Song"}</DialogTitle>
+            <DialogTitle>Edit Song</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
             <div>
@@ -2228,7 +2527,7 @@ export default function MusicPage() {
                 onClick={submitSong}
                 disabled={!songForm.title.trim() || createSong.isPending || updateSong.isPending}
               >
-                {editingSong ? "Save" : "Add Song"}
+                Save Changes
               </Button>
             </div>
           </div>
