@@ -6,7 +6,7 @@ import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
-  UserX, Send, Loader2, ChevronRight, Link,
+  UserX, Send, Loader2, ChevronRight, Link, Bell, ChevronLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,21 +48,31 @@ function initials(first: string, last?: string | null): string {
   return [(first[0] ?? ""), (last?.[0] ?? "")].join("").toUpperCase();
 }
 
-// Parse childrenJson — supports both new (number[]) and legacy ({name,birthday}[]) formats
 function parseChildIds(json: string | null | undefined): number[] {
   if (!json) return [];
   try {
     const parsed = JSON.parse(json);
     if (!Array.isArray(parsed)) return [];
-    // New format: array of numbers
     if (parsed.length === 0 || typeof parsed[0] === "number") return parsed as number[];
-    // Legacy format: array of {name, birthday} objects — can't convert without IDs, ignore
     return [];
   } catch { return []; }
 }
 
 function fullName(p: Person | PersonWithSpouse): string {
   return [p.firstName, p.lastName].filter(Boolean).join(" ");
+}
+
+// ── Avatar ─────────────────────────────────────────────────────────────────────
+function Avatar({ user, size = 36 }: { user: { name: string; avatarUrl?: string | null }; size?: number }) {
+  if (user.avatarUrl) {
+    return <img src={user.avatarUrl} alt={user.name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  }
+  return (
+    <div className="rounded-full bg-primary/15 flex items-center justify-center font-semibold text-primary shrink-0 select-none"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}>
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 // ── Multi-select children picker ──────────────────────────────────────────────
@@ -72,7 +82,6 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
   candidates: PersonWithSpouse[];
   currentPersonId?: number;
 }) {
-  // Candidates are people who are NOT this person, NOT already someone's spouse
   const options = candidates.filter((p) => p.id !== currentPersonId);
   const [open, setOpen] = useState(false);
 
@@ -84,7 +93,6 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
 
   return (
     <div className="space-y-2">
-      {/* Selected chips */}
       {selectedPeople.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selectedPeople.map((p) => (
@@ -97,7 +105,6 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
           ))}
         </div>
       )}
-      {/* Dropdown trigger */}
       <button
         type="button"
         onClick={() => setOpen((x) => !x)}
@@ -109,7 +116,7 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
       {open && (
         <div className="border rounded-xl bg-popover shadow-md overflow-hidden">
           {options.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-3">No other people added yet. Add them first, then link as children.</p>
+            <p className="text-xs text-muted-foreground p-3">No other people added yet.</p>
           ) : (
             <div className="max-h-48 overflow-y-auto">
               {options.map((p) => (
@@ -169,20 +176,16 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
   const saveMut = useMutation({
     mutationFn: async (payload: InsertPerson) => {
       let personId = editPerson?.id;
-
       if (editPerson) {
         await apiRequest("PATCH", `/api/people/${editPerson.id}`, payload);
       } else {
         const created: any = await apiRequest("POST", "/api/people", payload);
         personId = created.id;
       }
-
-      // Bidirectional spouse link via dedicated endpoint
       const sid = spouseId && spouseId !== "__none__" ? parseInt(spouseId) : null;
       if (personId) {
         await apiRequest("POST", `/api/people/${personId}/link-spouse`, { spouseId: sid });
       }
-
       return personId;
     },
     onSuccess: () => { invAll(); toast({ title: editPerson ? "Person updated" : "Person added" }); onClose(); },
@@ -205,7 +208,6 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
     });
   };
 
-  // Spouse options: exclude self and people already married to someone else (unless to this person)
   const spouseOptions = allPeople.filter((p) => {
     if (p.id === editPerson?.id) return false;
     if (p.spouseId && p.spouseId !== editPerson?.id) return false;
@@ -219,7 +221,6 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
           <DialogTitle>{editPerson ? "Edit Person" : "Add Person"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>First Name *</Label>
@@ -230,8 +231,6 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
               <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last" />
             </div>
           </div>
-
-          {/* Group + Birthday */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Group</Label>
@@ -248,8 +247,6 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
               <Input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
             </div>
           </div>
-
-          {/* Spouse */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5">
               <Heart size={13} className="text-rose-500" /> Spouse / Partner
@@ -260,36 +257,25 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
                 <SelectItem value="__none__">None</SelectItem>
                 {spouseOptions.map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
-                    {fullName(p)}
-                    {p.spouseId === editPerson?.id ? " (linked)" : ""}
+                    {fullName(p)}{p.spouseId === editPerson?.id ? " (linked)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">Selecting a spouse automatically links both people to each other.</p>
           </div>
-
-          {/* Children */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5">
               <Baby size={13} className="text-sky-500" /> Children
             </Label>
-            <ChildrenPicker
-              value={childIds}
-              onChange={setChildIds}
-              candidates={allPeople}
-              currentPersonId={editPerson?.id}
-            />
-            <p className="text-xs text-muted-foreground">Select existing people. Add them as a Person first if they aren't in the list yet.</p>
+            <ChildrenPicker value={childIds} onChange={setChildIds} candidates={allPeople} currentPersonId={editPerson?.id} />
+            <p className="text-xs text-muted-foreground">Add them as a Person first if they aren't in the list yet.</p>
           </div>
-
-          {/* Notes */}
           <div className="space-y-1.5">
             <Label>Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
               placeholder="How you know them, things to remember..." />
           </div>
-
           <div className="flex gap-2">
             <Button type="submit" disabled={saveMut.isPending} className="flex-1">
               {saveMut.isPending ? "Saving..." : editPerson ? "Save Changes" : "Add Person"}
@@ -362,12 +348,11 @@ function GroupFormModal({ open, onClose, editGroup }: {
   );
 }
 
-// ── Child Row (nested visual style) ──────────────────────────────────────────
+// ── Child Row ─────────────────────────────────────────────────────────────────
 function ChildRow({ child, color }: { child: PersonWithSpouse; color?: string }) {
   const bdayInfo = child.birthday ? nextBirthday(child.birthday) : null;
   return (
     <div className="flex items-center gap-2.5 py-1.5">
-      {/* Connecting line + avatar */}
       <div className="flex items-center gap-0 shrink-0">
         <div className="w-4 h-px bg-border" />
         <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
@@ -381,7 +366,7 @@ function ChildRow({ child, color }: { child: PersonWithSpouse; color?: string })
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
             <Cake size={9} />{formatBirthday(child.birthday)}
             {bdayInfo && bdayInfo.daysAway <= 30 && (
-              <span className={`ml-1 font-semibold ${bdayInfo.daysAway === 0 ? "text-amber-600 dark:text-amber-400" : bdayInfo.daysAway <= 7 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+              <span className={`ml-1 font-semibold ${bdayInfo.daysAway <= 7 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
                 {bdayInfo.label}
               </span>
             )}
@@ -392,26 +377,19 @@ function ChildRow({ child, color }: { child: PersonWithSpouse; color?: string })
   );
 }
 
-// ── Quick Add Child (inline in tile) ─────────────────────────────────────────
+// ── Quick Add Child ───────────────────────────────────────────────────────────
 function QuickAddChild({ person, allPeople, onSave }: {
-  person: Person;
-  allPeople: PersonWithSpouse[];
-  onSave: () => void;
+  person: Person; allPeople: PersonWithSpouse[]; onSave: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"link" | "create">("link");
-  // Link existing
   const [selectedId, setSelectedId] = useState("__none__");
-  // Create new
   const [newFirst, setNewFirst] = useState("");
   const [newLast, setNewLast] = useState("");
   const [newBday, setNewBday] = useState("");
 
   const existingChildIds = parseChildIds(person.childrenJson);
-  // Available to link: not already a child, not self
-  const available = allPeople.filter(
-    (p) => p.id !== person.id && !existingChildIds.includes(p.id)
-  );
+  const available = allPeople.filter((p) => p.id !== person.id && !existingChildIds.includes(p.id));
 
   const invAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/people"] });
@@ -427,16 +405,11 @@ function QuickAddChild({ person, allPeople, onSave }: {
 
   const handleCreate = async () => {
     if (!newFirst.trim()) return;
-    // Create the child person
     const child: any = await apiRequest("POST", "/api/people", {
-      firstName: newFirst.trim(),
-      lastName: newLast.trim() || null,
-      groupId: person.groupId,
-      birthday: newBday || null,
-      childrenJson: "[]",
-      sortOrder: 0,
+      firstName: newFirst.trim(), lastName: newLast.trim() || null,
+      groupId: person.groupId, birthday: newBday || null,
+      childrenJson: "[]", sortOrder: 0,
     });
-    // Link to parent
     const newIds = [...existingChildIds, child.id];
     await apiRequest("PATCH", `/api/people/${person.id}`, { childrenJson: JSON.stringify(newIds) });
     invAll(); setOpen(false); setNewFirst(""); setNewLast(""); setNewBday(""); onSave();
@@ -451,18 +424,14 @@ function QuickAddChild({ person, allPeople, onSave }: {
 
   return (
     <div className="mt-2 bg-secondary/40 rounded-xl p-3 space-y-2">
-      {/* Mode toggle */}
       <div className="flex gap-1">
-        <button type="button" onClick={() => setMode("link")}
-          className={`text-xs px-2 py-1 rounded-lg border transition-colors ${mode === "link" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-          Link existing
-        </button>
-        <button type="button" onClick={() => setMode("create")}
-          className={`text-xs px-2 py-1 rounded-lg border transition-colors ${mode === "create" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-          Create new
-        </button>
+        {(["link", "create"] as const).map((m) => (
+          <button key={m} type="button" onClick={() => setMode(m)}
+            className={`text-xs px-2 py-1 rounded-lg border transition-colors ${mode === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+            {m === "link" ? "Link existing" : "Create new"}
+          </button>
+        ))}
       </div>
-
       {mode === "link" ? (
         <div className="space-y-1.5">
           <Select value={selectedId} onValueChange={setSelectedId}>
@@ -484,10 +453,8 @@ function QuickAddChild({ person, allPeople, onSave }: {
       ) : (
         <div className="space-y-1.5">
           <div className="grid grid-cols-2 gap-1">
-            <Input value={newFirst} onChange={(e) => setNewFirst(e.target.value)}
-              placeholder="First name" className="h-7 text-xs" autoFocus />
-            <Input value={newLast} onChange={(e) => setNewLast(e.target.value)}
-              placeholder="Last name" className="h-7 text-xs" />
+            <Input value={newFirst} onChange={(e) => setNewFirst(e.target.value)} placeholder="First name" className="h-7 text-xs" autoFocus />
+            <Input value={newLast} onChange={(e) => setNewLast(e.target.value)} placeholder="Last name" className="h-7 text-xs" />
           </div>
           <Input type="date" value={newBday} onChange={(e) => setNewBday(e.target.value)} className="h-7 text-xs" />
           <div className="flex gap-1">
@@ -500,18 +467,14 @@ function QuickAddChild({ person, allPeople, onSave }: {
   );
 }
 
-// ── Quick Link Spouse (inline in tile) ────────────────────────────────────────
+// ── Quick Link Spouse ─────────────────────────────────────────────────────────
 function QuickLinkSpouse({ person, allPeople, onSave }: {
-  person: Person;
-  allPeople: PersonWithSpouse[];
-  onSave: () => void;
+  person: Person; allPeople: PersonWithSpouse[]; onSave: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("__none__");
 
-  const available = allPeople.filter(
-    (p) => p.id !== person.id && (!p.spouseId || p.spouseId === person.id)
-  );
+  const available = allPeople.filter((p) => p.id !== person.id && (!p.spouseId || p.spouseId === person.id));
 
   const handleLink = async () => {
     const sid = selectedId !== "__none__" ? parseInt(selectedId) : null;
@@ -555,7 +518,7 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
   color?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [, forceUpdate] = useState(0); // trigger re-render after inline actions
+  const [, forceUpdate] = useState(0);
 
   const spouse = person.spouseId ? allPeople.find((p) => p.id === person.spouseId) : null;
   const childIds = parseChildIds(person.childrenJson);
@@ -564,22 +527,17 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
 
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
-      {/* Color accent bar */}
       <div className="h-1.5" style={{ backgroundColor: color || "#1e3a5f" }} />
-
       <div className="p-4">
-        {/* ── Main person row ── */}
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 select-none"
             style={{ backgroundColor: color || "#1e3a5f" }}>
             {initials(person.firstName, person.lastName)}
           </div>
-
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-sm leading-tight">{fullName(person)}</p>
-                {/* Spouse pill */}
                 {spouse ? (
                   <p className="text-xs text-rose-500 dark:text-rose-400 flex items-center gap-1 mt-0.5">
                     <Heart size={10} className="shrink-0" fill="currentColor" />{fullName(spouse)}
@@ -606,8 +564,6 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
                 </DropdownMenu>
               </div>
             </div>
-
-            {/* Birthday */}
             {person.birthday && bdayInfo && (
               <div className="flex items-center gap-1.5 mt-1.5">
                 <Cake size={11} className="text-muted-foreground" />
@@ -620,27 +576,20 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
             )}
           </div>
         </div>
-
-        {/* ── Expanded section ── */}
         {expanded && (
           <div className="mt-3 pt-3 border-t space-y-3">
-
-            {/* Notes */}
             {person.notes && (
               <div className="flex items-start gap-1.5">
                 <StickyNote size={12} className="text-muted-foreground mt-0.5 shrink-0" />
                 <p className="text-xs text-muted-foreground leading-relaxed">{person.notes}</p>
               </div>
             )}
-
-            {/* ── Children nest ── */}
             <div>
               {children.length > 0 && (
                 <div className="mb-1">
                   <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-0.5">
                     <Baby size={11} /> Children
                   </p>
-                  {/* Tree connector */}
                   <div className="ml-1 pl-2 border-l-2 border-border space-y-0">
                     {children.map((child) => (
                       <ChildRow key={child.id} child={child} color={color} />
@@ -649,14 +598,9 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
                 </div>
               )}
               <div className="ml-3">
-                <QuickAddChild
-                  person={person}
-                  allPeople={allPeople}
-                  onSave={() => forceUpdate((n) => n + 1)}
-                />
+                <QuickAddChild person={person} allPeople={allPeople} onSave={() => forceUpdate((n) => n + 1)} />
               </div>
             </div>
-
           </div>
         )}
       </div>
@@ -664,309 +608,232 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
   );
 }
 
-// ── Avatar ─────────────────────────────────────────────────────────────────────
-function Avatar({ user, size = 36 }: { user: { name: string; avatarUrl?: string | null }; size?: number }) {
-  if (user.avatarUrl) {
-    return <img src={user.avatarUrl} alt={user.name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
-  }
+// ── Friend Card (app-connected user) ─────────────────────────────────────────
+function FriendCard({
+  friend,
+  onUnfriend,
+  onViewProfile,
+}: {
+  friend: PublicUser;
+  onUnfriend: (id: number) => void;
+  onViewProfile: (id: number) => void;
+}) {
   return (
-    <div className="rounded-full bg-primary/15 flex items-center justify-center font-semibold text-primary shrink-0 select-none"
-      style={{ width: size, height: size, fontSize: size * 0.38 }}>
-      {user.name.charAt(0).toUpperCase()}
+    <div className="bg-card border rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
+      <div className="h-1.5 bg-primary/30" />
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <Avatar user={friend} size={44} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="font-semibold text-sm truncate">{friend.name}</p>
+              <span className="shrink-0 flex items-center gap-0.5 text-[10px] font-medium text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                <UserCheck size={9} /> Connected
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => onViewProfile(friend.id)}
+              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              title="View profile"
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={() => onUnfriend(friend.id)}
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              title="Remove friend"
+            >
+              <UserX size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ── Friends Tab ─────────────────────────────────────────────────────────────────
-function FriendsTab({ onBadgeClear }: { onBadgeClear: () => void }) {
+// ── Incoming Request Card ─────────────────────────────────────────────────────
+function IncomingRequestCard({
+  request,
+  onAccept,
+  onDecline,
+}: {
+  request: FriendRequestWithUser;
+  onAccept: (id: number) => void;
+  onDecline: (id: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+      <Avatar user={request.otherUser} size={38} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold truncate">{request.otherUser.name}</p>
+        <p className="text-xs text-muted-foreground truncate">{request.otherUser.email}</p>
+      </div>
+      <div className="flex gap-1.5 shrink-0">
+        <button
+          onClick={() => onAccept(request.id)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          <Check size={11} /> Accept
+        </button>
+        <button
+          onClick={() => onDecline(request.id)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
+        >
+          <X size={11} /> Decline
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── User Search Panel ─────────────────────────────────────────────────────────
+function UserSearchPanel({
+  friends,
+  requests,
+  onSendRequest,
+  onAccept,
+  onDecline,
+  onCancel,
+  onUnfriend,
+  sendPending,
+}: {
+  friends: PublicUser[];
+  requests: { incoming: FriendRequestWithUser[]; outgoing: FriendRequestWithUser[] };
+  onSendRequest: (id: number) => void;
+  onAccept: (id: number) => void;
+  onDecline: (id: number) => void;
+  onCancel: (id: number) => void;
+  onUnfriend: (id: number) => void;
+  sendPending: boolean;
+}) {
   const { toast } = useToast();
-  const [subTab, setSubTab] = useState<"friends" | "requests" | "search">("friends");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<(PublicUser & { relationshipStatus: string; incomingRequestId: number | null })[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<(PublicUser & { relationshipStatus: string; incomingRequestId: number | null })[]>([]);
+  const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: friends = [], refetch: refetchFriends } = useQuery<PublicUser[]>({
-    queryKey: ["/api/friends"],
-    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
-  });
-
-  const { data: requests = { incoming: [], outgoing: [] }, refetch: refetchRequests } = useQuery<{ incoming: FriendRequestWithUser[]; outgoing: FriendRequestWithUser[] }>({
-    queryKey: ["/api/friend-requests"],
-    queryFn: async () => { const r = await apiRequest("GET", "/api/friend-requests"); return r.json(); },
-  });
-
-  // Clear badge on mount
-  useEffect(() => { onBadgeClear(); }, []);
-
-  const sendMut = useMutation({
-    mutationFn: (toUserId: number) => apiRequest("POST", "/api/friend-requests", { toUserId }),
-    onSuccess: () => {
-      refetchRequests();
-      doSearch(searchQuery); // refresh status chips in search results
-      toast({ title: "Friend request sent" });
-      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
-    },
-    onError: () => toast({ title: "Couldn't send request", variant: "destructive" }),
-  });
-
-  const respondMut = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: "accepted" | "declined" }) =>
-      apiRequest("PATCH", `/api/friend-requests/${id}`, { status }),
-    onSuccess: () => {
-      refetchFriends(); refetchRequests();
-      doSearch(searchQuery);
-      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
-    },
-  });
-
-  const cancelMut = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/friend-requests/${id}`),
-    onSuccess: () => { refetchRequests(); doSearch(searchQuery); },
-  });
-
-  const unfriendMut = useMutation({
-    mutationFn: (friendId: number) => apiRequest("DELETE", `/api/friends/${friendId}`),
-    onSuccess: () => { refetchFriends(); doSearch(searchQuery); toast({ title: "Removed from friends" }); },
-  });
-
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setSearchResults([]); return; }
-    setSearchLoading(true);
+    if (!q.trim()) { setResults([]); return; }
+    setLoading(true);
     try {
       const r = await apiRequest("GET", `/api/users/search?q=${encodeURIComponent(q)}`);
-      setSearchResults(await r.json());
-    } catch { setSearchResults([]); }
-    finally { setSearchLoading(false); }
+      setResults(await r.json());
+    } catch { setResults([]); }
+    finally { setLoading(false); }
   }, []);
 
-  function handleSearchChange(val: string) {
-    setSearchQuery(val);
+  function handleChange(val: string) {
+    setQuery(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(val), 400);
+    debounceRef.current = setTimeout(() => doSearch(val), 350);
   }
 
-  const incomingCount = requests.incoming.length;
+  // Re-run search when mutation state changes (to refresh status chips)
+  useEffect(() => {
+    if (query.trim()) doSearch(query);
+  }, [friends.length, requests.incoming.length, requests.outgoing.length]);
 
   function StatusBadge({ status }: { status: string }) {
     if (status === "friends") return <span className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1"><UserCheck size={11} />Friends</span>;
-    if (status === "outgoing_pending") return <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><Clock size={11} />Pending</span>;
+    if (status === "outgoing_pending") return <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><Clock size={11} />Request sent</span>;
     if (status === "incoming") return <span className="text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"><Send size={11} />Sent you a request</span>;
     return null;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Sub-tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1">
-        {([
-          ["friends", "Friends", friends.length],
-          ["requests", "Requests", incomingCount],
-          ["search", "Search Users", null],
-        ] as const).map(([key, label, count]) => (
-          <button key={key} onClick={() => setSubTab(key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${subTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-            {label}
-            {count != null && count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${key === "requests" ? "bg-red-500 text-white" : "bg-secondary text-muted-foreground"}`}>{count}</span>
-            )}
-          </button>
-        ))}
+    <div className="space-y-3">
+      {/* Search input */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        {loading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="Search by name or email…"
+          className="w-full pl-9 pr-8 py-2.5 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
       </div>
 
-      {/* Friends list */}
-      {subTab === "friends" && (
-        <div>
-          {friends.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users size={36} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No friends yet</p>
-              <p className="text-xs mt-1">Search for other users to send friend requests</p>
-              <button onClick={() => setSubTab("search")} className="mt-3 text-xs text-primary hover:underline">Search users →</button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {friends.map((f) => (
-                <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-secondary/40 transition-colors group">
-                  <button
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                    onClick={() => window.location.hash = `#/profile/${f.id}`}
-                  >
-                    <Avatar user={f} size={40} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{f.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{f.email}</p>
-                    </div>
-                    <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
-                  </button>
-                  <button
-                    onClick={() => unfriendMut.mutate(f.id)}
-                    title="Remove friend"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-                  >
-                    <UserX size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Empty state */}
+      {!query.trim() && (
+        <p className="text-sm text-muted-foreground text-center py-4">Type a name or email to find users</p>
+      )}
+
+      {/* No results */}
+      {query.trim() && !loading && results.length === 0 && (
+        <div className="text-center py-5 space-y-2">
+          <p className="text-sm text-muted-foreground">No users found for "{query}"</p>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.origin).then(() =>
+                toast({ title: "Link copied!", description: "Share this link so they can sign up." })
+              );
+            }}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+          >
+            <Link size={12} /> Copy invite link
+          </button>
         </div>
       )}
 
-      {/* Requests */}
-      {subTab === "requests" && (
-        <div className="space-y-5">
-          {/* Incoming */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Incoming Requests {incomingCount > 0 && <span className="ml-1 text-red-500">{incomingCount}</span>}
-            </p>
-            {requests.incoming.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No incoming requests</p>
-            ) : (
-              <div className="space-y-2">
-                {requests.incoming.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                    <Avatar user={req.otherUser} size={38} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{req.otherUser.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{req.otherUser.email}</p>
-                    </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button
-                        onClick={() => respondMut.mutate({ id: req.id, status: "accepted" })}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
-                      >
-                        <Check size={12} /> Accept
-                      </button>
-                      <button
-                        onClick={() => respondMut.mutate({ id: req.id, status: "declined" })}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
-                      >
-                        <X size={12} /> Decline
-                      </button>
-                    </div>
-                  </div>
-                ))}
+      {/* Results */}
+      <div className="space-y-2">
+        {results.map((u) => {
+          const incomingReq = requests.incoming.find((r) => r.otherUser.id === u.id);
+          const outgoingReq = requests.outgoing.find((r) => r.otherUser.id === u.id);
+          return (
+            <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+              <Avatar user={u} size={38} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{u.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                <div className="mt-0.5"><StatusBadge status={u.relationshipStatus} /></div>
               </div>
-            )}
-          </div>
-
-          {/* Outgoing */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sent</p>
-            {requests.outgoing.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No outgoing requests</p>
-            ) : (
-              <div className="space-y-2">
-                {requests.outgoing.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                    <Avatar user={req.otherUser} size={38} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{req.otherUser.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{req.otherUser.email}</p>
-                    </div>
-                    <button
-                      onClick={() => cancelMut.mutate(req.id)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors shrink-0"
-                    >
-                      <X size={12} /> Cancel
+              <div className="shrink-0">
+                {u.relationshipStatus === "none" && (
+                  <button
+                    onClick={() => onSendRequest(u.id)}
+                    disabled={sendPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    <UserPlus size={12} /> Add Friend
+                  </button>
+                )}
+                {u.relationshipStatus === "incoming" && incomingReq && (
+                  <div className="flex gap-1.5">
+                    <button onClick={() => onAccept(incomingReq.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90">
+                      <Check size={11} /> Accept
+                    </button>
+                    <button onClick={() => onDecline(incomingReq.id)}
+                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive">
+                      <X size={11} />
                     </button>
                   </div>
-                ))}
+                )}
+                {u.relationshipStatus === "outgoing_pending" && outgoingReq && (
+                  <button onClick={() => onCancel(outgoingReq.id)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/30">
+                    <X size={11} /> Cancel
+                  </button>
+                )}
+                {u.relationshipStatus === "friends" && (
+                  <button onClick={() => onUnfriend(u.id)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/30">
+                    <UserX size={12} /> Unfriend
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Search */}
-      {subTab === "search" && (
-        <div className="space-y-3">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            {searchLoading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search by name or email…"
-              className="w-full pl-9 pr-8 py-2.5 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          {searchQuery.trim() && !searchLoading && searchResults.length === 0 && (
-            <div className="text-center py-6 space-y-3">
-              <p className="text-sm text-muted-foreground">No users found for "{searchQuery}"</p>
-              <p className="text-xs text-muted-foreground/70">They may not have signed up yet. Send them an invite!</p>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.origin).then(() =>
-                    toast({ title: "Link copied!", description: "Share this link so they can sign up." })
-                  );
-                }}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
-              >
-                <Link size={12} />
-                Copy invite link
-              </button>
             </div>
-          )}
-
-          {!searchQuery.trim() && (
-            <p className="text-sm text-muted-foreground text-center py-6">Type a name or email to find users</p>
-          )}
-
-          <div className="space-y-2">
-            {searchResults.map((u) => (
-              <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                <Avatar user={u} size={38} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{u.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                  <div className="mt-0.5"><StatusBadge status={u.relationshipStatus} /></div>
-                </div>
-                <div className="shrink-0">
-                  {u.relationshipStatus === "none" && (
-                    <button
-                      onClick={() => sendMut.mutate(u.id)}
-                      disabled={sendMut.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                    >
-                      <UserPlus size={12} /> Add Friend
-                    </button>
-                  )}
-                  {u.relationshipStatus === "incoming" && u.incomingRequestId && (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => respondMut.mutate({ id: u.incomingRequestId!, status: "accepted" })}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
-                      >
-                        <Check size={11} /> Accept
-                      </button>
-                      <button
-                        onClick={() => respondMut.mutate({ id: u.incomingRequestId!, status: "declined" })}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive"
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                  )}
-                  {u.relationshipStatus === "friends" && (
-                    <button
-                      onClick={() => unfriendMut.mutate(u.id)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/30"
-                    >
-                      <UserX size={12} /> Unfriend
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -974,17 +841,44 @@ function FriendsTab({ onBadgeClear }: { onBadgeClear: () => void }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RelationshipsPage() {
   const { toast } = useToast();
-  const [mainTab, setMainTab] = useState<"people" | "friends">("people");
+
+  // ── Data ──────────────────────────────────────────────────────────────────────
+  const { data: groups = [] } = useQuery<RelationshipGroup[]>({ queryKey: ["/api/groups"] });
+  const { data: allPeople = [] } = useQuery<PersonWithSpouse[]>({ queryKey: ["/api/people"] });
+
+  const { data: friends = [], refetch: refetchFriends } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friends"); return r.json(); },
+  });
+
+  const { data: requests = { incoming: [], outgoing: [] }, refetch: refetchRequests } = useQuery<{
+    incoming: FriendRequestWithUser[]; outgoing: FriendRequestWithUser[];
+  }>({
+    queryKey: ["/api/friend-requests"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/friend-requests"); return r.json(); },
+  });
+
+  // ── UI State ──────────────────────────────────────────────────────────────────
   const [personModal, setPersonModal] = useState(false);
   const [groupModal, setGroupModal] = useState(false);
   const [editPerson, setEditPerson] = useState<Person | null>(null);
   const [editGroup, setEditGroup] = useState<RelationshipGroup | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<number | "all" | "none">("all");
+  const [selectedGroupId, setSelectedGroupId] = useState<number | "all" | "none" | "friends">("all");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
 
-  const { data: groups = [] } = useQuery<RelationshipGroup[]>({ queryKey: ["/api/groups"] });
-  const { data: allPeople = [] } = useQuery<PersonWithSpouse[]>({ queryKey: ["/api/people"] });
+  // Auto-open requests panel when there are incoming requests
+  useEffect(() => {
+    if (requests.incoming.length > 0) setRequestsOpen(true);
+  }, [requests.incoming.length]);
 
+  // Clear badge on mount
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
+  }, []);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────────
   const deletePersonMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/people/${id}`),
     onSuccess: () => {
@@ -1002,7 +896,36 @@ export default function RelationshipsPage() {
     },
   });
 
-  // Upcoming birthdays (people + their children) within 30 days
+  const sendMut = useMutation({
+    mutationFn: (toUserId: number) => apiRequest("POST", "/api/friend-requests", { toUserId }),
+    onSuccess: () => {
+      refetchRequests();
+      toast({ title: "Friend request sent" });
+      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
+    },
+    onError: () => toast({ title: "Couldn't send request", variant: "destructive" }),
+  });
+
+  const respondMut = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "accepted" | "declined" }) =>
+      apiRequest("PATCH", `/api/friend-requests/${id}`, { status }),
+    onSuccess: () => {
+      refetchFriends(); refetchRequests();
+      queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] });
+    },
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/friend-requests/${id}`),
+    onSuccess: () => refetchRequests(),
+  });
+
+  const unfriendMut = useMutation({
+    mutationFn: (friendId: number) => apiRequest("DELETE", `/api/friends/${friendId}`),
+    onSuccess: () => { refetchFriends(); toast({ title: "Removed from friends" }); },
+  });
+
+  // ── Derived data ──────────────────────────────────────────────────────────────
   const upcomingBirthdays = useMemo(() => {
     const items: { name: string; days: number; label: string; color?: string }[] = [];
     allPeople.forEach((p) => {
@@ -1015,60 +938,139 @@ export default function RelationshipsPage() {
     return items.sort((a, b) => a.days - b.days);
   }, [allPeople, groups]);
 
-  const filtered = useMemo(() => {
+  const filteredPeople = useMemo(() => {
     let list = allPeople;
     if (selectedGroupId === "none") list = list.filter((p) => !p.groupId);
-    else if (selectedGroupId !== "all") list = list.filter((p) => p.groupId === selectedGroupId);
+    else if (selectedGroupId !== "all" && selectedGroupId !== "friends") list = list.filter((p) => p.groupId === selectedGroupId);
     if (search) list = list.filter((p) => fullName(p).toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [allPeople, selectedGroupId, search]);
 
+  const filteredFriends = useMemo(() => {
+    if (!search) return friends;
+    return friends.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()) || f.email.toLowerCase().includes(search.toLowerCase()));
+  }, [friends, search]);
+
   const groupColor = (id: number | null | undefined) => groups.find((g) => g.id === id)?.color;
 
+  const incomingCount = requests.incoming.length;
+  const showFriends = selectedGroupId === "all" || selectedGroupId === "friends";
+  const showPeople = selectedGroupId !== "friends";
+
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+
+      {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Relationships</h1>
-        </div>
-        {mainTab === "people" && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
-              <Plus size={13} /><FolderPlus size={13} />Group
-            </Button>
-            <Button size="sm" onClick={() => { setEditPerson(null); setPersonModal(true); }} className="gap-1.5">
-              <Plus size={13} /><UserPlus size={13} />Person
-            </Button>
+          <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
-        )}
+          <div>
+            <h1 className="text-xl font-semibold">Relationships</h1>
+            <p className="text-xs text-muted-foreground">
+              {allPeople.length} {allPeople.length === 1 ? "person" : "people"} · {friends.length} connected
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {/* Find users button */}
+          <button
+            onClick={() => setSearchOpen((x) => !x)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors relative ${
+              searchOpen ? "bg-primary text-primary-foreground border-primary" : "hover:bg-secondary border-border"
+            }`}
+          >
+            <Search size={14} />
+            Find Users
+          </button>
+          <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
+            <FolderPlus size={13} /> Group
+          </Button>
+          <Button size="sm" onClick={() => { setEditPerson(null); setPersonModal(true); }} className="gap-1.5">
+            <UserPlus size={13} /> Add Person
+          </Button>
+        </div>
       </div>
 
-      {/* Main tabs: People / Friends */}
-      <div className="flex gap-1 border-b">
-        <button
-          onClick={() => setMainTab("people")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${mainTab === "people" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        >
-          <span className="flex items-center gap-1.5"><Users size={14} />People ({allPeople.length})</span>
-        </button>
-        <button
-          onClick={() => setMainTab("friends")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${mainTab === "friends" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        >
-          <span className="flex items-center gap-1.5"><UserCheck size={14} />Friends</span>
-        </button>
-      </div>
-
-      {/* Friends tab */}
-      {mainTab === "friends" && (
-        <FriendsTab onBadgeClear={() => queryClient.invalidateQueries({ queryKey: ["/api/friend-requests/count"] })} />
+      {/* ── Incoming requests banner ──────────────────────────────────────────── */}
+      {incomingCount > 0 && (
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 overflow-hidden">
+          <button
+            onClick={() => setRequestsOpen((x) => !x)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Bell size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                {incomingCount} friend {incomingCount === 1 ? "request" : "requests"} waiting
+              </span>
+            </div>
+            {requestsOpen ? <ChevronUp size={14} className="text-blue-600" /> : <ChevronDown size={14} className="text-blue-600" />}
+          </button>
+          {requestsOpen && (
+            <div className="px-4 pb-4 space-y-2">
+              {requests.incoming.map((req) => (
+                <IncomingRequestCard
+                  key={req.id}
+                  request={req}
+                  onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
+                  onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* People tab content below — only shown when mainTab === "people" */}
-      {mainTab === "people" && (<>
+      {/* ── User Search Panel ─────────────────────────────────────────────────── */}
+      {searchOpen && (
+        <div className="rounded-xl border bg-card p-4 space-y-1">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <UserPlus size={14} /> Find & Connect with Users
+            </h3>
+            <button onClick={() => setSearchOpen(false)} className="text-muted-foreground hover:text-foreground p-1 rounded">
+              <X size={14} />
+            </button>
+          </div>
+          <UserSearchPanel
+            friends={friends}
+            requests={requests}
+            onSendRequest={(id) => sendMut.mutate(id)}
+            onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
+            onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
+            onCancel={(id) => cancelMut.mutate(id)}
+            onUnfriend={(id) => unfriendMut.mutate(id)}
+            sendPending={sendMut.isPending}
+          />
 
-      {/* Upcoming birthdays strip */}
+          {/* Outgoing requests summary */}
+          {requests.outgoing.length > 0 && (
+            <div className="pt-3 border-t">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Sent Requests</p>
+              <div className="space-y-1.5">
+                {requests.outgoing.map((req) => (
+                  <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                    <Avatar user={req.otherUser} size={32} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{req.otherUser.name}</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Clock size={10} /> Pending</p>
+                    </div>
+                    <button onClick={() => cancelMut.mutate(req.id)}
+                      className="text-xs text-muted-foreground hover:text-destructive border px-2 py-1 rounded-lg hover:border-destructive/30 transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Upcoming birthdays ────────────────────────────────────────────────── */}
       {upcomingBirthdays.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
           <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1.5">
@@ -1086,14 +1088,26 @@ export default function RelationshipsPage() {
         </div>
       )}
 
-      {/* Search + group tabs */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Input placeholder="Search people..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-52" />
+      {/* ── Search + Group filter row ─────────────────────────────────────────── */}
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search people & friends…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm w-52"
+          />
+        </div>
+
         <div className="flex gap-1.5 flex-wrap">
+          {/* All */}
           <button onClick={() => setSelectedGroupId("all")}
             className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${selectedGroupId === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
             All
           </button>
+
+          {/* Custom groups */}
           {groups.map((g) => (
             <div key={g.id} className="flex items-center">
               <button onClick={() => setSelectedGroupId(g.id)}
@@ -1115,81 +1129,143 @@ export default function RelationshipsPage() {
               </DropdownMenu>
             </div>
           ))}
+
+          {/* Ungrouped */}
           <button onClick={() => setSelectedGroupId("none")}
             className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${selectedGroupId === "none" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
             Ungrouped
           </button>
+
+          {/* Connected Friends */}
+          <button
+            onClick={() => setSelectedGroupId("friends")}
+            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${selectedGroupId === "friends" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}
+          >
+            <UserCheck size={11} /> Connected
+            {friends.length > 0 && <span className="opacity-70">{friends.length}</span>}
+          </button>
         </div>
       </div>
 
-      {/* People grid */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <Users size={40} className="mx-auto mb-4 opacity-20" />
-          <p className="font-medium">No people yet</p>
-          <p className="text-sm mt-1">Add someone to get started</p>
-        </div>
-      ) : selectedGroupId !== "all" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((p) => (
-            <PersonTile key={p.id} person={p} allPeople={allPeople}
-              onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
-              onDelete={(id) => deletePersonMut.mutate(id)}
-              color={groupColor(p.groupId)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {groups.map((g) => {
-            const members = filtered.filter((p) => p.groupId === g.id);
-            if (members.length === 0) return null;
-            return (
-              <section key={g.id}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
-                  <h2 className="font-bold text-base">{g.name}</h2>
-                  <span className="text-xs text-muted-foreground">{members.length}</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {members.map((p) => (
-                    <PersonTile key={p.id} person={p} allPeople={allPeople}
-                      onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
-                      onDelete={(id) => deletePersonMut.mutate(id)}
-                      color={g.color ?? undefined}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-          {(() => {
-            const ungrouped = filtered.filter((p) => !p.groupId);
-            if (!ungrouped.length) return null;
-            return (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
-                  <h2 className="font-bold text-base">Other</h2>
-                  <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {ungrouped.map((p) => (
-                    <PersonTile key={p.id} person={p} allPeople={allPeople}
-                      onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
-                      onDelete={(id) => deletePersonMut.mutate(id)}
-                      color={undefined}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })()}
+      {/* ── People Grid ───────────────────────────────────────────────────────── */}
+      {showPeople && (
+        <>
+          {filteredPeople.length === 0 && allPeople.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">No people yet</p>
+              <p className="text-xs mt-1">Add someone to get started, or connect with users above</p>
+              <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setPersonModal(true); }}>
+                <UserPlus size={13} /> Add your first person
+              </Button>
+            </div>
+          ) : selectedGroupId !== "all" && selectedGroupId !== "friends" ? (
+            // Single group or ungrouped view
+            filteredPeople.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No people in this group</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {filteredPeople.map((p) => (
+                  <PersonTile key={p.id} person={p} allPeople={allPeople}
+                    onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
+                    onDelete={(id) => deletePersonMut.mutate(id)}
+                    color={groupColor(p.groupId)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            // "All" view — grouped sections
+            <div className="space-y-8">
+              {groups.map((g) => {
+                const members = filteredPeople.filter((p) => p.groupId === g.id);
+                if (members.length === 0) return null;
+                return (
+                  <section key={g.id}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
+                      <h2 className="font-bold text-base">{g.name}</h2>
+                      <span className="text-xs text-muted-foreground">{members.length}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {members.map((p) => (
+                        <PersonTile key={p.id} person={p} allPeople={allPeople}
+                          onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
+                          onDelete={(id) => deletePersonMut.mutate(id)}
+                          color={g.color ?? undefined}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+
+              {/* Ungrouped people */}
+              {(() => {
+                const ungrouped = filteredPeople.filter((p) => !p.groupId);
+                if (!ungrouped.length) return null;
+                return (
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
+                      <h2 className="font-bold text-base">Other</h2>
+                      <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {ungrouped.map((p) => (
+                        <PersonTile key={p.id} person={p} allPeople={allPeople}
+                          onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
+                          onDelete={(id) => deletePersonMut.mutate(id)}
+                          color={undefined}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Connected Friends Section ─────────────────────────────────────────── */}
+      {showFriends && filteredFriends.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <UserCheck size={13} className="text-primary" />
+            <h2 className="font-bold text-base">Connected</h2>
+            <span className="text-xs text-muted-foreground">{filteredFriends.length}</span>
+            <span className="text-xs text-muted-foreground">· app users you're friends with</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredFriends.map((f) => (
+              <FriendCard
+                key={f.id}
+                friend={f}
+                onUnfriend={(id) => unfriendMut.mutate(id)}
+                onViewProfile={(id) => { window.location.hash = `#/profile/${id}`; }}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Empty friends state */}
+      {selectedGroupId === "friends" && filteredFriends.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <UserCheck size={36} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-medium">No connected users yet</p>
+          <p className="text-xs mt-1">Use "Find Users" to search for people on the app and send friend requests</p>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="mt-3 text-xs text-primary hover:underline flex items-center gap-1 mx-auto"
+          >
+            <Search size={12} /> Find Users →
+          </button>
         </div>
       )}
 
-      </> )} {/* end mainTab === "people" */}
-
+      {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <PersonFormModal
         open={personModal}
         onClose={() => { setPersonModal(false); setEditPerson(null); }}
