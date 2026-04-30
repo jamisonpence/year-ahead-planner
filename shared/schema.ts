@@ -1098,6 +1098,28 @@ export type MusicCollectionWithItems = MusicCollection & {
   items: MusicCollectionItemWithData[];
 };
 
+// ── TAB COLLABORATIONS ────────────────────────────────────────────────────────
+// When ownerUserId invites collaboratorUserId to share a tab, collaborator
+// reads + writes as if they were the owner for that tab's data.
+export const tabCollaborations = pgTable("tab_collaborations", {
+  id: serial("id").primaryKey(),
+  ownerUserId: integer("owner_user_id").notNull(),
+  collaboratorUserId: integer("collaborator_user_id").notNull(),
+  tabName: text("tab_name").notNull(),   // e.g. "kids", "housekeeping"
+  status: text("status").notNull().default("pending"), // pending | accepted | declined
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertTabCollaborationSchema = createInsertSchema(tabCollaborations).omit({ id: true });
+export type InsertTabCollaboration = z.infer<typeof insertTabCollaborationSchema>;
+export type TabCollaboration = typeof tabCollaborations.$inferSelect;
+
+// Enriched version with the "other user" profile attached (relative to viewer)
+export type TabCollaborationWithUser = TabCollaboration & {
+  otherUser: { id: number; name: string; email: string; avatarUrl: string | null };
+  role: "owner" | "collaborator";
+};
+
 // ── FRIEND REQUESTS ────────────────────────────────────────────────────────────
 export const friendRequests = pgTable("friend_requests", {
   id: serial("id").primaryKey(),

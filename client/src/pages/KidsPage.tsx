@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem } from "@shared/schema";
+import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Baby, Plus, Pencil, Trash2, Check,
+  Baby, Plus, Pencil, Trash2, Check, Users,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -622,6 +622,12 @@ export default function KidsPage() {
     queryFn: async () => (await apiRequest("GET", "/api/children")).json(),
   });
 
+  const { data: collabs = [] } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+  const kidsCollab = collabs.find(c => c.tabName === "kids" && c.status === "accepted");
+
   const selectedChild = useMemo(
     () => allChildren.find((c) => c.id === selectedChildId) ?? allChildren[0] ?? null,
     [allChildren, selectedChildId],
@@ -685,6 +691,16 @@ export default function KidsPage() {
           <Plus size={15} /> Add Child
         </Button>
       </div>
+
+      {kidsCollab && (
+        <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
+          <Users size={14} className="shrink-0" />
+          <span>
+            Collaborating with <strong>{kidsCollab.otherUser.name}</strong>
+            {kidsCollab.role === "collaborator" ? " — viewing their data" : " — they can see your data"}
+          </span>
+        </div>
+      )}
 
       {allChildren.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
