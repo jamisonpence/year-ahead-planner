@@ -27,6 +27,7 @@ import {
   insertQuoteSchema,
   insertArtPieceSchema,
   insertEquipmentSchema,
+  insertTabCollaborationSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1049,11 +1050,15 @@ Return exactly this structure:
 
   // ── Chores ────────────────────────────────────────────────────────────────────
   app.get("/api/chores", requireAuth, async (req, res) => {
-    try { res.json(await storage.getAllChores((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      res.json(await storage.getAllChores(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/chores", requireAuth, async (req, res) => {
     try {
-      const data = insertChoreSchema.parse({ ...req.body, userId: (req.user as User).id });
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const data = insertChoreSchema.parse({ ...req.body, userId: uid });
       res.status(201).json(await storage.createChore(data, (req.user as User).id));
     } catch (e) { handleError(res, e); }
   });
@@ -1071,11 +1076,15 @@ Return exactly this structure:
 
   // ── House Projects ────────────────────────────────────────────────────────────
   app.get("/api/house-projects", requireAuth, async (req, res) => {
-    try { res.json(await storage.getAllHouseProjects((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      res.json(await storage.getAllHouseProjects(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/house-projects", requireAuth, async (req, res) => {
     try {
-      const data = insertHouseProjectSchema.parse({ ...req.body, userId: (req.user as User).id });
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const data = insertHouseProjectSchema.parse({ ...req.body, userId: uid });
       res.status(201).json(await storage.createHouseProject(data, (req.user as User).id));
     } catch (e) { handleError(res, e); }
   });
@@ -1094,8 +1103,9 @@ Return exactly this structure:
   // ── House Project Tasks ───────────────────────────────────────────────────────
   app.post("/api/house-projects/:id/tasks", requireAuth, async (req, res) => {
     try {
-      const data = { ...req.body, houseProjectId: +req.params.id, userId: (req.user as User).id };
-      res.status(201).json(await storage.createHouseProjectTask(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const data = { ...req.body, houseProjectId: +req.params.id, userId: uid };
+      res.status(201).json(await storage.createHouseProjectTask(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/house-project-tasks/:id", requireAuth, async (req, res) => {
@@ -1112,12 +1122,16 @@ Return exactly this structure:
 
   // ── Appliances ────────────────────────────────────────────────────────────────
   app.get("/api/appliances", requireAuth, async (req, res) => {
-    try { res.json(await storage.getAllAppliances((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      res.json(await storage.getAllAppliances(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/appliances", requireAuth, async (req, res) => {
     try {
-      const data = insertApplianceSchema.parse({ ...req.body, userId: (req.user as User).id });
-      res.status(201).json(await storage.createAppliance(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const data = insertApplianceSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createAppliance(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/appliances/:id", requireAuth, async (req, res) => {
@@ -2002,12 +2016,16 @@ Rules:
 
   // ── Children ──────────────────────────────────────────────────────────────────
   app.get("/api/children", requireAuth, async (req, res) => {
-    try { res.json(await storage.getAllChildrenWithDetails((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "kids");
+      res.json(await storage.getAllChildrenWithDetails(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/children", requireAuth, async (req, res) => {
     try {
-      const data = insertChildSchema.parse({ ...req.body, userId: (req.user as User).id });
-      res.status(201).json(await storage.createChild(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "kids");
+      const data = insertChildSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createChild(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/children/:id", requireAuth, async (req, res) => {
@@ -2025,8 +2043,9 @@ Rules:
   // Child Milestones
   app.post("/api/children/:childId/milestones", requireAuth, async (req, res) => {
     try {
-      const data = insertChildMilestoneSchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
-      res.status(201).json(await storage.createChildMilestone(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "kids");
+      const data = insertChildMilestoneSchema.parse({ ...req.body, childId: +req.params.childId, userId: uid });
+      res.status(201).json(await storage.createChildMilestone(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/child-milestones/:id", requireAuth, async (req, res) => {
@@ -2044,8 +2063,9 @@ Rules:
   // Child Memories
   app.post("/api/children/:childId/memories", requireAuth, async (req, res) => {
     try {
-      const data = insertChildMemorySchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
-      res.status(201).json(await storage.createChildMemory(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "kids");
+      const data = insertChildMemorySchema.parse({ ...req.body, childId: +req.params.childId, userId: uid });
+      res.status(201).json(await storage.createChildMemory(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/child-memories/:id", requireAuth, async (req, res) => {
@@ -2063,8 +2083,9 @@ Rules:
   // Child Prep Items
   app.post("/api/children/:childId/prep-items", requireAuth, async (req, res) => {
     try {
-      const data = insertChildPrepItemSchema.parse({ ...req.body, childId: +req.params.childId, userId: (req.user as User).id });
-      res.status(201).json(await storage.createChildPrepItem(data, (req.user as User).id));
+      const uid = await storage.getTabUserId((req.user as User).id, "kids");
+      const data = insertChildPrepItemSchema.parse({ ...req.body, childId: +req.params.childId, userId: uid });
+      res.status(201).json(await storage.createChildPrepItem(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/child-prep-items/:id", requireAuth, async (req, res) => {
@@ -2407,6 +2428,63 @@ Rules:
       const { itemIds } = req.body; // ordered array of item IDs
       await storage.reorderCollectionItems(Number(req.params.id), itemIds);
       res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Tab Collaborations ────────────────────────────────────────────────────────
+  app.get("/api/tab-collaborations", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getTabCollaborations(uid));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/tab-collaborations", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const now = new Date().toISOString();
+      // Find collaborator by email or userId
+      const { collaboratorId, tabName } = req.body;
+      if (!collaboratorId || !tabName) return res.status(400).json({ error: "collaboratorId and tabName are required" });
+      if (collaboratorId === uid) return res.status(400).json({ error: "Cannot collaborate with yourself" });
+      // Check for existing
+      const existing = await storage.getTabCollaborations(uid);
+      const dupe = existing.find(c => c.tabName === tabName &&
+        ((c.ownerUserId === uid && c.collaboratorUserId === collaboratorId) ||
+         (c.collaboratorUserId === uid && c.ownerUserId === collaboratorId)));
+      if (dupe) return res.status(409).json({ error: "Collaboration already exists" });
+      const data = insertTabCollaborationSchema.parse({
+        ownerUserId: uid,
+        collaboratorUserId: collaboratorId,
+        tabName,
+        status: "pending",
+        createdAt: now,
+      });
+      res.status(201).json(await storage.createTabCollaboration(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/tab-collaborations/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { status } = req.body;
+      if (!["accepted", "declined"].includes(status)) return res.status(400).json({ error: "status must be accepted or declined" });
+      // Verify the current user is the collaborator (only they can accept/decline)
+      const collabs = await storage.getTabCollaborations(uid);
+      const collab = collabs.find(c => c.id === +req.params.id && c.collaboratorUserId === uid);
+      if (!collab) return res.status(403).json({ error: "Forbidden" });
+      const updated = await storage.updateTabCollaborationStatus(+req.params.id, status);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/tab-collaborations/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const collabs = await storage.getTabCollaborations(uid);
+      const collab = collabs.find(c => c.id === +req.params.id);
+      if (!collab) return res.status(403).json({ error: "Forbidden" });
+      (await storage.deleteTabCollaboration(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Chore, HouseProjectWithTasks, HouseProjectTask, Appliance } from "@shared/schema";
+import type { Chore, HouseProjectWithTasks, HouseProjectTask, Appliance, TabCollaborationWithUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock, Check, X, Circle,
-  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight,
+  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -959,6 +959,12 @@ function AppliancesTab() {
 export default function HousekeepingPage() {
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
+  const { data: collabs = [] } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+  const housekeepingCollab = collabs.find(c => c.tabName === "housekeeping" && c.status === "accepted");
+
   const overdueCount = chores.filter((c) => {
     if (!c.isActive || !c.nextDue) return false;
     return (daysUntil(c.nextDue) ?? 1) < 0;
@@ -984,6 +990,16 @@ export default function HousekeepingPage() {
           </div>
         )}
       </div>
+
+      {housekeepingCollab && (
+        <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
+          <Users size={14} className="shrink-0" />
+          <span>
+            Collaborating with <strong>{housekeepingCollab.otherUser.name}</strong>
+            {housekeepingCollab.role === "collaborator" ? " — viewing their data" : " — they can see your data"}
+          </span>
+        </div>
+      )}
 
       <Tabs defaultValue="chores">
         <TabsList className="mb-4">

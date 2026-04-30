@@ -8,8 +8,9 @@ import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
+  Link2, Check, X, UserCheck, Send,
 } from "lucide-react";
-import type { TabPrivacySetting } from "@shared/schema";
+import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,281 @@ function TabPrivacySection() {
   );
 }
 
+// ── Collaboration Section ──────────────────────────────────────────────────────
+
+const COLLAB_TABS = [
+  { name: "kids",         label: "Kids",          icon: Baby },
+  { name: "housekeeping", label: "Housekeeping",  icon: Home },
+];
+
+function CollaborationSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [selectedTab, setSelectedTab] = useState<string>("kids");
+  const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
+  const [friendSearch, setFriendSearch] = useState("");
+
+  const { data: collabs = [], isLoading } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()),
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: (data: { collaboratorId: number; tabName: string }) =>
+      apiRequest("POST", "/api/tab-collaborations", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/tab-collaborations"] });
+      toast({ title: "Invite sent!" });
+      setSelectedFriendId(null);
+      setFriendSearch("");
+    },
+    onError: async (err: any) => {
+      const text = await err?.response?.text?.() ?? "Failed to send invite";
+      toast({ title: "Could not invite", description: text, variant: "destructive" });
+    },
+  });
+
+  const respondMut = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      apiRequest("PATCH", `/api/tab-collaborations/${id}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/tab-collaborations"] }),
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/tab-collaborations/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/tab-collaborations"] });
+      toast({ title: "Collaboration removed" });
+    },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  const pendingIncoming = collabs.filter(c => c.status === "pending" && c.role === "collaborator");
+  const activeCollabs = collabs.filter(c => c.status === "accepted");
+  const pendingOutgoing = collabs.filter(c => c.status === "pending" && c.role === "owner");
+
+  const filteredFriends = friends.filter(f =>
+    f.name.toLowerCase().includes(friendSearch.toLowerCase()) ||
+    f.email.toLowerCase().includes(friendSearch.toLowerCase())
+  );
+
+  // Friends already invited/active for the selected tab
+  const busyFriendIds = new Set(
+    collabs
+      .filter(c => c.tabName === selectedTab && c.status !== "declined")
+      .map(c => c.otherUser.id)
+  );
+
+  function handleInvite() {
+    if (!selectedFriendId) return;
+    inviteMut.mutate({ collaboratorId: selectedFriendId, tabName: selectedTab });
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-6 space-y-5">
+      <div className="flex items-center gap-2">
+        <Link2 size={18} className="text-emerald-500" />
+        <h2 className="font-semibold text-base">Tab Collaboration</h2>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Share a tab with someone so you're both working off the same data.
+        Currently supported for <strong>Kids</strong> and <strong>Housekeeping</strong>.
+      </p>
+
+      {/* Pending incoming invites */}
+      {pendingIncoming.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending Invites</p>
+          {pendingIncoming.map(c => {
+            const TabIcon = COLLAB_TABS.find(t => t.name === c.tabName)?.icon ?? Home;
+            return (
+              <div key={c.id} className="flex items-center gap-3 rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2.5">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {c.otherUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{c.otherUser.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <TabIcon size={11} /> wants to collaborate on <strong>{COLLAB_TABS.find(t => t.name === c.tabName)?.label ?? c.tabName}</strong>
+                  </p>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    onClick={() => respondMut.mutate({ id: c.id, status: "accepted" })}
+                    disabled={respondMut.isPending}
+                    className="p-1.5 rounded-md bg-green-500 hover:bg-green-600 text-white transition-colors"
+                    title="Accept"
+                  >
+                    <Check size={13} />
+                  </button>
+                  <button
+                    onClick={() => respondMut.mutate({ id: c.id, status: "declined" })}
+                    disabled={respondMut.isPending}
+                    className="p-1.5 rounded-md bg-secondary hover:bg-secondary/80 text-muted-foreground transition-colors"
+                    title="Decline"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Active collaborations */}
+      {activeCollabs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active</p>
+          {activeCollabs.map(c => {
+            const TabIcon = COLLAB_TABS.find(t => t.name === c.tabName)?.icon ?? Home;
+            return (
+              <div key={c.id} className="flex items-center gap-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 px-3 py-2.5">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {c.otherUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{c.otherUser.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <TabIcon size={11} />
+                    <span>{COLLAB_TABS.find(t => t.name === c.tabName)?.label ?? c.tabName}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      · {c.role === "owner" ? "you own" : "on their data"}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => deleteMut.mutate(c.id)}
+                  disabled={deleteMut.isPending}
+                  className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors shrink-0"
+                  title="Remove collaboration"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pending outgoing */}
+      {pendingOutgoing.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Awaiting Response</p>
+          {pendingOutgoing.map(c => {
+            const TabIcon = COLLAB_TABS.find(t => t.name === c.tabName)?.icon ?? Home;
+            return (
+              <div key={c.id} className="flex items-center gap-3 rounded-lg border bg-secondary/40 px-3 py-2.5">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {c.otherUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate text-muted-foreground">{c.otherUser.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <TabIcon size={11} /> {COLLAB_TABS.find(t => t.name === c.tabName)?.label ?? c.tabName} · waiting…
+                  </p>
+                </div>
+                <button
+                  onClick={() => deleteMut.mutate(c.id)}
+                  disabled={deleteMut.isPending}
+                  className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors shrink-0"
+                  title="Cancel invite"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Invite form */}
+      <div className="space-y-3 pt-1 border-t">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Invite a Friend</p>
+
+        {/* Tab picker */}
+        <div className="flex gap-2">
+          {COLLAB_TABS.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.name}
+                onClick={() => { setSelectedTab(t.name); setSelectedFriendId(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                  selectedTab === t.name
+                    ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 font-medium"
+                    : "border-transparent bg-secondary/50 hover:bg-secondary text-muted-foreground"
+                }`}
+              >
+                <Icon size={14} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Friend search */}
+        {friends.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Add friends in the <strong>Relationships</strong> tab to invite them to collaborate.
+          </p>
+        ) : (
+          <>
+            <Input
+              placeholder="Search friends…"
+              value={friendSearch}
+              onChange={e => setFriendSearch(e.target.value)}
+              className="text-sm"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+              {filteredFriends.map(f => {
+                const isBusy = busyFriendIds.has(f.id);
+                const isSelected = selectedFriendId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => !isBusy && setSelectedFriendId(isSelected ? null : f.id)}
+                    disabled={isBusy}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all ${
+                      isSelected
+                        ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20"
+                        : isBusy
+                        ? "opacity-40 cursor-not-allowed border-transparent bg-secondary/30"
+                        : "border-transparent bg-secondary/50 hover:bg-secondary"
+                    }`}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                      {f.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm truncate flex-1">{f.name}</span>
+                    {isSelected && <UserCheck size={13} className="text-emerald-600 shrink-0" />}
+                    {isBusy && <CheckCircle2 size={13} className="text-muted-foreground shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              size="sm"
+              disabled={!selectedFriendId || inviteMut.isPending}
+              onClick={handleInvite}
+              className="gap-1.5"
+            >
+              {inviteMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              Send Invite
+            </Button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── Settings Page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -206,6 +482,9 @@ export default function SettingsPage() {
 
       {/* Tab Privacy */}
       <TabPrivacySection />
+
+      {/* Tab Collaboration */}
+      <CollaborationSection />
 
       {/* Anthropic API Key */}
       <section className="rounded-xl border bg-card p-6 space-y-4">

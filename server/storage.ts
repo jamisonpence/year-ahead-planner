@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -47,6 +47,7 @@ import type {
   InsertHobby, Hobby,
   InsertMusicCollection, MusicCollection, MusicCollectionWithItems,
   InsertMusicCollectionItem, MusicCollectionItem,
+  InsertTabCollaboration, TabCollaboration, TabCollaborationWithUser,
 } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
@@ -906,6 +907,17 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tab_collaborations (
+      id SERIAL PRIMARY KEY,
+      owner_user_id INTEGER NOT NULL,
+      collaborator_user_id INTEGER NOT NULL,
+      tab_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1173,6 +1185,12 @@ export interface IStorage {
   createWorkoutShare(data: InsertWorkoutShare): Promise<WorkoutShare>;
   getWorkoutShares(userId: number): Promise<WorkoutShareWithUser[]>;
   dismissWorkoutShare(id: number, userId: number): Promise<void>;
+  // Tab Collaborations
+  getTabCollaborations(userId: number): Promise<TabCollaborationWithUser[]>;
+  createTabCollaboration(data: InsertTabCollaboration): Promise<TabCollaboration>;
+  updateTabCollaborationStatus(id: number, status: string): Promise<TabCollaboration | undefined>;
+  deleteTabCollaboration(id: number): Promise<boolean>;
+  getTabUserId(requestingUserId: number, tabName: string): Promise<number>;
 }
 
 export const storage: IStorage = {
@@ -2932,6 +2950,64 @@ export const storage: IStorage = {
         .set({ sortOrder: i })
         .where(eq(musicCollectionItems.id, itemIds[i]));
     }
+  },
+
+  // ── Tab Collaborations ──────────────────────────────────────────────────────
+  async getTabCollaborations(userId) {
+    const rows = await pool.query<{
+      id: number; owner_user_id: number; collaborator_user_id: number;
+      tab_name: string; status: string; created_at: string;
+      other_id: number; other_name: string; other_email: string; other_avatar: string | null;
+    }>(
+      `SELECT tc.*,
+              u.id AS other_id, u.name AS other_name, u.email AS other_email, u.avatar_url AS other_avatar
+       FROM tab_collaborations tc
+       JOIN users u ON u.id = CASE
+         WHEN tc.owner_user_id = $1 THEN tc.collaborator_user_id
+         ELSE tc.owner_user_id
+       END
+       WHERE tc.owner_user_id = $1 OR tc.collaborator_user_id = $1
+       ORDER BY tc.created_at DESC`,
+      [userId]
+    );
+    return rows.rows.map(r => ({
+      id: r.id,
+      ownerUserId: r.owner_user_id,
+      collaboratorUserId: r.collaborator_user_id,
+      tabName: r.tab_name,
+      status: r.status,
+      createdAt: r.created_at,
+      otherUser: { id: r.other_id, name: r.other_name, email: r.other_email, avatarUrl: r.other_avatar },
+      role: r.owner_user_id === userId ? "owner" : "collaborator",
+    } as TabCollaborationWithUser));
+  },
+
+  async createTabCollaboration(data) {
+    const result = await db.insert(tabCollaborations).values(data).returning();
+    return result[0];
+  },
+
+  async updateTabCollaborationStatus(id, status) {
+    const result = await db.update(tabCollaborations)
+      .set({ status })
+      .where(eq(tabCollaborations.id, id))
+      .returning();
+    return result[0];
+  },
+
+  async deleteTabCollaboration(id) {
+    const result = await db.delete(tabCollaborations).where(eq(tabCollaborations.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async getTabUserId(requestingUserId, tabName) {
+    const result = await pool.query<{ owner_user_id: number }>(
+      `SELECT owner_user_id FROM tab_collaborations
+       WHERE collaborator_user_id = $1 AND tab_name = $2 AND status = 'accepted'
+       LIMIT 1`,
+      [requestingUserId, tabName]
+    );
+    return result.rows[0]?.owner_user_id ?? requestingUserId;
   },
 };
 
