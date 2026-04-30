@@ -6,7 +6,8 @@ import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
-  UserX, Send, Loader2, ChevronRight, Link, Bell, ChevronLeft,
+  UserX, Send, Loader2, Link, Bell,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,11 @@ function parseChildIds(json: string | null | undefined): number[] {
 
 function fullName(p: Person | PersonWithSpouse): string {
   return [p.firstName, p.lastName].filter(Boolean).join(" ");
+}
+
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/);
+  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
 }
 
 // ── Avatar ─────────────────────────────────────────────────────────────────────
@@ -141,11 +147,14 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
 }
 
 // ── Person Form Modal ─────────────────────────────────────────────────────────
-function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
+function PersonFormModal({ open, onClose, editPerson, groups, allPeople, linkedUserId, defaultFirstName, defaultLastName }: {
   open: boolean; onClose: () => void;
   editPerson: Person | null;
   groups: RelationshipGroup[];
   allPeople: PersonWithSpouse[];
+  linkedUserId?: number | null;
+  defaultFirstName?: string;
+  defaultLastName?: string;
 }) {
   const { toast } = useToast();
   const [firstName, setFirstName]   = useState("");
@@ -158,15 +167,15 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
 
   useEffect(() => {
     if (open) {
-      setFirstName(editPerson?.firstName ?? "");
-      setLastName(editPerson?.lastName ?? "");
+      setFirstName(editPerson?.firstName ?? defaultFirstName ?? "");
+      setLastName(editPerson?.lastName ?? defaultLastName ?? "");
       setGroupId(editPerson?.groupId?.toString() ?? "__none__");
       setBirthday(editPerson?.birthday ?? "");
       setNotes(editPerson?.notes ?? "");
       setSpouseId(editPerson?.spouseId?.toString() ?? "__none__");
       setChildIds(parseChildIds(editPerson?.childrenJson));
     }
-  }, [open, editPerson]);
+  }, [open, editPerson, defaultFirstName, defaultLastName]);
 
   const invAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/people"] });
@@ -188,7 +197,7 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
       }
       return personId;
     },
-    onSuccess: () => { invAll(); toast({ title: editPerson ? "Person updated" : "Person added" }); onClose(); },
+    onSuccess: () => { invAll(); toast({ title: editPerson ? "Profile updated" : linkedUserId ? "Profile created" : "Person added" }); onClose(); },
     onError: () => toast({ title: "Error saving", variant: "destructive" }),
   });
 
@@ -205,6 +214,7 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
       childrenJson: JSON.stringify(childIds),
       birthdayEventId: editPerson?.birthdayEventId ?? null,
       sortOrder: editPerson?.sortOrder ?? 0,
+      linkedUserId: linkedUserId ?? (editPerson as any)?.linkedUserId ?? null,
     });
   };
 
@@ -214,11 +224,20 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
     return true;
   });
 
+  const isConnectedProfile = !!(linkedUserId || editPerson?.linkedUserId);
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editPerson ? "Edit Person" : "Add Person"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {editPerson ? "Edit Profile" : isConnectedProfile ? "Set Up Profile" : "Add Person"}
+            {isConnectedProfile && (
+              <span className="text-xs font-normal text-primary bg-primary/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <UserCheck size={10} /> Connected user
+              </span>
+            )}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -278,7 +297,7 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople }: {
           </div>
           <div className="flex gap-2">
             <Button type="submit" disabled={saveMut.isPending} className="flex-1">
-              {saveMut.isPending ? "Saving..." : editPerson ? "Save Changes" : "Add Person"}
+              {saveMut.isPending ? "Saving..." : editPerson ? "Save Changes" : isConnectedProfile ? "Create Profile" : "Add Person"}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
@@ -510,12 +529,13 @@ function QuickLinkSpouse({ person, allPeople, onSave }: {
 }
 
 // ── Person Tile ───────────────────────────────────────────────────────────────
-function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
+function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
   person: PersonWithSpouse;
   allPeople: PersonWithSpouse[];
   onEdit: (p: Person) => void;
   onDelete: (id: number) => void;
   color?: string;
+  friend?: PublicUser | null;  // if this person is a connected app user
 }) {
   const [expanded, setExpanded] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -530,21 +550,36 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
       <div className="h-1.5" style={{ backgroundColor: color || "#1e3a5f" }} />
       <div className="p-4">
         <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 select-none"
-            style={{ backgroundColor: color || "#1e3a5f" }}>
-            {initials(person.firstName, person.lastName)}
-          </div>
+          {/* Avatar: use app avatar if connected, else initials */}
+          {friend?.avatarUrl ? (
+            <img src={friend.avatarUrl} alt={friend.name} className="w-11 h-11 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 select-none"
+              style={{ backgroundColor: color || "#1e3a5f" }}>
+              {initials(person.firstName, person.lastName)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-sm leading-tight">{fullName(person)}</p>
-                {spouse ? (
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-sm leading-tight">{fullName(person)}</p>
+                  {friend && (
+                    <span className="shrink-0 flex items-center gap-0.5 text-[10px] font-medium text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                      <UserCheck size={9} /> Connected
+                    </span>
+                  )}
+                </div>
+                {friend && (
+                  <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
+                )}
+                {!friend && (spouse ? (
                   <p className="text-xs text-rose-500 dark:text-rose-400 flex items-center gap-1 mt-0.5">
                     <Heart size={10} className="shrink-0" fill="currentColor" />{fullName(spouse)}
                   </p>
                 ) : (
                   <QuickLinkSpouse person={person} allPeople={allPeople} onSave={() => forceUpdate((n) => n + 1)} />
-                )}
+                ))}
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
                 <button onClick={() => setExpanded((x) => !x)}
@@ -584,23 +619,46 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
                 <p className="text-xs text-muted-foreground leading-relaxed">{person.notes}</p>
               </div>
             )}
-            <div>
-              {children.length > 0 && (
-                <div className="mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-0.5">
-                    <Baby size={11} /> Children
-                  </p>
-                  <div className="ml-1 pl-2 border-l-2 border-border space-y-0">
-                    {children.map((child) => (
-                      <ChildRow key={child.id} child={child} color={color} />
-                    ))}
+            {/* Spouse section (only show for non-connected people) */}
+            {!friend && (
+              <div>
+                {children.length > 0 && (
+                  <div className="mb-1">
+                    <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-0.5">
+                      <Baby size={11} /> Children
+                    </p>
+                    <div className="ml-1 pl-2 border-l-2 border-border space-y-0">
+                      {children.map((child) => (
+                        <ChildRow key={child.id} child={child} color={color} />
+                      ))}
+                    </div>
                   </div>
+                )}
+                <div className="ml-3">
+                  <QuickAddChild person={person} allPeople={allPeople} onSave={() => forceUpdate((n) => n + 1)} />
                 </div>
-              )}
-              <div className="ml-3">
-                <QuickAddChild person={person} allPeople={allPeople} onSave={() => forceUpdate((n) => n + 1)} />
               </div>
-            </div>
+            )}
+            {/* Connected friend: show spouse and children too */}
+            {friend && (
+              <div>
+                {spouse && (
+                  <p className="text-xs text-rose-500 dark:text-rose-400 flex items-center gap-1">
+                    <Heart size={10} fill="currentColor" /> {fullName(spouse)}
+                  </p>
+                )}
+                {children.length > 0 && (
+                  <div className="mt-1">
+                    <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-0.5">
+                      <Baby size={11} /> Children
+                    </p>
+                    <div className="ml-1 pl-2 border-l-2 border-border">
+                      {children.map((child) => <ChildRow key={child.id} child={child} color={color} />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -608,19 +666,21 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color }: {
   );
 }
 
-// ── Friend Card (app-connected user) ─────────────────────────────────────────
+// ── Friend Card (app-connected user, no profile yet) ──────────────────────────
 function FriendCard({
   friend,
+  groups,
   onUnfriend,
-  onViewProfile,
+  onEditProfile,
 }: {
   friend: PublicUser;
+  groups: RelationshipGroup[];
   onUnfriend: (id: number) => void;
-  onViewProfile: (id: number) => void;
+  onEditProfile: (friend: PublicUser) => void;
 }) {
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
-      <div className="h-1.5 bg-primary/30" />
+      <div className="h-1.5 bg-primary/20" />
       <div className="p-4">
         <div className="flex items-center gap-3">
           <Avatar user={friend} size={44} />
@@ -632,14 +692,20 @@ function FriendCard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
+            <button
+              onClick={() => onEditProfile(friend)}
+              className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Pencil size={10} /> Add to a group & set up profile
+            </button>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => onViewProfile(friend.id)}
-              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-              title="View profile"
+              onClick={() => onEditProfile(friend)}
+              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-primary transition-colors"
+              title="Edit profile"
             >
-              <ChevronRight size={14} />
+              <Pencil size={14} />
             </button>
             <button
               onClick={() => onUnfriend(friend.id)}
@@ -867,6 +933,10 @@ export default function RelationshipsPage() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [requestsOpen, setRequestsOpen] = useState(false);
+  // For creating/editing a profile linked to a connected friend
+  const [editFriendLinkedUserId, setEditFriendLinkedUserId] = useState<number | null>(null);
+  const [editFriendDefaultFirst, setEditFriendDefaultFirst] = useState("");
+  const [editFriendDefaultLast, setEditFriendDefaultLast] = useState("");
 
   // Auto-open requests panel when there are incoming requests
   useEffect(() => {
@@ -926,6 +996,24 @@ export default function RelationshipsPage() {
   });
 
   // ── Derived data ──────────────────────────────────────────────────────────────
+
+  // Map of linkedUserId → PersonWithSpouse for connected friends who have profiles
+  const linkedPersonMap = useMemo(() => {
+    const map = new Map<number, PersonWithSpouse>();
+    allPeople.forEach((p) => { if ((p as any).linkedUserId) map.set((p as any).linkedUserId, p); });
+    return map;
+  }, [allPeople]);
+
+  // Map of friendId → PublicUser
+  const friendMap = useMemo(() => {
+    const map = new Map<number, PublicUser>();
+    friends.forEach((f) => map.set(f.id, f));
+    return map;
+  }, [friends]);
+
+  // Friends WITHOUT a linked person record (shown in "Connected" section as FriendCards)
+  const unlinkedFriends = useMemo(() => friends.filter((f) => !linkedPersonMap.has(f.id)), [friends, linkedPersonMap]);
+
   const upcomingBirthdays = useMemo(() => {
     const items: { name: string; days: number; label: string; color?: string }[] = [];
     allPeople.forEach((p) => {
@@ -940,22 +1028,50 @@ export default function RelationshipsPage() {
 
   const filteredPeople = useMemo(() => {
     let list = allPeople;
-    if (selectedGroupId === "none") list = list.filter((p) => !p.groupId);
-    else if (selectedGroupId !== "all" && selectedGroupId !== "friends") list = list.filter((p) => p.groupId === selectedGroupId);
+    if (selectedGroupId === "friends") {
+      // Only show people linked to a friend
+      list = list.filter((p) => (p as any).linkedUserId && friendMap.has((p as any).linkedUserId));
+    } else if (selectedGroupId === "none") {
+      list = list.filter((p) => !p.groupId);
+    } else if (typeof selectedGroupId === "number") {
+      list = list.filter((p) => p.groupId === selectedGroupId);
+    }
+    // In "all" view, don't filter by group — show everyone
     if (search) list = list.filter((p) => fullName(p).toLowerCase().includes(search.toLowerCase()));
     return list;
-  }, [allPeople, selectedGroupId, search]);
+  }, [allPeople, selectedGroupId, search, friendMap]);
 
-  const filteredFriends = useMemo(() => {
-    if (!search) return friends;
-    return friends.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()) || f.email.toLowerCase().includes(search.toLowerCase()));
-  }, [friends, search]);
+  const filteredUnlinkedFriends = useMemo(() => {
+    if (!search) return unlinkedFriends;
+    return unlinkedFriends.filter((f) =>
+      f.name.toLowerCase().includes(search.toLowerCase()) || f.email.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [unlinkedFriends, search]);
 
   const groupColor = (id: number | null | undefined) => groups.find((g) => g.id === id)?.color;
 
   const incomingCount = requests.incoming.length;
   const showFriends = selectedGroupId === "all" || selectedGroupId === "friends";
   const showPeople = selectedGroupId !== "friends";
+
+  // Handler to open edit modal for a connected friend
+  function openFriendProfile(friend: PublicUser) {
+    const existing = linkedPersonMap.get(friend.id);
+    if (existing) {
+      // Edit existing linked person
+      setEditPerson(existing);
+      setEditFriendLinkedUserId(null);
+      setPersonModal(true);
+    } else {
+      // Create new linked person pre-populated from friend's app profile
+      const { first, last } = splitName(friend.name);
+      setEditPerson(null);
+      setEditFriendLinkedUserId(friend.id);
+      setEditFriendDefaultFirst(first);
+      setEditFriendDefaultLast(last);
+      setPersonModal(true);
+    }
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
@@ -975,23 +1091,84 @@ export default function RelationshipsPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          {/* Find users button */}
-          <button
-            onClick={() => setSearchOpen((x) => !x)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors relative ${
-              searchOpen ? "bg-primary text-primary-foreground border-primary" : "hover:bg-secondary border-border"
-            }`}
-          >
-            <Search size={14} />
-            Find Users
-          </button>
           <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
             <FolderPlus size={13} /> Group
           </Button>
-          <Button size="sm" onClick={() => { setEditPerson(null); setPersonModal(true); }} className="gap-1.5">
+          <Button size="sm" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }} className="gap-1.5">
             <UserPlus size={13} /> Add Person
           </Button>
         </div>
+      </div>
+
+      {/* ── Find Users Banner ─────────────────────────────────────────────────── */}
+      <div
+        className={`rounded-xl border-2 transition-all overflow-hidden ${
+          searchOpen
+            ? "border-primary bg-primary/5"
+            : "border-primary/40 bg-gradient-to-r from-primary/5 to-blue-500/5 hover:border-primary/60 cursor-pointer"
+        }`}
+        onClick={!searchOpen ? () => setSearchOpen(true) : undefined}
+      >
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+              <Sparkles size={15} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-primary">Find & Connect with Users</p>
+              <p className="text-xs text-muted-foreground">Search for people on the app to send friend requests</p>
+            </div>
+          </div>
+          {searchOpen ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); setSearchOpen(false); }}
+              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X size={15} />
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 px-3 py-1.5 rounded-lg">
+              <Search size={12} /> Search Users
+            </div>
+          )}
+        </div>
+
+        {searchOpen && (
+          <div className="px-4 pb-4">
+            <UserSearchPanel
+              friends={friends}
+              requests={requests}
+              onSendRequest={(id) => sendMut.mutate(id)}
+              onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
+              onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
+              onCancel={(id) => cancelMut.mutate(id)}
+              onUnfriend={(id) => unfriendMut.mutate(id)}
+              sendPending={sendMut.isPending}
+            />
+
+            {/* Outgoing requests summary */}
+            {requests.outgoing.length > 0 && (
+              <div className="pt-3 border-t mt-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Sent Requests</p>
+                <div className="space-y-1.5">
+                  {requests.outgoing.map((req) => (
+                    <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                      <Avatar user={req.otherUser} size={32} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{req.otherUser.name}</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Clock size={10} /> Pending</p>
+                      </div>
+                      <button onClick={() => cancelMut.mutate(req.id)}
+                        className="text-xs text-muted-foreground hover:text-destructive border px-2 py-1 rounded-lg hover:border-destructive/30 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Incoming requests banner ──────────────────────────────────────────── */}
@@ -1019,52 +1196,6 @@ export default function RelationshipsPage() {
                   onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
                 />
               ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── User Search Panel ─────────────────────────────────────────────────── */}
-      {searchOpen && (
-        <div className="rounded-xl border bg-card p-4 space-y-1">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <UserPlus size={14} /> Find & Connect with Users
-            </h3>
-            <button onClick={() => setSearchOpen(false)} className="text-muted-foreground hover:text-foreground p-1 rounded">
-              <X size={14} />
-            </button>
-          </div>
-          <UserSearchPanel
-            friends={friends}
-            requests={requests}
-            onSendRequest={(id) => sendMut.mutate(id)}
-            onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
-            onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
-            onCancel={(id) => cancelMut.mutate(id)}
-            onUnfriend={(id) => unfriendMut.mutate(id)}
-            sendPending={sendMut.isPending}
-          />
-
-          {/* Outgoing requests summary */}
-          {requests.outgoing.length > 0 && (
-            <div className="pt-3 border-t">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Sent Requests</p>
-              <div className="space-y-1.5">
-                {requests.outgoing.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
-                    <Avatar user={req.otherUser} size={32} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{req.otherUser.name}</p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Clock size={10} /> Pending</p>
-                    </div>
-                    <button onClick={() => cancelMut.mutate(req.id)}
-                      className="text-xs text-muted-foreground hover:text-destructive border px-2 py-1 rounded-lg hover:border-destructive/30 transition-colors">
-                      Cancel
-                    </button>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </div>
@@ -1147,131 +1278,224 @@ export default function RelationshipsPage() {
         </div>
       </div>
 
-      {/* ── People Grid ───────────────────────────────────────────────────────── */}
-      {showPeople && (
-        <>
-          {filteredPeople.length === 0 && allPeople.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users size={36} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm font-medium">No people yet</p>
-              <p className="text-xs mt-1">Add someone to get started, or connect with users above</p>
-              <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setPersonModal(true); }}>
-                <UserPlus size={13} /> Add your first person
-              </Button>
-            </div>
-          ) : selectedGroupId !== "all" && selectedGroupId !== "friends" ? (
-            // Single group or ungrouped view
-            filteredPeople.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">No people in this group</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredPeople.map((p) => (
-                  <PersonTile key={p.id} person={p} allPeople={allPeople}
-                    onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
-                    onDelete={(id) => deletePersonMut.mutate(id)}
-                    color={groupColor(p.groupId)}
-                  />
-                ))}
-              </div>
-            )
-          ) : (
-            // "All" view — grouped sections
-            <div className="space-y-8">
-              {groups.map((g) => {
-                const members = filteredPeople.filter((p) => p.groupId === g.id);
-                if (members.length === 0) return null;
-                return (
-                  <section key={g.id}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
-                      <h2 className="font-bold text-base">{g.name}</h2>
-                      <span className="text-xs text-muted-foreground">{members.length}</span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {members.map((p) => (
-                        <PersonTile key={p.id} person={p} allPeople={allPeople}
-                          onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
-                          onDelete={(id) => deletePersonMut.mutate(id)}
-                          color={g.color ?? undefined}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+      {/* ── People Grid (for normal + "Connected" filter) ─────────────────────── */}
+      {selectedGroupId === "friends" ? (
+        /* Connected filter: show linked-friend PersonTiles + unlinked FriendCards */
+        <div className="space-y-6">
+          {/* Linked-friend persons, grouped */}
+          {(() => {
+            if (filteredPeople.length === 0 && filteredUnlinkedFriends.length === 0) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <UserCheck size={36} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-sm font-medium">No connected users yet</p>
+                  <p className="text-xs mt-1">Use "Find & Connect" above to send friend requests</p>
+                </div>
+              );
+            }
 
-              {/* Ungrouped people */}
-              {(() => {
-                const ungrouped = filteredPeople.filter((p) => !p.groupId);
-                if (!ungrouped.length) return null;
-                return (
+            // Group linked persons by their group
+            const groupedLinked: Record<string, PersonWithSpouse[]> = {};
+            const ungroupedLinked: PersonWithSpouse[] = [];
+            filteredPeople.forEach((p) => {
+              if (p.groupId) {
+                const key = String(p.groupId);
+                if (!groupedLinked[key]) groupedLinked[key] = [];
+                groupedLinked[key].push(p);
+              } else {
+                ungroupedLinked.push(p);
+              }
+            });
+
+            return (
+              <>
+                {groups.map((g) => {
+                  const members = groupedLinked[String(g.id)] ?? [];
+                  if (!members.length) return null;
+                  return (
+                    <section key={g.id}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
+                        <h2 className="font-bold text-base">{g.name}</h2>
+                        <span className="text-xs text-muted-foreground">{members.length}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {members.map((p) => (
+                          <PersonTile key={p.id} person={p} allPeople={allPeople}
+                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                            onDelete={(id) => deletePersonMut.mutate(id)}
+                            color={g.color ?? undefined}
+                            friend={friendMap.get((p as any).linkedUserId) ?? null}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+                {ungroupedLinked.length > 0 && (
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
-                      <h2 className="font-bold text-base">Other</h2>
-                      <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
+                      <h2 className="font-bold text-base">No Group</h2>
+                      <span className="text-xs text-muted-foreground">{ungroupedLinked.length}</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {ungrouped.map((p) => (
+                      {ungroupedLinked.map((p) => (
                         <PersonTile key={p.id} person={p} allPeople={allPeople}
-                          onEdit={(person) => { setEditPerson(person); setPersonModal(true); }}
+                          onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
                           onDelete={(id) => deletePersonMut.mutate(id)}
                           color={undefined}
+                          friend={friendMap.get((p as any).linkedUserId) ?? null}
                         />
                       ))}
                     </div>
                   </section>
-                );
-              })()}
-            </div>
-          )}
-        </>
+                )}
+
+                {/* Unlinked friends at the bottom of "Connected" view */}
+                {filteredUnlinkedFriends.length > 0 && (
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <UserCheck size={13} className="text-muted-foreground" />
+                      <h2 className="font-bold text-base">No Profile Yet</h2>
+                      <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
+                      <span className="text-xs text-muted-foreground">· click Edit to add to a group</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {filteredUnlinkedFriends.map((f) => (
+                        <FriendCard key={f.id} friend={f} groups={groups}
+                          onUnfriend={(id) => unfriendMut.mutate(id)}
+                          onEditProfile={openFriendProfile}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      ) : (
+        /* Normal view: people sections */
+        showPeople && (
+          <>
+            {filteredPeople.length === 0 && allPeople.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users size={36} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">No people yet</p>
+                <p className="text-xs mt-1">Add someone to get started, or connect with users above</p>
+                <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
+                  <UserPlus size={13} /> Add your first person
+                </Button>
+              </div>
+            ) : selectedGroupId !== "all" ? (
+              // Single group or ungrouped view
+              filteredPeople.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No people in this group</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredPeople.map((p) => (
+                    <PersonTile key={p.id} person={p} allPeople={allPeople}
+                      onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                      onDelete={(id) => deletePersonMut.mutate(id)}
+                      color={groupColor(p.groupId)}
+                      friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
+                    />
+                  ))}
+                </div>
+              )
+            ) : (
+              // "All" view — grouped sections
+              <div className="space-y-8">
+                {groups.map((g) => {
+                  const members = filteredPeople.filter((p) => p.groupId === g.id);
+                  if (members.length === 0) return null;
+                  return (
+                    <section key={g.id}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
+                        <h2 className="font-bold text-base">{g.name}</h2>
+                        <span className="text-xs text-muted-foreground">{members.length}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {members.map((p) => (
+                          <PersonTile key={p.id} person={p} allPeople={allPeople}
+                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                            onDelete={(id) => deletePersonMut.mutate(id)}
+                            color={g.color ?? undefined}
+                            friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+
+                {/* Ungrouped people */}
+                {(() => {
+                  const ungrouped = filteredPeople.filter((p) => !p.groupId);
+                  if (!ungrouped.length) return null;
+                  return (
+                    <section>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
+                        <h2 className="font-bold text-base">Other</h2>
+                        <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {ungrouped.map((p) => (
+                          <PersonTile key={p.id} person={p} allPeople={allPeople}
+                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                            onDelete={(id) => deletePersonMut.mutate(id)}
+                            color={undefined}
+                            friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })()}
+              </div>
+            )}
+          </>
+        )
       )}
 
-      {/* ── Connected Friends Section ─────────────────────────────────────────── */}
-      {showFriends && filteredFriends.length > 0 && (
+      {/* ── Unlinked Connected Friends (in All view) ──────────────────────────── */}
+      {selectedGroupId === "all" && filteredUnlinkedFriends.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
             <UserCheck size={13} className="text-primary" />
-            <h2 className="font-bold text-base">Connected</h2>
-            <span className="text-xs text-muted-foreground">{filteredFriends.length}</span>
-            <span className="text-xs text-muted-foreground">· app users you're friends with</span>
+            <h2 className="font-bold text-base">Connected — No Profile Yet</h2>
+            <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredFriends.map((f) => (
-              <FriendCard
-                key={f.id}
-                friend={f}
+            {filteredUnlinkedFriends.map((f) => (
+              <FriendCard key={f.id} friend={f} groups={groups}
                 onUnfriend={(id) => unfriendMut.mutate(id)}
-                onViewProfile={(id) => { window.location.hash = `#/profile/${id}`; }}
+                onEditProfile={openFriendProfile}
               />
             ))}
           </div>
         </section>
       )}
 
-      {/* Empty friends state */}
-      {selectedGroupId === "friends" && filteredFriends.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <UserCheck size={36} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-medium">No connected users yet</p>
-          <p className="text-xs mt-1">Use "Find Users" to search for people on the app and send friend requests</p>
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="mt-3 text-xs text-primary hover:underline flex items-center gap-1 mx-auto"
-          >
-            <Search size={12} /> Find Users →
-          </button>
-        </div>
-      )}
-
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <PersonFormModal
         open={personModal}
-        onClose={() => { setPersonModal(false); setEditPerson(null); }}
+        onClose={() => {
+          setPersonModal(false);
+          setEditPerson(null);
+          setEditFriendLinkedUserId(null);
+          setEditFriendDefaultFirst("");
+          setEditFriendDefaultLast("");
+        }}
         editPerson={editPerson}
         groups={groups}
         allPeople={allPeople}
+        linkedUserId={editFriendLinkedUserId}
+        defaultFirstName={editFriendDefaultFirst}
+        defaultLastName={editFriendDefaultLast}
       />
       <GroupFormModal
         open={groupModal}
