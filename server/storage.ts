@@ -261,9 +261,11 @@ export async function initializeStorage() {
       spouse_id INTEGER,
       children_json TEXT NOT NULL DEFAULT '[]',
       birthday_event_id INTEGER,
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      linked_user_id INTEGER
     )
   `);
+  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS linked_user_id INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS general_tasks (

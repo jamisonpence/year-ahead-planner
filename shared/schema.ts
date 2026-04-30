@@ -242,6 +242,8 @@ export const people = pgTable("people", {
   // linked birthday event id (for syncing)
   birthdayEventId: integer("birthday_event_id"),
   sortOrder: integer("sort_order").notNull().default(0),
+  // linked app user id — when set, this person is an app-connected friend
+  linkedUserId: integer("linked_user_id"),
 });
 
 // ── GENERAL TASKS (standalone — not linked to any project or goal) ────────────
