@@ -931,7 +931,7 @@ export default function RelationshipsPage() {
   const [editGroup, setEditGroup] = useState<RelationshipGroup | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | "all" | "none" | "friends">("all");
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(true);
   const [requestsOpen, setRequestsOpen] = useState(false);
   // For creating/editing a profile linked to a connected friend
   const [editFriendLinkedUserId, setEditFriendLinkedUserId] = useState<number | null>(null);
@@ -1077,59 +1077,50 @@ export default function RelationshipsPage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
 
       {/* ── Header ────────────────────────────────────────────────────────────── */}
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
             <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Relationships</h1>
+            <h1 className="text-xl font-semibold">Friends</h1>
             <p className="text-xs text-muted-foreground">
               {allPeople.length} {allPeople.length === 1 ? "person" : "people"} · {friends.length} connected
             </p>
           </div>
         </div>
-
         <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5">
-            <FolderPlus size={13} /> Group
+          <Button size="sm" variant="ghost" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5 text-muted-foreground">
+            <FolderPlus size={13} /> Add Group
           </Button>
-          <Button size="sm" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }} className="gap-1.5 text-muted-foreground">
             <UserPlus size={13} /> Add Person
           </Button>
         </div>
       </div>
 
-      {/* ── Find Users Banner ─────────────────────────────────────────────────── */}
-      <div
-        className={`rounded-xl border-2 transition-all overflow-hidden ${
-          searchOpen
-            ? "border-primary bg-primary/5"
-            : "border-primary/40 bg-gradient-to-r from-primary/5 to-blue-500/5 hover:border-primary/60 cursor-pointer"
-        }`}
+      {/* ── Find Users (primary action) ───────────────────────────────────────── */}
+      <div className={`rounded-xl border-2 transition-all overflow-hidden ${searchOpen ? "border-primary bg-primary/5" : "border-primary/40 bg-gradient-to-r from-primary/5 to-blue-500/5 hover:border-primary/60 cursor-pointer"}`}
         onClick={!searchOpen ? () => setSearchOpen(true) : undefined}
       >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-              <Sparkles size={15} className="text-primary" />
+              <Search size={15} className="text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-primary">Find & Connect with Users</p>
+              <p className="text-sm font-semibold text-primary">Find Friends</p>
               <p className="text-xs text-muted-foreground">Search for people on the app to send friend requests</p>
             </div>
           </div>
-          {searchOpen ? (
+          {searchOpen && (
             <button
               onClick={(e) => { e.stopPropagation(); setSearchOpen(false); }}
               className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
             >
               <X size={15} />
             </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 px-3 py-1.5 rounded-lg">
-              <Search size={12} /> Search Users
-            </div>
           )}
         </div>
 

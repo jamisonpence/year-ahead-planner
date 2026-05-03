@@ -369,7 +369,7 @@ function CollaborationSection() {
         {/* Friend search */}
         {friends.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
-            Add friends in the <strong>Relationships</strong> tab to invite them to collaborate.
+            Add friends in the <strong>Friends</strong> tab to invite them to collaborate.
           </p>
         ) : (
           <>

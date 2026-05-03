@@ -640,7 +640,7 @@ function MusicRecommendModal({ open, onClose, type, artistName, songTitle }: {
             {friends.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-3 border rounded-lg">
                 <Users size={18} className="mx-auto mb-1 opacity-30" />
-                No friends yet — connect with people in the Relationships tab
+                No friends yet — connect with people in the Friends tab
               </p>
             ) : (
               <div className="space-y-1.5 max-h-48 overflow-y-auto">

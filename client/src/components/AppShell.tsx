@@ -18,7 +18,7 @@ const ALL_TABS = [
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
-  { path: "/relationships", label: "Relationships",           icon: Users           },
+  { path: "/relationships", label: "Friends",                 icon: Users           },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/movies",        label: "Movies & Shows",           icon: Film            },
   { path: "/music",         label: "Music",                   icon: Music2          },

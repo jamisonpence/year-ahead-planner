@@ -570,7 +570,7 @@ export default function ProfilePage() {
     return (
       <div className="p-8 max-w-4xl mx-auto text-center">
         <button onClick={() => navigate("/relationships")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-8">
-          <ArrowLeft size={15} /> Back to Relationships
+          <ArrowLeft size={15} /> Back to Friends
         </button>
         <Lock size={36} className="mx-auto mb-3 text-muted-foreground/30" />
         <p className="text-muted-foreground">Profile not available.</p>
@@ -611,7 +611,7 @@ export default function ProfilePage() {
         onClick={() => navigate("/relationships")}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
       >
-        <ArrowLeft size={15} /> Back to Relationships
+        <ArrowLeft size={15} /> Back to Friends
       </button>
 
       {/* Profile header */}

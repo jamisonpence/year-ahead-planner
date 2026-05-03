@@ -866,7 +866,7 @@ function ShareWorkoutModal({ open, onClose, shareType, contentJson, itemName }: 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Send to</label>
             {friends.length === 0 ? (
-              <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">No friends yet. Add friends in Relationships.</p>
+              <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">No friends yet. Add friends in the Friends tab.</p>
             ) : (
               <Select value={selectedFriendId} onValueChange={setSelectedFriendId}>
                 <SelectTrigger><SelectValue placeholder="Select a friend…" /></SelectTrigger>
