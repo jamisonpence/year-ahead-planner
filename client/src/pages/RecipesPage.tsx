@@ -1394,7 +1394,8 @@ export default function RecipesPage() {
   const [editBundle, setEditBundle] = useState<MealBundle | null>(null);
   const [assignRecipe, setAssignRecipe] = useState<Recipe | null>(null);
   const [assignBundle, setAssignBundle] = useState<MealBundle | null>(null);
-  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
+  // Inverted logic: store EXPANDED keys — empty set = everything collapsed by default
+  const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
   // All-view type sections start collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set([...COMPONENT_TYPES.map(ct => ct.value), "unclassified"])
@@ -1406,7 +1407,7 @@ export default function RecipesPage() {
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
-    setCollapsedBuckets(prev => {
+    setExpandedBuckets(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -1419,6 +1420,30 @@ export default function RecipesPage() {
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }
+
+  function collapseAll() {
+    setCollapsedSections(new Set([...COMPONENT_TYPES.map(ct => ct.value), "unclassified"]));
+    setExpandedBuckets(new Set());
+  }
+
+  function expandAll() {
+    setCollapsedSections(new Set());
+    // Expand every category bucket across all types
+    const allKeys = new Set<string>();
+    COMPONENT_TYPES.forEach(ct => {
+      groupByCategory(recipesByType[ct.value] ?? []).forEach(({ category }) => {
+        allKeys.add(`${ct.value}:${category ?? "__none__"}`);
+      });
+    });
+    groupByCategory(recipesByType["unclassified"] ?? []).forEach(({ category }) => {
+      allKeys.add(`unclassified:${category ?? "__none__"}`);
+    });
+    // Also cover any active filtered view
+    groupByCategory(filteredRecipes).forEach(({ category }) => {
+      allKeys.add(`${libFilter}:${category ?? "__none__"}`);
+    });
+    setExpandedBuckets(allKeys);
   }
 
   const COMPONENT_TYPE_MAP: Record<string, string> = {
@@ -1636,23 +1661,29 @@ export default function RecipesPage() {
       {/* ── LIBRARY ── */}
       {subView === "library" && (
         <div className="space-y-6">
-          {/* Component type filter */}
-          <div className="flex gap-2 flex-wrap">
-            {([{ value: "all", label: "All", icon: <Layers size={13} /> },
-               ...COMPONENT_TYPES.map(ct => ({ value: ct.value, label: ct.label, icon: ct.icon })),
-               { value: "unclassified", label: "Unclassified", icon: <ChefHat size={13} /> }
-            ] as { value: string; label: string; icon: React.ReactNode }[]).map(f => (
-              <button key={f.value} onClick={() => setLibFilter(f.value as LibFilter)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${libFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary hover:text-foreground"}`}>
-                {f.icon} {f.label}
-                {f.value !== "all" && f.value !== "unclassified" && recipesByType[f.value]?.length > 0 && (
-                  <span className="opacity-60">{recipesByType[f.value].length}</span>
-                )}
-                {f.value === "unclassified" && recipesByType["unclassified"]?.length > 0 && (
-                  <span className="opacity-60">{recipesByType["unclassified"].length}</span>
-                )}
-              </button>
-            ))}
+          {/* Component type filter + collapse/expand controls */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              {([{ value: "all", label: "All", icon: <Layers size={13} /> },
+                 ...COMPONENT_TYPES.map(ct => ({ value: ct.value, label: ct.label, icon: ct.icon })),
+                 { value: "unclassified", label: "Unclassified", icon: <ChefHat size={13} /> }
+              ] as { value: string; label: string; icon: React.ReactNode }[]).map(f => (
+                <button key={f.value} onClick={() => setLibFilter(f.value as LibFilter)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${libFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary hover:text-foreground"}`}>
+                  {f.icon} {f.label}
+                  {f.value !== "all" && f.value !== "unclassified" && recipesByType[f.value]?.length > 0 && (
+                    <span className="opacity-60">{recipesByType[f.value].length}</span>
+                  )}
+                  {f.value === "unclassified" && recipesByType["unclassified"]?.length > 0 && (
+                    <span className="opacity-60">{recipesByType["unclassified"].length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              <button onClick={collapseAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground">Collapse All</button>
+              <button onClick={expandAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground">Expand All</button>
+            </div>
           </div>
 
           {/* Sectioned view when "All" selected */}
@@ -1681,7 +1712,7 @@ export default function RecipesPage() {
                           <div className="space-y-4">
                             {buckets.map(({ category, recipes: bRecipes }) => {
                               const bucketKey = `${ct.value}:${category ?? "__none__"}`;
-                              const isCollapsed = collapsedBuckets.has(bucketKey);
+                              const isCollapsed = !expandedBuckets.has(bucketKey);
                               return (
                                 <div key={bucketKey}>
                                   <button onClick={() => toggleBucket(bucketKey)}
@@ -1801,7 +1832,7 @@ export default function RecipesPage() {
                   <div className="space-y-3">
                     {buckets.map(({ category, recipes: bRecipes }) => {
                       const bucketKey = `${libFilter}:${category ?? "__none__"}`;
-                      const isCollapsed = collapsedBuckets.has(bucketKey);
+                      const isCollapsed = !expandedBuckets.has(bucketKey);
                       return (
                         <div key={bucketKey} className="rounded-xl border overflow-hidden">
                           <button onClick={() => toggleBucket(bucketKey)}
