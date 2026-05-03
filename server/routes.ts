@@ -2233,6 +2233,32 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Book search diagnostic ────────────────────────────────────────────────────
+  app.get("/api/debug/book-search", requireAuth, async (req, res) => {
+    const results: Record<string, any> = {};
+    // Test Open Library
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8_000);
+      const r = await fetch("https://openlibrary.org/search.json?q=bible&limit=1&fields=title", { signal: ctrl.signal });
+      clearTimeout(t);
+      results.openLibrary = { status: r.status, ok: r.ok };
+    } catch (e: any) {
+      results.openLibrary = { error: e?.name === "AbortError" ? "timeout" : String(e?.message ?? e) };
+    }
+    // Test Google Books
+    try {
+      const r = await fetch("https://www.googleapis.com/books/v1/volumes?q=bible&maxResults=1");
+      results.googleBooks = { status: r.status, ok: r.ok };
+    } catch (e: any) {
+      results.googleBooks = { error: String(e?.message ?? e) };
+    }
+    // Node version
+    results.nodeVersion = process.version;
+    results.fetchExists = typeof fetch !== "undefined";
+    res.json(results);
+  });
+
   // ── TMDB Proxy ───────────────────────────────────────────────────────────────
   // Temporary debug endpoint – remove after confirming env vars work
   app.get("/api/debug/env-check", (req, res) => {
