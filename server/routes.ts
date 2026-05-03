@@ -32,6 +32,9 @@ import {
   insertFaithPracticeSchema,
   insertSermonSchema,
   insertPrayerItemSchema,
+  insertMedicationSchema,
+  insertHealthMetricSchema,
+  insertSleepLogSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -2674,6 +2677,71 @@ Rules:
   app.delete("/api/prayer-items/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deletePrayerItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Health ──────────────────────────────────────────────────────────────────
+
+  // Medications
+  app.get("/api/health/medications", requireAuth, async (req, res) => {
+    try { res.json(await storage.getMedications((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/health/medications", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertMedicationSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createMedication(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/health/medications/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateMedication(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/health/medications/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteMedication(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Health Metrics
+  app.get("/api/health/metrics", requireAuth, async (req, res) => {
+    try { res.json(await storage.getHealthMetrics((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/health/metrics", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertHealthMetricSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createHealthMetric(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/health/metrics/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteHealthMetric(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Sleep Logs
+  app.get("/api/health/sleep", requireAuth, async (req, res) => {
+    try { res.json(await storage.getSleepLogs((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/health/sleep", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertSleepLogSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createSleepLog(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/health/sleep/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateSleepLog(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/health/sleep/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteSleepLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }

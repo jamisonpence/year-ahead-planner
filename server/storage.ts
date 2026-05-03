@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -980,6 +980,41 @@ export async function initializeStorage() {
       notes TEXT
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS medications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'medication',
+      dosage TEXT,
+      frequency TEXT,
+      time_of_day TEXT,
+      start_date TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      prescribed_by TEXT,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS health_metrics (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      value TEXT NOT NULL,
+      unit TEXT,
+      date TEXT NOT NULL,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS sleep_logs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      hours_slept REAL NOT NULL,
+      quality INTEGER,
+      bedtime TEXT,
+      wake_time TEXT,
+      notes TEXT
+    );
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1270,6 +1305,19 @@ export interface IStorage {
   createPrayerItem(data: InsertPrayerItem): Promise<PrayerItem>;
   updatePrayerItem(id: number, data: Partial<InsertPrayerItem>): Promise<PrayerItem | undefined>;
   deletePrayerItem(id: number): Promise<boolean>;
+
+  // Health
+  getMedications(userId: number): Promise<import("@shared/schema").Medication[]>;
+  createMedication(data: import("@shared/schema").InsertMedication, userId: number): Promise<import("@shared/schema").Medication>;
+  updateMedication(id: number, data: Partial<import("@shared/schema").InsertMedication>): Promise<import("@shared/schema").Medication | undefined>;
+  deleteMedication(id: number): Promise<boolean>;
+  getHealthMetrics(userId: number): Promise<import("@shared/schema").HealthMetric[]>;
+  createHealthMetric(data: import("@shared/schema").InsertHealthMetric, userId: number): Promise<import("@shared/schema").HealthMetric>;
+  deleteHealthMetric(id: number): Promise<boolean>;
+  getSleepLogs(userId: number): Promise<import("@shared/schema").SleepLog[]>;
+  createSleepLog(data: import("@shared/schema").InsertSleepLog, userId: number): Promise<import("@shared/schema").SleepLog>;
+  updateSleepLog(id: number, data: Partial<import("@shared/schema").InsertSleepLog>): Promise<import("@shared/schema").SleepLog | undefined>;
+  deleteSleepLog(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -1877,6 +1925,37 @@ export const storage: IStorage = {
             coverUrl: x.cover_url, isFavorite: x.is_favorite,
           }));
         } catch (e) { console.error(`[getFriendProfile] hobbies query failed:`, e); data.hobbies = []; }
+      }
+      if (visibleTabs.includes("/faith")) {
+        try {
+          // Sacred texts (title, author, tradition, status — no personal notes or passages)
+          const st = await pool.query(
+            `SELECT id, title, author, tradition, status, cover_image_url FROM sacred_texts WHERE user_id = $1 ORDER BY id DESC`,
+            [targetId]
+          );
+          data.faithTexts = st.rows.map(x => ({
+            id: x.id, title: x.title, author: x.author,
+            tradition: x.tradition, status: x.status, coverImageUrl: x.cover_image_url,
+          }));
+          // Practices (name, frequency, status — no personal notes)
+          const fp = await pool.query(
+            `SELECT id, name, frequency, status FROM faith_practices WHERE user_id = $1 ORDER BY id`,
+            [targetId]
+          );
+          data.faithPractices = fp.rows.map(x => ({
+            id: x.id, name: x.name, frequency: x.frequency, status: x.status,
+          }));
+          // Sermons/Teachings (title, speaker, date, topic — no personal notes)
+          const sr = await pool.query(
+            `SELECT id, title, speaker, source, date, topic, tags FROM sermons WHERE user_id = $1 ORDER BY id DESC`,
+            [targetId]
+          );
+          data.faithSermons = sr.rows.map(x => ({
+            id: x.id, title: x.title, speaker: x.speaker,
+            source: x.source, date: x.date, topic: x.topic, tags: x.tags,
+          }));
+          // Prayer items are never shared — too personal
+        } catch (e) { console.error(`[getFriendProfile] faith query failed:`, e); data.faithTexts = []; data.faithPractices = []; data.faithSermons = []; }
       }
 
       return { user: { id: u.id, name: u.name, avatarUrl: u.avatarUrl, email: u.email }, visibleTabs, data };
@@ -3151,6 +3230,49 @@ export const storage: IStorage = {
   },
   async deletePrayerItem(id) {
     const result = await db.delete(prayerItems).where(eq(prayerItems.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Health ─────────────────────────────────────────────────────────────────
+  async getMedications(userId: number) {
+    return db.select().from(medications).where(eq(medications.userId, userId)).orderBy(asc(medications.name));
+  },
+  async createMedication(data: any, userId: number) {
+    const result = await db.insert(medications).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateMedication(id: number, data: any) {
+    const result = await db.update(medications).set(data).where(eq(medications.id, id)).returning();
+    return result[0];
+  },
+  async deleteMedication(id: number) {
+    const result = await db.delete(medications).where(eq(medications.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getHealthMetrics(userId: number) {
+    return db.select().from(healthMetrics).where(eq(healthMetrics.userId, userId)).orderBy(desc(healthMetrics.date), asc(healthMetrics.name));
+  },
+  async createHealthMetric(data: any, userId: number) {
+    const result = await db.insert(healthMetrics).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async deleteHealthMetric(id: number) {
+    const result = await db.delete(healthMetrics).where(eq(healthMetrics.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getSleepLogs(userId: number) {
+    return db.select().from(sleepLogs).where(eq(sleepLogs.userId, userId)).orderBy(desc(sleepLogs.date));
+  },
+  async createSleepLog(data: any, userId: number) {
+    const result = await db.insert(sleepLogs).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateSleepLog(id: number, data: any) {
+    const result = await db.update(sleepLogs).set(data).where(eq(sleepLogs.id, id)).returning();
+    return result[0];
+  },
+  async deleteSleepLog(id: number) {
+    const result = await db.delete(sleepLogs).where(eq(sleepLogs.id, id));
     return (result.rowCount ?? 0) > 0;
   },
 };
