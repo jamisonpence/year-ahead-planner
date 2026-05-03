@@ -61,57 +61,59 @@ function GoogleBooksModal({
     setLoading(true);
     let lastErr = "";
     try {
-      // ── Try 1: Open Library (browser-direct, CORS-enabled) ──────────────────
+      // ── Try 1: Google Books (most reliable, no auth required) ────────────────
       try {
-        // Minimal URL — no fields filter, no custom headers (avoids 422)
-        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20`;
+        const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query.trim())}&maxResults=20&printType=books`;
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 10000);
-        const res = await fetch(url, { signal: ctrl.signal });
+        const gbRes = await fetch(gbUrl, { signal: ctrl.signal });
         clearTimeout(t);
-        if (!res.ok) throw new Error(`OL:${res.status}`);
-        const data = await res.json() as any;
-        const normalized: GBVolume[] = (data.docs ?? []).map((doc: any) => ({
-          id: doc.key ?? doc.isbn?.[0] ?? String(Math.random()),
+        if (!gbRes.ok) throw new Error(`GB:${gbRes.status}`);
+        const gbData = await gbRes.json() as any;
+        const gbNorm: GBVolume[] = (gbData.items ?? []).map((v: any) => ({
+          id: v.id,
           volumeInfo: {
-            title: doc.title ?? "Unknown Title",
-            authors: doc.author_name ?? [],
-            publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
-            pageCount: doc.number_of_pages_median ?? undefined,
-            categories: doc.subject ? [doc.subject[0]] : undefined,
-            imageLinks: doc.cover_i ? { thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` } : undefined,
+            title: v.volumeInfo?.title ?? "Unknown Title",
+            authors: v.volumeInfo?.authors ?? [],
+            publishedDate: v.volumeInfo?.publishedDate,
+            pageCount: v.volumeInfo?.pageCount,
+            categories: v.volumeInfo?.categories,
+            imageLinks: v.volumeInfo?.imageLinks ? {
+              thumbnail: (v.volumeInfo.imageLinks.thumbnail ?? v.volumeInfo.imageLinks.smallThumbnail ?? "").replace(/^http:\/\//, "https://"),
+            } : undefined,
           },
         }));
-        setResults(normalized);
+        setResults(gbNorm);
         return;
       } catch (e: any) {
-        lastErr = e?.name === "AbortError" ? "OL timeout" : String(e?.message ?? e);
-        console.warn("[book-search] Open Library failed:", lastErr, "— trying Google Books");
+        lastErr = e?.name === "AbortError" ? "GB timeout" : String(e?.message ?? e);
+        console.warn("[book-search] Google Books failed:", lastErr, "— trying Open Library");
       }
 
-      // ── Try 2: Google Books (unauthenticated, browser-direct) ────────────────
-      const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query.trim())}&maxResults=20&printType=books`;
-      const gbRes = await fetch(gbUrl, { headers: { "Accept": "application/json" } });
-      if (!gbRes.ok) throw new Error(`GB:${gbRes.status}`);
-      const gbData = await gbRes.json() as any;
-      const gbNorm: GBVolume[] = (gbData.items ?? []).map((v: any) => ({
-        id: v.id,
+      // ── Try 2: Open Library fallback ─────────────────────────────────────────
+      const olUrl = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20`;
+      const olCtrl = new AbortController();
+      const olT = setTimeout(() => olCtrl.abort(), 10000);
+      const olRes = await fetch(olUrl, { signal: olCtrl.signal });
+      clearTimeout(olT);
+      if (!olRes.ok) throw new Error(`OL:${olRes.status}`);
+      const olData = await olRes.json() as any;
+      const olNorm: GBVolume[] = (olData.docs ?? []).map((doc: any) => ({
+        id: doc.key ?? doc.isbn?.[0] ?? String(Math.random()),
         volumeInfo: {
-          title: v.volumeInfo?.title ?? "Unknown Title",
-          authors: v.volumeInfo?.authors ?? [],
-          publishedDate: v.volumeInfo?.publishedDate,
-          pageCount: v.volumeInfo?.pageCount,
-          categories: v.volumeInfo?.categories,
-          imageLinks: v.volumeInfo?.imageLinks ? {
-            thumbnail: (v.volumeInfo.imageLinks.thumbnail ?? v.volumeInfo.imageLinks.smallThumbnail ?? "").replace(/^http:\/\//, "https://"),
-          } : undefined,
+          title: doc.title ?? "Unknown Title",
+          authors: doc.author_name ?? [],
+          publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
+          pageCount: doc.number_of_pages_median ?? undefined,
+          categories: doc.subject ? [doc.subject[0]] : undefined,
+          imageLinks: doc.cover_i ? { thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` } : undefined,
         },
       }));
-      setResults(gbNorm);
+      setResults(olNorm);
     } catch (e: any) {
       const reason = lastErr || String(e?.message ?? e);
       console.error("[book-search] Both sources failed:", reason);
-      toast({ title: "Search failed", description: `Could not reach the book search service (${reason}). Try again in a moment.`, variant: "destructive" });
+      toast({ title: "Search failed", description: `Book search unavailable (${reason}). Try again in a moment.`, variant: "destructive" });
     } finally { setLoading(false); }
   }
 
