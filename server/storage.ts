@@ -1878,37 +1878,6 @@ export const storage: IStorage = {
           }));
         } catch (e) { console.error(`[getFriendProfile] hobbies query failed:`, e); data.hobbies = []; }
       }
-      if (visibleTabs.includes("/faith")) {
-        try {
-          // Sacred texts (title, author, tradition, status — no personal notes or passages)
-          const st = await pool.query(
-            `SELECT id, title, author, tradition, status, cover_image_url FROM sacred_texts WHERE user_id = $1 ORDER BY id DESC`,
-            [targetId]
-          );
-          data.faithTexts = st.rows.map(x => ({
-            id: x.id, title: x.title, author: x.author,
-            tradition: x.tradition, status: x.status, coverImageUrl: x.cover_image_url,
-          }));
-          // Practices (name, frequency, status — no personal notes)
-          const fp = await pool.query(
-            `SELECT id, name, frequency, status FROM faith_practices WHERE user_id = $1 ORDER BY id`,
-            [targetId]
-          );
-          data.faithPractices = fp.rows.map(x => ({
-            id: x.id, name: x.name, frequency: x.frequency, status: x.status,
-          }));
-          // Sermons/Teachings (title, speaker, date, topic — no personal notes)
-          const sr = await pool.query(
-            `SELECT id, title, speaker, source, date, topic, tags FROM sermons WHERE user_id = $1 ORDER BY id DESC`,
-            [targetId]
-          );
-          data.faithSermons = sr.rows.map(x => ({
-            id: x.id, title: x.title, speaker: x.speaker,
-            source: x.source, date: x.date, topic: x.topic, tags: x.tags,
-          }));
-          // Prayer items are never shared — too personal
-        } catch (e) { console.error(`[getFriendProfile] faith query failed:`, e); data.faithTexts = []; data.faithPractices = []; data.faithSermons = []; }
-      }
 
       return { user: { id: u.id, name: u.name, avatarUrl: u.avatarUrl, email: u.email }, visibleTabs, data };
     } catch (e) {
