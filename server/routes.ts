@@ -2446,6 +2446,15 @@ Rules:
   });
 
   // ── Tab Collaborations ────────────────────────────────────────────────────────
+  app.get("/api/tab-collaborations/pending-count", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const all = await storage.getTabCollaborations(uid);
+      const count = all.filter(c => c.collaboratorUserId === uid && c.status === "pending").length;
+      res.json({ count });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/tab-collaborations", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;

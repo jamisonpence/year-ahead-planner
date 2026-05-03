@@ -153,6 +153,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   });
   const pendingFriendCount = friendCountData?.count ?? 0;
 
+  // Pending collaboration requests
+  const { data: collabCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/tab-collaborations/pending-count"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/tab-collaborations/pending-count");
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const pendingCollabCount = collabCountData?.count ?? 0;
+
   // Unread shares count
   const { data: sharesCountData } = useQuery<{
     total: number; books: number; music: number; recipes: number;
@@ -167,6 +179,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     enabled: !!user,
   });
   const unreadSharesTotal = sharesCountData?.total ?? 0;
+  const totalNotifCount = unreadSharesTotal + pendingFriendCount + pendingCollabCount;
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -277,9 +290,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="relative shrink-0">
                 <Bell size={15} />
-                {unreadSharesTotal > 0 && (
+                {totalNotifCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                    {unreadSharesTotal > 9 ? "9+" : unreadSharesTotal}
+                    {totalNotifCount > 9 ? "9+" : totalNotifCount}
                   </span>
                 )}
               </div>
@@ -288,12 +301,49 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {notifOpen && (
               <div className="absolute bottom-full left-0 mb-2 w-72 bg-card border rounded-xl shadow-xl z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b">
-                  <h3 className="font-semibold text-sm">Shared with you</h3>
-                  {unreadSharesTotal === 0 && (
+                  <h3 className="font-semibold text-sm">Notifications</h3>
+                  {totalNotifCount === 0 && (
                     <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
                   )}
                 </div>
                 <div className="divide-y max-h-80 overflow-y-auto">
+                  {/* Friend requests */}
+                  {pendingFriendCount > 0 && (
+                    <Link href="/relationships">
+                      <div onClick={() => setNotifOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
+                        <span className="text-lg leading-none">👋</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">Friend Requests</span>
+                          <p className="text-xs text-muted-foreground">
+                            {pendingFriendCount} pending {pendingFriendCount === 1 ? "request" : "requests"}
+                          </p>
+                        </div>
+                        <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
+                          {pendingFriendCount}
+                        </span>
+                      </div>
+                    </Link>
+                  )}
+                  {/* Collaboration requests */}
+                  {pendingCollabCount > 0 && (
+                    <Link href="/settings">
+                      <div onClick={() => setNotifOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
+                        <span className="text-lg leading-none">🤝</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">Collaboration Requests</span>
+                          <p className="text-xs text-muted-foreground">
+                            {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Kids or Housekeeping
+                          </p>
+                        </div>
+                        <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
+                          {pendingCollabCount}
+                        </span>
+                      </div>
+                    </Link>
+                  )}
+                  {/* Shared items */}
                   {[
                     { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
                     { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
@@ -322,7 +372,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         </div>
                       </Link>
                     ))}
-                  {unreadSharesTotal === 0 && (
+                  {totalNotifCount === 0 && (
                     <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                       Nothing new to see here
                     </div>
@@ -382,9 +432,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="relative p-2 rounded-lg hover:bg-secondary transition-colors"
           >
             <Bell size={16} />
-            {unreadSharesTotal > 0 && (
+            {totalNotifCount > 0 && (
               <span className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {unreadSharesTotal > 9 ? "9+" : unreadSharesTotal}
+                {totalNotifCount > 9 ? "9+" : totalNotifCount}
               </span>
             )}
           </button>
@@ -429,12 +479,49 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setNotifOpen(false)}>
           <div className="absolute right-4 top-16 w-72 bg-card border rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Shared with you</h3>
+              <h3 className="font-semibold text-sm">Notifications</h3>
               <button onClick={() => setNotifOpen(false)} className="p-1 rounded hover:bg-secondary transition-colors">
                 <X size={14} />
               </button>
             </div>
             <div className="divide-y max-h-80 overflow-y-auto">
+              {/* Friend requests */}
+              {pendingFriendCount > 0 && (
+                <Link href="/relationships">
+                  <div onClick={() => setNotifOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
+                    <span className="text-lg leading-none">👋</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">Friend Requests</span>
+                      <p className="text-xs text-muted-foreground">
+                        {pendingFriendCount} pending {pendingFriendCount === 1 ? "request" : "requests"}
+                      </p>
+                    </div>
+                    <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
+                      {pendingFriendCount}
+                    </span>
+                  </div>
+                </Link>
+              )}
+              {/* Collaboration requests */}
+              {pendingCollabCount > 0 && (
+                <Link href="/settings">
+                  <div onClick={() => setNotifOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
+                    <span className="text-lg leading-none">🤝</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">Collaboration Requests</span>
+                      <p className="text-xs text-muted-foreground">
+                        {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Kids or Housekeeping
+                      </p>
+                    </div>
+                    <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
+                      {pendingCollabCount}
+                    </span>
+                  </div>
+                </Link>
+              )}
+              {/* Shared items */}
               {[
                 { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
                 { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
@@ -463,7 +550,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </Link>
                 ))}
-              {unreadSharesTotal === 0 && (
+              {totalNotifCount === 0 && (
                 <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                   Nothing new to see here
                 </div>
