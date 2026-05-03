@@ -1059,7 +1059,7 @@ Return exactly this structure:
     try {
       const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
       const data = insertChoreSchema.parse({ ...req.body, userId: uid });
-      res.status(201).json(await storage.createChore(data, (req.user as User).id));
+      res.status(201).json(await storage.createChore(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/chores/:id", requireAuth, async (req, res) => {
@@ -1085,7 +1085,7 @@ Return exactly this structure:
     try {
       const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
       const data = insertHouseProjectSchema.parse({ ...req.body, userId: uid });
-      res.status(201).json(await storage.createHouseProject(data, (req.user as User).id));
+      res.status(201).json(await storage.createHouseProject(data, uid));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/house-projects/:id", requireAuth, async (req, res) => {
