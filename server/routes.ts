@@ -2163,18 +2163,32 @@ Rules:
     res.json({ ok: true });
   });
 
-  // ── Google Books Proxy ────────────────────────────────────────────────────────
+  // ── Open Library Book Search Proxy ───────────────────────────────────────────
+  // Uses Open Library (openlibrary.org) — no API key required, no rate limits
   app.get("/api/gbooks/search", requireAuth, async (req, res) => {
     try {
       const query = String(req.query.q || "").trim();
       if (!query) return res.status(400).json({ error: "q is required" });
-      const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
-      const keyParam = apiKey ? `&key=${apiKey}` : "";
-      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=20&printType=books${keyParam}`;
-      const gbRes = await fetch(url);
-      if (!gbRes.ok) return res.status(gbRes.status).json({ error: "Google Books error" });
-      const data = await gbRes.json() as any;
-      res.json(data.items ?? []);
+      const fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn";
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${fields}`;
+      const olRes = await fetch(url, { headers: { "User-Agent": "YearAheadPlanner/1.0" } });
+      if (!olRes.ok) return res.status(olRes.status).json({ error: "Book search unavailable" });
+      const data = await olRes.json() as any;
+      // Normalize to the same GBVolume shape the client already consumes
+      const items = (data.docs ?? []).map((doc: any) => ({
+        id: doc.key ?? doc.isbn?.[0] ?? Math.random().toString(),
+        volumeInfo: {
+          title: doc.title ?? "Unknown Title",
+          authors: doc.author_name ?? [],
+          publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
+          pageCount: doc.number_of_pages_median ?? undefined,
+          categories: doc.subject ? [doc.subject[0]] : undefined,
+          imageLinks: doc.cover_i ? {
+            thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`,
+          } : undefined,
+        },
+      }));
+      res.json(items);
     } catch (e) { handleError(res, e); }
   });
 

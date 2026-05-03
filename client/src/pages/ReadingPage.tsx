@@ -24,7 +24,7 @@ const STATUS_TABS = [
   { value: "recommendations", label: "Recommendations" },
 ];
 
-// ── Google Books Search Modal ─────────────────────────────────────────────────
+// ── Book Search Modal (Open Library) ─────────────────────────────────────────
 interface GBVolume {
   id: string;
   volumeInfo: {
@@ -64,7 +64,7 @@ function GoogleBooksModal({
       const data = await res.json();
       setResults(Array.isArray(data) ? data : []);
     } catch {
-      toast({ title: "Search failed", description: "Could not reach Google Books API.", variant: "destructive" });
+      toast({ title: "Search failed", description: "Could not reach the book search service. Try again in a moment.", variant: "destructive" });
     } finally { setLoading(false); }
   }
 
@@ -110,7 +110,7 @@ function GoogleBooksModal({
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <BookOpen size={16} /> Find on Google Books
+            <BookOpen size={16} /> Find Books
           </DialogTitle>
         </DialogHeader>
 
