@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
-  Lock, Plus, Pencil, Trash2, X, Check, Search, ChevronDown, ChevronUp,
+  Plus, Pencil, Trash2, X, Check, Search, ChevronDown, ChevronUp,
   ExternalLink, BookOpen, Flame, Heart, Mic2, MoreHorizontal, BookMarked,
   Tag, Calendar, User2,
 } from "lucide-react";
@@ -49,15 +49,6 @@ const STATUS_COLORS: Record<string, string> = {
   "Answered": "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
-// ── Privacy Banner ─────────────────────────────────────────────────────────────
-function PrivacyBanner() {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-stone-100 dark:bg-stone-800/60 text-stone-600 dark:text-stone-400 text-xs border border-stone-200 dark:border-stone-700">
-      <Lock size={12} className="shrink-0" />
-      <span>Private — only visible to you. This tab is never shared with friends or included in any recommendations.</span>
-    </div>
-  );
-}
 
 // ── Sacred Text Modal ──────────────────────────────────────────────────────────
 function TextModal({ text, onClose, onSave }: {
@@ -147,15 +138,16 @@ function TextSearchModal({ onClose, onSelect }: {
     if (!q.trim()) return;
     setLoading(true);
     try {
-      const fields = "key,title,author_name,cover_i";
-      const url = `/api/gbooks/search?q=${encodeURIComponent(q)}`;
-      const r = await apiRequest("GET", url);
-      const data = await r.json();
-      const items = (data.items ?? []).map((v: { id: string; volumeInfo: { title?: string; authors?: string[]; publishedDate?: string; imageLinks?: { thumbnail?: string } } }) => ({
-        title: v.volumeInfo.title ?? "",
-        author: (v.volumeInfo.authors ?? []).join(", "),
-        coverUrl: v.volumeInfo.imageLinks?.thumbnail ?? null,
-        year: v.volumeInfo.publishedDate?.slice(0, 4) ?? "",
+      // Call Open Library directly — minimal URL, no fields filter (avoids 422)
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=20`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Open Library ${r.status}`);
+      const data = await r.json() as any;
+      const items = (data.docs ?? []).map((doc: any) => ({
+        title: doc.title ?? "",
+        author: (doc.author_name ?? []).join(", "),
+        coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+        year: doc.first_publish_year ? String(doc.first_publish_year) : "",
       }));
       setResults(items);
     } catch {
@@ -1108,8 +1100,6 @@ export default function FaithPage() {
           <p className="text-xs text-muted-foreground">Personal curation of your spiritual life</p>
         </div>
       </div>
-
-      <PrivacyBanner />
 
       {/* Sub-navigation */}
       <div className="flex gap-1.5 flex-wrap border-b pb-3">

@@ -59,61 +59,12 @@ function GoogleBooksModal({
   async function doSearch() {
     if (!query.trim()) return;
     setLoading(true);
-    let lastErr = "";
     try {
-      // ── Try 1: Google Books (most reliable, no auth required) ────────────────
-      try {
-        const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query.trim())}&maxResults=20&printType=books`;
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 10000);
-        const gbRes = await fetch(gbUrl, { signal: ctrl.signal });
-        clearTimeout(t);
-        if (!gbRes.ok) throw new Error(`GB:${gbRes.status}`);
-        const gbData = await gbRes.json() as any;
-        const gbNorm: GBVolume[] = (gbData.items ?? []).map((v: any) => ({
-          id: v.id,
-          volumeInfo: {
-            title: v.volumeInfo?.title ?? "Unknown Title",
-            authors: v.volumeInfo?.authors ?? [],
-            publishedDate: v.volumeInfo?.publishedDate,
-            pageCount: v.volumeInfo?.pageCount,
-            categories: v.volumeInfo?.categories,
-            imageLinks: v.volumeInfo?.imageLinks ? {
-              thumbnail: (v.volumeInfo.imageLinks.thumbnail ?? v.volumeInfo.imageLinks.smallThumbnail ?? "").replace(/^http:\/\//, "https://"),
-            } : undefined,
-          },
-        }));
-        setResults(gbNorm);
-        return;
-      } catch (e: any) {
-        lastErr = e?.name === "AbortError" ? "GB timeout" : String(e?.message ?? e);
-        console.warn("[book-search] Google Books failed:", lastErr, "— trying Open Library");
-      }
-
-      // ── Try 2: Open Library fallback ─────────────────────────────────────────
-      const olUrl = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20`;
-      const olCtrl = new AbortController();
-      const olT = setTimeout(() => olCtrl.abort(), 10000);
-      const olRes = await fetch(olUrl, { signal: olCtrl.signal });
-      clearTimeout(olT);
-      if (!olRes.ok) throw new Error(`OL:${olRes.status}`);
-      const olData = await olRes.json() as any;
-      const olNorm: GBVolume[] = (olData.docs ?? []).map((doc: any) => ({
-        id: doc.key ?? doc.isbn?.[0] ?? String(Math.random()),
-        volumeInfo: {
-          title: doc.title ?? "Unknown Title",
-          authors: doc.author_name ?? [],
-          publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
-          pageCount: doc.number_of_pages_median ?? undefined,
-          categories: doc.subject ? [doc.subject[0]] : undefined,
-          imageLinks: doc.cover_i ? { thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` } : undefined,
-        },
-      }));
-      setResults(olNorm);
-    } catch (e: any) {
-      const reason = lastErr || String(e?.message ?? e);
-      console.error("[book-search] Both sources failed:", reason);
-      toast({ title: "Search failed", description: `Book search unavailable (${reason}). Try again in a moment.`, variant: "destructive" });
+      const res = await apiRequest("GET", `/api/gbooks/search?q=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      setResults(Array.isArray(data) ? data : []);
+    } catch {
+      toast({ title: "Search failed", description: "Could not reach the book search service. Try again in a moment.", variant: "destructive" });
     } finally { setLoading(false); }
   }
 
