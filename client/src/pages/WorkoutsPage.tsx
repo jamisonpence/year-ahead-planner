@@ -44,6 +44,20 @@ const EQUIPMENT_CATEGORIES = [
   { value: "other",          label: "Other",               color: "bg-secondary text-muted-foreground" },
 ];
 
+const GYM_MEMBERSHIP_EQUIPMENT = [
+  { name: "Barbell",           category: "barbell"         },
+  { name: "Dumbbells",         category: "dumbbell"        },
+  { name: "Kettlebells",       category: "kettlebell"      },
+  { name: "Cable Machine",     category: "cable"           },
+  { name: "Weight Machines",   category: "machine"         },
+  { name: "Pull-up Bar",       category: "pullup_bar"      },
+  { name: "Adjustable Bench",  category: "bench"           },
+  { name: "Resistance Bands",  category: "resistance_band" },
+  { name: "Treadmill",         category: "cardio"          },
+  { name: "Stationary Bike",   category: "cardio"          },
+  { name: "Rowing Machine",    category: "cardio"          },
+];
+
 const EXERCISE_EQUIPMENT_MAP: Record<string, string> = {
   barbell: "barbell", dumbbell: "dumbbell", kettlebell: "kettle bells",
   cable: "cable", machine: "machine", resistance_band: "bands",
@@ -943,6 +957,25 @@ export default function WorkoutsPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/equipment/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/equipment"] }),
   });
+
+  const [gymAdding, setGymAdding] = useState(false);
+  async function addGymMembership() {
+    setGymAdding(true);
+    const existingNames = new Set(equipmentList.map(e => e.name.toLowerCase()));
+    const toAdd = GYM_MEMBERSHIP_EQUIPMENT.filter(e => !existingNames.has(e.name.toLowerCase()));
+    if (toAdd.length === 0) {
+      toast({ title: "All gym equipment already added!" });
+      setGymAdding(false);
+      return;
+    }
+    try {
+      await Promise.all(toAdd.map(e => apiRequest("POST", "/api/equipment", e)));
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      toast({ title: `Added ${toAdd.length} piece${toAdd.length === 1 ? "" : "s"} of gym equipment` });
+    } catch {
+      toast({ title: "Failed to add equipment", variant: "destructive" });
+    } finally { setGymAdding(false); }
+  }
   const dismissShare = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/workout-shares/${id}/dismiss`),
     onSuccess: () => {
@@ -1372,13 +1405,26 @@ export default function WorkoutsPage() {
       {/* Equipment */}
       {tab === "equipment" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <p className="text-sm text-muted-foreground">
               Track your gym equipment — it's used for exercise search and AI plan generation.
             </p>
-            <Button size="sm" className="gap-1.5" onClick={() => { setEditEquipment(null); setEquipmentModal(true); }}>
-              <Plus size={13} /> Add Equipment
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={addGymMembership}
+                disabled={gymAdding}
+                title="Adds barbells, dumbbells, cables, machines, cardio equipment, and more"
+              >
+                {gymAdding ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                Gym Membership
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => { setEditEquipment(null); setEquipmentModal(true); }}>
+                <Plus size={13} /> Add Equipment
+              </Button>
+            </div>
           </div>
 
           {equipmentList.length === 0 ? (
