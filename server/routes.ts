@@ -2173,26 +2173,63 @@ Rules:
     try {
       const query = String(req.query.q || "").trim();
       if (!query) return res.status(400).json({ error: "q is required" });
-      const fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn";
-      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${fields}`;
-      const olRes = await fetch(url, { headers: { "User-Agent": "YearAheadPlanner/1.0" } });
-      if (!olRes.ok) return res.status(olRes.status).json({ error: "Book search unavailable" });
-      const data = await olRes.json() as any;
-      // Normalize to the same GBVolume shape the client already consumes
-      const items = (data.docs ?? []).map((doc: any) => ({
-        id: doc.key ?? doc.isbn?.[0] ?? Math.random().toString(),
+
+      // Try Open Library first (10 s timeout)
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn";
+        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${fields}`;
+        const olRes = await fetch(url, {
+          signal: controller.signal,
+          headers: { "User-Agent": "YearAheadPlanner/1.0 (contact@yearaheadplanner.com)" },
+        });
+        clearTimeout(timer);
+        if (!olRes.ok) throw new Error(`Open Library returned ${olRes.status}`);
+        const data = await olRes.json() as any;
+        // Normalize to the GBVolume shape the client consumes
+        const items = (data.docs ?? []).map((doc: any) => ({
+          id: doc.key ?? doc.isbn?.[0] ?? Math.random().toString(),
+          volumeInfo: {
+            title: doc.title ?? "Unknown Title",
+            authors: doc.author_name ?? [],
+            publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
+            pageCount: doc.number_of_pages_median ?? undefined,
+            categories: doc.subject ? [doc.subject[0]] : undefined,
+            imageLinks: doc.cover_i ? {
+              thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`,
+            } : undefined,
+          },
+        }));
+        return res.json(items);
+      } catch (olErr: any) {
+        clearTimeout(timer);
+        const reason = olErr?.name === "AbortError" ? "timeout" : String(olErr?.message ?? olErr);
+        console.warn(`[gbooks/search] Open Library failed (${reason}), falling back to Google Books`);
+      }
+
+      // Fallback: unauthenticated Google Books (free tier, ~100 req/day from a single IP)
+      const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=20&printType=books`;
+      const gbRes = await fetch(gbUrl, { headers: { "User-Agent": "YearAheadPlanner/1.0" } });
+      if (!gbRes.ok) {
+        console.error(`[gbooks/search] Google Books fallback also failed: ${gbRes.status}`);
+        return res.status(503).json({ error: "Book search temporarily unavailable" });
+      }
+      const gbData = await gbRes.json() as any;
+      const gbItems = (gbData.items ?? []).map((v: any) => ({
+        id: v.id,
         volumeInfo: {
-          title: doc.title ?? "Unknown Title",
-          authors: doc.author_name ?? [],
-          publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
-          pageCount: doc.number_of_pages_median ?? undefined,
-          categories: doc.subject ? [doc.subject[0]] : undefined,
-          imageLinks: doc.cover_i ? {
-            thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`,
+          title: v.volumeInfo?.title ?? "Unknown Title",
+          authors: v.volumeInfo?.authors ?? [],
+          publishedDate: v.volumeInfo?.publishedDate,
+          pageCount: v.volumeInfo?.pageCount,
+          categories: v.volumeInfo?.categories,
+          imageLinks: v.volumeInfo?.imageLinks ? {
+            thumbnail: (v.volumeInfo.imageLinks.thumbnail ?? v.volumeInfo.imageLinks.smallThumbnail ?? "").replace(/^http:\/\//, "https://"),
           } : undefined,
         },
       }));
-      res.json(items);
+      res.json(gbItems);
     } catch (e) { handleError(res, e); }
   });
 
