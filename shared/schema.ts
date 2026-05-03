@@ -1283,3 +1283,19 @@ export const sleepLogs = pgTable("sleep_logs", {
 export const insertSleepLogSchema = createInsertSchema(sleepLogs).omit({ id: true });
 export type InsertSleepLog = z.infer<typeof insertSleepLogSchema>;
 export type SleepLog = typeof sleepLogs.$inferSelect;
+
+export const careProviders = pgTable("care_providers", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),          // "Dr. Sarah Kim"
+  specialty: text("specialty"),          // "Primary Care" | "Dentist" | "Cardiologist" | etc.
+  practice: text("practice"),            // Practice/clinic name
+  phone: text("phone"),
+  address: text("address"),
+  lastAppointment: text("last_appointment"),   // ISO date
+  nextAppointment: text("next_appointment"),   // ISO date
+  notes: text("notes"),
+});
+export const insertCareProviderSchema = createInsertSchema(careProviders).omit({ id: true });
+export type InsertCareProvider = z.infer<typeof insertCareProviderSchema>;
+export type CareProvider = typeof careProviders.$inferSelect;

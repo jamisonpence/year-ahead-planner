@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -1014,6 +1014,18 @@ export async function initializeStorage() {
       wake_time TEXT,
       notes TEXT
     );
+    CREATE TABLE IF NOT EXISTS care_providers (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      specialty TEXT,
+      practice TEXT,
+      phone TEXT,
+      address TEXT,
+      last_appointment TEXT,
+      next_appointment TEXT,
+      notes TEXT
+    );
   `);
 }
 
@@ -1318,6 +1330,12 @@ export interface IStorage {
   createSleepLog(data: import("@shared/schema").InsertSleepLog, userId: number): Promise<import("@shared/schema").SleepLog>;
   updateSleepLog(id: number, data: Partial<import("@shared/schema").InsertSleepLog>): Promise<import("@shared/schema").SleepLog | undefined>;
   deleteSleepLog(id: number): Promise<boolean>;
+
+  // Care Team
+  getCareProviders(userId: number): Promise<import("@shared/schema").CareProvider[]>;
+  createCareProvider(data: import("@shared/schema").InsertCareProvider, userId: number): Promise<import("@shared/schema").CareProvider>;
+  updateCareProvider(id: number, data: Partial<import("@shared/schema").InsertCareProvider>): Promise<import("@shared/schema").CareProvider | undefined>;
+  deleteCareProvider(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -3273,6 +3291,23 @@ export const storage: IStorage = {
   },
   async deleteSleepLog(id: number) {
     const result = await db.delete(sleepLogs).where(eq(sleepLogs.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Care Team ──────────────────────────────────────────────────────────────
+  async getCareProviders(userId: number) {
+    return db.select().from(careProviders).where(eq(careProviders.userId, userId)).orderBy(asc(careProviders.name));
+  },
+  async createCareProvider(data: any, userId: number) {
+    const result = await db.insert(careProviders).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateCareProvider(id: number, data: any) {
+    const result = await db.update(careProviders).set(data).where(eq(careProviders.id, id)).returning();
+    return result[0];
+  },
+  async deleteCareProvider(id: number) {
+    const result = await db.delete(careProviders).where(eq(careProviders.id, id));
     return (result.rowCount ?? 0) > 0;
   },
 };

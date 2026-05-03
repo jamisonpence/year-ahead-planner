@@ -35,6 +35,7 @@ import {
   insertMedicationSchema,
   insertHealthMetricSchema,
   insertSleepLogSchema,
+  insertCareProviderSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -2742,6 +2743,29 @@ Rules:
   app.delete("/api/health/sleep/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteSleepLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Care Providers
+  app.get("/api/health/care-providers", requireAuth, async (req, res) => {
+    try { res.json(await storage.getCareProviders((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/health/care-providers", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertCareProviderSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createCareProvider(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/health/care-providers/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateCareProvider(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/health/care-providers/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteCareProvider(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 }

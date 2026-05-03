@@ -1,14 +1,14 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
-  ChevronDown, ChevronUp, Star,
+  ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -592,12 +592,268 @@ function SleepTab() {
   );
 }
 
+// ── CARE TEAM TAB ──────────────────────────────────────────────────────────────
+
+const SPECIALTIES = [
+  "Primary Care", "Dentist", "Optometrist", "Cardiologist", "Dermatologist",
+  "Endocrinologist", "Gastroenterologist", "Gynecologist / OB-GYN", "Neurologist",
+  "Oncologist", "Orthopedist", "Pediatrician", "Psychiatrist", "Psychologist / Therapist",
+  "Pulmonologist", "Rheumatologist", "Urologist", "Physical Therapist", "Chiropractor",
+  "Nutritionist / Dietitian", "Other",
+];
+
+function CareTeamTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<CareProvider | null>(null);
+
+  const { data: providers = [] } = useQuery<CareProvider[]>({ queryKey: ["/api/health/care-providers"] });
+
+  const blank = { name: "", specialty: "", practice: "", phone: "", address: "", lastAppointment: "", nextAppointment: "", notes: "" };
+  const [form, setForm] = useState(blank);
+
+  function openNew() { setForm(blank); setEditing(null); setShowModal(true); }
+  function openEdit(p: CareProvider) {
+    setForm({
+      name: p.name, specialty: p.specialty ?? "", practice: p.practice ?? "",
+      phone: p.phone ?? "", address: p.address ?? "",
+      lastAppointment: p.lastAppointment ?? "", nextAppointment: p.nextAppointment ?? "",
+      notes: p.notes ?? "",
+    });
+    setEditing(p);
+    setShowModal(true);
+  }
+
+  const saveMut = useMutation({
+    mutationFn: (data: any) => editing
+      ? apiRequest("PATCH", `/api/health/care-providers/${editing.id}`, data).then(r => r.json())
+      : apiRequest("POST", "/api/health/care-providers", data).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/health/care-providers"] });
+      setShowModal(false);
+      toast({ title: editing ? "Updated" : "Added", description: form.name });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/health/care-providers/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/health/care-providers"] }),
+  });
+
+  function handleSubmit() {
+    if (!form.name.trim()) return;
+    saveMut.mutate({
+      name: form.name.trim(),
+      specialty: form.specialty || null,
+      practice: form.practice || null,
+      phone: form.phone || null,
+      address: form.address || null,
+      lastAppointment: form.lastAppointment || null,
+      nextAppointment: form.nextAppointment || null,
+      notes: form.notes || null,
+    });
+  }
+
+  // Sort: upcoming next appt first, then no next appt, then past-only
+  const today = startOfDay(new Date());
+  const sorted = [...providers].sort((a, b) => {
+    const aNext = a.nextAppointment ? parseISO(a.nextAppointment) : null;
+    const bNext = b.nextAppointment ? parseISO(b.nextAppointment) : null;
+    if (aNext && bNext) return aNext.getTime() - bNext.getTime();
+    if (aNext && !bNext) return -1;
+    if (!aNext && bNext) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Upcoming appts across all providers (next 90 days)
+  const upcoming = providers
+    .filter(p => p.nextAppointment)
+    .map(p => ({ provider: p, date: parseISO(p.nextAppointment!) }))
+    .filter(x => isAfter(x.date, new Date()) || x.date.toDateString() === today.toDateString())
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, 5);
+
+  function apptLabel(dateStr: string | null | undefined) {
+    if (!dateStr) return null;
+    const d = parseISO(dateStr);
+    const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const label = format(d, "MMM d, yyyy");
+    if (diff === 0) return { label, badge: "Today", color: "text-primary bg-primary/10 border-primary/20" };
+    if (diff > 0 && diff <= 7) return { label, badge: `In ${diff}d`, color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800" };
+    if (diff > 0) return { label, badge: format(d, "MMM d"), color: "text-muted-foreground bg-secondary border-border" };
+    return { label, badge: `${Math.abs(diff)}d ago`, color: "text-muted-foreground bg-secondary border-border" };
+  }
+
+  return (
+    <div>
+      {/* Upcoming appointments banner */}
+      {upcoming.length > 0 && (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-5">
+          <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Upcoming Appointments</p>
+          <div className="space-y-1.5">
+            {upcoming.map(({ provider, date }) => {
+              const info = apptLabel(provider.nextAppointment);
+              return (
+                <div key={provider.id} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CalendarClock size={12} className="text-primary shrink-0" />
+                    <span className="text-sm font-medium truncate">{provider.name}</span>
+                    {provider.specialty && <span className="text-xs text-muted-foreground hidden sm:inline">{provider.specialty}</span>}
+                  </div>
+                  <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full border ${info?.color}`}>
+                    {info?.badge}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-sm text-muted-foreground">{providers.length} provider{providers.length !== 1 ? "s" : ""}</p>
+        <Button size="sm" onClick={openNew} className="gap-1.5"><Plus size={13} />Add Provider</Button>
+      </div>
+
+      {providers.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          <Stethoscope size={32} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm">No care providers yet</p>
+          <p className="text-xs mt-1">Track your doctors, dentists, therapists, and more</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sorted.map(p => {
+          const lastInfo = apptLabel(p.lastAppointment);
+          const nextInfo = apptLabel(p.nextAppointment);
+          return (
+            <div key={p.id} className="rounded-xl border bg-card p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center shrink-0 mt-0.5">
+                  <Stethoscope size={16} className="text-teal-600 dark:text-teal-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-snug">{p.name}</p>
+                      {p.specialty && <p className="text-xs text-muted-foreground">{p.specialty}{p.practice ? ` · ${p.practice}` : ""}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+                        <Pencil size={13} className="text-muted-foreground" />
+                      </button>
+                      <button onClick={() => deleteMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Appointment dates */}
+                  <div className="flex flex-wrap gap-3 mt-2.5">
+                    {p.lastAppointment && (
+                      <div className="flex items-center gap-1.5">
+                        <CalendarCheck size={12} className="text-muted-foreground shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider leading-none mb-0.5">Last visit</p>
+                          <p className="text-xs font-medium">{lastInfo?.label}</p>
+                        </div>
+                      </div>
+                    )}
+                    {p.nextAppointment && (
+                      <div className="flex items-center gap-1.5">
+                        <CalendarClock size={12} className={nextInfo && parseISO(p.nextAppointment) > today ? "text-primary shrink-0" : "text-muted-foreground shrink-0"} />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider leading-none mb-0.5">Next visit</p>
+                          <p className={`text-xs font-medium ${nextInfo && parseISO(p.nextAppointment) > today ? "text-primary" : ""}`}>{nextInfo?.label}</p>
+                        </div>
+                      </div>
+                    )}
+                    {!p.lastAppointment && !p.nextAppointment && (
+                      <p className="text-xs text-muted-foreground italic">No appointments recorded</p>
+                    )}
+                  </div>
+
+                  {/* Contact info */}
+                  {(p.phone || p.address) && (
+                    <div className="flex flex-wrap gap-3 mt-2 pt-2 border-t border-dashed">
+                      {p.phone && (
+                        <a href={`tel:${p.phone}`} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                          <Phone size={11} className="shrink-0" />{p.phone}
+                        </a>
+                      )}
+                      {p.address && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MapPin size={11} className="shrink-0" />{p.address}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {p.notes && <p className="text-xs text-muted-foreground/70 mt-2 italic line-clamp-2">{p.notes}</p>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showModal && (
+        <Modal title={editing ? "Edit Provider" : "Add Care Provider"} onClose={() => setShowModal(false)}>
+          <Field label="Name *">
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Dr. Sarah Kim" autoFocus />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Specialty">
+              <Select value={form.specialty} onChange={v => setForm(f => ({ ...f, specialty: v }))}>
+                <option value="">Select…</option>
+                {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Practice / Clinic">
+              <Input value={form.practice} onChange={e => setForm(f => ({ ...f, practice: e.target.value }))} placeholder="Clinic name" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Last appointment">
+              <Input type="date" value={form.lastAppointment} onChange={e => setForm(f => ({ ...f, lastAppointment: e.target.value }))} />
+            </Field>
+            <Field label="Next appointment">
+              <Input type="date" value={form.nextAppointment} onChange={e => setForm(f => ({ ...f, nextAppointment: e.target.value }))} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Phone">
+              <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" />
+            </Field>
+            <Field label="Address">
+              <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Office address" />
+            </Field>
+          </div>
+          <Field label="Notes">
+            <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Insurance, referrals, anything useful…" />
+          </Field>
+          <div className="flex gap-2 pt-1">
+            <Button onClick={handleSubmit} disabled={saveMut.isPending} className="flex-1">
+              {saveMut.isPending ? "Saving…" : editing ? "Save changes" : "Add"}
+            </Button>
+            <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "medications", label: "Medications", icon: Pill },
-  { id: "metrics",     label: "Health Metrics", icon: TrendingUp },
-  { id: "sleep",       label: "Sleep", icon: Moon },
+  { id: "medications", label: "Medications",    icon: Pill        },
+  { id: "metrics",     label: "Health Metrics", icon: TrendingUp  },
+  { id: "sleep",       label: "Sleep",          icon: Moon        },
+  { id: "care_team",   label: "Care Team",      icon: Stethoscope },
 ];
 
 export default function HealthPage() {
@@ -612,7 +868,7 @@ export default function HealthPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Health</h1>
-          <p className="text-sm text-muted-foreground">Track medications, metrics, and sleep</p>
+          <p className="text-sm text-muted-foreground">Track medications, metrics, sleep, and your care team</p>
         </div>
       </div>
 
@@ -642,6 +898,7 @@ export default function HealthPage() {
       {activeTab === "medications" && <MedicationsTab />}
       {activeTab === "metrics"     && <MetricsTab />}
       {activeTab === "sleep"       && <SleepTab />}
+      {activeTab === "care_team"   && <CareTeamTab />}
     </div>
   );
 }
