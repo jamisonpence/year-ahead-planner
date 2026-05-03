@@ -63,11 +63,11 @@ function GoogleBooksModal({
     try {
       // ── Try 1: Open Library (browser-direct, CORS-enabled) ──────────────────
       try {
-        const fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn";
-        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20&fields=${fields}`;
+        // Minimal URL — no fields filter, no custom headers (avoids 422)
+        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20`;
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 8000);
-        const res = await fetch(url, { signal: ctrl.signal, headers: { "Accept": "application/json" } });
+        const t = setTimeout(() => ctrl.abort(), 10000);
+        const res = await fetch(url, { signal: ctrl.signal });
         clearTimeout(t);
         if (!res.ok) throw new Error(`OL:${res.status}`);
         const data = await res.json() as any;
