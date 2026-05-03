@@ -1395,6 +1395,10 @@ export default function RecipesPage() {
   const [assignRecipe, setAssignRecipe] = useState<Recipe | null>(null);
   const [assignBundle, setAssignBundle] = useState<MealBundle | null>(null);
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
+  // All-view type sections start collapsed by default
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set([...COMPONENT_TYPES.map(ct => ct.value), "unclassified"])
+  );
   const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const [mealDbOpen, setMealDbOpen] = useState(false);
@@ -1403,6 +1407,14 @@ export default function RecipesPage() {
 
   function toggleBucket(key: string) {
     setCollapsedBuckets(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSection(key: string) {
+    setCollapsedSections(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -1645,90 +1657,110 @@ export default function RecipesPage() {
 
           {/* Sectioned view when "All" selected */}
           {libFilter === "all" ? (
-            <div className="space-y-8">
+            <div className="space-y-3">
               {COMPONENT_TYPES.map(ct => {
                 const group = recipesByType[ct.value];
                 if (group.length === 0) return null;
+                const isSectionCollapsed = collapsedSections.has(ct.value);
                 const buckets = groupByCategory(group);
                 const hasBuckets = buckets.some(b => b.category !== null);
                 return (
-                  <div key={ct.value}>
-                    <div className={`flex items-center gap-2 mb-3 pb-2 border-b`}>
+                  <div key={ct.value} className="rounded-xl border overflow-hidden">
+                    <button
+                      onClick={() => toggleSection(ct.value)}
+                      className="flex items-center gap-2 w-full text-left px-4 py-3 hover:bg-secondary/40 transition-colors"
+                    >
+                      <ChevronDown size={14} className={`transition-transform duration-200 text-muted-foreground shrink-0 ${isSectionCollapsed ? "-rotate-90" : ""}`} />
                       <span className={ct.color}>{ct.icon}</span>
-                      <h2 className={`text-sm font-bold uppercase tracking-widest ${ct.color}`}>{ct.label}s</h2>
-                      <span className="text-xs text-muted-foreground">{group.length}</span>
-                    </div>
-                    {hasBuckets ? (
-                      <div className="space-y-4">
-                        {buckets.map(({ category, recipes: bRecipes }) => {
-                          const bucketKey = `${ct.value}:${category ?? "__none__"}`;
-                          const isCollapsed = collapsedBuckets.has(bucketKey);
-                          return (
-                            <div key={bucketKey}>
-                              <button onClick={() => toggleBucket(bucketKey)}
-                                className="flex items-center gap-1.5 w-full text-left mb-2 py-1 px-2 rounded-lg hover:bg-secondary/60 transition-colors">
-                                <ChevronDown size={12} className={`transition-transform duration-200 text-muted-foreground ${isCollapsed ? "-rotate-90" : ""}`} />
-                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  {category ?? "Other"}
-                                </span>
-                                <span className="text-xs text-muted-foreground/60 ml-1">{bRecipes.length}</span>
-                              </button>
-                              {!isCollapsed && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                                  {bRecipes.map(recipe => (
-                                    <RecipeCard key={recipe.id} recipe={recipe}
-                                      isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
-                                      onDetail={() => setDetailRecipe(recipe)}
-                                      onAssign={() => setAssignRecipe(recipe)}
-                                      onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
-                                      onDelete={() => deleteRecipeMut.mutate(recipe.id)}
-                                    onShare={() => setShareRecipe(recipe)}
-                                    />
-                                  ))}
+                      <span className={`text-sm font-bold uppercase tracking-widest ${ct.color}`}>{ct.label}s</span>
+                      <span className="text-xs text-muted-foreground ml-1">{group.length}</span>
+                    </button>
+                    {!isSectionCollapsed && (
+                      <div className="px-4 pb-4 pt-1">
+                        {hasBuckets ? (
+                          <div className="space-y-4">
+                            {buckets.map(({ category, recipes: bRecipes }) => {
+                              const bucketKey = `${ct.value}:${category ?? "__none__"}`;
+                              const isCollapsed = collapsedBuckets.has(bucketKey);
+                              return (
+                                <div key={bucketKey}>
+                                  <button onClick={() => toggleBucket(bucketKey)}
+                                    className="flex items-center gap-1.5 w-full text-left mb-2 py-1 px-2 rounded-lg hover:bg-secondary/60 transition-colors">
+                                    <ChevronDown size={12} className={`transition-transform duration-200 text-muted-foreground ${isCollapsed ? "-rotate-90" : ""}`} />
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                      {category ?? "Other"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground/60 ml-1">{bRecipes.length}</span>
+                                  </button>
+                                  {!isCollapsed && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                      {bRecipes.map(recipe => (
+                                        <RecipeCard key={recipe.id} recipe={recipe}
+                                          isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                                          onDetail={() => setDetailRecipe(recipe)}
+                                          onAssign={() => setAssignRecipe(recipe)}
+                                          onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                                          onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                                          onShare={() => setShareRecipe(recipe)}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                        {group.map(recipe => (
-                          <RecipeCard key={recipe.id} recipe={recipe}
-                            isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
-                            onDetail={() => setDetailRecipe(recipe)}
-                            onAssign={() => setAssignRecipe(recipe)}
-                            onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
-                            onDelete={() => deleteRecipeMut.mutate(recipe.id)}
-                            onShare={() => setShareRecipe(recipe)}
-                          />
-                        ))}
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {group.map(recipe => (
+                              <RecipeCard key={recipe.id} recipe={recipe}
+                                isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                                onDetail={() => setDetailRecipe(recipe)}
+                                onAssign={() => setAssignRecipe(recipe)}
+                                onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                                onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                                onShare={() => setShareRecipe(recipe)}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 );
               })}
-              {recipesByType["unclassified"].length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b">
-                    <ChefHat size={13} className="text-muted-foreground" />
-                    <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Unclassified</h2>
-                    <span className="text-xs text-muted-foreground">{recipesByType["unclassified"].length}</span>
+              {recipesByType["unclassified"].length > 0 && (() => {
+                const isSectionCollapsed = collapsedSections.has("unclassified");
+                return (
+                  <div className="rounded-xl border overflow-hidden">
+                    <button
+                      onClick={() => toggleSection("unclassified")}
+                      className="flex items-center gap-2 w-full text-left px-4 py-3 hover:bg-secondary/40 transition-colors"
+                    >
+                      <ChevronDown size={14} className={`transition-transform duration-200 text-muted-foreground shrink-0 ${isSectionCollapsed ? "-rotate-90" : ""}`} />
+                      <ChefHat size={13} className="text-muted-foreground" />
+                      <span className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Unclassified</span>
+                      <span className="text-xs text-muted-foreground ml-1">{recipesByType["unclassified"].length}</span>
+                    </button>
+                    {!isSectionCollapsed && (
+                      <div className="px-4 pb-4 pt-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {recipesByType["unclassified"].map(recipe => (
+                            <RecipeCard key={recipe.id} recipe={recipe}
+                              isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                              onDetail={() => setDetailRecipe(recipe)}
+                              onAssign={() => setAssignRecipe(recipe)}
+                              onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                              onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                              onShare={() => setShareRecipe(recipe)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {recipesByType["unclassified"].map(recipe => (
-                      <RecipeCard key={recipe.id} recipe={recipe}
-                        isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
-                        onDetail={() => setDetailRecipe(recipe)}
-                        onAssign={() => setAssignRecipe(recipe)}
-                        onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
-                        onDelete={() => deleteRecipeMut.mutate(recipe.id)}
-                        onShare={() => setShareRecipe(recipe)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
               {recipes.length === 0 && (
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
@@ -1738,7 +1770,7 @@ export default function RecipesPage() {
               )}
             </div>
           ) : (
-            // Filtered view
+            // Filtered view — grouped by category with collapsible buckets
             <div>
               {filteredRecipes.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground">
@@ -1746,20 +1778,62 @@ export default function RecipesPage() {
                   <p className="font-medium">No recipes here yet</p>
                   <p className="text-sm mt-1">Add a recipe and set its Component Type to add it to this section</p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {filteredRecipes.map(recipe => (
-                    <RecipeCard key={recipe.id} recipe={recipe}
-                      isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
-                      onDetail={() => setDetailRecipe(recipe)}
-                      onAssign={() => setAssignRecipe(recipe)}
-                      onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
-                      onDelete={() => deleteRecipeMut.mutate(recipe.id)}
-                      onShare={() => setShareRecipe(recipe)}
-                    />
-                  ))}
-                </div>
-              )}
+              ) : (() => {
+                const buckets = groupByCategory(filteredRecipes);
+                const hasBuckets = buckets.some(b => b.category !== null);
+                if (!hasBuckets) {
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {filteredRecipes.map(recipe => (
+                        <RecipeCard key={recipe.id} recipe={recipe}
+                          isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                          onDetail={() => setDetailRecipe(recipe)}
+                          onAssign={() => setAssignRecipe(recipe)}
+                          onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                          onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                          onShare={() => setShareRecipe(recipe)}
+                        />
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-3">
+                    {buckets.map(({ category, recipes: bRecipes }) => {
+                      const bucketKey = `${libFilter}:${category ?? "__none__"}`;
+                      const isCollapsed = collapsedBuckets.has(bucketKey);
+                      return (
+                        <div key={bucketKey} className="rounded-xl border overflow-hidden">
+                          <button onClick={() => toggleBucket(bucketKey)}
+                            className="flex items-center gap-2 w-full text-left px-4 py-3 hover:bg-secondary/40 transition-colors">
+                            <ChevronDown size={14} className={`transition-transform duration-200 text-muted-foreground shrink-0 ${isCollapsed ? "-rotate-90" : ""}`} />
+                            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                              {category ?? "Other"}
+                            </span>
+                            <span className="text-xs text-muted-foreground/60 ml-1">{bRecipes.length}</span>
+                          </button>
+                          {!isCollapsed && (
+                            <div className="px-4 pb-4 pt-1">
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {bRecipes.map(recipe => (
+                                  <RecipeCard key={recipe.id} recipe={recipe}
+                                    isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
+                                    onDetail={() => setDetailRecipe(recipe)}
+                                    onAssign={() => setAssignRecipe(recipe)}
+                                    onEdit={() => { setEditRecipe(recipe); setRecipeModal(true); }}
+                                    onDelete={() => deleteRecipeMut.mutate(recipe.id)}
+                                    onShare={() => setShareRecipe(recipe)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
