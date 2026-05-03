@@ -151,7 +151,10 @@ function TextSearchModal({ onClose, onSelect }: {
       const url = `/api/gbooks/search?q=${encodeURIComponent(q)}`;
       const r = await apiRequest("GET", url);
       const data = await r.json();
-      const items = (data.items ?? []).map((v: { id: string; volumeInfo: { title?: string; authors?: string[]; publishedDate?: string; imageLinks?: { thumbnail?: string } } }) => ({
+      // API returns a plain array of { id, volumeInfo } objects
+      type GBVol = { id: string; volumeInfo: { title?: string; authors?: string[]; publishedDate?: string; imageLinks?: { thumbnail?: string } } };
+      const raw: GBVol[] = Array.isArray(data) ? data : (data.items ?? []);
+      const items = raw.map(v => ({
         title: v.volumeInfo.title ?? "",
         author: (v.volumeInfo.authors ?? []).join(", "),
         coverUrl: v.volumeInfo.imageLinks?.thumbnail ?? null,
