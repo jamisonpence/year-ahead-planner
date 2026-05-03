@@ -60,9 +60,26 @@ function GoogleBooksModal({
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const res = await apiRequest("GET", `/api/gbooks/search?q=${encodeURIComponent(query.trim())}`);
-      const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
+      // Call Open Library directly from the browser — avoids server-side proxy network issues
+      const fields = "key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn";
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=20&fields=${fields}`;
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error(`Open Library ${res.status}`);
+      const data = await res.json() as any;
+      const normalized: GBVolume[] = (data.docs ?? []).map((doc: any) => ({
+        id: doc.key ?? doc.isbn?.[0] ?? String(Math.random()),
+        volumeInfo: {
+          title: doc.title ?? "Unknown Title",
+          authors: doc.author_name ?? [],
+          publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : undefined,
+          pageCount: doc.number_of_pages_median ?? undefined,
+          categories: doc.subject ? [doc.subject[0]] : undefined,
+          imageLinks: doc.cover_i ? {
+            thumbnail: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`,
+          } : undefined,
+        },
+      }));
+      setResults(normalized);
     } catch {
       toast({ title: "Search failed", description: "Could not reach the book search service. Try again in a moment.", variant: "destructive" });
     } finally { setLoading(false); }

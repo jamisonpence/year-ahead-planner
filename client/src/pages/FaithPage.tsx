@@ -147,18 +147,16 @@ function TextSearchModal({ onClose, onSelect }: {
     if (!q.trim()) return;
     setLoading(true);
     try {
-      const fields = "key,title,author_name,cover_i";
-      const url = `/api/gbooks/search?q=${encodeURIComponent(q)}`;
-      const r = await apiRequest("GET", url);
-      const data = await r.json();
-      // API returns a plain array of { id, volumeInfo } objects
-      type GBVol = { id: string; volumeInfo: { title?: string; authors?: string[]; publishedDate?: string; imageLinks?: { thumbnail?: string } } };
-      const raw: GBVol[] = Array.isArray(data) ? data : (data.items ?? []);
-      const items = raw.map(v => ({
-        title: v.volumeInfo.title ?? "",
-        author: (v.volumeInfo.authors ?? []).join(", "),
-        coverUrl: v.volumeInfo.imageLinks?.thumbnail ?? null,
-        year: v.volumeInfo.publishedDate?.slice(0, 4) ?? "",
+      // Call Open Library directly — bypasses server proxy entirely
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=20&fields=key,title,author_name,cover_i,first_publish_year`;
+      const r = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!r.ok) throw new Error(`Open Library ${r.status}`);
+      const data = await r.json() as any;
+      const items = (data.docs ?? []).map((doc: any) => ({
+        title: doc.title ?? "",
+        author: (doc.author_name ?? []).join(", "),
+        coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+        year: doc.first_publish_year ? String(doc.first_publish_year) : "",
       }));
       setResults(items);
     } catch {
