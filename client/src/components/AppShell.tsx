@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
-  Bell, ChevronRight, Sparkles, Flame,
+  Bell, ChevronRight, Sparkles, Flame, Activity,
 } from "lucide-react";
 
 const ALL_TABS = [
@@ -32,6 +32,7 @@ const ALL_TABS = [
   { path: "/journal",       label: "Journal",                 icon: BookOpen        },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
+  { path: "/health",        label: "Health",                  icon: Activity        },
 ];
 
 function useNavPrefs() {

@@ -1237,3 +1237,65 @@ export const prayerItems = pgTable("prayer_items", {
 export const insertPrayerItemSchema = createInsertSchema(prayerItems).omit({ id: true });
 export type InsertPrayerItem = z.infer<typeof insertPrayerItemSchema>;
 export type PrayerItem = typeof prayerItems.$inferSelect;
+
+// ── HEALTH ────────────────────────────────────────────────────────────────────
+
+export const medications = pgTable("medications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("medication"), // medication | supplement | vitamin
+  dosage: text("dosage"),
+  frequency: text("frequency"), // Once daily | Twice daily | As needed | Weekly | etc.
+  timeOfDay: text("time_of_day"), // Morning | Evening | With meals | Bedtime | As needed
+  startDate: text("start_date"),
+  isActive: boolean("is_active").notNull().default(true),
+  prescribedBy: text("prescribed_by"),
+  notes: text("notes"),
+});
+export const insertMedicationSchema = createInsertSchema(medications).omit({ id: true });
+export type InsertMedication = z.infer<typeof insertMedicationSchema>;
+export type Medication = typeof medications.$inferSelect;
+
+export const healthMetrics = pgTable("health_metrics", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(), // Weight | Blood Pressure | Blood Sugar | Heart Rate | custom
+  value: text("value").notNull(), // text so "120/80" works for BP
+  unit: text("unit"), // lbs | kg | mmHg | mg/dL | bpm | %
+  date: text("date").notNull(),
+  notes: text("notes"),
+});
+export const insertHealthMetricSchema = createInsertSchema(healthMetrics).omit({ id: true });
+export type InsertHealthMetric = z.infer<typeof insertHealthMetricSchema>;
+export type HealthMetric = typeof healthMetrics.$inferSelect;
+
+export const sleepLogs = pgTable("sleep_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  date: text("date").notNull(), // date of the night (e.g. "2024-01-15")
+  hoursSlept: real("hours_slept").notNull(),
+  quality: integer("quality"), // 1-5
+  bedtime: text("bedtime"), // "10:30 PM"
+  wakeTime: text("wake_time"), // "6:30 AM"
+  notes: text("notes"),
+});
+export const insertSleepLogSchema = createInsertSchema(sleepLogs).omit({ id: true });
+export type InsertSleepLog = z.infer<typeof insertSleepLogSchema>;
+export type SleepLog = typeof sleepLogs.$inferSelect;
+
+export const careProviders = pgTable("care_providers", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),          // "Dr. Sarah Kim"
+  specialty: text("specialty"),          // "Primary Care" | "Dentist" | "Cardiologist" | etc.
+  practice: text("practice"),            // Practice/clinic name
+  phone: text("phone"),
+  address: text("address"),
+  lastAppointment: text("last_appointment"),   // ISO date
+  nextAppointment: text("next_appointment"),   // ISO date
+  notes: text("notes"),
+});
+export const insertCareProviderSchema = createInsertSchema(careProviders).omit({ id: true });
+export type InsertCareProvider = z.infer<typeof insertCareProviderSchema>;
+export type CareProvider = typeof careProviders.$inferSelect;
