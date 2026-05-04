@@ -2917,7 +2917,24 @@ Rules:
       }
 
       if (!match) {
-        return res.status(404).json({ error: `"${memberName}" not found in US Congress sessions on LegiScan.` });
+        // Collect debug info so we can diagnose the name format / roster structure
+        const debugPeopleResp = await fetch(
+          `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${sessions[0].session_id}`
+        );
+        const debugData = await debugPeopleResp.json() as any;
+        const debugRoster: any[] = debugData.sessionpeople?.people ?? [];
+        const sampleNames = debugRoster.slice(0, 5).map((p: any) => p.name ?? "(no name)");
+        const debugInfo = {
+          sessionCount: sessions.length,
+          firstSession: { id: sessions[0].session_id, yearStart: sessions[0].year_start, yearEnd: sessions[0].year_end },
+          rosterSize: debugRoster.length,
+          sampleNames,
+          rawKeys: Object.keys(debugData),
+        };
+        return res.status(404).json({
+          error: `"${memberName}" not found in US Congress sessions on LegiScan.`,
+          debug: debugInfo,
+        });
       }
 
       // Step 3: get their votes
