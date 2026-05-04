@@ -588,9 +588,19 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
             </div>
           )}
           {isError && (
-            <div className="py-2 space-y-0.5">
-              <p className="text-xs text-destructive">Could not load voting record.</p>
-              {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
+            <div className="py-2 space-y-1">
+              {fetchError?.includes("PROPUBLICA_API_KEY") ? (
+                <p className="text-xs text-amber-500 dark:text-amber-400">
+                  Voting records require a free ProPublica API key.{" "}
+                  <a href="https://www.propublica.org/datastore/api/propublica-congress-api" target="_blank" rel="noopener noreferrer" className="underline">Get one here</a>
+                  {" "}(free, instant), then add it as <code className="font-mono text-[11px]">PROPUBLICA_API_KEY</code> in your Railway environment variables.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-destructive">Could not load voting record.</p>
+                  {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
+                </>
+              )}
             </div>
           )}
           {!isLoading && !isError && votes.length === 0 && (

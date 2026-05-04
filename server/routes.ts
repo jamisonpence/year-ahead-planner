@@ -2870,87 +2870,68 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // GovTrack — recent votes for a federal member
-  // (Congress.gov v3 has no per-member votes endpoint; GovTrack is free, no key required)
+  // ProPublica Congress API — recent votes for a federal member by bioguideId
+  // Free API key at: https://www.propublica.org/datastore/api/propublica-congress-api
+  // Add as PROPUBLICA_API_KEY in Railway environment variables
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
       const { bioguideId } = req.params;
-      const memberName = (req.query.name as string | undefined) ?? "";
 
-      // WIMR-sourced fake IDs are not real bioguideIds
       if (bioguideId.startsWith("wimr-")) {
         return res.status(400).json({
           error: "Re-add this rep via Find Representatives → By State to enable voting records.",
         });
       }
 
-      // Helper: resolve GovTrack person ID, returns null on any failure/miss
-      async function resolveGovtrackId(): Promise<number | null> {
-        // Try 1: look up by bioguideId
-        try {
-          const r = await fetch(`https://www.govtrack.us/api/v2/person?bioguideid=${bioguideId}`, {
-            headers: { Accept: "application/json" },
-          });
-          if (r.ok) {
-            const d = await r.json() as any;
-            const id = d.objects?.[0]?.id;
-            if (id) return id;
-          }
-        } catch { /* fall through */ }
-
-        // Try 2: look up by name (useful for very new members not yet indexed by bioguideId)
-        if (memberName) {
-          try {
-            const r = await fetch(
-              `https://www.govtrack.us/api/v2/person?name=${encodeURIComponent(memberName)}&current_role=1`,
-              { headers: { Accept: "application/json" } }
-            );
-            if (r.ok) {
-              const d = await r.json() as any;
-              const id = d.objects?.[0]?.id;
-              if (id) return id;
-            }
-          } catch { /* fall through */ }
-        }
-
-        return null;
-      }
-
-      const govtrackId = await resolveGovtrackId();
-      if (!govtrackId) {
-        return res.status(404).json({
-          error: "Member not found in GovTrack. They may be very newly appointed, or try re-adding via Find Representatives → By State.",
+      const proPublicaKey = process.env.PROPUBLICA_API_KEY;
+      if (!proPublicaKey) {
+        return res.status(503).json({
+          error: "PROPUBLICA_API_KEY not configured. Get a free key at propublica.org/datastore/api/propublica-congress-api and add it as PROPUBLICA_API_KEY in Railway.",
         });
       }
 
-      // Fetch their 20 most-recent votes
-      const votesResp = await fetch(
-        `https://www.govtrack.us/api/v2/vote_voter?person=${govtrackId}&order_by=-created&limit=20`,
-        { headers: { Accept: "application/json" } }
-      );
-      if (!votesResp.ok) {
-        const body = await votesResp.text().catch(() => "");
-        console.error(`[votes/federal] GovTrack votes ${votesResp.status} for person ${govtrackId}:`, body.slice(0, 300));
-        return res.status(votesResp.status).json({ error: `GovTrack votes fetch failed (${votesResp.status})` });
-      }
-      const votesData = await votesResp.json() as any;
-      const objects: any[] = votesData.objects ?? [];
+      // ProPublica member votes endpoint — uses the same bioguideId as Congress.gov
+      const url = `https://api.propublica.org/congress/v1/members/${bioguideId}/votes.json`;
+      const resp = await fetch(url, {
+        headers: { "X-API-Key": proPublicaKey, Accept: "application/json" },
+      });
 
-      const votes = objects.map((obj: any) => {
-        const v = obj.vote ?? {};
-        const option = obj.option ?? {};
-        const bill = v.related_bill;
-        const billNumber = bill
-          ? `${(bill.bill_type ?? "").toUpperCase()} ${bill.number}`
-          : v.number ? `Roll Call ${v.number}` : "";
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        console.error(`[votes/federal] ProPublica ${resp.status} for ${bioguideId}:`, body.slice(0, 300));
+        return res.status(resp.status).json({ error: `ProPublica API returned ${resp.status}`, detail: body.slice(0, 200) });
+      }
+
+      const data = await resp.json() as any;
+      const rawVotes: any[] = data.results?.[0]?.votes ?? [];
+
+      const votes = rawVotes.slice(0, 20).map((v: any) => {
+        const bill = v.bill;
+        // Prefer specific bill number; fall back to roll call
+        const billNumber = bill?.number
+          ? bill.number
+          : v.roll_call ? `Roll Call ${v.roll_call}` : "";
         const billDescription = bill?.title ?? v.question ?? v.description ?? "";
-        const voteUrl = v.url ? `https://www.govtrack.us${v.url}` : (v.source_url ?? null);
+
+        // Build Congress.gov URL for the bill if available
+        let voteUrl: string | null = bill?.congressdotgov_url ?? null;
+        if (!voteUrl && v.congress && v.chamber && v.session && v.roll_call) {
+          const ch = (v.chamber ?? "").toLowerCase();
+          voteUrl = `https://www.congress.gov/nomination/${v.congress}th-congress?q=%7B%22roll-call-vote%22%3A%22${v.roll_call}%22%7D`;
+        }
+
+        // ProPublica uses "Yes"/"No" — normalise to "Yea"/"Nay" to match display logic
+        const positionRaw: string = v.position ?? "";
+        const memberVote = positionRaw === "Yes" ? "Yea"
+          : positionRaw === "No" ? "Nay"
+          : positionRaw;
+
         return {
           billNumber,
           billDescription,
-          voteDate: v.created ?? "",
-          memberVote: option.value ?? option.key ?? "",
-          chamber: v.chamber_label ?? v.chamber ?? "",
+          voteDate: v.date ?? "",
+          memberVote,
+          chamber: v.chamber ?? "",
           url: voteUrl,
         };
       });
