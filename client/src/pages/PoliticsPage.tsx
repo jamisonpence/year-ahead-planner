@@ -4,7 +4,7 @@ import { format, parseISO, isBefore, isAfter, startOfDay, addDays } from "date-f
 import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
-  CheckCircle2, Circle, ExternalLink, Tag,
+  CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -95,6 +95,227 @@ function Badge({ className, children }: { className?: string; children: React.Re
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${className}`}>{children}</span>;
 }
 
+// ── US States ─────────────────────────────────────────────────────────────────
+
+const US_STATES = [
+  { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" },
+  { code: "AR", name: "Arkansas" }, { code: "CA", name: "California" }, { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" }, { code: "FL", name: "Florida" },
+  { code: "GA", name: "Georgia" }, { code: "HI", name: "Hawaii" }, { code: "ID", name: "Idaho" },
+  { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" }, { code: "IA", name: "Iowa" },
+  { code: "KS", name: "Kansas" }, { code: "KY", name: "Kentucky" }, { code: "LA", name: "Louisiana" },
+  { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" }, { code: "MA", name: "Massachusetts" },
+  { code: "MI", name: "Michigan" }, { code: "MN", name: "Minnesota" }, { code: "MS", name: "Mississippi" },
+  { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" }, { code: "NE", name: "Nebraska" },
+  { code: "NV", name: "Nevada" }, { code: "NH", name: "New Hampshire" }, { code: "NJ", name: "New Jersey" },
+  { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" }, { code: "NC", name: "North Carolina" },
+  { code: "ND", name: "North Dakota" }, { code: "OH", name: "Ohio" }, { code: "OK", name: "Oklahoma" },
+  { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" }, { code: "RI", name: "Rhode Island" },
+  { code: "SC", name: "South Carolina" }, { code: "SD", name: "South Dakota" }, { code: "TN", name: "Tennessee" },
+  { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" }, { code: "VT", name: "Vermont" },
+  { code: "VA", name: "Virginia" }, { code: "WA", name: "Washington" }, { code: "WV", name: "West Virginia" },
+  { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" }, { code: "DC", name: "D.C." },
+  { code: "AS", name: "American Samoa" }, { code: "GU", name: "Guam" }, { code: "PR", name: "Puerto Rico" },
+  { code: "VI", name: "U.S. Virgin Islands" },
+];
+
+// ── Congress.gov search component ─────────────────────────────────────────────
+
+type CongressMember = {
+  bioguideId: string;
+  name: string;
+  title: string;
+  chamber: "Senate" | "House";
+  party: string;
+  state: string;
+  district: string | null;
+  website: string | null;
+  imageUrl: string | null;
+};
+
+function CongressSearch({
+  existingOfficials,
+  onAdd,
+}: {
+  existingOfficials: PoliticalOfficial[];
+  onAdd: (member: CongressMember) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [stateCode, setStateCode] = useState("");
+  const [searchedState, setSearchedState] = useState("");
+  const [members, setMembers] = useState<CongressMember[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  // Pre-populate addedIds based on existing officials (match by name)
+  const existingNames = new Set(existingOfficials.map(o => o.name.toLowerCase().trim()));
+
+  async function search() {
+    if (!stateCode) return;
+    setLoading(true);
+    setError("");
+    setMembers([]);
+    try {
+      const r = await apiRequest("GET", `/api/politics/congress/members?state=${stateCode}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed to load members");
+      setMembers(data);
+      setSearchedState(stateCode);
+      setAddedIds(new Set());
+    } catch (e: any) {
+      setError(e.message ?? "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdd(member: CongressMember) {
+    setAddingIds(prev => new Set(prev).add(member.bioguideId));
+    try {
+      await onAdd(member);
+      setAddedIds(prev => new Set(prev).add(member.bioguideId));
+    } finally {
+      setAddingIds(prev => { const s = new Set(prev); s.delete(member.bioguideId); return s; });
+    }
+  }
+
+  async function addAll() {
+    const toAdd = members.filter(m => !addedIds.has(m.bioguideId) && !existingNames.has(m.name.toLowerCase().trim()));
+    for (const m of toAdd) await handleAdd(m);
+  }
+
+  const senators = members.filter(m => m.chamber === "Senate");
+  const houseMembers = members.filter(m => m.chamber === "House");
+  const allAdded = members.length > 0 && members.every(m => addedIds.has(m.bioguideId) || existingNames.has(m.name.toLowerCase().trim()));
+  const stateName = US_STATES.find(s => s.code === searchedState)?.name ?? searchedState;
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="gap-1.5">
+        <Search size={14} />Find from Congress.gov
+      </Button>
+    );
+  }
+
+  return (
+    <div className="border rounded-xl bg-secondary/20 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <Landmark size={15} className="text-primary" />
+          Find Federal Representatives
+        </h3>
+        <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-secondary transition-colors">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* State picker + search */}
+      <div className="flex gap-2">
+        <Select
+          value={stateCode}
+          onChange={e => setStateCode(e.target.value)}
+          className="flex-1"
+        >
+          <option value="">Select a state…</option>
+          {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+        </Select>
+        <Button size="sm" onClick={search} disabled={!stateCode || loading} className="gap-1.5 shrink-0">
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+          {loading ? "Loading…" : "Search"}
+        </Button>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {members.length > 0 && (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {members.length} current federal members for <strong>{stateName}</strong>
+            </p>
+            {!allAdded && (
+              <Button size="sm" variant="outline" onClick={addAll} className="gap-1.5 text-xs h-7">
+                <PlusCircle size={12} />Add All {stateName} Reps
+              </Button>
+            )}
+          </div>
+
+          {/* Senators */}
+          {senators.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">U.S. Senators</p>
+              <div className="space-y-1.5">
+                {senators.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
+              </div>
+            </div>
+          )}
+
+          {/* House */}
+          {houseMembers.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">U.S. House of Representatives ({houseMembers.length} members)</p>
+              <div className="space-y-1.5">
+                {houseMembers.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="text-xs text-muted-foreground/60">Data from <a href="https://api.congress.gov" target="_blank" rel="noopener noreferrer" className="underline">Congress.gov</a></p>
+    </div>
+  );
+}
+
+function MemberRow({
+  member, existingNames, addedIds, addingIds, onAdd,
+}: {
+  member: CongressMember;
+  existingNames: Set<string>;
+  addedIds: Set<string>;
+  addingIds: Set<string>;
+  onAdd: (m: CongressMember) => Promise<void>;
+}) {
+  const alreadyExists = existingNames.has(member.name.toLowerCase().trim());
+  const justAdded = addedIds.has(member.bioguideId);
+  const isAdding = addingIds.has(member.bioguideId);
+  const done = alreadyExists || justAdded;
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-card border">
+      {member.imageUrl && (
+        <img src={member.imageUrl} alt={member.name} className="w-8 h-8 rounded-full object-cover shrink-0 bg-secondary" />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm font-medium">{member.name}</span>
+          {member.party && (
+            <Badge className={PARTY_COLORS[member.party] ?? "bg-secondary text-muted-foreground"}>{member.party}</Badge>
+          )}
+          {member.district && <Badge className="bg-secondary text-muted-foreground">Dist. {member.district}</Badge>}
+        </div>
+        <p className="text-xs text-muted-foreground">{member.title}</p>
+      </div>
+      <button
+        onClick={() => !done && !isAdding && onAdd(member)}
+        disabled={done || isAdding}
+        className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors ${
+          done
+            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 cursor-default"
+            : isAdding
+              ? "bg-secondary text-muted-foreground cursor-wait"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+        }`}
+      >
+        {isAdding ? <Loader2 size={11} className="animate-spin" /> : done ? <Check size={11} /> : <Plus size={11} />}
+        {done ? (alreadyExists ? "In list" : "Added") : isAdding ? "Adding…" : "Add"}
+      </button>
+    </div>
+  );
+}
+
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -141,6 +362,22 @@ function OfficialsTab() {
     else createMut.mutate(form);
   }
 
+  async function addFromCongress(member: CongressMember): Promise<void> {
+    return new Promise((resolve, reject) => {
+      createMut.mutate(
+        {
+          name: member.name,
+          title: member.title,
+          level: "federal",
+          party: member.party,
+          district: member.district ?? undefined,
+          website: member.website ?? undefined,
+        },
+        { onSuccess: () => resolve(), onError: (e) => reject(e) }
+      );
+    });
+  }
+
   const grouped = LEVELS.reduce((acc, level) => {
     acc[level] = officials.filter(o => (o.level ?? "").toLowerCase() === level.toLowerCase());
     return acc;
@@ -149,8 +386,11 @@ function OfficialsTab() {
 
   return (
     <div className="space-y-4">
+      {/* Congress.gov search */}
+      <CongressSearch existingOfficials={officials} onAdd={addFromCongress} />
+
       {!showForm ? (
-        <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5"><Plus size={14} />Add Official</Button>
+        <Button size="sm" variant="outline" onClick={() => setShowForm(true)} className="gap-1.5"><Plus size={14} />Add Manually</Button>
       ) : (
         <div className="border rounded-xl p-4 bg-secondary/30 space-y-3">
           <h3 className="font-medium text-sm">{editing ? "Edit Official" : "Add Official"}</h3>

@@ -2771,6 +2771,52 @@ Rules:
 
   // ── Politics ────────────────────────────────────────────────────────────────
 
+  // Congress.gov proxy — look up current federal members by state
+  app.get("/api/politics/congress/members", requireAuth, async (req, res) => {
+    try {
+      const state = (req.query.state as string | undefined)?.toUpperCase();
+      if (!state || state.length !== 2) return res.status(400).json({ error: "Valid 2-letter state code required" });
+      const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
+      const url = `https://api.congress.gov/v3/member?stateCode=${state}&currentMember=true&limit=300&api_key=${apiKey}`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) return res.status(resp.status).json({ error: "Congress.gov API error" });
+      const data = await resp.json() as { members?: any[] };
+      // Normalise fields for the client
+      const members = (data.members ?? []).map((m: any) => {
+        // Congress.gov returns name as "LastName, FirstName [Middle]"
+        const rawName: string = m.name ?? "";
+        const commaIdx = rawName.indexOf(",");
+        const name = commaIdx > -1
+          ? `${rawName.slice(commaIdx + 1).trim()} ${rawName.slice(0, commaIdx).trim()}`
+          : rawName;
+        // Determine chamber from most-recent term
+        const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
+          : m.terms?.item ? [m.terms.item] : [];
+        const latestTerm = terms[terms.length - 1];
+        const chamber: string = latestTerm?.chamber ?? "";
+        const isSenate = chamber.toLowerCase().includes("senate");
+        const title = isSenate ? "U.S. Senator" : `U.S. Representative${m.district ? `, District ${m.district}` : ""}`;
+        return {
+          bioguideId: m.bioguideId,
+          name,
+          title,
+          chamber: isSenate ? "Senate" : "House",
+          party: m.partyName ?? "",
+          state: m.state ?? state,
+          district: m.district ? String(m.district) : null,
+          website: m.officialWebsiteUrl ?? null,
+          imageUrl: m.depiction?.imageUrl ?? null,
+        };
+      });
+      // Sort: Senate first, then House by district
+      members.sort((a: any, b: any) => {
+        if (a.chamber !== b.chamber) return a.chamber === "Senate" ? -1 : 1;
+        return (Number(a.district) || 0) - (Number(b.district) || 0);
+      });
+      res.json(members);
+    } catch (e) { handleError(res, e); }
+  });
+
   // Officials / Representatives
   app.get("/api/politics/officials", requireAuth, async (req, res) => {
     try { res.json(await storage.getPoliticalOfficials((req.user as User).id)); } catch (e) { handleError(res, e); }
