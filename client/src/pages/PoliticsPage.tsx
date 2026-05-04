@@ -523,31 +523,27 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
     queryKey: ["votes", official.id, (official as any).externalId, cachedPeopleId],
     queryFn: async () => {
       setFetchError(null);
-      if (isFederal) {
-        const r = await apiRequest("GET", `/api/politics/votes/federal/${(official as any).externalId}`);
-        const body = await r.json();
-        if (!r.ok) {
-          const msg = body?.detail ?? body?.error ?? `HTTP ${r.status}`;
-          setFetchError(msg);
-          throw new Error(msg);
+      try {
+        if (isFederal) {
+          // apiRequest throws on non-ok with message "${status}: ${body}"
+          const r = await apiRequest("GET", `/api/politics/votes/federal/${(official as any).externalId}`);
+          return r.json();
         }
-        return body;
-      }
-      // State: use cached peopleId or auto-lookup by name+stateCode
-      const params = new URLSearchParams();
-      const pid = cachedPeopleId ?? (official as any).externalId;
-      if (pid) params.set("peopleId", pid);
-      if (official.name) params.set("name", official.name);
-      if ((official as any).stateCode) params.set("stateCode", (official as any).stateCode);
-      const r = await apiRequest("GET", `/api/politics/votes/state?${params}`);
-      const body = await r.json();
-      if (!r.ok) {
-        const msg = body?.detail ?? body?.error ?? `HTTP ${r.status}`;
+        // State: use cached peopleId or auto-lookup by name+stateCode
+        const params = new URLSearchParams();
+        const pid = cachedPeopleId ?? (official as any).externalId;
+        if (pid) params.set("peopleId", pid);
+        if (official.name) params.set("name", official.name);
+        if ((official as any).stateCode) params.set("stateCode", (official as any).stateCode);
+        const r = await apiRequest("GET", `/api/politics/votes/state?${params}`);
+        const body = await r.json();
+        if (body.peopleId && body.peopleId !== cachedPeopleId) setCachedPeopleId(body.peopleId);
+        return body.votes ?? body;
+      } catch (e: any) {
+        const msg: string = e?.message ?? String(e);
         setFetchError(msg);
-        throw new Error(msg);
+        throw e;
       }
-      if (body.peopleId && body.peopleId !== cachedPeopleId) setCachedPeopleId(body.peopleId);
-      return body.votes ?? body;
     },
     enabled,
     staleTime: 5 * 60 * 1000,
