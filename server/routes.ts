@@ -2870,9 +2870,8 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // ── Federal voting records via official government XML (no API key required) ───
-  // Senate: https://www.senate.gov/legislative/LIS/roll_call_lists/
-  // House:  https://clerk.house.gov/evs/
+  // ── Federal voting records via official government sources (no API key required) ──
+  // Senate: senate.gov LIS roll call XML  |  House: clerk.house.gov EVS text files
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
       const bioguideId = req.params.bioguideId;
@@ -2887,7 +2886,9 @@ Rules:
 
       const isSenator = memberTitle.includes("senator") || memberTitle.includes("senate");
       const currentYear = new Date().getFullYear();
-      const CONGRESS = 119; // 119th Congress (2025–2026)
+      // 119th Congress (2025–2026). Session 1 = odd year (2025), Session 2 = even year (2026).
+      const CONGRESS = 119;
+      const SESSION = currentYear % 2 === 0 ? 2 : 1;
 
       // ── XML helpers ──────────────────────────────────────────────────────────
       function xmlTag(xml: string, tag: string): string {
@@ -2902,53 +2903,61 @@ Rules:
 
       if (isSenator) {
         // ── Senate ─────────────────────────────────────────────────────────────
-        const menuResp = await fetch(
-          `https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_${CONGRESS}_1.xml`
-        );
-        if (!menuResp.ok) return res.status(502).json({ error: "Could not fetch Senate vote list from senate.gov" });
-        const menuXml = await menuResp.text();
+        // Get vote numbers from the current session's menu; fall back to previous session.
+        const getSenateVoteNums = async (sess: number): Promise<string[]> => {
+          const r = await fetch(
+            `https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_${CONGRESS}_${sess}.xml`,
+            { signal: AbortSignal.timeout(10000) }
+          );
+          if (!r.ok) return [];
+          const xml = await r.text();
+          return xmlBlocks(xml, "vote")
+            .map((b) => xmlTag(b, "vote_number"))
+            .filter(Boolean);
+        };
 
-        const voteBlocks = xmlBlocks(menuXml, "vote");
-        const voteMetaMap: Record<string, any> = {};
-        const recentVoteNums: string[] = [];
-
-        for (const b of voteBlocks.slice(0, 60)) {
-          const num = xmlTag(b, "vote_number");
-          if (!num) continue;
-          recentVoteNums.push(num);
-          voteMetaMap[num] = {
-            date:     xmlTag(b, "vote_date"),
-            title:    xmlTag(b, "vote_title"),
-            question: xmlTag(b, "question"),
-            result:   xmlTag(b, "vote_result"),
-          };
+        let voteNums = await getSenateVoteNums(SESSION);
+        // If current session has too few votes, also include recent ones from previous session
+        if (voteNums.length < 20 && SESSION > 1) {
+          const prevNums = await getSenateVoteNums(SESSION - 1);
+          voteNums = [...voteNums, ...prevNums.slice(0, 40)];
         }
 
-        const fetchSenVote = async (voteNum: string) => {
+        // Fetch individual vote XMLs in parallel; extract ALL metadata from the file itself
+        const fetchSenVote = async (voteNum: string, sess: number) => {
           const padded = voteNum.padStart(5, "0");
-          const url = `https://www.senate.gov/legislative/LIS/roll_call_votes/vote${CONGRESS}1/vote_${CONGRESS}_1_${padded}.xml`;
+          const url = `https://www.senate.gov/legislative/LIS/roll_call_votes/vote${CONGRESS}${sess}/vote_${CONGRESS}_${sess}_${padded}.xml`;
           try {
             const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
             if (!r.ok) return null;
             const xml = await r.text();
+            // Guard: ensure this file is actually for the expected congress
+            const xmlCongress = xmlTag(xml, "congress");
+            if (xmlCongress && xmlCongress !== String(CONGRESS)) return null;
+            // Find member by last name + first initial
             const memberBlock = xmlBlocks(xml, "member").find((m) => {
               const mLast = xmlTag(m, "last_name").toLowerCase();
               const mFirst = xmlTag(m, "first_name").toLowerCase();
               return mLast === lastName && mFirst.startsWith(firstName[0]);
             });
             if (!memberBlock) return null;
-            const meta = voteMetaMap[voteNum] ?? {};
             return {
-              billNumber:      meta.title || `Senate Vote #${voteNum}`,
-              billDescription: meta.question || meta.result || "",
-              voteDate:        meta.date || "",
+              billNumber:      xmlTag(xml, "vote_title") || `Senate Vote #${voteNum}`,
+              billDescription: xmlTag(xml, "vote_question_text") || xmlTag(xml, "question") || "",
+              voteDate:        xmlTag(xml, "vote_date"),   // Full date: "December 18, 2025, 09:42 PM"
               memberVote:      xmlTag(memberBlock, "vote_cast"),
               url,
             };
           } catch { return null; }
         };
 
-        const settled = await Promise.allSettled(recentVoteNums.map(fetchSenVote));
+        // voteNums = [currentSession nums..., prevSession nums...] — tag each with session
+        const curSessionNums = await getSenateVoteNums(SESSION);
+        const curCount = curSessionNums.length;
+        const allNums = voteNums.slice(0, 60);
+        const settled = await Promise.allSettled(
+          allNums.map((num, i) => fetchSenVote(num, i < curCount ? SESSION : Math.max(1, SESSION - 1)))
+        );
         votes = settled
           .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
           .map((r) => r.value)
@@ -2956,70 +2965,88 @@ Rules:
 
       } else {
         // ── House ──────────────────────────────────────────────────────────────
-        const isRealBioguide = bioguideId && !bioguideId.startsWith("wimr-") && bioguideId !== "lookup";
+        // clerk.house.gov EVS files are plain text (not XML), one per roll call.
+        // We probe for recent vote numbers by fetching a plausible range in parallel.
+        // Approximate current roll call count: ~400/year, session 1=2025, session 2=2026.
+        const probeYear = currentYear;
+        const highGuess = SESSION === 2 ? 200 : 500;  // rough upper bound
+        const probeNums = Array.from({ length: 60 }, (_, i) => highGuess - i); // descending
 
-        const indexResp = await fetch(`https://clerk.house.gov/xml/lists/evs/${currentYear}.xml`);
-        if (!indexResp.ok) return res.status(502).json({ error: "Could not fetch House vote list from clerk.house.gov" });
-        const indexXml = await indexResp.text();
-
-        // Extract roll-call numbers and metadata from the index XML
-        const rollCallNums: string[] = [];
-        const rollMeta: Record<string, any> = {};
-
-        for (const block of xmlBlocks(indexXml, "vote").slice(0, 60)) {
-          const num =
-            xmlTag(block, "roll-call") ||
-            xmlTag(block, "rollcall-num") ||
-            xmlTag(block, "vote-number") ||
-            xmlTag(block, "roll_call");
-          if (!num) continue;
-          rollCallNums.push(num);
-          rollMeta[num] = {
-            date:     xmlTag(block, "action-date") || xmlTag(block, "vote-date"),
-            question: xmlTag(block, "vote-question") || xmlTag(block, "question"),
-            bill:     xmlTag(block, "legis-num") || xmlTag(block, "bill-number"),
+        // Helper: parse plain-text EVS vote file
+        const parseHouseVote = (text: string): { bill: string; date: string; question: string; title: string } => {
+          const dateMatch = text.match(/(\d{1,2}-\w{3}-\d{4})/);
+          const questionMatch = text.match(/QUESTION:\s+(.+)/);
+          const titleMatch = text.match(/BILL TITLE:\s+(.+)/);
+          const billMatch = text.match(/(\S[\S\s]*?)\s{2,}(?:YEA-AND-NAY|RECORDED VOTE|TWO-THIRDS)/i);
+          return {
+            date:     dateMatch?.[1] ?? "",
+            question: questionMatch?.[1]?.trim() ?? "",
+            title:    titleMatch?.[1]?.trim() ?? "",
+            bill:     billMatch?.[1]?.trim() ?? "",
           };
-        }
+        };
 
-        const fetchHouseVote = async (rollNum: string) => {
-          const padded = rollNum.padStart(3, "0");
-          const url = `https://clerk.house.gov/evs/${currentYear}/roll${padded}.xml`;
+        const findHouseMemberVote = (text: string): string | null => {
+          // Sections: "---- YEAS", "---- NAYS", "---- NOT VOTING", "---- ANSWERED"
+          const sectionPatterns: [RegExp, string][] = [
+            [/---- YEAS[\s\d-]+([\s\S]*?)(?=----|\Z)/i, "Yea"],
+            [/---- NAYS[\s\d-]+([\s\S]*?)(?=----|\Z)/i, "Nay"],
+            [/---- NOT VOTING[\s\d-]+([\s\S]*?)(?=----|\Z)/i, "Not Voting"],
+            [/---- ANSWERED "PRESENT"[\s\d-]+([\s\S]*?)(?=----|\Z)/i, "Present"],
+          ];
+          const lastNameLower = lastName.toLowerCase();
+          for (const [pattern, voteName] of sectionPatterns) {
+            const section = text.match(pattern)?.[0] ?? "";
+            if (!section) continue;
+            // Match "Williams" or "Williams (TX)" — case-insensitive
+            const nameRx = new RegExp(`\\b${lastName}\\b`, "i");
+            if (nameRx.test(section)) return voteName;
+          }
+          return null;
+        };
+
+        const fetchHouseVote = async (rollNum: number) => {
+          const padded = String(rollNum).padStart(3, "0");
+          const url = `https://clerk.house.gov/evs/${probeYear}/roll${padded}.xml`;
           try {
             const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
             if (!r.ok) return null;
-            const xml = await r.text();
-
-            // Find our member — by bioguide-id attribute first, then by name
-            const rvBlocks = xmlBlocks(xml, "recorded-vote");
-            const rvBlock = rvBlocks.find((block) => {
-              if (isRealBioguide && block.includes(`bioguide-id="${bioguideId}"`)) return true;
-              const lower = block.toLowerCase();
-              return lower.includes(lastName) && lower.includes(firstName[0]);
-            });
-            if (!rvBlock) return null;
-
-            const voteCast = xmlTag(rvBlock, "vote");
-            const meta = rollMeta[rollNum] ?? {};
+            const text = await r.text();
+            const memberVote = findHouseMemberVote(text);
+            if (!memberVote) return null;
+            const meta = parseHouseVote(text);
             return {
-              billNumber:      xmlTag(xml, "legis-num") || meta.bill || `Roll Call #${rollNum}`,
-              billDescription: xmlTag(xml, "vote-question") || meta.question || "",
-              voteDate:        xmlTag(xml, "action-date") || xmlTag(xml, "vote-date") || meta.date || "",
-              memberVote:      voteCast,
+              billNumber:      meta.bill || meta.title || `Roll Call #${rollNum}`,
+              billDescription: meta.question || "",
+              voteDate:        meta.date || "",
+              memberVote,
               url,
             };
           } catch { return null; }
         };
 
-        const settled = await Promise.allSettled(rollCallNums.map(fetchHouseVote));
+        const settled = await Promise.allSettled(probeNums.map(fetchHouseVote));
         votes = settled
           .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
           .map((r) => r.value)
           .slice(0, 20);
+
+        // If nothing found in current year, try previous year
+        if (votes.length === 0 && probeYear === currentYear) {
+          const prevNums = Array.from({ length: 60 }, (_, i) => 500 - i);
+          const settled2 = await Promise.allSettled(
+            prevNums.map((n) => fetchHouseVote(n))
+          );
+          votes = settled2
+            .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
+            .map((r) => r.value)
+            .slice(0, 20);
+        }
       }
 
       if (votes.length === 0) {
         return res.status(404).json({
-          error: `No recent votes found for "${memberName}" in ${isSenator ? "Senate" : "House"} records. They may not have voted recently, or their name may not match exactly.`,
+          error: `No recent votes found for "${memberName}".`,
         });
       }
 
