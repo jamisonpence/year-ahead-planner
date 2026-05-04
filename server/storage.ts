@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -1026,6 +1026,60 @@ export async function initializeStorage() {
       next_appointment TEXT,
       notes TEXT
     );
+    CREATE TABLE IF NOT EXISTS political_officials (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      title TEXT,
+      level TEXT,
+      party TEXT,
+      district TEXT,
+      phone TEXT,
+      email TEXT,
+      website TEXT,
+      term_end TEXT,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS political_issues (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      topic TEXT NOT NULL,
+      category TEXT,
+      position TEXT,
+      importance INTEGER,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS political_elections (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      date TEXT,
+      level TEXT,
+      voted BOOLEAN NOT NULL DEFAULT false,
+      registration_deadline TEXT,
+      polling_location TEXT,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS civic_actions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      official TEXT,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS political_news_sources (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT,
+      bias TEXT,
+      reliability INTEGER,
+      type TEXT,
+      topics TEXT,
+      notes TEXT
+    );
   `);
 }
 
@@ -1336,6 +1390,27 @@ export interface IStorage {
   createCareProvider(data: import("@shared/schema").InsertCareProvider, userId: number): Promise<import("@shared/schema").CareProvider>;
   updateCareProvider(id: number, data: Partial<import("@shared/schema").InsertCareProvider>): Promise<import("@shared/schema").CareProvider | undefined>;
   deleteCareProvider(id: number): Promise<boolean>;
+  // Politics
+  getPoliticalOfficials(userId: number): Promise<import("@shared/schema").PoliticalOfficial[]>;
+  createPoliticalOfficial(data: import("@shared/schema").InsertPoliticalOfficial, userId: number): Promise<import("@shared/schema").PoliticalOfficial>;
+  updatePoliticalOfficial(id: number, data: Partial<import("@shared/schema").InsertPoliticalOfficial>): Promise<import("@shared/schema").PoliticalOfficial | undefined>;
+  deletePoliticalOfficial(id: number): Promise<boolean>;
+  getPoliticalIssues(userId: number): Promise<import("@shared/schema").PoliticalIssue[]>;
+  createPoliticalIssue(data: import("@shared/schema").InsertPoliticalIssue, userId: number): Promise<import("@shared/schema").PoliticalIssue>;
+  updatePoliticalIssue(id: number, data: Partial<import("@shared/schema").InsertPoliticalIssue>): Promise<import("@shared/schema").PoliticalIssue | undefined>;
+  deletePoliticalIssue(id: number): Promise<boolean>;
+  getPoliticalElections(userId: number): Promise<import("@shared/schema").PoliticalElection[]>;
+  createPoliticalElection(data: import("@shared/schema").InsertPoliticalElection, userId: number): Promise<import("@shared/schema").PoliticalElection>;
+  updatePoliticalElection(id: number, data: Partial<import("@shared/schema").InsertPoliticalElection>): Promise<import("@shared/schema").PoliticalElection | undefined>;
+  deletePoliticalElection(id: number): Promise<boolean>;
+  getCivicActions(userId: number): Promise<import("@shared/schema").CivicAction[]>;
+  createCivicAction(data: import("@shared/schema").InsertCivicAction, userId: number): Promise<import("@shared/schema").CivicAction>;
+  updateCivicAction(id: number, data: Partial<import("@shared/schema").InsertCivicAction>): Promise<import("@shared/schema").CivicAction | undefined>;
+  deleteCivicAction(id: number): Promise<boolean>;
+  getPoliticalNewsSources(userId: number): Promise<import("@shared/schema").PoliticalNewsSource[]>;
+  createPoliticalNewsSource(data: import("@shared/schema").InsertPoliticalNewsSource, userId: number): Promise<import("@shared/schema").PoliticalNewsSource>;
+  updatePoliticalNewsSource(id: number, data: Partial<import("@shared/schema").InsertPoliticalNewsSource>): Promise<import("@shared/schema").PoliticalNewsSource | undefined>;
+  deletePoliticalNewsSource(id: number): Promise<boolean>;
 }
 
 export const storage: IStorage = {
@@ -3308,6 +3383,83 @@ export const storage: IStorage = {
   },
   async deleteCareProvider(id: number) {
     const result = await db.delete(careProviders).where(eq(careProviders.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Politics ────────────────────────────────────────────────────────────────
+  async getPoliticalOfficials(userId: number) {
+    return db.select().from(politicalOfficials).where(eq(politicalOfficials.userId, userId)).orderBy(asc(politicalOfficials.level), asc(politicalOfficials.name));
+  },
+  async createPoliticalOfficial(data: any, userId: number) {
+    const result = await db.insert(politicalOfficials).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePoliticalOfficial(id: number, data: any) {
+    const result = await db.update(politicalOfficials).set(data).where(eq(politicalOfficials.id, id)).returning();
+    return result[0];
+  },
+  async deletePoliticalOfficial(id: number) {
+    const result = await db.delete(politicalOfficials).where(eq(politicalOfficials.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getPoliticalIssues(userId: number) {
+    return db.select().from(politicalIssues).where(eq(politicalIssues.userId, userId)).orderBy(desc(politicalIssues.importance), asc(politicalIssues.topic));
+  },
+  async createPoliticalIssue(data: any, userId: number) {
+    const result = await db.insert(politicalIssues).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePoliticalIssue(id: number, data: any) {
+    const result = await db.update(politicalIssues).set(data).where(eq(politicalIssues.id, id)).returning();
+    return result[0];
+  },
+  async deletePoliticalIssue(id: number) {
+    const result = await db.delete(politicalIssues).where(eq(politicalIssues.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getPoliticalElections(userId: number) {
+    return db.select().from(politicalElections).where(eq(politicalElections.userId, userId)).orderBy(asc(politicalElections.date));
+  },
+  async createPoliticalElection(data: any, userId: number) {
+    const result = await db.insert(politicalElections).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePoliticalElection(id: number, data: any) {
+    const result = await db.update(politicalElections).set(data).where(eq(politicalElections.id, id)).returning();
+    return result[0];
+  },
+  async deletePoliticalElection(id: number) {
+    const result = await db.delete(politicalElections).where(eq(politicalElections.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getCivicActions(userId: number) {
+    return db.select().from(civicActions).where(eq(civicActions.userId, userId)).orderBy(desc(civicActions.date));
+  },
+  async createCivicAction(data: any, userId: number) {
+    const result = await db.insert(civicActions).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateCivicAction(id: number, data: any) {
+    const result = await db.update(civicActions).set(data).where(eq(civicActions.id, id)).returning();
+    return result[0];
+  },
+  async deleteCivicAction(id: number) {
+    const result = await db.delete(civicActions).where(eq(civicActions.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getPoliticalNewsSources(userId: number) {
+    return db.select().from(politicalNewsSources).where(eq(politicalNewsSources.userId, userId)).orderBy(asc(politicalNewsSources.name));
+  },
+  async createPoliticalNewsSource(data: any, userId: number) {
+    const result = await db.insert(politicalNewsSources).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePoliticalNewsSource(id: number, data: any) {
+    const result = await db.update(politicalNewsSources).set(data).where(eq(politicalNewsSources.id, id)).returning();
+    return result[0];
+  },
+  async deletePoliticalNewsSource(id: number) {
+    const result = await db.delete(politicalNewsSources).where(eq(politicalNewsSources.id, id));
     return (result.rowCount ?? 0) > 0;
   },
 };

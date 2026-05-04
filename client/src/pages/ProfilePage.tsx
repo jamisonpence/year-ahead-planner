@@ -5,7 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette, Quote,
-  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles, Flame,
+  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,9 +25,6 @@ type ProfileData = {
     workouts?: Array<{ id: number; name: string; muscleGroup: string | null }>;
     plants?: Array<{ id: number; name: string; species: string | null; imageUrl: string | null }>;
     hobbies?: Array<{ id: number; name: string; hobbyType: string; category: string | null; skillLevel: string; status: string; description: string | null; coverUrl: string | null; isFavorite: boolean }>;
-    faithTexts?: Array<{ id: number; title: string; author: string | null; tradition: string | null; status: string; coverImageUrl: string | null }>;
-    faithPractices?: Array<{ id: number; name: string; frequency: string; status: string }>;
-    faithSermons?: Array<{ id: number; title: string; speaker: string | null; source: string | null; date: string | null; topic: string | null; tags: string[] | null }>;
   };
 };
 
@@ -43,7 +40,6 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType; key: st
   "/workouts":   { label: "Workouts",      icon: Dumbbell,  key: "workouts" },
   "/plants":     { label: "Plants",        icon: Leaf,      key: "plants"   },
   "/hobbies":    { label: "Hobbies",       icon: Sparkles,  key: "hobbies"  },
-  "/faith":      { label: "Faith & Spirituality", icon: Flame, key: "faithTexts" },
 };
 
 function Avatar({ name, avatarUrl, size = 48 }: { name: string; avatarUrl: string | null; size?: number }) {
@@ -506,104 +502,6 @@ function HobbiesPanel({ hobbies }: { hobbies: ProfileData["data"]["hobbies"] }) 
   );
 }
 
-function FaithPanel({ texts, practices, sermons }: {
-  texts: ProfileData["data"]["faithTexts"];
-  practices: ProfileData["data"]["faithPractices"];
-  sermons: ProfileData["data"]["faithSermons"];
-}) {
-  const hasTexts = texts && texts.length > 0;
-  const hasPractices = practices && practices.length > 0;
-  const hasSermons = sermons && sermons.length > 0;
-  if (!hasTexts && !hasPractices && !hasSermons) return <Empty label="Nothing shared yet" />;
-
-  const TRADITION_COLORS: Record<string, string> = {
-    christian: "#3b82f6", islamic: "#10b981", jewish: "#f59e0b",
-    buddhist: "#8b5cf6", hindu: "#f97316", other: "#6366f1",
-  };
-
-  return (
-    <div className="space-y-8">
-      {hasTexts && (
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sacred Texts ({texts!.length})</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {texts!.map(t => {
-              const color = TRADITION_COLORS[t.tradition?.toLowerCase() ?? ""] ?? "#6366f1";
-              return (
-                <div key={t.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card">
-                  {t.coverImageUrl ? (
-                    <img src={t.coverImageUrl} alt={t.title} className="w-10 h-14 object-cover rounded shrink-0" />
-                  ) : (
-                    <div className="w-10 h-14 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22` }}>
-                      <Flame size={16} style={{ color }} />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1 pt-0.5">
-                    <p className="text-sm font-medium leading-snug truncate">{t.title}</p>
-                    {t.author && <p className="text-xs text-muted-foreground truncate">{t.author}</p>}
-                    {t.tradition && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full mt-1 inline-block capitalize" style={{ backgroundColor: `${color}22`, color }}>
-                        {t.tradition}
-                      </span>
-                    )}
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 self-start mt-0.5 ${t.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
-                    {t.status === "completed" ? "Finished" : t.status === "current" ? "Reading" : "Backlog"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {hasPractices && (
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Practices ({practices!.length})</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {practices!.map(p => (
-              <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
-                <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-                  <Flame size={14} className="text-amber-500" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{p.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{p.frequency}</p>
-                </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${p.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
-                  {p.status === "active" ? "Active" : "Paused"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {hasSermons && (
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sermons & Talks ({sermons!.length})</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {sermons!.map(s => (
-              <div key={s.id} className="p-3 rounded-xl border bg-card">
-                <p className="text-sm font-medium leading-snug">{s.title}</p>
-                {s.speaker && <p className="text-xs text-muted-foreground mt-0.5">{s.speaker}{s.source ? ` · ${s.source}` : ""}</p>}
-                {s.topic && <p className="text-xs text-muted-foreground/70 mt-0.5 italic">{s.topic}</p>}
-                {s.tags && s.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {s.tags.slice(0, 3).map(tag => (
-                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{tag}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Profile Page ─────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -702,7 +600,6 @@ export default function ProfilePage() {
       case "/workouts":  return <WorkoutsPanel workouts={data.workouts} />;
       case "/plants":    return <PlantsPanel plants={data.plants} {...panelProps} />;
       case "/hobbies":   return <HobbiesPanel hobbies={data.hobbies} />;
-      case "/faith":     return <FaithPanel texts={data.faithTexts} practices={data.faithPractices} sermons={data.faithSermons} />;
       default:           return <Empty label="Content coming soon" />;
     }
   }

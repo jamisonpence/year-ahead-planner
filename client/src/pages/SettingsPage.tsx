@@ -8,7 +8,7 @@ import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
-  Link2, Check, X, UserCheck, Send, Flame,
+  Link2, Check, X, UserCheck, Send,
 } from "lucide-react";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 
@@ -33,7 +33,6 @@ const PRIVACY_TABS = [
   { path: "/quotes",        label: "Quotes",             icon: Quote           },
   { path: "/art",           label: "Art",                icon: Palette         },
   { path: "/hobbies",       label: "Hobbies",            icon: Sparkles        },
-  { path: "/faith",         label: "Faith & Spirituality", icon: Flame         },
 ];
 
 // ── Tab Privacy Section ───────────────────────────────────────────────────────

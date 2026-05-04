@@ -1299,3 +1299,79 @@ export const careProviders = pgTable("care_providers", {
 export const insertCareProviderSchema = createInsertSchema(careProviders).omit({ id: true });
 export type InsertCareProvider = z.infer<typeof insertCareProviderSchema>;
 export type CareProvider = typeof careProviders.$inferSelect;
+
+// ── Politics ───────────────────────────────────────────────────────────────────
+
+export const politicalOfficials = pgTable("political_officials", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  title: text("title"),
+  level: text("level"),        // "federal" | "state" | "local"
+  party: text("party"),
+  district: text("district"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  termEnd: text("term_end"),
+  notes: text("notes"),
+});
+export const insertPoliticalOfficialSchema = createInsertSchema(politicalOfficials).omit({ id: true });
+export type InsertPoliticalOfficial = z.infer<typeof insertPoliticalOfficialSchema>;
+export type PoliticalOfficial = typeof politicalOfficials.$inferSelect;
+
+export const politicalIssues = pgTable("political_issues", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  topic: text("topic").notNull(),
+  category: text("category"),
+  position: text("position"),  // "support" | "oppose" | "neutral" | "undecided"
+  importance: integer("importance"),  // 1-5
+  notes: text("notes"),
+});
+export const insertPoliticalIssueSchema = createInsertSchema(politicalIssues).omit({ id: true });
+export type InsertPoliticalIssue = z.infer<typeof insertPoliticalIssueSchema>;
+export type PoliticalIssue = typeof politicalIssues.$inferSelect;
+
+export const politicalElections = pgTable("political_elections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  date: text("date"),
+  level: text("level"),        // "federal" | "state" | "local" | "primary"
+  voted: boolean("voted").default(false),
+  registrationDeadline: text("registration_deadline"),
+  pollingLocation: text("polling_location"),
+  notes: text("notes"),
+});
+export const insertPoliticalElectionSchema = createInsertSchema(politicalElections).omit({ id: true });
+export type InsertPoliticalElection = z.infer<typeof insertPoliticalElectionSchema>;
+export type PoliticalElection = typeof politicalElections.$inferSelect;
+
+export const civicActions = pgTable("civic_actions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  date: text("date").notNull(),
+  type: text("type").notNull(),  // "voted" | "called" | "emailed" | "volunteered" | "donated" | "attended" | "petition" | "letter" | "other"
+  description: text("description"),
+  official: text("official"),
+  notes: text("notes"),
+});
+export const insertCivicActionSchema = createInsertSchema(civicActions).omit({ id: true });
+export type InsertCivicAction = z.infer<typeof insertCivicActionSchema>;
+export type CivicAction = typeof civicActions.$inferSelect;
+
+export const politicalNewsSources = pgTable("political_news_sources", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  url: text("url"),
+  bias: text("bias"),          // "left" | "center-left" | "center" | "center-right" | "right"
+  reliability: integer("reliability"),  // 1-5
+  type: text("type"),          // "newspaper" | "tv" | "podcast" | "newsletter" | "website" | "other"
+  topics: text("topics"),
+  notes: text("notes"),
+});
+export const insertPoliticalNewsSourceSchema = createInsertSchema(politicalNewsSources).omit({ id: true });
+export type InsertPoliticalNewsSource = z.infer<typeof insertPoliticalNewsSourceSchema>;
+export type PoliticalNewsSource = typeof politicalNewsSources.$inferSelect;

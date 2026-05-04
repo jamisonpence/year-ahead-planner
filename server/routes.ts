@@ -2768,4 +2768,101 @@ Rules:
       (await storage.deleteCareProvider(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Politics ────────────────────────────────────────────────────────────────
+
+  // Officials / Representatives
+  app.get("/api/politics/officials", requireAuth, async (req, res) => {
+    try { res.json(await storage.getPoliticalOfficials((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/politics/officials", requireAuth, async (req, res) => {
+    try { res.json(await storage.createPoliticalOfficial(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/politics/officials/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePoliticalOfficial(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/politics/officials/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePoliticalOfficial(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Issues
+  app.get("/api/politics/issues", requireAuth, async (req, res) => {
+    try { res.json(await storage.getPoliticalIssues((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/politics/issues", requireAuth, async (req, res) => {
+    try { res.json(await storage.createPoliticalIssue(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/politics/issues/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePoliticalIssue(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/politics/issues/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePoliticalIssue(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Elections
+  app.get("/api/politics/elections", requireAuth, async (req, res) => {
+    try { res.json(await storage.getPoliticalElections((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/politics/elections", requireAuth, async (req, res) => {
+    try { res.json(await storage.createPoliticalElection(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/politics/elections/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePoliticalElection(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/politics/elections/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePoliticalElection(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Civic Actions
+  app.get("/api/politics/civic-actions", requireAuth, async (req, res) => {
+    try { res.json(await storage.getCivicActions((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/politics/civic-actions", requireAuth, async (req, res) => {
+    try { res.json(await storage.createCivicAction(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/politics/civic-actions/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateCivicAction(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/politics/civic-actions/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteCivicAction(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // News Sources
+  app.get("/api/politics/news-sources", requireAuth, async (req, res) => {
+    try { res.json(await storage.getPoliticalNewsSources((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/politics/news-sources", requireAuth, async (req, res) => {
+    try { res.json(await storage.createPoliticalNewsSource(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/politics/news-sources/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePoliticalNewsSource(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/politics/news-sources/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePoliticalNewsSource(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
 }
