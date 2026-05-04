@@ -469,6 +469,131 @@ function MemberRow({
   );
 }
 
+// ── Voting Records components ──────────────────────────────────────────────────
+
+function VoteRow({ vote, isFederal }: { vote: any; isFederal: boolean }) {
+  const raw = (vote.memberVote ?? "").trim().toUpperCase();
+  const voteColor =
+    raw.startsWith("YEA") || raw === "YES" || raw === "AYE" || raw === "Y"
+      ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
+      : raw.startsWith("NAY") || raw === "NO" || raw === "N"
+        ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20"
+        : "text-muted-foreground bg-secondary";
+
+  let dateStr = "";
+  try { dateStr = vote.voteDate ? format(new Date(vote.voteDate), "MMM d, yyyy") : ""; } catch { dateStr = vote.voteDate ?? ""; }
+
+  return (
+    <div className="flex items-start gap-2.5 py-2 border-b last:border-0">
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${voteColor}`}>
+        {vote.memberVote || "—"}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-xs font-medium">{vote.billNumber}</span>
+          {dateStr && <span className="text-[10px] text-muted-foreground">{dateStr}</span>}
+        </div>
+        {vote.billDescription && (
+          <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2 mt-0.5">{vote.billDescription}</p>
+        )}
+      </div>
+      {vote.url && (
+        <a href={vote.url} target="_blank" rel="noopener noreferrer"
+          className="shrink-0 text-primary hover:text-primary/70 transition-colors mt-1"
+          title={isFederal ? "View on Congress.gov" : "View on LegiScan"}>
+          <ExternalLink size={11} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function VotingRecords({ official }: { official: PoliticalOfficial }) {
+  const isFederal = official.level?.toLowerCase() === "federal";
+  const isState = official.level?.toLowerCase() === "state";
+  const [shown, setShown] = useState(false);
+  const [cachedPeopleId, setCachedPeopleId] = useState<string | null>(
+    (official as any).externalId && isState ? (official as any).externalId : null
+  );
+
+  const enabled = shown && (isFederal ? !!(official as any).externalId : isState);
+
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["votes", official.id, (official as any).externalId, cachedPeopleId],
+    queryFn: async () => {
+      if (isFederal) {
+        const r = await apiRequest("GET", `/api/politics/votes/federal/${(official as any).externalId}`);
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      }
+      // State: use cached peopleId or auto-lookup by name+stateCode
+      const params = new URLSearchParams();
+      const pid = cachedPeopleId ?? (official as any).externalId;
+      if (pid) params.set("peopleId", pid);
+      if (official.name) params.set("name", official.name);
+      if ((official as any).stateCode) params.set("stateCode", (official as any).stateCode);
+      const r = await apiRequest("GET", `/api/politics/votes/state?${params}`);
+      if (!r.ok) throw new Error("Failed");
+      const d = await r.json();
+      if (d.peopleId && d.peopleId !== cachedPeopleId) setCachedPeopleId(d.peopleId);
+      return d.votes ?? d;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (!isFederal && !isState) return null;
+
+  if (isFederal && !(official as any).externalId) {
+    return (
+      <p className="text-[11px] text-muted-foreground/70 italic mt-1">
+        Re-add this rep via "Find Representatives" to enable voting records.
+      </p>
+    );
+  }
+
+  const votes: any[] = Array.isArray(data) ? data : [];
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setShown(s => !s)}
+        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+      >
+        <Vote size={12} />
+        {shown ? "Hide" : "Show"} recent votes
+        {shown ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {shown && (
+        <div className="mt-2">
+          {isLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 size={12} className="animate-spin" />Loading voting record…
+            </div>
+          )}
+          {isError && (
+            <p className="text-xs text-destructive py-2">Could not load voting record. Check API key or try again.</p>
+          )}
+          {!isLoading && !isError && votes.length === 0 && (
+            <p className="text-xs text-muted-foreground py-2">No voting records found.</p>
+          )}
+          {votes.length > 0 && (
+            <div className="mt-1">
+              <p className="text-[10px] text-muted-foreground/60 mb-1.5 uppercase tracking-wider font-semibold">
+                {votes.length} most recent votes · {isFederal ? "Congress.gov" : "LegiScan"}
+              </p>
+              <div>
+                {votes.map((v, i) => <VoteRow key={i} vote={v} isFederal={isFederal} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -524,6 +649,8 @@ function OfficialsTab() {
           level: "federal",
           party: member.party,
           district: member.district ?? undefined,
+          stateCode: member.state ?? undefined,
+          externalId: member.bioguideId,
           phone: member.phone ?? undefined,
           website: member.website ?? undefined,
           notes: member.office ? `Office: ${member.office}` : undefined,
@@ -568,9 +695,17 @@ function OfficialsTab() {
                 {PARTIES.map(p => <option key={p}>{p}</option>)}
               </Select>
             </Field>
-            <Field label="District / State">
+            <Field label="District">
               <Input value={form.district ?? ""} onChange={e => setForm(f => ({ ...f, district: e.target.value }))} placeholder="e.g. TX-7" />
             </Field>
+            {(form.level === "state") && (
+              <Field label="State">
+                <Select value={form.stateCode ?? ""} onChange={e => setForm(f => ({ ...f, stateCode: e.target.value }))}>
+                  <option value="">Select state…</option>
+                  {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label="Term Ends">
               <Input type="date" value={form.termEnd ?? ""} onChange={e => setForm(f => ({ ...f, termEnd: e.target.value }))} />
             </Field>
@@ -646,6 +781,7 @@ function OfficialsTab() {
                         </a>
                       )}
                       {o.notes && <p className="text-muted-foreground text-xs mt-2 whitespace-pre-wrap">{o.notes}</p>}
+                      <VotingRecords official={o} />
                     </div>
                   )}
                 </div>

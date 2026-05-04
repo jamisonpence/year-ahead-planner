@@ -1034,12 +1034,16 @@ export async function initializeStorage() {
       level TEXT,
       party TEXT,
       district TEXT,
+      state_code TEXT,
+      external_id TEXT,
       phone TEXT,
       email TEXT,
       website TEXT,
       term_end TEXT,
       notes TEXT
     );
+    ALTER TABLE political_officials ADD COLUMN IF NOT EXISTS state_code TEXT;
+    ALTER TABLE political_officials ADD COLUMN IF NOT EXISTS external_id TEXT;
     CREATE TABLE IF NOT EXISTS political_issues (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,

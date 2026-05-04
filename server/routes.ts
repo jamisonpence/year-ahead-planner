@@ -2868,6 +2868,103 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Voting record proxies ─────────────────────────────────────────────────────
+
+  // Congress.gov — recent votes for a federal member by bioguideId
+  app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
+    try {
+      const { bioguideId } = req.params;
+      const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
+      const url = `https://api.congress.gov/v3/member/${bioguideId}/votes?api_key=${apiKey}&limit=20`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) return res.status(resp.status).json({ error: "Congress.gov API error" });
+      const data = await resp.json() as any;
+
+      // Response may nest votes as data.votes[] with each item having a .vote sub-object
+      const rawList: any[] = data.votes ?? data.memberVotes ?? [];
+      const votes = rawList.slice(0, 20).map((item: any) => {
+        const v = item.vote ?? item;
+        // Build a congress.gov bill URL from vote URL when available
+        const voteUrl = v.url ?? null;
+        const billNum = v.rollNumber ?? v.number ?? v.rollCall ?? "";
+        const description = v.description ?? v.question ?? v.title ?? "";
+        return {
+          billNumber: billNum ? `Roll Call ${billNum}` : description.slice(0, 60),
+          billDescription: description,
+          voteDate: v.date ?? "",
+          memberVote: v.memberVote ?? v.votePosition ?? v.position ?? "",
+          chamber: v.chamber ?? "",
+          congress: v.congress ?? null,
+          url: voteUrl,
+        };
+      });
+      res.json(votes);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // LegiScan — recent votes for a state member
+  // Accepts: ?peopleId=ID  (if already known/cached)  OR  ?name=NAME&stateCode=TX  (auto-lookup)
+  app.get("/api/politics/votes/state", requireAuth, async (req, res) => {
+    try {
+      const { peopleId, name, stateCode } = req.query as { peopleId?: string; name?: string; stateCode?: string };
+      const apiKey = process.env.LEGISCAN_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "LEGISCAN_API_KEY not configured" });
+
+      let pid = peopleId;
+
+      // If no cached people_id, look it up via session roster
+      if (!pid && name && stateCode) {
+        const sessResp = await fetch(
+          `https://api.legiscan.com/?key=${apiKey}&op=getSessionList&state=${stateCode.toUpperCase()}`
+        );
+        if (!sessResp.ok) return res.status(502).json({ error: "LegiScan session lookup failed" });
+        const sessData = await sessResp.json() as any;
+        const sessions: any[] = sessData.sessions ?? [];
+        if (sessions.length === 0) return res.json({ votes: [], peopleId: null });
+
+        // Most-recent session by year_end descending
+        sessions.sort((a: any, b: any) => (b.year_end ?? 0) - (a.year_end ?? 0));
+        const session = sessions[0];
+
+        const peopleResp = await fetch(
+          `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${session.session_id}`
+        );
+        if (!peopleResp.ok) return res.status(502).json({ error: "LegiScan people lookup failed" });
+        const peopleData = await peopleResp.json() as any;
+        const roster: any[] = peopleData.sessionpeople?.people ?? [];
+
+        // Match by all words in the provided name (case-insensitive)
+        const nameParts = (name as string).toLowerCase().split(/\s+/).filter(Boolean);
+        const match = roster.find((p: any) => {
+          const pName = (p.name ?? "").toLowerCase();
+          return nameParts.every((part) => pName.includes(part));
+        });
+        if (!match) return res.json({ votes: [], peopleId: null });
+        pid = String(match.people_id);
+      }
+
+      if (!pid) return res.status(400).json({ error: "Provide peopleId or name+stateCode" });
+
+      const votesResp = await fetch(
+        `https://api.legiscan.com/?key=${apiKey}&op=getPersonVotes&people_id=${pid}`
+      );
+      if (!votesResp.ok) return res.status(502).json({ error: "LegiScan votes fetch failed" });
+      const votesData = await votesResp.json() as any;
+      const rawVotes: any[] = votesData.personvotes?.votes ?? [];
+
+      const votes = rawVotes.slice(0, 20).map((v: any) => ({
+        billNumber: v.bill_number ?? "",
+        billDescription: v.description ?? v.title ?? "",
+        voteDate: v.date ?? "",
+        memberVote: v.vote_desc ?? v.vote_text ?? "",
+        billId: v.bill_id ?? null,
+        url: v.url ?? (v.bill_id ? `https://legiscan.com/bill/view/id/${v.bill_id}` : null),
+      }));
+
+      res.json({ votes, peopleId: pid });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Officials / Representatives
   app.get("/api/politics/officials", requireAuth, async (req, res) => {
     try { res.json(await storage.getPoliticalOfficials((req.user as User).id)); } catch (e) { handleError(res, e); }

@@ -1310,6 +1310,8 @@ export const politicalOfficials = pgTable("political_officials", {
   level: text("level"),        // "federal" | "state" | "local"
   party: text("party"),
   district: text("district"),
+  stateCode: text("state_code"),   // 2-letter state code for LegiScan lookups
+  externalId: text("external_id"), // bioguideId (federal) or LegiScan people_id (state)
   phone: text("phone"),
   email: text("email"),
   website: text("website"),
