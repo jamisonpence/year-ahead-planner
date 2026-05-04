@@ -149,7 +149,12 @@ function CongressSearch({
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
-  // Pre-populate addedIds based on existing officials (match by name)
+  // Filter state
+  const [nameFilter, setNameFilter] = useState("");
+  const [chamberFilter, setChamberFilter] = useState<"All" | "Senate" | "House">("All");
+  const [partyFilter, setPartyFilter] = useState("All");
+  const [districtFilter, setDistrictFilter] = useState("");
+
   const existingNames = new Set(existingOfficials.map(o => o.name.toLowerCase().trim()));
 
   async function search() {
@@ -157,6 +162,10 @@ function CongressSearch({
     setLoading(true);
     setError("");
     setMembers([]);
+    setNameFilter("");
+    setChamberFilter("All");
+    setPartyFilter("All");
+    setDistrictFilter("");
     try {
       const r = await apiRequest("GET", `/api/politics/congress/members?state=${stateCode}`);
       const data = await r.json();
@@ -181,15 +190,30 @@ function CongressSearch({
     }
   }
 
-  async function addAll() {
-    const toAdd = members.filter(m => !addedIds.has(m.bioguideId) && !existingNames.has(m.name.toLowerCase().trim()));
+  // Apply all filters to get visible members
+  const filtered = members.filter(m => {
+    if (chamberFilter !== "All" && m.chamber !== chamberFilter) return false;
+    if (partyFilter !== "All" && m.party !== partyFilter) return false;
+    if (districtFilter && m.district !== districtFilter) return false;
+    if (nameFilter && !m.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
+    return true;
+  });
+
+  async function addAllVisible() {
+    const toAdd = filtered.filter(m => !addedIds.has(m.bioguideId) && !existingNames.has(m.name.toLowerCase().trim()));
     for (const m of toAdd) await handleAdd(m);
   }
 
-  const senators = members.filter(m => m.chamber === "Senate");
-  const houseMembers = members.filter(m => m.chamber === "House");
-  const allAdded = members.length > 0 && members.every(m => addedIds.has(m.bioguideId) || existingNames.has(m.name.toLowerCase().trim()));
+  // Available parties in current result set
+  const availableParties = ["All", ...Array.from(new Set(members.map(m => m.party).filter(Boolean))).sort()];
+  // Available districts in current result set
+  const availableDistricts = Array.from(new Set(members.filter(m => m.district).map(m => m.district!))).sort((a, b) => Number(a) - Number(b));
+
+  const filteredSenators = filtered.filter(m => m.chamber === "Senate");
+  const filteredHouse = filtered.filter(m => m.chamber === "House");
+  const allVisibleAdded = filtered.length > 0 && filtered.every(m => addedIds.has(m.bioguideId) || existingNames.has(m.name.toLowerCase().trim()));
   const stateName = US_STATES.find(s => s.code === searchedState)?.name ?? searchedState;
+  const filtersActive = chamberFilter !== "All" || partyFilter !== "All" || districtFilter !== "" || nameFilter !== "";
 
   if (!open) {
     return (
@@ -213,11 +237,7 @@ function CongressSearch({
 
       {/* State picker + search */}
       <div className="flex gap-2">
-        <Select
-          value={stateCode}
-          onChange={e => setStateCode(e.target.value)}
-          className="flex-1"
-        >
+        <Select value={stateCode} onChange={e => setStateCode(e.target.value)} className="flex-1">
           <option value="">Select a state…</option>
           {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
         </Select>
@@ -229,35 +249,98 @@ function CongressSearch({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
+      {/* Filters — shown once results are loaded */}
       {members.length > 0 && (
         <>
+          <div className="space-y-2 pt-1 border-t">
+            <p className="text-xs font-medium text-muted-foreground">Filter results</p>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Name search */}
+              <div className="col-span-2 relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
+                <input
+                  value={nameFilter}
+                  onChange={e => setNameFilter(e.target.value)}
+                  placeholder="Search by name…"
+                  className="w-full border rounded-lg pl-7 pr-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                {nameFilter && (
+                  <button onClick={() => setNameFilter("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Chamber */}
+              <Select value={chamberFilter} onChange={e => setChamberFilter(e.target.value as any)}>
+                <option value="All">All chambers</option>
+                <option value="Senate">Senate only</option>
+                <option value="House">House only</option>
+              </Select>
+
+              {/* Party */}
+              <Select value={partyFilter} onChange={e => setPartyFilter(e.target.value)}>
+                {availableParties.map(p => <option key={p} value={p}>{p === "All" ? "All parties" : p}</option>)}
+              </Select>
+
+              {/* District — only useful when House is visible */}
+              {chamberFilter !== "Senate" && availableDistricts.length > 0 && (
+                <Select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)}>
+                  <option value="">All districts</option>
+                  {availableDistricts.map(d => <option key={d} value={d}>District {d}</option>)}
+                </Select>
+              )}
+
+              {/* Reset filters */}
+              {filtersActive && (
+                <button
+                  onClick={() => { setNameFilter(""); setChamberFilter("All"); setPartyFilter("All"); setDistrictFilter(""); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline text-left self-center"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results header */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              {members.length} current federal members for <strong>{stateName}</strong>
+              {filtersActive
+                ? <><strong>{filtered.length}</strong> of {members.length} members match</>
+                : <><strong>{members.length}</strong> current federal members for <strong>{stateName}</strong></>
+              }
             </p>
-            {!allAdded && (
-              <Button size="sm" variant="outline" onClick={addAll} className="gap-1.5 text-xs h-7">
-                <PlusCircle size={12} />Add All {stateName} Reps
+            {!allVisibleAdded && filtered.length > 0 && (
+              <Button size="sm" variant="outline" onClick={addAllVisible} className="gap-1.5 text-xs h-7">
+                <PlusCircle size={12} />
+                {filtersActive ? `Add ${filtered.length} shown` : `Add All ${stateName} Reps`}
               </Button>
             )}
           </div>
 
+          {filtered.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">No members match your filters.</p>
+          )}
+
           {/* Senators */}
-          {senators.length > 0 && (
+          {filteredSenators.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">U.S. Senators</p>
               <div className="space-y-1.5">
-                {senators.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
+                {filteredSenators.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
               </div>
             </div>
           )}
 
           {/* House */}
-          {houseMembers.length > 0 && (
+          {filteredHouse.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">U.S. House of Representatives ({houseMembers.length} members)</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                U.S. House of Representatives ({filteredHouse.length}{filtersActive && members.filter(m => m.chamber === "House").length !== filteredHouse.length ? ` of ${members.filter(m => m.chamber === "House").length}` : ""} members)
+              </p>
               <div className="space-y-1.5">
-                {houseMembers.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
+                {filteredHouse.map(m => <MemberRow key={m.bioguideId} member={m} existingNames={existingNames} addedIds={addedIds} addingIds={addingIds} onAdd={handleAdd} />)}
               </div>
             </div>
           )}
