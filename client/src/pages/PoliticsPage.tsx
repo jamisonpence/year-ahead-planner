@@ -511,27 +511,32 @@ function VoteRow({ vote, isFederal }: { vote: any; isFederal: boolean }) {
 function VotingRecords({ official }: { official: PoliticalOfficial }) {
   const isFederal = official.level?.toLowerCase() === "federal";
   const isState = official.level?.toLowerCase() === "state";
+
+  // Derive the stored external ID and whether it's a real Congress.gov bioguideId
+  const extId: string | null | undefined = (official as any).externalId;
+  const isWimrId = !!extId?.startsWith("wimr-");
+  const hasRealFederalId = isFederal && !!extId && !isWimrId;
+
   const [shown, setShown] = useState(false);
   const [cachedPeopleId, setCachedPeopleId] = useState<string | null>(
-    (official as any).externalId && isState ? (official as any).externalId : null
+    extId && isState && !isWimrId ? extId : null
   );
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const enabled = shown && (isFederal ? !!(official as any).externalId : isState);
+  const enabled = shown && (isFederal ? hasRealFederalId : isState);
 
   const { data, isLoading, isError } = useQuery<any>({
-    queryKey: ["votes", official.id, (official as any).externalId, cachedPeopleId],
+    queryKey: ["votes", official.id, extId, cachedPeopleId],
     queryFn: async () => {
       setFetchError(null);
       try {
         if (isFederal) {
-          // apiRequest throws on non-ok with message "${status}: ${body}"
-          const r = await apiRequest("GET", `/api/politics/votes/federal/${(official as any).externalId}`);
+          const r = await apiRequest("GET", `/api/politics/votes/federal/${extId}`);
           return r.json();
         }
         // State: use cached peopleId or auto-lookup by name+stateCode
         const params = new URLSearchParams();
-        const pid = cachedPeopleId ?? (official as any).externalId;
+        const pid = cachedPeopleId ?? (extId && !isWimrId ? extId : undefined);
         if (pid) params.set("peopleId", pid);
         if (official.name) params.set("name", official.name);
         if ((official as any).stateCode) params.set("stateCode", (official as any).stateCode);
@@ -552,10 +557,11 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
 
   if (!isFederal && !isState) return null;
 
-  if (isFederal && !(official as any).externalId) {
+  // Rep was added via ZIP search (WIMR) — no real Congress.gov ID stored
+  if (isFederal && !hasRealFederalId) {
     return (
       <p className="text-[11px] text-muted-foreground/70 italic mt-1">
-        Re-add this rep via "Find Representatives" to enable voting records.
+        Delete and re-add via <strong>Find Representatives → By State</strong> to link voting records.
       </p>
     );
   }
@@ -661,7 +667,8 @@ function OfficialsTab() {
           party: member.party,
           district: member.district ?? undefined,
           stateCode: member.state ?? undefined,
-          externalId: member.bioguideId,
+          // Only store real Congress.gov bioguideIds — WIMR results use fake "wimr-N-Name" IDs
+          externalId: member.bioguideId.startsWith("wimr-") ? undefined : member.bioguideId,
           phone: member.phone ?? undefined,
           website: member.website ?? undefined,
           notes: member.office ? `Office: ${member.office}` : undefined,

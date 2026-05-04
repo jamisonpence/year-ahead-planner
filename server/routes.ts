@@ -2874,6 +2874,10 @@ Rules:
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
       const { bioguideId } = req.params;
+      // WIMR-sourced fake IDs must never reach Congress.gov
+      if (bioguideId.startsWith("wimr-")) {
+        return res.status(400).json({ error: "This rep was added via ZIP search and has no Congress.gov ID. Re-add via By State search to enable voting records." });
+      }
       const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
       const url = `https://api.congress.gov/v3/member/${bioguideId}/votes?api_key=${apiKey}&limit=20&format=json`;
       const resp = await fetch(url, { headers: { Accept: "application/json" } });
