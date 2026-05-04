@@ -2870,71 +2870,59 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // ProPublica Congress API — recent votes for a federal member by bioguideId
-  // Free API key at: https://www.propublica.org/datastore/api/propublica-congress-api
-  // Add as PROPUBLICA_API_KEY in Railway environment variables
+  // LegiScan — federal member votes via US Congress session roster
+  // Same approach as state votes but with state=US; uses existing LEGISCAN_API_KEY
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
-      const { bioguideId } = req.params;
+      const memberName = (req.query.name as string | undefined)?.trim() ?? "";
+      if (!memberName) return res.status(400).json({ error: "Member name required (pass ?name=...)" });
 
-      if (bioguideId.startsWith("wimr-")) {
-        return res.status(400).json({
-          error: "Re-add this rep via Find Representatives → By State to enable voting records.",
-        });
-      }
+      const apiKey = process.env.LEGISCAN_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "LEGISCAN_API_KEY not configured" });
 
-      const proPublicaKey = process.env.PROPUBLICA_API_KEY;
-      if (!proPublicaKey) {
-        return res.status(503).json({
-          error: "PROPUBLICA_API_KEY not configured. Get a free key at propublica.org/datastore/api/propublica-congress-api and add it as PROPUBLICA_API_KEY in Railway.",
-        });
-      }
+      // Step 1: get current US Congress session
+      const sessResp = await fetch(`https://api.legiscan.com/?key=${apiKey}&op=getSessionList&state=US`);
+      if (!sessResp.ok) return res.status(502).json({ error: "LegiScan session lookup failed" });
+      const sessData = await sessResp.json() as any;
+      const sessions: any[] = sessData.sessions ?? [];
+      if (!sessions.length) return res.json([]);
 
-      // ProPublica member votes endpoint — uses the same bioguideId as Congress.gov
-      const url = `https://api.propublica.org/congress/v1/members/${bioguideId}/votes.json`;
-      const resp = await fetch(url, {
-        headers: { "X-API-Key": proPublicaKey, Accept: "application/json" },
+      sessions.sort((a: any, b: any) => (b.year_end ?? 0) - (a.year_end ?? 0));
+      const session = sessions[0];
+
+      // Step 2: get roster for that session
+      const peopleResp = await fetch(
+        `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${session.session_id}`
+      );
+      if (!peopleResp.ok) return res.status(502).json({ error: "LegiScan people lookup failed" });
+      const peopleData = await peopleResp.json() as any;
+      const roster: any[] = peopleData.sessionpeople?.people ?? [];
+
+      // Match by all words in the name (case-insensitive)
+      const nameParts = memberName.toLowerCase().split(/\s+/).filter(Boolean);
+      const match = roster.find((p: any) => {
+        const pName = (p.name ?? "").toLowerCase();
+        return nameParts.every((part) => pName.includes(part));
       });
-
-      if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
-        console.error(`[votes/federal] ProPublica ${resp.status} for ${bioguideId}:`, body.slice(0, 300));
-        return res.status(resp.status).json({ error: `ProPublica API returned ${resp.status}`, detail: body.slice(0, 200) });
+      if (!match) {
+        return res.status(404).json({ error: `"${memberName}" not found in current Congress session on LegiScan.` });
       }
 
-      const data = await resp.json() as any;
-      const rawVotes: any[] = data.results?.[0]?.votes ?? [];
+      // Step 3: get their votes
+      const votesResp = await fetch(
+        `https://api.legiscan.com/?key=${apiKey}&op=getPersonVotes&people_id=${match.people_id}`
+      );
+      if (!votesResp.ok) return res.status(502).json({ error: "LegiScan votes fetch failed" });
+      const votesData = await votesResp.json() as any;
+      const rawVotes: any[] = votesData.personvotes?.votes ?? [];
 
-      const votes = rawVotes.slice(0, 20).map((v: any) => {
-        const bill = v.bill;
-        // Prefer specific bill number; fall back to roll call
-        const billNumber = bill?.number
-          ? bill.number
-          : v.roll_call ? `Roll Call ${v.roll_call}` : "";
-        const billDescription = bill?.title ?? v.question ?? v.description ?? "";
-
-        // Build Congress.gov URL for the bill if available
-        let voteUrl: string | null = bill?.congressdotgov_url ?? null;
-        if (!voteUrl && v.congress && v.chamber && v.session && v.roll_call) {
-          const ch = (v.chamber ?? "").toLowerCase();
-          voteUrl = `https://www.congress.gov/nomination/${v.congress}th-congress?q=%7B%22roll-call-vote%22%3A%22${v.roll_call}%22%7D`;
-        }
-
-        // ProPublica uses "Yes"/"No" — normalise to "Yea"/"Nay" to match display logic
-        const positionRaw: string = v.position ?? "";
-        const memberVote = positionRaw === "Yes" ? "Yea"
-          : positionRaw === "No" ? "Nay"
-          : positionRaw;
-
-        return {
-          billNumber,
-          billDescription,
-          voteDate: v.date ?? "",
-          memberVote,
-          chamber: v.chamber ?? "",
-          url: voteUrl,
-        };
-      });
+      const votes = rawVotes.slice(0, 20).map((v: any) => ({
+        billNumber: v.bill_number ?? "",
+        billDescription: v.description ?? v.title ?? "",
+        voteDate: v.date ?? "",
+        memberVote: v.vote_desc ?? v.vote_text ?? "",
+        url: v.url ?? (v.bill_id ? `https://legiscan.com/bill/view/id/${v.bill_id}` : null),
+      }));
 
       res.json(votes);
     } catch (e) { handleError(res, e); }

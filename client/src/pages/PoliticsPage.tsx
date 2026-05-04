@@ -500,7 +500,7 @@ function VoteRow({ vote, isFederal }: { vote: any; isFederal: boolean }) {
       {vote.url && (
         <a href={vote.url} target="_blank" rel="noopener noreferrer"
           className="shrink-0 text-primary hover:text-primary/70 transition-colors mt-1"
-          title={isFederal ? "View on Congress.gov" : "View on LegiScan"}>
+          title="View on LegiScan">
           <ExternalLink size={11} />
         </a>
       )}
@@ -512,10 +512,10 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
   const isFederal = official.level?.toLowerCase() === "federal";
   const isState = official.level?.toLowerCase() === "state";
 
-  // Derive the stored external ID and whether it's a real Congress.gov bioguideId
+  // For LegiScan lookups, we use name-based matching — no real bioguideId required
   const extId: string | null | undefined = (official as any).externalId;
   const isWimrId = !!extId?.startsWith("wimr-");
-  const hasRealFederalId = isFederal && !!extId && !isWimrId;
+  const hasFederalName = isFederal && !!official.name;
 
   const [shown, setShown] = useState(false);
   const [cachedPeopleId, setCachedPeopleId] = useState<string | null>(
@@ -523,16 +523,19 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
   );
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const enabled = shown && (isFederal ? hasRealFederalId : isState);
+  // Both federal and state use LegiScan name lookup; need a name to proceed
+  const enabled = shown && (isFederal ? hasFederalName : isState);
 
   const { data, isLoading, isError } = useQuery<any>({
-    queryKey: ["votes", official.id, extId, cachedPeopleId],
+    queryKey: ["votes", official.id, cachedPeopleId],
     queryFn: async () => {
       setFetchError(null);
       try {
         if (isFederal) {
+          // Pass name for LegiScan lookup; bioguideId is just used as a cache key in the URL
+          const idSegment = (extId && !isWimrId) ? extId : "lookup";
           const nameParam = official.name ? `?name=${encodeURIComponent(official.name)}` : "";
-          const r = await apiRequest("GET", `/api/politics/votes/federal/${extId}${nameParam}`);
+          const r = await apiRequest("GET", `/api/politics/votes/federal/${idSegment}${nameParam}`);
           return r.json();
         }
         // State: use cached peopleId or auto-lookup by name+stateCode
@@ -558,15 +561,6 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
 
   if (!isFederal && !isState) return null;
 
-  // Rep was added via ZIP search (WIMR) — no real Congress.gov ID stored
-  if (isFederal && !hasRealFederalId) {
-    return (
-      <p className="text-[11px] text-muted-foreground/70 italic mt-1">
-        Delete and re-add via <strong>Find Representatives → By State</strong> to link voting records.
-      </p>
-    );
-  }
-
   const votes: any[] = Array.isArray(data) ? data : [];
 
   return (
@@ -589,18 +583,8 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
           )}
           {isError && (
             <div className="py-2 space-y-1">
-              {fetchError?.includes("PROPUBLICA_API_KEY") ? (
-                <p className="text-xs text-amber-500 dark:text-amber-400">
-                  Voting records require a free ProPublica API key.{" "}
-                  <a href="https://www.propublica.org/datastore/api/propublica-congress-api" target="_blank" rel="noopener noreferrer" className="underline">Get one here</a>
-                  {" "}(free, instant), then add it as <code className="font-mono text-[11px]">PROPUBLICA_API_KEY</code> in your Railway environment variables.
-                </p>
-              ) : (
-                <>
-                  <p className="text-xs text-destructive">Could not load voting record.</p>
-                  {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
-                </>
-              )}
+              <p className="text-xs text-destructive">Could not load voting record.</p>
+              {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
             </div>
           )}
           {!isLoading && !isError && votes.length === 0 && (
@@ -609,7 +593,7 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
           {votes.length > 0 && (
             <div className="mt-1">
               <p className="text-[10px] text-muted-foreground/60 mb-1.5 uppercase tracking-wider font-semibold">
-                {votes.length} most recent votes · {isFederal ? "GovTrack" : "LegiScan"}
+                {votes.length} most recent votes · LegiScan
               </p>
               <div>
                 {votes.map((v, i) => <VoteRow key={i} vote={v} isFederal={isFederal} />)}
