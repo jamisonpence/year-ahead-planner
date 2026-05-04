@@ -2870,88 +2870,158 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // LegiScan — federal member votes via US Congress session roster
-  // Same approach as state votes but with state=US; uses existing LEGISCAN_API_KEY
+  // ── Federal voting records via official government XML (no API key required) ───
+  // Senate: https://www.senate.gov/legislative/LIS/roll_call_lists/
+  // House:  https://clerk.house.gov/evs/
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
+      const bioguideId = req.params.bioguideId;
       const memberName = (req.query.name as string | undefined)?.trim() ?? "";
+      const memberTitle = (req.query.title as string | undefined)?.trim().toLowerCase() ?? "";
+
       if (!memberName) return res.status(400).json({ error: "Member name required (pass ?name=...)" });
 
-      const apiKey = process.env.LEGISCAN_API_KEY;
-      if (!apiKey) return res.status(500).json({ error: "LEGISCAN_API_KEY not configured" });
+      const nameParts = memberName.trim().split(/\s+/);
+      const lastName = nameParts[nameParts.length - 1].toLowerCase();
+      const firstName = nameParts[0].toLowerCase();
 
-      // Step 1: get current US Congress sessions
-      const sessResp = await fetch(`https://api.legiscan.com/?key=${apiKey}&op=getSessionList&state=US`);
-      if (!sessResp.ok) return res.status(502).json({ error: "LegiScan session lookup failed" });
-      const sessData = await sessResp.json() as any;
-      const sessions: any[] = sessData.sessions ?? [];
-      if (!sessions.length) return res.json([]);
+      const isSenator = memberTitle.includes("senator") || memberTitle.includes("senate");
+      const currentYear = new Date().getFullYear();
+      const CONGRESS = 119; // 119th Congress (2025–2026)
 
-      // LegiScan uses year_end=0 for the currently-active session — treat 0 as the highest priority.
-      // Among non-zero year_end, sort descending so we try the most recent completed session next.
-      sessions.sort((a: any, b: any) => {
-        const aEnd = a.year_end ?? 0;
-        const bEnd = b.year_end ?? 0;
-        if (aEnd === 0 && bEnd !== 0) return -1;
-        if (bEnd === 0 && aEnd !== 0) return 1;
-        return bEnd - aEnd;
-      });
-
-      // Try up to 3 most-recent sessions in case the member isn't in the first one's roster
-      const nameParts = memberName.toLowerCase().split(/\s+/).filter(Boolean);
-      let match: any = null;
-
-      for (const session of sessions.slice(0, 3)) {
-        const peopleResp = await fetch(
-          `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${session.session_id}`
-        );
-        if (!peopleResp.ok) continue;
-        const peopleData = await peopleResp.json() as any;
-        const roster: any[] = peopleData.sessionpeople?.people ?? [];
-
-        match = roster.find((p: any) => {
-          const pName = (p.name ?? "").toLowerCase();
-          return nameParts.every((part) => pName.includes(part));
-        });
-        if (match) break;
+      // ── XML helpers ──────────────────────────────────────────────────────────
+      function xmlTag(xml: string, tag: string): string {
+        const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+        return m ? m[1].trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">") : "";
+      }
+      function xmlBlocks(xml: string, tag: string): string[] {
+        return xml.match(new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi")) ?? [];
       }
 
-      if (!match) {
-        // Collect debug info so we can diagnose the name format / roster structure
-        const debugPeopleResp = await fetch(
-          `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${sessions[0].session_id}`
+      let votes: any[] = [];
+
+      if (isSenator) {
+        // ── Senate ─────────────────────────────────────────────────────────────
+        const menuResp = await fetch(
+          `https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_${CONGRESS}_1.xml`
         );
-        const debugData = await debugPeopleResp.json() as any;
-        const debugRoster: any[] = debugData.sessionpeople?.people ?? [];
-        const sampleNames = debugRoster.slice(0, 5).map((p: any) => p.name ?? "(no name)");
-        const debugInfo = {
-          sessionCount: sessions.length,
-          firstSession: { id: sessions[0].session_id, yearStart: sessions[0].year_start, yearEnd: sessions[0].year_end },
-          rosterSize: debugRoster.length,
-          sampleNames,
-          rawKeys: Object.keys(debugData),
+        if (!menuResp.ok) return res.status(502).json({ error: "Could not fetch Senate vote list from senate.gov" });
+        const menuXml = await menuResp.text();
+
+        const voteBlocks = xmlBlocks(menuXml, "vote");
+        const voteMetaMap: Record<string, any> = {};
+        const recentVoteNums: string[] = [];
+
+        for (const b of voteBlocks.slice(0, 60)) {
+          const num = xmlTag(b, "vote_number");
+          if (!num) continue;
+          recentVoteNums.push(num);
+          voteMetaMap[num] = {
+            date:     xmlTag(b, "vote_date"),
+            title:    xmlTag(b, "vote_title"),
+            question: xmlTag(b, "question"),
+            result:   xmlTag(b, "vote_result"),
+          };
+        }
+
+        const fetchSenVote = async (voteNum: string) => {
+          const padded = voteNum.padStart(5, "0");
+          const url = `https://www.senate.gov/legislative/LIS/roll_call_votes/vote${CONGRESS}1/vote_${CONGRESS}_1_${padded}.xml`;
+          try {
+            const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+            if (!r.ok) return null;
+            const xml = await r.text();
+            const memberBlock = xmlBlocks(xml, "member").find((m) => {
+              const mLast = xmlTag(m, "last_name").toLowerCase();
+              const mFirst = xmlTag(m, "first_name").toLowerCase();
+              return mLast === lastName && mFirst.startsWith(firstName[0]);
+            });
+            if (!memberBlock) return null;
+            const meta = voteMetaMap[voteNum] ?? {};
+            return {
+              billNumber:      meta.title || `Senate Vote #${voteNum}`,
+              billDescription: meta.question || meta.result || "",
+              voteDate:        meta.date || "",
+              memberVote:      xmlTag(memberBlock, "vote_cast"),
+              url,
+            };
+          } catch { return null; }
         };
-        return res.status(404).json({
-          error: `"${memberName}" not found in US Congress sessions on LegiScan.`,
-          debug: debugInfo,
-        });
+
+        const settled = await Promise.allSettled(recentVoteNums.map(fetchSenVote));
+        votes = settled
+          .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
+          .map((r) => r.value)
+          .slice(0, 20);
+
+      } else {
+        // ── House ──────────────────────────────────────────────────────────────
+        const isRealBioguide = bioguideId && !bioguideId.startsWith("wimr-") && bioguideId !== "lookup";
+
+        const indexResp = await fetch(`https://clerk.house.gov/xml/lists/evs/${currentYear}.xml`);
+        if (!indexResp.ok) return res.status(502).json({ error: "Could not fetch House vote list from clerk.house.gov" });
+        const indexXml = await indexResp.text();
+
+        // Extract roll-call numbers and metadata from the index XML
+        const rollCallNums: string[] = [];
+        const rollMeta: Record<string, any> = {};
+
+        for (const block of xmlBlocks(indexXml, "vote").slice(0, 60)) {
+          const num =
+            xmlTag(block, "roll-call") ||
+            xmlTag(block, "rollcall-num") ||
+            xmlTag(block, "vote-number") ||
+            xmlTag(block, "roll_call");
+          if (!num) continue;
+          rollCallNums.push(num);
+          rollMeta[num] = {
+            date:     xmlTag(block, "action-date") || xmlTag(block, "vote-date"),
+            question: xmlTag(block, "vote-question") || xmlTag(block, "question"),
+            bill:     xmlTag(block, "legis-num") || xmlTag(block, "bill-number"),
+          };
+        }
+
+        const fetchHouseVote = async (rollNum: string) => {
+          const padded = rollNum.padStart(3, "0");
+          const url = `https://clerk.house.gov/evs/${currentYear}/roll${padded}.xml`;
+          try {
+            const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+            if (!r.ok) return null;
+            const xml = await r.text();
+
+            // Find our member — by bioguide-id attribute first, then by name
+            const rvBlocks = xmlBlocks(xml, "recorded-vote");
+            const rvBlock = rvBlocks.find((block) => {
+              if (isRealBioguide && block.includes(`bioguide-id="${bioguideId}"`)) return true;
+              const lower = block.toLowerCase();
+              return lower.includes(lastName) && lower.includes(firstName[0]);
+            });
+            if (!rvBlock) return null;
+
+            const voteCast = xmlTag(rvBlock, "vote");
+            const meta = rollMeta[rollNum] ?? {};
+            return {
+              billNumber:      xmlTag(xml, "legis-num") || meta.bill || `Roll Call #${rollNum}`,
+              billDescription: xmlTag(xml, "vote-question") || meta.question || "",
+              voteDate:        xmlTag(xml, "action-date") || xmlTag(xml, "vote-date") || meta.date || "",
+              memberVote:      voteCast,
+              url,
+            };
+          } catch { return null; }
+        };
+
+        const settled = await Promise.allSettled(rollCallNums.map(fetchHouseVote));
+        votes = settled
+          .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
+          .map((r) => r.value)
+          .slice(0, 20);
       }
 
-      // Step 3: get their votes
-      const votesResp = await fetch(
-        `https://api.legiscan.com/?key=${apiKey}&op=getPersonVotes&people_id=${match.people_id}`
-      );
-      if (!votesResp.ok) return res.status(502).json({ error: "LegiScan votes fetch failed" });
-      const votesData = await votesResp.json() as any;
-      const rawVotes: any[] = votesData.personvotes?.votes ?? [];
-
-      const votes = rawVotes.slice(0, 20).map((v: any) => ({
-        billNumber: v.bill_number ?? "",
-        billDescription: v.description ?? v.title ?? "",
-        voteDate: v.date ?? "",
-        memberVote: v.vote_desc ?? v.vote_text ?? "",
-        url: v.url ?? (v.bill_id ? `https://legiscan.com/bill/view/id/${v.bill_id}` : null),
-      }));
+      if (votes.length === 0) {
+        return res.status(404).json({
+          error: `No recent votes found for "${memberName}" in ${isSenator ? "Senate" : "House"} records. They may not have voted recently, or their name may not match exactly.`,
+        });
+      }
 
       res.json(votes);
     } catch (e) { handleError(res, e); }

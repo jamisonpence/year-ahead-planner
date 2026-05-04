@@ -532,10 +532,11 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
       setFetchError(null);
       try {
         if (isFederal) {
-          // Pass name for LegiScan lookup; bioguideId is just used as a cache key in the URL
           const idSegment = (extId && !isWimrId) ? extId : "lookup";
-          const nameParam = official.name ? `?name=${encodeURIComponent(official.name)}` : "";
-          const r = await apiRequest("GET", `/api/politics/votes/federal/${idSegment}${nameParam}`);
+          const p = new URLSearchParams();
+          if (official.name) p.set("name", official.name);
+          if (official.title) p.set("title", official.title);
+          const r = await apiRequest("GET", `/api/politics/votes/federal/${idSegment}?${p}`);
           return r.json();
         }
         // State: use cached peopleId or auto-lookup by name+stateCode
@@ -593,7 +594,7 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
           {votes.length > 0 && (
             <div className="mt-1">
               <p className="text-[10px] text-muted-foreground/60 mb-1.5 uppercase tracking-wider font-semibold">
-                {votes.length} most recent votes · LegiScan
+                {votes.length} most recent votes · {isFederal ? (official.title?.toLowerCase().includes("senator") ? "Senate.gov" : "Clerk.house.gov") : "LegiScan"}
               </p>
               <div>
                 {votes.map((v, i) => <VoteRow key={i} vote={v} isFederal={isFederal} />)}
