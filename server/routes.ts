@@ -2817,6 +2817,57 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // WhoIsMyRepresentative.com proxy — search by ZIP code or last name
+  app.get("/api/politics/whoismyrep", requireAuth, async (req, res) => {
+    try {
+      const { zip, name } = req.query as { zip?: string; name?: string };
+      if (!zip && !name) return res.status(400).json({ error: "Provide zip or name" });
+
+      const partyFull: Record<string, string> = {
+        D: "Democrat", R: "Republican", I: "Independent",
+        L: "Libertarian", G: "Green", ID: "Independent Democrat",
+      };
+
+      let url: string;
+      if (zip) {
+        if (!/^\d{5}$/.test(zip)) return res.status(400).json({ error: "ZIP must be 5 digits" });
+        url = `https://whoismyrepresentative.com/getall_mems.php?zip=${zip}&output=json`;
+      } else {
+        url = `https://whoismyrepresentative.com/getall_mems.php?name=${encodeURIComponent(name!)}&output=json`;
+      }
+
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      // API returns 406 with message when no results found
+      if (resp.status === 406) return res.json([]);
+      if (!resp.ok) return res.status(resp.status).json({ error: "WhoIsMyRepresentative API error" });
+
+      const data = await resp.json() as { results?: any[] };
+      const members = (data.results ?? []).map((m: any, idx: number) => {
+        const isSenate = !m.district || m.district === "" || m.district === "0";
+        const district = isSenate ? null : String(m.district);
+        return {
+          bioguideId: `wimr-${idx}-${m.name?.replace(/\s+/g, "-")}`,
+          name: m.name ?? "",
+          title: isSenate ? "U.S. Senator" : `U.S. Representative${district ? `, District ${district}` : ""}`,
+          chamber: isSenate ? "Senate" : "House" as "Senate" | "House",
+          party: partyFull[m.party] ?? m.party ?? "",
+          state: m.state ?? "",
+          district,
+          phone: m.phone ?? null,
+          office: m.office ?? null,
+          website: m.link ?? null,
+          imageUrl: null,
+        };
+      });
+      // Sort senators first
+      members.sort((a: any, b: any) => {
+        if (a.chamber !== b.chamber) return a.chamber === "Senate" ? -1 : 1;
+        return (Number(a.district) || 0) - (Number(b.district) || 0);
+      });
+      res.json(members);
+    } catch (e) { handleError(res, e); }
+  });
+
   // Officials / Representatives
   app.get("/api/politics/officials", requireAuth, async (req, res) => {
     try { res.json(await storage.getPoliticalOfficials((req.user as User).id)); } catch (e) { handleError(res, e); }

@@ -129,9 +129,13 @@ type CongressMember = {
   party: string;
   state: string;
   district: string | null;
+  phone?: string | null;
+  office?: string | null;
   website: string | null;
   imageUrl: string | null;
 };
+
+type SearchMode = "state" | "zip" | "name";
 
 function CongressSearch({
   existingOfficials,
@@ -141,15 +145,21 @@ function CongressSearch({
   onAdd: (member: CongressMember) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<SearchMode>("zip");
+
+  // Search inputs
   const [stateCode, setStateCode] = useState("");
-  const [searchedState, setSearchedState] = useState("");
+  const [zipInput, setZipInput] = useState("");
+  const [nameInput, setNameInput] = useState("");
+
+  const [searchedLabel, setSearchedLabel] = useState("");
   const [members, setMembers] = useState<CongressMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
-  // Filter state
+  // Result filters (state mode only)
   const [nameFilter, setNameFilter] = useState("");
   const [chamberFilter, setChamberFilter] = useState<"All" | "Senate" | "House">("All");
   const [partyFilter, setPartyFilter] = useState("All");
@@ -157,21 +167,39 @@ function CongressSearch({
 
   const existingNames = new Set(existingOfficials.map(o => o.name.toLowerCase().trim()));
 
+  function resetFilters() {
+    setNameFilter(""); setChamberFilter("All"); setPartyFilter("All"); setDistrictFilter("");
+  }
+  function clearResults() {
+    setMembers([]); setError(""); resetFilters(); setAddedIds(new Set());
+  }
+
   async function search() {
-    if (!stateCode) return;
     setLoading(true);
     setError("");
     setMembers([]);
-    setNameFilter("");
-    setChamberFilter("All");
-    setPartyFilter("All");
-    setDistrictFilter("");
+    resetFilters();
     try {
-      const r = await apiRequest("GET", `/api/politics/congress/members?state=${stateCode}`);
+      let url = "";
+      let label = "";
+      if (mode === "state") {
+        if (!stateCode) { setError("Please select a state."); setLoading(false); return; }
+        url = `/api/politics/congress/members?state=${stateCode}`;
+        label = US_STATES.find(s => s.code === stateCode)?.name ?? stateCode;
+      } else if (mode === "zip") {
+        if (!/^\d{5}$/.test(zipInput.trim())) { setError("Please enter a valid 5-digit ZIP code."); setLoading(false); return; }
+        url = `/api/politics/whoismyrep?zip=${zipInput.trim()}`;
+        label = `ZIP ${zipInput.trim()}`;
+      } else {
+        if (!nameInput.trim()) { setError("Please enter a last name."); setLoading(false); return; }
+        url = `/api/politics/whoismyrep?name=${encodeURIComponent(nameInput.trim())}`;
+        label = `"${nameInput.trim()}"`;
+      }
+      const r = await apiRequest("GET", url);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Failed to load members");
       setMembers(data);
-      setSearchedState(stateCode);
+      setSearchedLabel(label);
       setAddedIds(new Set());
     } catch (e: any) {
       setError(e.message ?? "Something went wrong");
@@ -218,7 +246,7 @@ function CongressSearch({
   if (!open) {
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="gap-1.5">
-        <Search size={14} />Find from Congress.gov
+        <Search size={14} />Find Representatives
       </Button>
     );
   }
@@ -230,22 +258,65 @@ function CongressSearch({
           <Landmark size={15} className="text-primary" />
           Find Federal Representatives
         </h3>
-        <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-secondary transition-colors">
+        <button onClick={() => { setOpen(false); clearResults(); }} className="p-1 rounded hover:bg-secondary transition-colors">
           <X size={14} />
         </button>
       </div>
 
-      {/* State picker + search */}
+      {/* Mode tabs */}
+      <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
+        {([
+          { id: "zip",   label: "By ZIP Code" },
+          { id: "state", label: "By State"    },
+          { id: "name",  label: "By Name"     },
+        ] as { id: SearchMode; label: string }[]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setMode(tab.id); clearResults(); }}
+            className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${
+              mode === tab.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search input row */}
       <div className="flex gap-2">
-        <Select value={stateCode} onChange={e => setStateCode(e.target.value)} className="flex-1">
-          <option value="">Select a state…</option>
-          {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
-        </Select>
-        <Button size="sm" onClick={search} disabled={!stateCode || loading} className="gap-1.5 shrink-0">
+        {mode === "zip" && (
+          <input
+            value={zipInput}
+            onChange={e => setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
+            onKeyDown={e => e.key === "Enter" && search()}
+            placeholder="Enter ZIP code (e.g. 10001)"
+            maxLength={5}
+            className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        )}
+        {mode === "state" && (
+          <Select value={stateCode} onChange={e => setStateCode(e.target.value)} className="flex-1">
+            <option value="">Select a state…</option>
+            {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+          </Select>
+        )}
+        {mode === "name" && (
+          <input
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search()}
+            placeholder="Enter last name (e.g. Smith)"
+            className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        )}
+        <Button size="sm" onClick={search} disabled={loading} className="gap-1.5 shrink-0">
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
-          {loading ? "Loading…" : "Search"}
+          {loading ? "Searching…" : "Search"}
         </Button>
       </div>
+
+      {mode === "zip" && <p className="text-xs text-muted-foreground -mt-2">Finds your 2 senators + your exact House representative for that ZIP code</p>}
+      {mode === "name" && <p className="text-xs text-muted-foreground -mt-2">Search by last name across all current members of Congress</p>}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -454,7 +525,9 @@ function OfficialsTab() {
           level: "federal",
           party: member.party,
           district: member.district ?? undefined,
+          phone: member.phone ?? undefined,
           website: member.website ?? undefined,
+          notes: member.office ? `Office: ${member.office}` : undefined,
         },
         { onSuccess: () => resolve(), onError: (e) => reject(e) }
       );
