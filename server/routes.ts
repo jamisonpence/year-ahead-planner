@@ -2880,32 +2880,44 @@ Rules:
       const apiKey = process.env.LEGISCAN_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "LEGISCAN_API_KEY not configured" });
 
-      // Step 1: get current US Congress session
+      // Step 1: get current US Congress sessions
       const sessResp = await fetch(`https://api.legiscan.com/?key=${apiKey}&op=getSessionList&state=US`);
       if (!sessResp.ok) return res.status(502).json({ error: "LegiScan session lookup failed" });
       const sessData = await sessResp.json() as any;
       const sessions: any[] = sessData.sessions ?? [];
       if (!sessions.length) return res.json([]);
 
-      sessions.sort((a: any, b: any) => (b.year_end ?? 0) - (a.year_end ?? 0));
-      const session = sessions[0];
-
-      // Step 2: get roster for that session
-      const peopleResp = await fetch(
-        `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${session.session_id}`
-      );
-      if (!peopleResp.ok) return res.status(502).json({ error: "LegiScan people lookup failed" });
-      const peopleData = await peopleResp.json() as any;
-      const roster: any[] = peopleData.sessionpeople?.people ?? [];
-
-      // Match by all words in the name (case-insensitive)
-      const nameParts = memberName.toLowerCase().split(/\s+/).filter(Boolean);
-      const match = roster.find((p: any) => {
-        const pName = (p.name ?? "").toLowerCase();
-        return nameParts.every((part) => pName.includes(part));
+      // LegiScan uses year_end=0 for the currently-active session — treat 0 as the highest priority.
+      // Among non-zero year_end, sort descending so we try the most recent completed session next.
+      sessions.sort((a: any, b: any) => {
+        const aEnd = a.year_end ?? 0;
+        const bEnd = b.year_end ?? 0;
+        if (aEnd === 0 && bEnd !== 0) return -1;
+        if (bEnd === 0 && aEnd !== 0) return 1;
+        return bEnd - aEnd;
       });
+
+      // Try up to 3 most-recent sessions in case the member isn't in the first one's roster
+      const nameParts = memberName.toLowerCase().split(/\s+/).filter(Boolean);
+      let match: any = null;
+
+      for (const session of sessions.slice(0, 3)) {
+        const peopleResp = await fetch(
+          `https://api.legiscan.com/?key=${apiKey}&op=getSessionPeople&session_id=${session.session_id}`
+        );
+        if (!peopleResp.ok) continue;
+        const peopleData = await peopleResp.json() as any;
+        const roster: any[] = peopleData.sessionpeople?.people ?? [];
+
+        match = roster.find((p: any) => {
+          const pName = (p.name ?? "").toLowerCase();
+          return nameParts.every((part) => pName.includes(part));
+        });
+        if (match) break;
+      }
+
       if (!match) {
-        return res.status(404).json({ error: `"${memberName}" not found in current Congress session on LegiScan.` });
+        return res.status(404).json({ error: `"${memberName}" not found in US Congress sessions on LegiScan.` });
       }
 
       // Step 3: get their votes
