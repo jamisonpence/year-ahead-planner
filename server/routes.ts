@@ -2875,23 +2875,40 @@ Rules:
     try {
       const { bioguideId } = req.params;
       const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
-      const url = `https://api.congress.gov/v3/member/${bioguideId}/votes?api_key=${apiKey}&limit=20`;
+      const url = `https://api.congress.gov/v3/member/${bioguideId}/votes?api_key=${apiKey}&limit=20&format=json`;
       const resp = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!resp.ok) return res.status(resp.status).json({ error: "Congress.gov API error" });
+
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        console.error(`[votes/federal] Congress.gov ${resp.status} for ${bioguideId}:`, body.slice(0, 500));
+        return res.status(resp.status).json({
+          error: `Congress.gov API returned ${resp.status}`,
+          detail: body.slice(0, 300),
+        });
+      }
+
       const data = await resp.json() as any;
 
-      // Response may nest votes as data.votes[] with each item having a .vote sub-object
+      // Congress.gov returns votes[] where each item wraps a .vote object
+      // Date may be "actionDate" or "date"; roll call number is "rollNumber"
       const rawList: any[] = data.votes ?? data.memberVotes ?? [];
       const votes = rawList.slice(0, 20).map((item: any) => {
         const v = item.vote ?? item;
-        // Build a congress.gov bill URL from vote URL when available
-        const voteUrl = v.url ?? null;
-        const billNum = v.rollNumber ?? v.number ?? v.rollCall ?? "";
+        const rollNum = v.rollNumber ?? v.number ?? v.rollCall ?? "";
         const description = v.description ?? v.question ?? v.title ?? "";
+        const voteDate = v.actionDate ?? v.date ?? "";
+
+        // Build a human-readable congress.gov vote URL
+        let voteUrl = v.url ?? null;
+        if (!voteUrl && v.congress && v.chamber && v.session && rollNum) {
+          const ch = (v.chamber ?? "").toLowerCase().includes("senate") ? "senate" : "house";
+          voteUrl = `https://www.congress.gov/nomination/${v.congress}?q=%7B%22search%22%3A%22${rollNum}%22%7D`;
+        }
+
         return {
-          billNumber: billNum ? `Roll Call ${billNum}` : description.slice(0, 60),
+          billNumber: rollNum ? `Roll Call ${rollNum}` : "",
           billDescription: description,
-          voteDate: v.date ?? "",
+          voteDate,
           memberVote: v.memberVote ?? v.votePosition ?? v.position ?? "",
           chamber: v.chamber ?? "",
           congress: v.congress ?? null,

@@ -515,16 +515,23 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
   const [cachedPeopleId, setCachedPeopleId] = useState<string | null>(
     (official as any).externalId && isState ? (official as any).externalId : null
   );
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const enabled = shown && (isFederal ? !!(official as any).externalId : isState);
 
   const { data, isLoading, isError } = useQuery<any>({
     queryKey: ["votes", official.id, (official as any).externalId, cachedPeopleId],
     queryFn: async () => {
+      setFetchError(null);
       if (isFederal) {
         const r = await apiRequest("GET", `/api/politics/votes/federal/${(official as any).externalId}`);
-        if (!r.ok) throw new Error("Failed");
-        return r.json();
+        const body = await r.json();
+        if (!r.ok) {
+          const msg = body?.detail ?? body?.error ?? `HTTP ${r.status}`;
+          setFetchError(msg);
+          throw new Error(msg);
+        }
+        return body;
       }
       // State: use cached peopleId or auto-lookup by name+stateCode
       const params = new URLSearchParams();
@@ -533,13 +540,18 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
       if (official.name) params.set("name", official.name);
       if ((official as any).stateCode) params.set("stateCode", (official as any).stateCode);
       const r = await apiRequest("GET", `/api/politics/votes/state?${params}`);
-      if (!r.ok) throw new Error("Failed");
-      const d = await r.json();
-      if (d.peopleId && d.peopleId !== cachedPeopleId) setCachedPeopleId(d.peopleId);
-      return d.votes ?? d;
+      const body = await r.json();
+      if (!r.ok) {
+        const msg = body?.detail ?? body?.error ?? `HTTP ${r.status}`;
+        setFetchError(msg);
+        throw new Error(msg);
+      }
+      if (body.peopleId && body.peopleId !== cachedPeopleId) setCachedPeopleId(body.peopleId);
+      return body.votes ?? body;
     },
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   if (!isFederal && !isState) return null;
@@ -573,7 +585,10 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
             </div>
           )}
           {isError && (
-            <p className="text-xs text-destructive py-2">Could not load voting record. Check API key or try again.</p>
+            <div className="py-2 space-y-0.5">
+              <p className="text-xs text-destructive">Could not load voting record.</p>
+              {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
+            </div>
           )}
           {!isLoading && !isError && votes.length === 0 && (
             <p className="text-xs text-muted-foreground py-2">No voting records found.</p>
