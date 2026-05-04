@@ -240,7 +240,6 @@ function CongressSearch({
   const filteredSenators = filtered.filter(m => m.chamber === "Senate");
   const filteredHouse = filtered.filter(m => m.chamber === "House");
   const allVisibleAdded = filtered.length > 0 && filtered.every(m => addedIds.has(m.bioguideId) || existingNames.has(m.name.toLowerCase().trim()));
-  const stateName = US_STATES.find(s => s.code === searchedState)?.name ?? searchedState;
   const filtersActive = chamberFilter !== "All" || partyFilter !== "All" || districtFilter !== "" || nameFilter !== "";
 
   if (!open) {
@@ -379,13 +378,13 @@ function CongressSearch({
             <p className="text-xs text-muted-foreground">
               {filtersActive
                 ? <><strong>{filtered.length}</strong> of {members.length} members match</>
-                : <><strong>{members.length}</strong> current federal members for <strong>{stateName}</strong></>
+                : <><strong>{members.length}</strong> current federal members for <strong>{searchedLabel}</strong></>
               }
             </p>
             {!allVisibleAdded && filtered.length > 0 && (
               <Button size="sm" variant="outline" onClick={addAllVisible} className="gap-1.5 text-xs h-7">
                 <PlusCircle size={12} />
-                {filtersActive ? `Add ${filtered.length} shown` : `Add All ${stateName} Reps`}
+                {filtersActive ? `Add ${filtered.length} shown` : `Add All ${searchedLabel} Reps`}
               </Button>
             )}
           </div>
