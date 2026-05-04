@@ -2870,55 +2870,72 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // Congress.gov — recent votes for a federal member by bioguideId
+  // GovTrack — recent votes for a federal member by Congress.gov bioguideId
+  // (Congress.gov v3 has no per-member votes endpoint; GovTrack is free and no key required)
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
       const { bioguideId } = req.params;
-      // WIMR-sourced fake IDs must never reach Congress.gov
-      if (bioguideId.startsWith("wimr-")) {
-        return res.status(400).json({ error: "This rep was added via ZIP search and has no Congress.gov ID. Re-add via By State search to enable voting records." });
-      }
-      const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
-      const url = `https://api.congress.gov/v3/member/${bioguideId}/votes?api_key=${apiKey}&limit=20&format=json`;
-      const resp = await fetch(url, { headers: { Accept: "application/json" } });
 
-      if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
-        console.error(`[votes/federal] Congress.gov ${resp.status} for ${bioguideId}:`, body.slice(0, 500));
-        return res.status(resp.status).json({
-          error: `Congress.gov API returned ${resp.status}`,
-          detail: body.slice(0, 300),
+      // WIMR-sourced fake IDs are not real bioguideIds
+      if (bioguideId.startsWith("wimr-")) {
+        return res.status(400).json({
+          error: "Re-add this rep via Find Representatives → By State to enable voting records.",
         });
       }
 
-      const data = await resp.json() as any;
+      // Step 1: resolve GovTrack person ID from bioguideId
+      const personResp = await fetch(
+        `https://www.govtrack.us/api/v2/person?bioguideid=${bioguideId}&format=json`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!personResp.ok) {
+        const body = await personResp.text().catch(() => "");
+        console.error(`[votes/federal] GovTrack person lookup ${personResp.status} for ${bioguideId}:`, body.slice(0, 300));
+        return res.status(personResp.status).json({ error: `GovTrack person lookup failed (${personResp.status})` });
+      }
+      const personData = await personResp.json() as any;
+      const govtrackId: number | undefined = personData.objects?.[0]?.id;
+      if (!govtrackId) {
+        return res.status(404).json({ error: "Member not found in GovTrack. Try re-adding via Find Representatives." });
+      }
 
-      // Congress.gov returns votes[] where each item wraps a .vote object
-      // Date may be "actionDate" or "date"; roll call number is "rollNumber"
-      const rawList: any[] = data.votes ?? data.memberVotes ?? [];
-      const votes = rawList.slice(0, 20).map((item: any) => {
-        const v = item.vote ?? item;
-        const rollNum = v.rollNumber ?? v.number ?? v.rollCall ?? "";
-        const description = v.description ?? v.question ?? v.title ?? "";
-        const voteDate = v.actionDate ?? v.date ?? "";
+      // Step 2: fetch their 20 most-recent votes
+      const votesResp = await fetch(
+        `https://www.govtrack.us/api/v2/vote_voter?person=${govtrackId}&order_by=-created&limit=20&format=json`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!votesResp.ok) {
+        const body = await votesResp.text().catch(() => "");
+        console.error(`[votes/federal] GovTrack votes ${votesResp.status} for person ${govtrackId}:`, body.slice(0, 300));
+        return res.status(votesResp.status).json({ error: `GovTrack votes fetch failed (${votesResp.status})` });
+      }
+      const votesData = await votesResp.json() as any;
+      const objects: any[] = votesData.objects ?? [];
 
-        // Build a human-readable congress.gov vote URL
-        let voteUrl = v.url ?? null;
-        if (!voteUrl && v.congress && v.chamber && v.session && rollNum) {
-          const ch = (v.chamber ?? "").toLowerCase().includes("senate") ? "senate" : "house";
-          voteUrl = `https://www.congress.gov/nomination/${v.congress}?q=%7B%22search%22%3A%22${rollNum}%22%7D`;
-        }
+      const votes = objects.map((obj: any) => {
+        const v = obj.vote ?? {};
+        const option = obj.option ?? {};
+
+        // Related bill description
+        const bill = v.related_bill;
+        const billNumber = bill
+          ? `${(bill.bill_type ?? "").toUpperCase()} ${bill.number}`
+          : v.number ? `Roll Call ${v.number}` : "";
+        const billDescription = bill?.title ?? v.question ?? v.description ?? "";
+
+        // GovTrack vote URL
+        const voteUrl = v.url ? `https://www.govtrack.us${v.url}` : (v.source_url ?? null);
 
         return {
-          billNumber: rollNum ? `Roll Call ${rollNum}` : "",
-          billDescription: description,
-          voteDate,
-          memberVote: v.memberVote ?? v.votePosition ?? v.position ?? "",
-          chamber: v.chamber ?? "",
-          congress: v.congress ?? null,
+          billNumber,
+          billDescription,
+          voteDate: v.created ?? "",
+          memberVote: option.value ?? option.key ?? "",
+          chamber: v.chamber_label ?? v.chamber ?? "",
           url: voteUrl,
         };
       });
+
       res.json(votes);
     } catch (e) { handleError(res, e); }
   });

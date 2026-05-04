@@ -598,7 +598,7 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
           {votes.length > 0 && (
             <div className="mt-1">
               <p className="text-[10px] text-muted-foreground/60 mb-1.5 uppercase tracking-wider font-semibold">
-                {votes.length} most recent votes · {isFederal ? "Congress.gov" : "LegiScan"}
+                {votes.length} most recent votes · {isFederal ? "GovTrack" : "LegiScan"}
               </p>
               <div>
                 {votes.map((v, i) => <VoteRow key={i} vote={v} isFederal={isFederal} />)}
