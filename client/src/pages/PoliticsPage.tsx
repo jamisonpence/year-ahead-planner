@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isBefore, isAfter, startOfDay, addDays } from "date-fns";
 import {
@@ -61,7 +61,7 @@ const PARTY_COLORS: Record<string, string> = {
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div>
       <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
