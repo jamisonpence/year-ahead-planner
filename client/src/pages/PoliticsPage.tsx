@@ -531,7 +531,8 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
       setFetchError(null);
       try {
         if (isFederal) {
-          const r = await apiRequest("GET", `/api/politics/votes/federal/${extId}`);
+          const nameParam = official.name ? `?name=${encodeURIComponent(official.name)}` : "";
+          const r = await apiRequest("GET", `/api/politics/votes/federal/${extId}${nameParam}`);
           return r.json();
         }
         // State: use cached peopleId or auto-lookup by name+stateCode

@@ -2870,11 +2870,12 @@ Rules:
 
   // ── Voting record proxies ─────────────────────────────────────────────────────
 
-  // GovTrack — recent votes for a federal member by Congress.gov bioguideId
-  // (Congress.gov v3 has no per-member votes endpoint; GovTrack is free and no key required)
+  // GovTrack — recent votes for a federal member
+  // (Congress.gov v3 has no per-member votes endpoint; GovTrack is free, no key required)
   app.get("/api/politics/votes/federal/:bioguideId", requireAuth, async (req, res) => {
     try {
       const { bioguideId } = req.params;
+      const memberName = (req.query.name as string | undefined) ?? "";
 
       // WIMR-sourced fake IDs are not real bioguideIds
       if (bioguideId.startsWith("wimr-")) {
@@ -2883,25 +2884,48 @@ Rules:
         });
       }
 
-      // Step 1: resolve GovTrack person ID from bioguideId
-      const personResp = await fetch(
-        `https://www.govtrack.us/api/v2/person?bioguideid=${bioguideId}&format=json`,
-        { headers: { Accept: "application/json" } }
-      );
-      if (!personResp.ok) {
-        const body = await personResp.text().catch(() => "");
-        console.error(`[votes/federal] GovTrack person lookup ${personResp.status} for ${bioguideId}:`, body.slice(0, 300));
-        return res.status(personResp.status).json({ error: `GovTrack person lookup failed (${personResp.status})` });
-      }
-      const personData = await personResp.json() as any;
-      const govtrackId: number | undefined = personData.objects?.[0]?.id;
-      if (!govtrackId) {
-        return res.status(404).json({ error: "Member not found in GovTrack. Try re-adding via Find Representatives." });
+      // Helper: resolve GovTrack person ID, returns null on any failure/miss
+      async function resolveGovtrackId(): Promise<number | null> {
+        // Try 1: look up by bioguideId
+        try {
+          const r = await fetch(`https://www.govtrack.us/api/v2/person?bioguideid=${bioguideId}`, {
+            headers: { Accept: "application/json" },
+          });
+          if (r.ok) {
+            const d = await r.json() as any;
+            const id = d.objects?.[0]?.id;
+            if (id) return id;
+          }
+        } catch { /* fall through */ }
+
+        // Try 2: look up by name (useful for very new members not yet indexed by bioguideId)
+        if (memberName) {
+          try {
+            const r = await fetch(
+              `https://www.govtrack.us/api/v2/person?name=${encodeURIComponent(memberName)}&current_role=1`,
+              { headers: { Accept: "application/json" } }
+            );
+            if (r.ok) {
+              const d = await r.json() as any;
+              const id = d.objects?.[0]?.id;
+              if (id) return id;
+            }
+          } catch { /* fall through */ }
+        }
+
+        return null;
       }
 
-      // Step 2: fetch their 20 most-recent votes
+      const govtrackId = await resolveGovtrackId();
+      if (!govtrackId) {
+        return res.status(404).json({
+          error: "Member not found in GovTrack. They may be very newly appointed, or try re-adding via Find Representatives → By State.",
+        });
+      }
+
+      // Fetch their 20 most-recent votes
       const votesResp = await fetch(
-        `https://www.govtrack.us/api/v2/vote_voter?person=${govtrackId}&order_by=-created&limit=20&format=json`,
+        `https://www.govtrack.us/api/v2/vote_voter?person=${govtrackId}&order_by=-created&limit=20`,
         { headers: { Accept: "application/json" } }
       );
       if (!votesResp.ok) {
@@ -2915,17 +2939,12 @@ Rules:
       const votes = objects.map((obj: any) => {
         const v = obj.vote ?? {};
         const option = obj.option ?? {};
-
-        // Related bill description
         const bill = v.related_bill;
         const billNumber = bill
           ? `${(bill.bill_type ?? "").toUpperCase()} ${bill.number}`
           : v.number ? `Roll Call ${v.number}` : "";
         const billDescription = bill?.title ?? v.question ?? v.description ?? "";
-
-        // GovTrack vote URL
         const voteUrl = v.url ? `https://www.govtrack.us${v.url}` : (v.source_url ?? null);
-
         return {
           billNumber,
           billDescription,
