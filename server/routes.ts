@@ -2965,59 +2965,54 @@ Rules:
 
       } else {
         // ── House ──────────────────────────────────────────────────────────────
-        // clerk.house.gov EVS files are plain-text (not XML), one per roll call.
-        // Binary-search to find the actual current max roll call, then fetch top 60.
+        // clerk.house.gov EVS files at /evs/{year}/roll{NNN}.xml
+        // Modern format (2020+): XML with <rollcall-vote> root element
+        // Legacy format: plain text with ---- YEAS / ---- NAYS sections
 
-        // Helper: check if a roll call file exists for given year + number
-        const rollExists = async (year: number, num: number): Promise<boolean> => {
-          try {
-            const r = await fetch(
-              `https://clerk.house.gov/evs/${year}/roll${String(num).padStart(3, "0")}.xml`,
-              { method: "HEAD", signal: AbortSignal.timeout(5000) }
-            );
-            return r.ok;
-          } catch { return false; }
-        };
-
-        // Binary search for highest existing roll call number in a given year
-        const findMaxRoll = async (year: number): Promise<number> => {
-          // Quick upper bound check — avoid binary search if year hasn't started
-          if (!(await rollExists(year, 1))) return 0;
-          let lo = 1, hi = 700;
-          // Fast upper bound: double until we overshoot
-          while (await rollExists(year, hi)) hi = Math.min(hi * 2, 9999);
-          // Binary search between lo and hi
-          while (lo < hi - 1) {
-            const mid = Math.floor((lo + hi) / 2);
-            if (await rollExists(year, mid)) lo = mid; else hi = mid;
+        // Parse metadata — handles both XML and legacy plain-text format
+        const parseHouseVoteContent = (content: string, rollNum: number) => {
+          if (content.includes("<rollcall-vote")) {
+            return {
+              date:     xmlTag(content, "action-date") || "",
+              bill:     xmlTag(content, "legis-num") || xmlTag(content, "vote-desc") || `Roll #${rollNum}`,
+              question: xmlTag(content, "vote-desc") || xmlTag(content, "vote-question") || "",
+            };
           }
-          return lo;
-        };
-
-        // Helper: parse plain-text EVS vote file header
-        const parseHouseVote = (text: string, rollNum: number) => {
-          const dateMatch = text.match(/(\d{1,2}-\w{3}-\d{4})/);
-          const questionMatch = text.match(/QUESTION:\s+(.+)/);
-          const titleMatch = text.match(/BILL TITLE:\s+(.+)/);
-          const billMatch = text.match(/^\s*(\S.+?)\s{3,}(?:YEA-AND-NAY|RECORDED VOTE|TWO-THIRDS)/im);
+          // Legacy plain-text
+          const dateMatch    = content.match(/(\d{1,2}-\w{3}-\d{4})/);
+          const questionMatch = content.match(/QUESTION:\s+(.+)/);
+          const titleMatch   = content.match(/BILL TITLE:\s+(.+)/);
+          const billMatch    = content.match(/^\s*(\S.+?)\s{3,}(?:YEA-AND-NAY|RECORDED VOTE|TWO-THIRDS)/im);
           return {
             date:     dateMatch?.[1] ?? "",
+            bill:     titleMatch?.[1]?.trim() || billMatch?.[1]?.trim() || `Roll #${rollNum}`,
             question: questionMatch?.[1]?.trim() ?? "",
-            bill:     titleMatch?.[1]?.trim() || billMatch?.[1]?.trim() || `Roll Call #${rollNum}`,
           };
         };
 
-        // Find which section of the vote text the member appears in
-        const findHouseMemberVote = (text: string): string | null => {
+        // Find member vote — handles both XML and legacy plain-text format
+        const findHouseMemberVoteContent = (content: string): string | null => {
+          if (content.includes("<rollcall-vote")) {
+            // Each <recorded-vote> block has a <legislator> tag (text: "Williams, Roger") and <vote>
+            const blocks = xmlBlocks(content, "recorded-vote");
+            const nameRx = new RegExp(lastName, "i");
+            for (const block of blocks) {
+              if (nameRx.test(block)) {
+                return xmlTag(block, "vote") || null;
+              }
+            }
+            return null;
+          }
+          // Legacy plain-text: scan YEAS/NAYS sections
           const sections: [RegExp, string][] = [
-            [/---- YEAS[\s\S]*?(?=\n----|\n\n----)/i,              "Yea"],
-            [/---- NAYS[\s\S]*?(?=\n----|\n\n----)/i,              "Nay"],
-            [/---- NOT VOTING[\s\S]*?(?=\n----|\n\n----|$)/i,      "Not Voting"],
+            [/---- YEAS[\s\S]*?(?=\n----|\n\n----)/i,               "Yea"],
+            [/---- NAYS[\s\S]*?(?=\n----|\n\n----)/i,               "Nay"],
+            [/---- NOT VOTING[\s\S]*?(?=\n----|\n\n----|$)/i,       "Not Voting"],
             [/---- ANSWERED "PRESENT"[\s\S]*?(?=\n----|\n\n----|$)/i, "Present"],
           ];
           const nameRx = new RegExp(`\\b${lastName}\\b`, "i");
           for (const [pattern, voteName] of sections) {
-            const section = text.match(pattern)?.[0] ?? "";
+            const section = content.match(pattern)?.[0] ?? "";
             if (section && nameRx.test(section)) return voteName;
           }
           return null;
@@ -3029,28 +3024,61 @@ Rules:
           try {
             const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
             if (!r.ok) return null;
-            const text = await r.text();
-            const memberVote = findHouseMemberVote(text);
+            const content = await r.text();
+            if (!content.includes("<rollcall-vote") && !content.includes("---- YEAS")) return null;
+            const memberVote = findHouseMemberVoteContent(content);
             if (!memberVote) return null;
-            const meta = parseHouseVote(text, rollNum);
+            const meta = parseHouseVoteContent(content, rollNum);
             return { billNumber: meta.bill, billDescription: meta.question, voteDate: meta.date, memberVote, url };
           } catch { return null; }
         };
 
-        // Find max for current year, fall back to previous year if needed
+        // Step 1: Parallel milestone checks to find approximate current max roll
+        // (avoids slow sequential binary search; milestones spaced 50 apart so real max
+        //  is within 50 of the highest hit, letting us add a 100-roll buffer safely)
         let houseYear = currentYear;
-        let maxRoll = await findMaxRoll(houseYear);
-        if (maxRoll < 5) {
+        const milestones = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700];
+        const milestoneChecks = await Promise.allSettled(
+          milestones.map(async (n) => {
+            const r = await fetch(
+              `https://clerk.house.gov/evs/${houseYear}/roll${String(n).padStart(3, "0")}.xml`,
+              { signal: AbortSignal.timeout(6000) }
+            );
+            return { n, ok: r.ok };
+          })
+        );
+        let approxMax = 0;
+        for (const c of milestoneChecks) {
+          if (c.status === "fulfilled" && c.value.ok) approxMax = Math.max(approxMax, c.value.n);
+        }
+
+        // Fall back to previous year if current year has too few rolls yet
+        if (approxMax < 50) {
           houseYear = currentYear - 1;
-          maxRoll = await findMaxRoll(houseYear);
+          const prevChecks = await Promise.allSettled(
+            [400, 500, 600, 700, 800].map(async (n) => {
+              const r = await fetch(
+                `https://clerk.house.gov/evs/${houseYear}/roll${String(n).padStart(3, "0")}.xml`,
+                { signal: AbortSignal.timeout(6000) }
+              );
+              return { n, ok: r.ok };
+            })
+          );
+          approxMax = 0;
+          for (const c of prevChecks) {
+            if (c.status === "fulfilled" && c.value.ok) approxMax = Math.max(approxMax, c.value.n);
+          }
+          if (approxMax > 0) approxMax += 100; // buffer toward year-end
         }
 
-        if (maxRoll === 0) {
-          return res.status(502).json({ error: "Could not determine current House roll call range." });
+        if (approxMax === 0) {
+          return res.status(502).json({ error: "Could not access House roll call records." });
         }
 
-        // Fetch the 60 most recent roll calls in parallel
-        const probeNums = Array.from({ length: Math.min(60, maxRoll) }, (_, i) => maxRoll - i);
+        // Step 2: Probe 100 rolls from (approxMax + 100) downward in parallel
+        // The +100 buffer ensures we don't miss rolls above the last milestone hit
+        const probeFrom = approxMax + 100;
+        const probeNums = Array.from({ length: Math.min(100, probeFrom) }, (_, i) => probeFrom - i);
         const settled = await Promise.allSettled(probeNums.map((n) => fetchHouseVote(houseYear, n)));
         votes = settled
           .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
