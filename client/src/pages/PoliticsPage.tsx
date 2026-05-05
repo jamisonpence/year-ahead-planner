@@ -832,7 +832,6 @@ function CivicElectionsLookup() {
   }
 
   const vi = data?.voterInfo;
-  const upcoming: any[] = data?.upcomingElections ?? [];
 
   function Section({ id, label, count, children }: { id: string; label: string; count: number; children: React.ReactNode }) {
     if (count === 0) return null;
@@ -891,22 +890,6 @@ function CivicElectionsLookup() {
                 {vi.election.date ? format(new Date(vi.election.date + "T12:00:00"), "MMMM d, yyyy") : ""}
               </p>
             </div>
-          )}
-
-          {/* Upcoming elections (national list) */}
-          {upcoming.length > 0 && (
-            <Section id="upcoming" label="Upcoming Elections" count={upcoming.length}>
-              <div className="space-y-1.5">
-                {upcoming.map(e => (
-                  <div key={e.id} className="flex items-center justify-between gap-2 py-1 border-b last:border-0">
-                    <span className="text-[11px]">{e.name}</span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">
-                      {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d, yyyy") : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Section>
           )}
 
           {/* Polling location */}
