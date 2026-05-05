@@ -5,6 +5,7 @@ import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -607,6 +608,165 @@ function VotingRecords({ official }: { official: PoliticalOfficial }) {
   );
 }
 
+// ── Campaign Finance component ────────────────────────────────────────────────
+
+function fmt$(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function CampaignFinance({ official }: { official: PoliticalOfficial }) {
+  const isFederal = official.level?.toLowerCase() === "federal";
+  const extId: string | null | undefined = (official as any).externalId;
+  const hasRealId = isFederal && !!extId && !extId.startsWith("wimr-");
+
+  const [shown, setShown] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fecOffice = official.title?.toLowerCase().includes("senator") ? "S" : "H";
+  const stateCode = (official as any).stateCode ?? "";
+
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["finance", official.id],
+    queryFn: async () => {
+      setFetchError(null);
+      try {
+        const p = new URLSearchParams();
+        if (official.name)  p.set("name",   official.name);
+        if (stateCode)      p.set("state",  stateCode);
+        p.set("office", fecOffice);
+        const r = await apiRequest("GET", `/api/politics/finance/federal/${extId ?? "lookup"}?${p}`);
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(`${r.status}: ${JSON.stringify(body)}`);
+        }
+        return r.json();
+      } catch (e: any) {
+        setFetchError(e?.message ?? String(e));
+        throw e;
+      }
+    },
+    enabled: shown && hasRealId,
+    staleTime: 30 * 60 * 1000, // 30 min — FEC data doesn't change often
+    retry: false,
+  });
+
+  if (!hasRealId) return null;
+
+  const totalRaised     = data?.totalRaised     ?? 0;
+  const individualTotal = data?.individualTotal ?? 0;
+  const pacTotal        = data?.pacTotal        ?? 0;
+  const indivPct = totalRaised > 0 ? Math.round((individualTotal / totalRaised) * 100) : 0;
+  const pacPct   = totalRaised > 0 ? Math.round((pacTotal        / totalRaised) * 100) : 0;
+  const cycleLabel = data?.cycle ? `${data.cycle - 1}–${data.cycle}` : "";
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setShown(s => !s)}
+        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+      >
+        <DollarSign size={12} />
+        {shown ? "Hide" : "Show"} campaign finance
+        {shown ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {shown && (
+        <div className="mt-2">
+          {isLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 size={12} className="animate-spin" />Loading campaign finance…
+            </div>
+          )}
+          {isError && (
+            <div className="py-2 space-y-1">
+              <p className="text-xs text-destructive">Could not load campaign finance data.</p>
+              {fetchError && <p className="text-[11px] text-destructive/70 font-mono break-all">{fetchError}</p>}
+            </div>
+          )}
+          {!isLoading && !isError && data && (
+            <div className="mt-1 space-y-3">
+              <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold">
+                FEC · {cycleLabel} election cycle
+              </p>
+
+              {/* Total raised */}
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold">{fmt$(totalRaised)}</span>
+                <span className="text-xs text-muted-foreground">total raised</span>
+              </div>
+
+              {/* PAC vs Individual bar */}
+              {totalRaised > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex h-2 rounded-full overflow-hidden bg-secondary">
+                    <div className="bg-blue-500 transition-all" style={{ width: `${indivPct}%` }} />
+                    <div className="bg-amber-500 transition-all" style={{ width: `${pacPct}%` }} />
+                  </div>
+                  <div className="flex gap-4 text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-sm bg-blue-500 shrink-0" />
+                      <span className="text-muted-foreground">Individual</span>
+                      <span className="font-medium">{fmt$(individualTotal)}</span>
+                      <span className="text-muted-foreground">({indivPct}%)</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-sm bg-amber-500 shrink-0" />
+                      <span className="text-muted-foreground">PAC</span>
+                      <span className="font-medium">{fmt$(pacTotal)}</span>
+                      <span className="text-muted-foreground">({pacPct}%)</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Top contributors */}
+              {data.topContributors?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Top contributing employers
+                  </p>
+                  <div className="space-y-1">
+                    {data.topContributors.map((c: any, i: number) => {
+                      const barPct = data.topContributors[0]?.total > 0
+                        ? Math.round((c.total / data.topContributors[0].total) * 100)
+                        : 0;
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground/50 w-4 shrink-0 text-right">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[11px] font-medium truncate">{c.name}</span>
+                              <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{fmt$(c.total)}</span>
+                            </div>
+                            <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                              <div className="h-full bg-primary/40 rounded-full" style={{ width: `${barPct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <a
+                href={data.fecUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors"
+              >
+                <ExternalLink size={10} />FEC.gov · {data.candidateName}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -796,6 +956,7 @@ function OfficialsTab() {
                       )}
                       {o.notes && <p className="text-muted-foreground text-xs mt-2 whitespace-pre-wrap">{o.notes}</p>}
                       <VotingRecords official={o} />
+                      <CampaignFinance official={o} />
                     </div>
                   )}
                 </div>

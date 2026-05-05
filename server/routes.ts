@@ -3096,6 +3096,95 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // FEC — campaign finance for a federal member
+  // Accepts: ?name=FULL_NAME&state=TX&office=H|S
+  app.get("/api/politics/finance/federal/:bioguideId", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.FEC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "FEC_API_KEY not configured" });
+
+      const { name = "", state = "", office = "H" } = req.query as Record<string, string>;
+      const nameParts = name.trim().split(/\s+/);
+      const lastName  = nameParts[nameParts.length - 1].toLowerCase();
+      const fecOffice = office.toUpperCase() === "S" ? "S" : "H";
+
+      // FEC uses even-year cycles: 2025-2026 => cycle 2026
+      const currentYear = new Date().getFullYear();
+      let fecCycle = currentYear % 2 === 0 ? currentYear : currentYear + 1;
+
+      // Helper: search for FEC candidate
+      const findCandidate = async (cycle: number) => {
+        const p = new URLSearchParams({
+          api_key: apiKey,
+          q:        lastName,
+          office:   fecOffice,
+          cycle:    String(cycle),
+          per_page: "20",
+          sort:     "-receipts",
+        });
+        if (state) p.set("state", state.toUpperCase());
+        const r = await fetch(`https://api.open.fec.gov/v1/candidates/?${p}`, {
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const results: any[] = d.results ?? [];
+        // Prefer candidate whose name contains our last name
+        return results.find(c => (c.name ?? "").toLowerCase().includes(lastName)) ?? results[0] ?? null;
+      };
+
+      let candidate = await findCandidate(fecCycle);
+      if (!candidate) {
+        candidate = await findCandidate(fecCycle - 2); // try previous cycle
+        if (candidate) fecCycle -= 2;
+      }
+      if (!candidate) {
+        return res.status(404).json({ error: `No FEC record found for "${name}"` });
+      }
+
+      const committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
+      if (!committeeId) {
+        return res.status(404).json({ error: `No principal committee on file for ${candidate.name}` });
+      }
+
+      // Parallel: committee totals + top employers of individual donors
+      const [totalsResp, contribResp] = await Promise.all([
+        fetch(
+          `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
+        fetch(
+          `https://api.open.fec.gov/v1/schedules/schedule_a/by_employer/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=12&sort=-total&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
+      ]);
+
+      const totalsData = totalsResp.ok ? await totalsResp.json() : {};
+      const contribData = contribResp.ok ? await contribResp.json() : {};
+
+      const totals  = totalsData.results?.[0] ?? {};
+      const totalRaised       = totals.receipts ?? 0;
+      const individualTotal   = totals.individual_contributions ?? 0;
+      const pacTotal          = totals.other_political_committee_contributions ?? 0;
+
+      const topContributors = ((contribData.results ?? []) as any[])
+        .filter(c => c.employer && c.employer.trim() && !["N/A", "NONE", "NOT EMPLOYED", "INFORMATION REQUESTED"].includes((c.employer ?? "").toUpperCase()))
+        .slice(0, 10)
+        .map(c => ({ name: c.employer as string, total: (c.total ?? 0) as number, count: (c.count ?? 0) as number }));
+
+      res.json({
+        candidateName:   (candidate.name as string),
+        candidateId:     (candidate.candidate_id as string),
+        cycle:           fecCycle,
+        totalRaised,
+        individualTotal,
+        pacTotal,
+        topContributors,
+        fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/`,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   // LegiScan — recent votes for a state member
   // Accepts: ?peopleId=ID  (if already known/cached)  OR  ?name=NAME&stateCode=TX  (auto-lookup)
   app.get("/api/politics/votes/state", requireAuth, async (req, res) => {
