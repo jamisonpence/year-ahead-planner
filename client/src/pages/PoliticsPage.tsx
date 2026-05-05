@@ -619,13 +619,15 @@ function fmt$(n: number): string {
 function CampaignFinance({ official }: { official: PoliticalOfficial }) {
   const isFederal = official.level?.toLowerCase() === "federal";
   const extId: string | null | undefined = (official as any).externalId;
-  const hasRealId = isFederal && !!extId && !extId.startsWith("wimr-");
+  // FEC lookup only needs name+state+office — works even without a bioguideId
+  const canLookup = isFederal && !!official.name;
 
   const [shown, setShown] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fecOffice = official.title?.toLowerCase().includes("senator") ? "S" : "H";
   const stateCode = (official as any).stateCode ?? "";
+  const idSegment = (extId && !extId.startsWith("wimr-")) ? extId : "lookup";
 
   const { data, isLoading, isError } = useQuery<any>({
     queryKey: ["finance", official.id],
@@ -636,7 +638,7 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
         if (official.name)  p.set("name",   official.name);
         if (stateCode)      p.set("state",  stateCode);
         p.set("office", fecOffice);
-        const r = await apiRequest("GET", `/api/politics/finance/federal/${extId ?? "lookup"}?${p}`);
+        const r = await apiRequest("GET", `/api/politics/finance/federal/${idSegment}?${p}`);
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
           throw new Error(`${r.status}: ${JSON.stringify(body)}`);
@@ -647,12 +649,12 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
         throw e;
       }
     },
-    enabled: shown && hasRealId,
+    enabled: shown && canLookup,
     staleTime: 30 * 60 * 1000, // 30 min — FEC data doesn't change often
     retry: false,
   });
 
-  if (!hasRealId) return null;
+  if (!canLookup) return null;
 
   const totalRaised     = data?.totalRaised     ?? 0;
   const individualTotal = data?.individualTotal ?? 0;
