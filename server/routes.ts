@@ -3208,6 +3208,86 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Google Civic Information — elections, polling location, contests, drop boxes
+  // Accepts: ?address=FULL_ADDRESS
+  app.get("/api/politics/elections/civic", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "GOOGLE_CIVIC_API_KEY not configured" });
+
+      const { address } = req.query as { address?: string };
+      if (!address?.trim()) return res.status(400).json({ error: "address is required" });
+
+      // Fetch voterinfo (polling location, contests, drop boxes for the upcoming election)
+      // and elections list in parallel
+      const encoded = encodeURIComponent(address.trim());
+      const [voterResp, electionsResp] = await Promise.all([
+        fetch(
+          `https://www.googleapis.com/civicinfo/v2/voterinfo?key=${apiKey}&address=${encoded}&officialOnly=false`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
+        fetch(
+          `https://www.googleapis.com/civicinfo/v2/elections?key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
+      ]);
+
+      // Elections list — filter to upcoming only
+      const today = new Date().toISOString().slice(0, 10);
+      let upcomingElections: any[] = [];
+      if (electionsResp.ok) {
+        const ed = await electionsResp.json();
+        upcomingElections = ((ed.elections ?? []) as any[])
+          .filter(e => e.electionDay && e.electionDay >= today && e.id !== "2000") // 2000 = test election
+          .sort((a, b) => a.electionDay.localeCompare(b.electionDay))
+          .slice(0, 10)
+          .map(e => ({ id: e.id, name: e.name, date: e.electionDay, ocdId: e.ocdDivisionId }));
+      }
+
+      // Voter info — may 404 if no active election for address (that's OK)
+      let voterInfo: any = null;
+      if (voterResp.ok) {
+        const vd = await voterResp.json();
+        const clean = (locs: any[]) => (locs ?? []).map((l: any) => ({
+          name:   l.address?.locationName ?? null,
+          line1:  l.address?.line1 ?? null,
+          line2:  l.address?.line2 ?? null,
+          city:   l.address?.city ?? null,
+          state:  l.address?.state ?? null,
+          zip:    l.address?.zip ?? null,
+          hours:  l.pollingHours ?? l.hours ?? null,
+          notes:  l.notes ?? null,
+          startDate: l.startDate ?? null,
+          endDate:   l.endDate ?? null,
+        }));
+        voterInfo = {
+          election: vd.election ? {
+            id:   vd.election.id,
+            name: vd.election.name,
+            date: vd.election.electionDay,
+          } : null,
+          pollingLocations: clean(vd.pollingLocations),
+          earlyVoteSites:   clean(vd.earlyVoteSites),
+          dropOffLocations: clean(vd.dropOffLocations),
+          contests: ((vd.contests ?? []) as any[]).slice(0, 30).map((c: any) => ({
+            office:   c.office ?? c.type ?? "Unknown",
+            type:     c.type,
+            district: c.district?.name ?? null,
+            candidates: ((c.candidates ?? []) as any[]).map((k: any) => ({
+              name:    k.name,
+              party:   k.party ?? null,
+              phone:   k.phone ?? null,
+              url:     k.candidateUrl ?? null,
+              email:   k.email ?? null,
+            })),
+          })),
+        };
+      }
+
+      res.json({ upcomingElections, voterInfo });
+    } catch (e) { handleError(res, e); }
+  });
+
   // LegiScan — recent votes for a state member
   // Accepts: ?peopleId=ID  (if already known/cached)  OR  ?name=NAME&stateCode=TX  (auto-lookup)
   app.get("/api/politics/votes/state", requireAuth, async (req, res) => {
