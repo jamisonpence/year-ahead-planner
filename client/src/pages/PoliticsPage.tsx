@@ -659,8 +659,10 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
   const totalRaised     = data?.totalRaised     ?? 0;
   const individualTotal = data?.individualTotal ?? 0;
   const pacTotal        = data?.pacTotal        ?? 0;
-  const indivPct = totalRaised > 0 ? Math.round((individualTotal / totalRaised) * 100) : 0;
-  const pacPct   = totalRaised > 0 ? Math.round((pacTotal        / totalRaised) * 100) : 0;
+  const otherTotal      = Math.max(0, totalRaised - individualTotal - pacTotal);
+  const indivPct  = totalRaised > 0 ? Math.round((individualTotal / totalRaised) * 100) : 0;
+  const pacPct    = totalRaised > 0 ? Math.round((pacTotal        / totalRaised) * 100) : 0;
+  const otherPct  = totalRaised > 0 ? Math.round((otherTotal      / totalRaised) * 100) : 0;
   const cycleLabel = data?.cycle ? `${data.cycle - 1}–${data.cycle}` : "";
 
   return (
@@ -699,14 +701,15 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
                 <span className="text-xs text-muted-foreground">total raised</span>
               </div>
 
-              {/* PAC vs Individual bar */}
+              {/* Funding breakdown bar — Individual / PAC / Other (transfers, party, loans…) */}
               {totalRaised > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex h-2 rounded-full overflow-hidden bg-secondary">
                     <div className="bg-blue-500 transition-all" style={{ width: `${indivPct}%` }} />
                     <div className="bg-amber-500 transition-all" style={{ width: `${pacPct}%` }} />
+                    <div className="bg-slate-400 transition-all" style={{ width: `${otherPct}%` }} />
                   </div>
-                  <div className="flex gap-4 text-[11px]">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-sm bg-blue-500 shrink-0" />
                       <span className="text-muted-foreground">Individual</span>
@@ -719,6 +722,14 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
                       <span className="font-medium">{fmt$(pacTotal)}</span>
                       <span className="text-muted-foreground">({pacPct}%)</span>
                     </span>
+                    {otherTotal > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-slate-400 shrink-0" />
+                        <span className="text-muted-foreground">Other</span>
+                        <span className="font-medium">{fmt$(otherTotal)}</span>
+                        <span className="text-muted-foreground">({otherPct}%)</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
