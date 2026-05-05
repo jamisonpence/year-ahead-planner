@@ -3142,9 +3142,32 @@ Rules:
         return res.status(404).json({ error: `No FEC record found for "${name}"` });
       }
 
-      const committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
+      // Get principal committee — candidates endpoint sometimes returns empty array,
+      // so fall back to a direct committee lookup by candidate_id
+      let committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
       if (!committeeId) {
-        return res.status(404).json({ error: `No principal committee on file for ${candidate.name}` });
+        const cmteResp = await fetch(
+          `https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+        if (cmteResp.ok) {
+          const cmteData = await cmteResp.json();
+          committeeId = cmteData.results?.[0]?.committee_id;
+        }
+        // If still nothing, try without cycle filter (catches candidates between cycles)
+        if (!committeeId) {
+          const cmteResp2 = await fetch(
+            `https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&per_page=1&api_key=${apiKey}`,
+            { signal: AbortSignal.timeout(10000) }
+          );
+          if (cmteResp2.ok) {
+            const cmteData2 = await cmteResp2.json();
+            committeeId = cmteData2.results?.[0]?.committee_id;
+          }
+        }
+      }
+      if (!committeeId) {
+        return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
       }
 
       // Parallel: committee totals + top employers of individual donors
