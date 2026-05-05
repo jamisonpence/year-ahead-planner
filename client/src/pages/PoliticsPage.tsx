@@ -5,7 +5,7 @@ import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
-  DollarSign,
+  DollarSign, MapPin, Clock, Users2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -780,6 +780,212 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
   );
 }
 
+// ── Civic Elections Lookup ────────────────────────────────────────────────────
+
+function LocationCard({ loc }: { loc: any }) {
+  const addr = [loc.line1, loc.line2, loc.city, loc.state, loc.zip].filter(Boolean).join(", ");
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2.5 space-y-1">
+      {loc.name && <p className="text-xs font-semibold">{loc.name}</p>}
+      {addr && (
+        <a
+          href={`https://maps.google.com/?q=${encodeURIComponent(addr)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="flex items-start gap-1.5 text-[11px] text-primary hover:underline"
+        >
+          <MapPin size={11} className="mt-0.5 shrink-0" />{addr}
+        </a>
+      )}
+      {loc.hours && <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Clock size={11} />{loc.hours}</p>}
+      {(loc.startDate || loc.endDate) && (
+        <p className="text-[11px] text-muted-foreground">
+          {loc.startDate && loc.endDate ? `${loc.startDate} – ${loc.endDate}` : loc.startDate ?? loc.endDate}
+        </p>
+      )}
+      {loc.notes && <p className="text-[11px] text-muted-foreground italic">{loc.notes}</p>}
+    </div>
+  );
+}
+
+function CivicElectionsLookup() {
+  const [address, setAddress]       = useState("");
+  const [submitted, setSubmitted]   = useState("");
+  const [openSection, setOpenSection] = useState<string | null>("polling");
+
+  const { data, isLoading, isError, error } = useQuery<any>({
+    queryKey: ["civic-elections", submitted],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/politics/elections/civic?address=${encodeURIComponent(submitted)}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `Error ${r.status}`);
+      }
+      return r.json();
+    },
+    enabled: !!submitted,
+    staleTime: 15 * 60 * 1000,
+    retry: false,
+  });
+
+  function lookup() {
+    if (address.trim()) setSubmitted(address.trim());
+  }
+
+  const vi = data?.voterInfo;
+  const upcoming: any[] = data?.upcomingElections ?? [];
+
+  function Section({ id, label, count, children }: { id: string; label: string; count: number; children: React.ReactNode }) {
+    if (count === 0) return null;
+    const open = openSection === id;
+    return (
+      <div className="border rounded-xl overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between px-3 py-2.5 bg-card hover:bg-secondary/50 transition-colors"
+          onClick={() => setOpenSection(open ? null : id)}
+        >
+          <span className="text-xs font-semibold">{label}</span>
+          <div className="flex items-center gap-2">
+            <Badge className="bg-secondary text-muted-foreground">{count}</Badge>
+            {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </div>
+        </button>
+        {open && <div className="px-3 pb-3 pt-1 space-y-2 border-t bg-card">{children}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-xl bg-secondary/20 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <MapPin size={15} className="text-primary shrink-0" />
+        <h3 className="font-semibold text-sm">My Elections & Ballot</h3>
+        <span className="text-[10px] text-muted-foreground ml-auto">via Google Civic</span>
+      </div>
+
+      {/* Address input */}
+      <div className="flex gap-2">
+        <input
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && lookup()}
+          placeholder="Enter your registered address (e.g. 123 Main St, Austin TX 78701)"
+          className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        <Button size="sm" onClick={lookup} disabled={isLoading || !address.trim()} className="gap-1.5 shrink-0">
+          {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+          {isLoading ? "Looking up…" : "Look up"}
+        </Button>
+      </div>
+
+      {isError && (
+        <p className="text-xs text-destructive">{(error as any)?.message ?? "Could not load election data."}</p>
+      )}
+
+      {data && (
+        <div className="space-y-2">
+          {/* Active election banner */}
+          {vi?.election && (
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+              <p className="text-xs font-semibold text-primary">{vi.election.name}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {vi.election.date ? format(new Date(vi.election.date + "T12:00:00"), "MMMM d, yyyy") : ""}
+              </p>
+            </div>
+          )}
+
+          {/* Upcoming elections (national list) */}
+          {upcoming.length > 0 && (
+            <Section id="upcoming" label="Upcoming Elections" count={upcoming.length}>
+              <div className="space-y-1.5">
+                {upcoming.map(e => (
+                  <div key={e.id} className="flex items-center justify-between gap-2 py-1 border-b last:border-0">
+                    <span className="text-[11px]">{e.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d, yyyy") : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Polling location */}
+          {vi?.pollingLocations?.length > 0 && (
+            <Section id="polling" label="Polling Location" count={vi.pollingLocations.length}>
+              <div className="space-y-2">
+                {vi.pollingLocations.map((l: any, i: number) => <LocationCard key={i} loc={l} />)}
+              </div>
+            </Section>
+          )}
+
+          {/* Early voting */}
+          {vi?.earlyVoteSites?.length > 0 && (
+            <Section id="early" label="Early Voting Sites" count={vi.earlyVoteSites.length}>
+              <div className="space-y-2">
+                {vi.earlyVoteSites.map((l: any, i: number) => <LocationCard key={i} loc={l} />)}
+              </div>
+            </Section>
+          )}
+
+          {/* Drop boxes */}
+          {vi?.dropOffLocations?.length > 0 && (
+            <Section id="dropoff" label="Ballot Drop-Off Locations" count={vi.dropOffLocations.length}>
+              <div className="space-y-2">
+                {vi.dropOffLocations.map((l: any, i: number) => <LocationCard key={i} loc={l} />)}
+              </div>
+            </Section>
+          )}
+
+          {/* Contests */}
+          {vi?.contests?.length > 0 && (
+            <Section id="contests" label="Contests on Your Ballot" count={vi.contests.length}>
+              <div className="space-y-3">
+                {vi.contests.map((c: any, i: number) => (
+                  <div key={i} className="space-y-1.5 pb-2 border-b last:border-0">
+                    <div>
+                      <p className="text-[11px] font-semibold">{c.office}</p>
+                      {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      {c.candidates?.map((k: any, j: number) => (
+                        <div key={j} className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-medium">{k.name}</span>
+                          {k.party && (
+                            <Badge className={PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground text-[10px]"}>
+                              {k.party}
+                            </Badge>
+                          )}
+                          <div className="flex gap-2 ml-auto">
+                            {k.url && (
+                              <a href={k.url} target="_blank" rel="noopener noreferrer"
+                                className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                                <Globe size={10} />Website
+                              </a>
+                            )}
+                            {k.phone && (
+                              <a href={`tel:${k.phone}`} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5">
+                                <Phone size={10} />{k.phone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {vi && !vi.election && vi.contests?.length === 0 && vi.pollingLocations?.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-2">No active election data found for this address right now.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1205,6 +1411,8 @@ function ElectionsTab() {
 
   return (
     <div className="space-y-4">
+      <CivicElectionsLookup />
+
       {!showForm ? (
         <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5"><Plus size={14} />Add Election</Button>
       ) : (
