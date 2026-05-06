@@ -950,7 +950,7 @@ function CandidateDetails({
                       return (
                         <div key={i} className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <div className="text-[10px] truncate">{c.employer}</div>
+                            <div className="text-[10px] truncate">{c.name}</div>
                             <div className="h-1 rounded-full bg-primary/20 mt-0.5 overflow-hidden">
                               <div className="h-full bg-primary/60 rounded-full" style={{ width: `${Math.round((c.total / maxAmt) * 100)}%` }} />
                             </div>
