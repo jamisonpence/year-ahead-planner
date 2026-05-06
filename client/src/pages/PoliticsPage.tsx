@@ -1003,9 +1003,39 @@ function CandidateDetails({
                   <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-slate-400" />Other {fmt$(otherTotal)} ({otherPct}%)</span>
                 </div>
               </div>
+              {/* Top 5 individual donors */}
+              {fin.topDonors?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Top donors</p>
+                  <div className="space-y-1.5">
+                    {fin.topDonors.map((d: any, i: number) => {
+                      const maxAmt = fin.topDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      const donorName = tc(d.name);
+                      const detail = [d.occupation, d.employer].filter((s: string) => s && !["N/A","NONE","RETIRED","SELF-EMPLOYED","HOMEMAKER","NOT EMPLOYED","INFORMATION REQUESTED"].includes((s ?? "").toUpperCase())).map(tc).join(" · ");
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-[11px] font-medium truncate block">{donorName}</span>
+                              {detail && <span className="text-[9px] text-muted-foreground/70 truncate block">{detail}</span>}
+                            </div>
+                            <span className="text-[11px] font-semibold text-primary shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-primary/15 overflow-hidden">
+                            <div className="h-full bg-primary/50 rounded-full transition-all" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Top employers of contributors */}
               {fin.topContributors?.length > 0 && (
                 <div>
-                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Top employers of contributors</p>
+                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Top employers of contributors</p>
                   <div className="space-y-1">
                     {fin.topContributors.slice(0, 5).map((c: any, i: number) => {
                       const maxAmt = fin.topContributors[0]?.total ?? 1;

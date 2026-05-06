@@ -3185,8 +3185,8 @@ Rules:
         return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
       }
 
-      // Parallel: committee totals + top employers of individual donors
-      const [totalsResp, contribResp] = await Promise.all([
+      // Parallel: committee totals + top employers + top individual donors
+      const [totalsResp, contribResp, donorsResp] = await Promise.all([
         fetch(
           `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
           { signal: AbortSignal.timeout(10000) }
@@ -3195,20 +3195,48 @@ Rules:
           `https://api.open.fec.gov/v1/schedules/schedule_a/by_employer/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=12&sort=-total&api_key=${apiKey}`,
           { signal: AbortSignal.timeout(10000) }
         ),
+        fetch(
+          `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
       ]);
 
       const totalsData = totalsResp.ok ? await totalsResp.json() : {};
       const contribData = contribResp.ok ? await contribResp.json() : {};
+      const donorsData  = donorsResp.ok  ? await donorsResp.json()  : {};
 
       const totals  = totalsData.results?.[0] ?? {};
       const totalRaised       = totals.receipts ?? 0;
       const individualTotal   = totals.individual_contributions ?? 0;
       const pacTotal          = totals.other_political_committee_contributions ?? 0;
 
+      const SKIP_EMPLOYERS = new Set(["N/A", "NONE", "NOT EMPLOYED", "INFORMATION REQUESTED", "SELF-EMPLOYED", "RETIRED", "HOMEMAKER", "NULL", ""]);
       const topContributors = ((contribData.results ?? []) as any[])
-        .filter(c => c.employer && c.employer.trim() && !["N/A", "NONE", "NOT EMPLOYED", "INFORMATION REQUESTED"].includes((c.employer ?? "").toUpperCase()))
+        .filter(c => c.employer && !SKIP_EMPLOYERS.has((c.employer ?? "").toUpperCase().trim()))
         .slice(0, 10)
         .map(c => ({ name: c.employer as string, total: (c.total ?? 0) as number, count: (c.count ?? 0) as number }));
+
+      // Top individual donors — dedupe by name, sum their amounts
+      const donorMap = new Map<string, { name: string; employer: string; occupation: string; amount: number }>();
+      for (const d of (donorsData.results ?? []) as any[]) {
+        const name = (d.contributor_name ?? "").trim();
+        if (!name || name.toUpperCase() === "N/A") continue;
+        const existing = donorMap.get(name);
+        const amount = d.contribution_receipt_amount ?? 0;
+        if (existing) {
+          existing.amount += amount;
+        } else {
+          donorMap.set(name, {
+            name,
+            employer:   (d.contributor_employer ?? "").trim(),
+            occupation: (d.contributor_occupation ?? "").trim(),
+            amount,
+          });
+        }
+      }
+      const topDonors = [...donorMap.values()]
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
 
       res.json({
         candidateName:   (candidate.name as string),
@@ -3218,6 +3246,7 @@ Rules:
         individualTotal,
         pacTotal,
         topContributors,
+        topDonors,
         fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/`,
       });
     } catch (e) { handleError(res, e); }
