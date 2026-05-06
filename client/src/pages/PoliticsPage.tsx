@@ -822,9 +822,10 @@ function normalizeFecName(raw: string): string {
   return raw.split(/\s+/).map(tc).join(" ");
 }
 
-// Build a Ballotpedia URL — try "First_Last" format (Ballotpedia usually redirects aliases)
+// Build external search URLs from a normalized name
 function ballotpediaUrl(rawName: string): string {
-  return `https://ballotpedia.org/${normalizeFecName(rawName).replace(/ /g, "_")}`;
+  // Use Ballotpedia search so any name variant finds the right politician
+  return `https://ballotpedia.org/wiki/index.php?search=${encodeURIComponent(normalizeFecName(rawName))}`;
 }
 
 // ── Policy topic categorization (client-side) ─────────────────────────────────
@@ -845,12 +846,12 @@ const POLICY_BUCKETS: Array<{ label: string; emoji: string; keywords: string[] }
 function categorizeVotes(votes: any[]): Array<{ label: string; emoji: string; yea: number; nay: number; examples: string[] }> {
   return POLICY_BUCKETS.map(bucket => {
     const matching = votes.filter(v => {
-      const text = `${v.bill ?? ""} ${v.question ?? ""}`.toLowerCase();
+      const text = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`.toLowerCase();
       return bucket.keywords.some(kw => text.includes(kw));
     });
-    const yea = matching.filter(v => /yea|yes|aye/i.test(v.vote ?? "")).length;
-    const nay = matching.filter(v => /nay|no/i.test(v.vote ?? "")).length;
-    const examples = matching.slice(0, 2).map(v => v.bill ?? v.question ?? "").filter(Boolean);
+    const yea = matching.filter(v => /yea|yes|aye/i.test(v.memberVote ?? "")).length;
+    const nay = matching.filter(v => /nay|no/i.test(v.memberVote ?? "")).length;
+    const examples = matching.slice(0, 2).map(v => v.billNumber ?? v.billDescription ?? "").filter(Boolean);
     return { ...bucket, yea, nay, examples };
   }).filter(b => b.yea + b.nay > 0)
     .sort((a, b) => (b.yea + b.nay) - (a.yea + a.nay));
