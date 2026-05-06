@@ -843,7 +843,10 @@ const POLICY_BUCKETS: Array<{ label: string; emoji: string; keywords: string[] }
   { label: "Social Issues",     emoji: "🤝", keywords: ["abortion", "lgbtq", "civil rights", "discrimination", "women", "gender", "reproductive"] },
 ];
 
-function categorizeVotes(votes: any[]): Array<{ label: string; emoji: string; yea: number; nay: number; examples: string[] }> {
+function categorizeVotes(votes: any[]): Array<{
+  label: string; emoji: string; yea: number; nay: number;
+  examples: Array<{ text: string; vote: string }>;
+}> {
   return POLICY_BUCKETS.map(bucket => {
     const matching = votes.filter(v => {
       const text = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`.toLowerCase();
@@ -851,7 +854,10 @@ function categorizeVotes(votes: any[]): Array<{ label: string; emoji: string; ye
     });
     const yea = matching.filter(v => /yea|yes|aye/i.test(v.memberVote ?? "")).length;
     const nay = matching.filter(v => /nay|no/i.test(v.memberVote ?? "")).length;
-    const examples = matching.slice(0, 2).map(v => v.billNumber ?? v.billDescription ?? "").filter(Boolean);
+    const examples = matching
+      .slice(0, 3)
+      .map(v => ({ text: (v.billDescription || v.billNumber || "").trim(), vote: (v.memberVote || "").trim() }))
+      .filter(e => e.text);
     return { ...bucket, yea, nay, examples };
   }).filter(b => b.yea + b.nay > 0)
     .sort((a, b) => (b.yea + b.nay) - (a.yea + a.nay));
@@ -1035,18 +1041,49 @@ function CandidateDetails({
                 {topicBreakdown.map(b => {
                   const total = b.yea + b.nay;
                   const yeaPct = Math.round((b.yea / total) * 100);
+                  const stance    = yeaPct >= 65 ? "Generally Supports" : yeaPct <= 35 ? "Generally Opposes" : "Mixed Record";
+                  const stanceCls = yeaPct >= 65 ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
+                                  : yeaPct <= 35 ? "text-red-400 bg-red-400/10 border-red-400/20"
+                                  : "text-amber-400 bg-amber-400/10 border-amber-400/20";
                   return (
-                    <div key={b.label} className="space-y-0.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-medium">{b.emoji} {b.label}</span>
-                        <span className="text-[10px] text-muted-foreground">{b.yea}Y · {b.nay}N</span>
+                    <div key={b.label} className="rounded-lg border bg-secondary/20 p-2.5 space-y-2">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[12px] font-semibold">{b.emoji} {b.label}</span>
+                        <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${stanceCls}`}>
+                          {stance}
+                        </span>
                       </div>
-                      <div className="flex h-1.5 rounded-full overflow-hidden bg-secondary">
+
+                      {/* Vote bar */}
+                      <div className="flex h-2 rounded-full overflow-hidden bg-secondary">
                         <div className="bg-emerald-500 transition-all" style={{ width: `${yeaPct}%` }} />
                         <div className="bg-red-400 transition-all" style={{ width: `${100 - yeaPct}%` }} />
                       </div>
-                      {b.examples[0] && (
-                        <p className="text-[9px] text-muted-foreground/60 truncate">{b.examples[0]}</p>
+
+                      {/* Vote tally */}
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-emerald-400 font-medium">✓ {b.yea} voted for</span>
+                        <span className="text-red-400 font-medium">✗ {b.nay} voted against</span>
+                      </div>
+
+                      {/* Example votes */}
+                      {b.examples.length > 0 && (
+                        <div className="border-t border-border/30 pt-2 space-y-1.5">
+                          <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-semibold">Recent votes</p>
+                          {b.examples.map((ex, i) => {
+                            const isYea = /yea|yes|aye/i.test(ex.vote);
+                            const isNay = /nay|no/i.test(ex.vote);
+                            return (
+                              <div key={i} className="flex items-start gap-1.5">
+                                <span className={`text-[10px] font-bold shrink-0 mt-px ${isYea ? "text-emerald-400" : isNay ? "text-red-400" : "text-muted-foreground"}`}>
+                                  {isYea ? "✓" : isNay ? "✗" : "·"}
+                                </span>
+                                <p className="text-[10px] text-muted-foreground leading-snug">{ex.text}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   );
