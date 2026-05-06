@@ -3186,29 +3186,31 @@ Rules:
       }
 
       // Parallel: committee totals + top employers + top individual donors + top PAC/company donors
-      const [totalsResp, contribResp, donorsResp, pacResp] = await Promise.all([
+      // Use allSettled so a single slow/failed FEC call doesn't kill the whole response
+      const safeJson = async (r: Response) => { try { return r.ok ? await r.json() : {}; } catch { return {}; } };
+      const [totalsRes, contribRes, donorsRes, pacRes] = await Promise.allSettled([
         fetch(
           `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(10000) }
-        ),
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
         fetch(
           `https://api.open.fec.gov/v1/schedules/schedule_a/by_employer/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=12&sort=-total&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(10000) }
-        ),
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
         fetch(
           `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(10000) }
-        ),
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
         fetch(
           `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&contributor_type=committee&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(10000) }
-        ),
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
       ]);
 
-      const totalsData = totalsResp.ok ? await totalsResp.json() : {};
-      const contribData = contribResp.ok ? await contribResp.json() : {};
-      const donorsData  = donorsResp.ok  ? await donorsResp.json()  : {};
-      const pacData     = pacResp.ok     ? await pacResp.json()     : {};
+      const totalsData = totalsRes.status  === "fulfilled" ? totalsRes.value  : {};
+      const contribData = contribRes.status === "fulfilled" ? contribRes.value : {};
+      const donorsData  = donorsRes.status  === "fulfilled" ? donorsRes.value  : {};
+      const pacData     = pacRes.status     === "fulfilled" ? pacRes.value     : {};
 
       const totals  = totalsData.results?.[0] ?? {};
       const totalRaised       = totals.receipts ?? 0;
