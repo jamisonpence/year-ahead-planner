@@ -840,45 +840,58 @@ function ElectionCandidates({ electionId, stateCode }: { electionId: string; sta
   );
 
   const contests: any[] = data?.contests ?? [];
+  const isFecSource = data?.source === "fec";
+
   if (contests.length === 0) return (
-    <p className="px-4 py-2 text-[11px] text-muted-foreground italic">No candidate data available yet for this election.</p>
+    <p className="px-4 py-3 text-[11px] text-muted-foreground italic border-t">
+      Candidate data isn't available yet for this election — check back closer to the election date.
+    </p>
   );
 
   return (
-    <div className="divide-y border-t">
-      {contests.map((c: any, ci: number) => (
-        <div key={ci} className="px-4 py-2.5 space-y-1.5">
-          <div>
-            <p className="text-[11px] font-semibold">{c.office}</p>
-            {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
-          </div>
-          <div className="space-y-1">
-            {(c.candidates ?? []).map((k: any, ki: number) => (
-              <div key={ki} className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-medium">{k.name}</span>
-                {k.party && (
-                  <Badge className={`text-[10px] ${PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground"}`}>
-                    {k.party}
-                  </Badge>
-                )}
-                <div className="flex gap-2 ml-auto">
-                  {k.url && (
-                    <a href={k.url} target="_blank" rel="noopener noreferrer"
-                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                      <Globe size={10} />Website
-                    </a>
-                  )}
-                  {k.phone && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                      <Phone size={10} />{k.phone}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+    <div className="border-t">
+      {isFecSource && (
+        <div className="px-4 py-2 bg-amber-500/10 border-b">
+          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+            Ballot-specific candidates not yet available — showing federal candidates who have filed with the FEC for this state.
+          </p>
         </div>
-      ))}
+      )}
+      <div className="divide-y">
+        {contests.map((c: any, ci: number) => (
+          <div key={ci} className="px-4 py-2.5 space-y-1.5">
+            <div>
+              <p className="text-[11px] font-semibold">{c.office}</p>
+              {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
+            </div>
+            <div className="space-y-1">
+              {(c.candidates ?? []).map((k: any, ki: number) => (
+                <div key={ki} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-medium">{k.name}</span>
+                  {k.party && (
+                    <Badge className={`text-[10px] ${PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground"}`}>
+                      {k.party}
+                    </Badge>
+                  )}
+                  <div className="flex gap-2 ml-auto">
+                    {k.url && (
+                      <a href={k.url} target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                        <Globe size={10} />{isFecSource ? "FEC" : "Website"}
+                      </a>
+                    )}
+                    {k.phone && (
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <Phone size={10} />{k.phone}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

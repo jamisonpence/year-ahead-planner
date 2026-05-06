@@ -3328,22 +3328,85 @@ Rules:
       }
 
       const vd = await resp.json() as any;
-      const contests = ((vd.contests ?? []) as any[]).map((c: any) => ({
+      let contests: any[] = ((vd.contests ?? []) as any[]).map((c: any) => ({
         office:   c.office ?? c.type ?? "Unknown",
         type:     c.type ?? null,
         district: c.district?.name ?? null,
         level:    (c.level ?? []).join(", ") || null,
+        source:   "civic",
         candidates: ((c.candidates ?? []) as any[]).map((k: any) => ({
-          name:    k.name,
-          party:   k.party ?? null,
-          phone:   k.phone ?? null,
-          url:     k.candidateUrl ?? null,
-          email:   k.email ?? null,
+          name:     k.name,
+          party:    k.party ?? null,
+          phone:    k.phone ?? null,
+          url:      k.candidateUrl ?? null,
+          email:    k.email ?? null,
           photoUrl: k.photoUrl ?? null,
         })),
       }));
 
-      res.json({ contests });
+      // ── FEC fallback: when Civic has no contest data, pull federal candidates ──
+      if (contests.length === 0) {
+        const fecKey = process.env.FEC_API_KEY;
+        if (fecKey) {
+          const currentYear = new Date().getFullYear();
+          const cycle = currentYear % 2 === 0 ? currentYear : currentYear + 1;
+
+          // Fetch Senate + House candidates for this state in parallel
+          const [senResp, houseResp] = await Promise.allSettled([
+            fetch(
+              `https://api.open.fec.gov/v1/candidates/?api_key=${fecKey}` +
+              `&state=${stateCode}&office=S&cycle=${cycle}&per_page=20&page=1`,
+              { signal: AbortSignal.timeout(8000) }
+            ).then(r => r.json()),
+            fetch(
+              `https://api.open.fec.gov/v1/candidates/?api_key=${fecKey}` +
+              `&state=${stateCode}&office=H&cycle=${cycle}&per_page=50&page=1`,
+              { signal: AbortSignal.timeout(8000) }
+            ).then(r => r.json()),
+          ]);
+
+          const mapFecCandidate = (c: any) => ({
+            name:  c.name ?? c.candidate_id,
+            party: c.party_full ?? c.party ?? null,
+            url:   `https://www.fec.gov/data/candidate/${c.candidate_id}/`,
+            phone: null, email: null, photoUrl: null,
+          });
+
+          if (senResp.status === "fulfilled") {
+            const senators: any[] = (senResp.value?.results ?? []);
+            if (senators.length > 0) {
+              contests.push({
+                office: `U.S. Senate — ${stateCode}`,
+                type: "General", district: null, level: "federal", source: "fec",
+                candidates: senators.map(mapFecCandidate),
+              });
+            }
+          }
+
+          if (houseResp.status === "fulfilled") {
+            const reps: any[] = (houseResp.value?.results ?? []);
+            // Group by district
+            const byDistrict: Record<string, any[]> = {};
+            for (const r of reps) {
+              const dist = r.district ?? "At-Large";
+              (byDistrict[dist] ??= []).push(r);
+            }
+            for (const [dist, members] of Object.entries(byDistrict).sort()) {
+              contests.push({
+                office: `U.S. House — ${stateCode}-${dist}`,
+                type: "General", district: `District ${dist}`, level: "federal", source: "fec",
+                candidates: members.map(mapFecCandidate),
+              });
+            }
+          }
+        }
+      }
+
+      const source = contests.length > 0
+        ? (contests[0].source === "fec" ? "fec" : "civic")
+        : "none";
+
+      res.json({ contests, source });
     } catch (e) { handleError(res, e); }
   });
 
