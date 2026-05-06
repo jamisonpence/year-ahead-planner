@@ -3327,7 +3327,7 @@ Rules:
 
       const safeJson = async (r: Response) => { try { return r.ok ? await r.json() : {}; } catch { return {}; } };
 
-      // Find FEC candidate — comma-aware match
+      // Find FEC candidate — comma-aware match, try multiple cycles
       const findCandidate = async (cycle: number) => {
         const p = new URLSearchParams({ api_key: apiKey, q: lastName, office: fecOffice, cycle: String(cycle), per_page: "20", sort: "-receipts" });
         if (state) p.set("state", state.toUpperCase());
@@ -3337,102 +3337,110 @@ Rules:
         return results.find(c => (c.name ?? "").toLowerCase().startsWith(lastName)) ?? results[0] ?? null;
       };
 
-      // Find committee ID — try with cycle then without
-      const findCommittee = async (candidateId: string, cycle: number) => {
-        for (const url of [
-          `https://api.open.fec.gov/v1/candidate/${candidateId}/committees/?designation=P&cycle=${cycle}&per_page=1&api_key=${apiKey}`,
-          `https://api.open.fec.gov/v1/candidate/${candidateId}/committees/?designation=P&per_page=1&api_key=${apiKey}`,
-        ]) {
-          const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-          const id = r.ok ? (await r.json()).results?.[0]?.committee_id : undefined;
-          if (id) return id as string;
-        }
-        return undefined;
-      };
-
-      // Fetch disbursements for a given committee + cycle; fall back to previous cycle if empty
-      const fetchSpending = async (committeeId: string, cycle: number) => {
-        const [purposeRes, vendorsRes] = await Promise.allSettled([
-          fetch(
-            `https://api.open.fec.gov/v1/schedules/schedule_b/by_purpose/?committee_id=${committeeId}&cycle=${cycle}&per_page=20&sort=-total&api_key=${apiKey}`,
-            { signal: AbortSignal.timeout(12000) }
-          ).then(safeJson),
-          fetch(
-            `https://api.open.fec.gov/v1/schedules/schedule_b/by_recipient/?committee_id=${committeeId}&cycle=${cycle}&per_page=10&sort=-total&api_key=${apiKey}`,
-            { signal: AbortSignal.timeout(12000) }
-          ).then(safeJson),
-        ]);
-        return {
-          purposeData: purposeRes.status === "fulfilled" ? purposeRes.value : {},
-          vendorsData: vendorsRes.status === "fulfilled" ? vendorsRes.value : {},
-        };
-      };
-
-      // Resolve candidate + committee, falling back two cycles at a time until we find spend data
-      let candidate = await findCandidate(fecCycle);
-      if (!candidate) { candidate = await findCandidate(fecCycle - 2); if (candidate) fecCycle -= 2; }
-      if (!candidate) { candidate = await findCandidate(fecCycle - 4); if (candidate) fecCycle -= 4; }
+      let candidate: any = null;
+      for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
+        candidate = await findCandidate(tryCycle);
+        if (candidate) { fecCycle = tryCycle; break; }
+      }
       if (!candidate) return res.status(404).json({ error: `No FEC record found for "${name}"` });
 
-      const committeeId: string | undefined =
-        candidate.principal_committees?.[0]?.committee_id ??
-        await findCommittee(candidate.candidate_id, fecCycle);
+      // Get the principal committee — try cycle-specific then any
+      let committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
+      if (!committeeId) {
+        for (const url of [
+          `https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&cycle=${fecCycle}&per_page=5&api_key=${apiKey}`,
+          `https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&per_page=5&api_key=${apiKey}`,
+        ]) {
+          const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (r.ok) { committeeId = (await r.json()).results?.[0]?.committee_id; }
+          if (committeeId) break;
+        }
+      }
       if (!committeeId) return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
 
-      // Try current cycle, then step back until we find non-zero spend
-      let purposeData: any = {};
-      let vendorsData: any = {};
+      // Fetch raw Schedule B transactions — try multiple cycle params until we get data
+      // The FEC API uses `two_year_period` for schedule_b but `cycle` for candidates
+      let disbursements: any[] = [];
       let activeCycle = fecCycle;
+
       for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
-        const result = await fetchSpending(committeeId, tryCycle);
-        if ((result.purposeData.results ?? []).length > 0) {
-          purposeData = result.purposeData;
-          vendorsData = result.vendorsData;
-          activeCycle = tryCycle;
-          break;
+        // Try both `two_year_period` and `cycle` since FEC endpoints are inconsistent
+        for (const cycleParam of ["two_year_period", "cycle"]) {
+          const url = `https://api.open.fec.gov/v1/schedules/schedule_b/?committee_id=${committeeId}&${cycleParam}=${tryCycle}&per_page=100&sort=-disbursement_amount&api_key=${apiKey}`;
+          const r = await fetch(url, { signal: AbortSignal.timeout(12000) }).then(safeJson);
+          disbursements = (r.results ?? []) as any[];
+          if (disbursements.length > 0) { activeCycle = tryCycle; break; }
+        }
+        if (disbursements.length > 0) break;
+      }
+
+      // Friendly labels for FEC disbursement purpose descriptions
+      const PURPOSE_LABELS: Record<string, string> = {
+        "MEDIA":           "Advertising & Media",
+        "ADVERTISING":     "Advertising & Media",
+        "DIGITAL":         "Digital & Technology",
+        "ONLINE":          "Digital & Technology",
+        "PAYROLL":         "Payroll & Staff",
+        "SALARY":          "Payroll & Staff",
+        "WAGES":           "Payroll & Staff",
+        "ADMINISTRATIVE":  "Administrative",
+        "OFFICE":          "Administrative",
+        "SUPPLIES":        "Administrative",
+        "FUNDRAISING":     "Fundraising",
+        "CONTRIBUTION":    "Contributions to Others",
+        "TRAVEL":          "Travel & Lodging",
+        "LODGING":         "Travel & Lodging",
+        "AIRFARE":         "Travel & Lodging",
+        "HOTEL":           "Travel & Lodging",
+        "POLLING":         "Polling & Research",
+        "RESEARCH":        "Polling & Research",
+        "CONSULTING":      "Consulting",
+        "LEGAL":           "Legal & Compliance",
+        "COMPLIANCE":      "Legal & Compliance",
+        "PRINTING":        "Printing & Mailers",
+        "POSTAGE":         "Printing & Mailers",
+        "MAILING":         "Printing & Mailers",
+        "EVENT":           "Events & Rallies",
+        "CATERING":        "Events & Rallies",
+      };
+
+      const categorizePurpose = (desc: string): string => {
+        const upper = desc.toUpperCase();
+        for (const [kw, label] of Object.entries(PURPOSE_LABELS)) {
+          if (upper.includes(kw)) return label;
+        }
+        // Title-case the raw description as fallback
+        return desc.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ") || "Other";
+      };
+
+      // Aggregate by purpose category
+      const categoryMap = new Map<string, number>();
+      const vendorMap   = new Map<string, { name: string; purpose: string; total: number }>();
+
+      for (const d of disbursements) {
+        const amt  = (d.disbursement_amount ?? 0) as number;
+        const desc = (d.disbursement_description ?? d.purpose_full ?? "Other").trim();
+        const cat  = categorizePurpose(desc);
+        categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + amt);
+
+        const vendorName = (d.recipient_name ?? "").trim();
+        if (vendorName) {
+          const existing = vendorMap.get(vendorName);
+          if (existing) { existing.total += amt; }
+          else { vendorMap.set(vendorName, { name: vendorName, purpose: desc, total: amt }); }
         }
       }
 
-      const byPurposeRaw: any[] = purposeData.results ?? [];
-      // Derive total from category sum — more reliable than totals endpoint
-      const totalDisbursements: number = byPurposeRaw.reduce((s: number, p: any) => s + (p.total ?? 0), 0);
+      const totalDisbursements = [...categoryMap.values()].reduce((s, v) => s + v, 0);
 
-      // Friendly labels for FEC purpose codes
-      const PURPOSE_LABELS: Record<string, string> = {
-        "MEDIA":           "Advertising & Media",
-        "PAYROLL":         "Payroll & Staff",
-        "ADMINISTRATIVE":  "Administrative",
-        "FUNDRAISING":     "Fundraising",
-        "TRAVEL":          "Travel & Lodging",
-        "POLLING":         "Polling & Research",
-        "CONTRIBUTIONS":   "Contributions to Others",
-        "CONSULTING":      "Consulting",
-        "LEGAL":           "Legal & Compliance",
-        "PRINTING":        "Printing & Mailers",
-        "EVENTS":          "Events & Rallies",
-        "DIGITAL":         "Digital & Technology",
-        "VOLUNTEER":       "Volunteer Activities",
-        "OTHER":           "Other",
-      };
-
-      const byPurpose = byPurposeRaw
-        .filter((p: any) => p.purpose && p.total > 0)
-        .map((p: any) => {
-          const key = (p.purpose as string).toUpperCase().split(/[\s\/]/)[0];
-          const friendly = PURPOSE_LABELS[key] ?? (p.purpose as string).replace(/\b\w/g, (c: string) => c.toUpperCase());
-          return { purpose: friendly, total: p.total as number, count: p.count as number };
-        })
-        .sort((a: any, b: any) => b.total - a.total)
+      const byPurpose = [...categoryMap.entries()]
+        .map(([purpose, total]) => ({ purpose, total }))
+        .sort((a, b) => b.total - a.total)
         .slice(0, 10);
 
-      const topVendors = ((vendorsData.results ?? []) as any[])
-        .filter((v: any) => v.recipient_name && v.total > 0)
-        .slice(0, 8)
-        .map((v: any) => ({
-          name:    (v.recipient_name as string).trim(),
-          purpose: (v.disbursement_description ?? v.purpose ?? "") as string,
-          total:   v.total as number,
-        }));
+      const topVendors = [...vendorMap.values()]
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 8);
 
       res.json({
         totalDisbursements,
