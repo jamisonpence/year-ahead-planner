@@ -967,6 +967,111 @@ function CampaignSpending({ official }: { official: PoliticalOfficial }) {
   );
 }
 
+// ── Government Spending in Representative's State/District ───────────────────
+
+function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
+  const isFederal = official.level?.toLowerCase() === "federal";
+  const canLookup = isFederal && !!((official as any).stateCode);
+  const [shown, setShown] = useState(false);
+  const stateCode = (official as any).stateCode ?? "";
+  const isSenate  = official.title?.toLowerCase().includes("senator");
+  const fecOffice = isSenate ? "S" : "H";
+  const district  = (official as any).district ?? "";
+
+  const { data, isLoading, isError, error } = useQuery<any>({
+    queryKey: ["gov-spending", official.id],
+    queryFn: async () => {
+      const p = new URLSearchParams({ state: stateCode, office: fecOffice });
+      if (district) p.set("district", String(district).replace(/\D/g, ""));
+      const r = await apiRequest("GET", `/api/politics/spending/government?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    enabled: shown && canLookup,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!canLookup) return null;
+
+  const sp = data ?? {};
+  const totalSpending: number = sp.totalSpending ?? 0;
+  const agencies: any[]  = sp.topAgencies  ?? [];
+  const awardTypes: any[] = sp.awardTypes  ?? [];
+  const maxAgency = agencies[0]?.amount ?? 1;
+
+  return (
+    <div className="mt-3">
+      <button onClick={() => setShown(s => !s)}
+        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+        <Landmark size={12} />
+        {shown ? "Hide" : "Show"} government spending in {isSenate ? "state" : "district"}
+        {shown ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {shown && (
+        <div className="mt-2 space-y-3">
+          {isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 size={12} className="animate-spin" />Loading federal spending data…</div>}
+          {isError  && <p className="text-xs text-destructive py-1">{(error as Error)?.message ?? "Could not load spending data."}</p>}
+          {!isLoading && !isError && data && (
+            <div className="space-y-3">
+              {/* Header */}
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold">{fmt$(totalSpending)}</span>
+                  <span className="text-xs text-muted-foreground">federal spending in {sp.state} · FY{sp.fiscalYear}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                  All federal contracts, grants &amp; direct payments · Source: USASpending.gov
+                </p>
+              </div>
+
+              {/* Award type counts */}
+              {awardTypes.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {awardTypes.map((t: any) => (
+                    <div key={t.label} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary/40 border">
+                      <span className="text-[10px] font-medium">{t.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{t.count.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Top awarding agencies */}
+              {agencies.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top federal agencies spending here</p>
+                  <div className="space-y-1.5">
+                    {agencies.map((a: any, i: number) => (
+                      <div key={i} className="space-y-0.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium truncate">{a.name}</span>
+                          <span className="text-[11px] font-semibold shrink-0">{fmt$(a.amount)}</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-blue-400/15 overflow-hidden">
+                          <div className="h-full bg-blue-400/50 rounded-full" style={{ width: `${Math.round((a.amount / maxAgency) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {sp.usaSpendingUrl && (
+                <a href={sp.usaSpendingUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors">
+                  <ExternalLink size={10} />View full profile on USASpending.gov
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Civic Elections Lookup ────────────────────────────────────────────────────
 
 function LocationCard({ loc }: { loc: any }) {

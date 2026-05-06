@@ -3455,6 +3455,108 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Federal government spending in a representative's state/district ──────────
+  // Uses USASpending.gov public API (no key required)
+  // Accepts: ?state=TX&office=S|H&district=10  (district only for House)
+  app.get("/api/politics/spending/government", requireAuth, async (req, res) => {
+    try {
+      const { state = "", office = "H", district = "" } = req.query as Record<string, string>;
+      if (!state) return res.status(400).json({ error: "state is required" });
+
+      const isSenate = office.toUpperCase() === "S";
+      const fy = new Date().getMonth() >= 9              // FY starts Oct 1
+        ? new Date().getFullYear() + 1
+        : new Date().getFullYear();
+      const fyStart = `${fy - 1}-10-01`;
+      const fyEnd   = `${fy}-09-30`;
+
+      const safePost = async (url: string, body: object) => {
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(14000),
+          });
+          return r.ok ? await r.json() : {};
+        } catch { return {}; }
+      };
+
+      // Geographic filter — senators get whole state, reps get congressional district
+      const geoFilter = isSenate
+        ? [{ country: "USA", state: state.toUpperCase() }]
+        : [{ country: "USA", state: state.toUpperCase(), congressional_district: district.padStart(2, "0") }];
+
+      // Run requests in parallel: total + by award type + top agencies
+      const baseFilters = {
+        time_period:                [{ start_date: fyStart, end_date: fyEnd }],
+        place_of_performance_locations: geoFilter,
+      };
+
+      const [totalRes, awardTypeRes, agencyRes] = await Promise.allSettled([
+        // Overall spending total
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", {
+          scope:            "place_of_performance",
+          geo_layer:        "state",
+          geo_layer_filters:[state.toUpperCase()],
+          filters:          { time_period: [{ start_date: fyStart, end_date: fyEnd }] },
+          subawards:        false,
+        }),
+        // Breakdown by award type (contracts, grants, direct payments, loans)
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_award_count/", {
+          filters: baseFilters,
+          subawards: false,
+        }),
+        // Top awarding agencies
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", {
+          filters: baseFilters,
+          limit:   8,
+          page:    1,
+          subawards: false,
+        }),
+      ]);
+
+      const totalData     = totalRes.status     === "fulfilled" ? totalRes.value     : {};
+      const awardTypeData = awardTypeRes.status === "fulfilled" ? awardTypeRes.value : {};
+      const agencyData    = agencyRes.status    === "fulfilled" ? agencyRes.value    : {};
+
+      // Pull out state total from geography results
+      const stateRow = (totalData.results ?? []).find(
+        (r: any) => (r.shape_code ?? "").toUpperCase() === state.toUpperCase()
+      );
+      const totalSpending: number = stateRow?.aggregated_amount ?? 0;
+
+      // Award type breakdown
+      const counts = awardTypeData.results ?? {};
+      const awardTypes = [
+        { label: "Contracts",        count: (counts.contracts         ?? 0) as number },
+        { label: "Grants",           count: (counts.grants            ?? 0) as number },
+        { label: "Direct Payments",  count: (counts.direct_payments   ?? 0) as number },
+        { label: "Loans",            count: (counts.loans             ?? 0) as number },
+        { label: "Other",            count: (counts.other             ?? 0) as number },
+      ].filter(t => t.count > 0);
+
+      // Top agencies
+      const topAgencies = ((agencyData.results ?? []) as any[])
+        .slice(0, 8)
+        .map((a: any) => ({
+          name:   (a.name ?? a.awarding_agency_name ?? "").trim(),
+          amount: (a.aggregated_amount ?? a.obligated_amount ?? 0) as number,
+        }))
+        .filter((a: any) => a.name && a.amount > 0);
+
+      res.json({
+        state:        state.toUpperCase(),
+        fiscalYear:   fy,
+        scope:        isSenate ? "state" : `district ${district}`,
+        totalSpending,
+        awardTypes,
+        topAgencies,
+        usaSpendingUrl: `https://www.usaspending.gov/state/${state.toUpperCase()}/latest`,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Upcoming elections list — next 36 months, optionally filtered by state
   // Accepts: ?state=TX  (optional; omit for all states)
   app.get("/api/politics/elections/upcoming", requireAuth, async (req, res) => {
