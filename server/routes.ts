@@ -3260,12 +3260,33 @@ Rules:
           startDate: l.startDate ?? null,
           endDate:   l.endDate ?? null,
         }));
+        // Extract state admin body links + voter services
+        const stateBody = (vd.state ?? [])[0]?.electionAdministrationBody ?? {};
+        const localBody = (vd.state ?? [])[0]?.local_jurisdiction?.electionAdministrationBody ?? {};
+        const adminLinks = {
+          registrationUrl:             stateBody.electionRegistrationUrl ?? null,
+          registrationConfirmationUrl: stateBody.electionRegistrationConfirmationUrl ?? null,
+          absenteeUrl:                 stateBody.absenteeVotingInfoUrl ?? null,
+          ballotInfoUrl:               stateBody.ballotInfoUrl ?? localBody.ballotInfoUrl ?? null,
+          electionInfoUrl:             stateBody.electionInfoUrl ?? localBody.electionInfoUrl ?? null,
+          electionRulesUrl:            stateBody.electionRulesUrl ?? null,
+          voterServices:               (stateBody.voter_services ?? []) as string[],
+        };
+
+        // Derive early voting window from earlyVoteSites dates
+        const evDates = (vd.earlyVoteSites ?? []).flatMap((s: any) => [s.startDate, s.endDate]).filter(Boolean) as string[];
+        const earlyVotingWindow = evDates.length > 0
+          ? { start: evDates.reduce((a, b) => a < b ? a : b), end: evDates.reduce((a, b) => a > b ? a : b) }
+          : null;
+
         voterInfo = {
           election: vd.election ? {
             id:   vd.election.id,
             name: vd.election.name,
             date: vd.election.electionDay,
           } : null,
+          earlyVotingWindow,
+          adminLinks,
           pollingLocations: clean(vd.pollingLocations),
           earlyVoteSites:   clean(vd.earlyVoteSites),
           dropOffLocations: clean(vd.dropOffLocations),

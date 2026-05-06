@@ -892,6 +892,100 @@ function CivicElectionsLookup() {
             </div>
           )}
 
+          {/* Key Dates */}
+          {vi && (vi.election?.date || vi.earlyVotingWindow) && (
+            <div className="border rounded-xl overflow-hidden">
+              <div className="px-3 py-2.5 bg-card border-b">
+                <span className="text-xs font-semibold">Key Dates</span>
+              </div>
+              <div className="bg-card divide-y">
+                {vi.earlyVotingWindow?.start && (
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">Early Voting Begins</span>
+                    <span className="text-[11px] font-medium">
+                      {format(new Date(vi.earlyVotingWindow.start + "T12:00:00"), "EEEE, MMMM d, yyyy")}
+                    </span>
+                  </div>
+                )}
+                {vi.earlyVotingWindow?.end && (
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">Last Day of Early Voting</span>
+                    <span className="text-[11px] font-medium">
+                      {format(new Date(vi.earlyVotingWindow.end + "T12:00:00"), "EEEE, MMMM d, yyyy")}
+                    </span>
+                  </div>
+                )}
+                {vi.election?.date && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-primary/5">
+                    <span className="text-[11px] font-semibold text-primary">Election Day</span>
+                    <span className="text-[11px] font-bold text-primary">
+                      {format(new Date(vi.election.date + "T12:00:00"), "EEEE, MMMM d, yyyy")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Resources */}
+          {vi?.adminLinks && Object.values(vi.adminLinks).some(v => v && typeof v === "string") && (
+            <div className="border rounded-xl overflow-hidden">
+              <div className="px-3 py-2.5 bg-card border-b">
+                <span className="text-xs font-semibold">Voter Resources</span>
+              </div>
+              <div className="bg-card px-3 py-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                {vi.adminLinks.registrationUrl && (
+                  <a href={vi.adminLinks.registrationUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Register to Vote
+                  </a>
+                )}
+                {vi.adminLinks.registrationConfirmationUrl && (
+                  <a href={vi.adminLinks.registrationConfirmationUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Check Registration
+                  </a>
+                )}
+                {vi.adminLinks.absenteeUrl && (
+                  <a href={vi.adminLinks.absenteeUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Mail / Absentee Ballot
+                  </a>
+                )}
+                {vi.adminLinks.ballotInfoUrl && (
+                  <a href={vi.adminLinks.ballotInfoUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Sample Ballot
+                  </a>
+                )}
+                {vi.adminLinks.electionInfoUrl && (
+                  <a href={vi.adminLinks.electionInfoUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Election Calendar
+                  </a>
+                )}
+                {vi.adminLinks.electionRulesUrl && (
+                  <a href={vi.adminLinks.electionRulesUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink size={10} />Voting Rules
+                  </a>
+                )}
+              </div>
+              {vi.adminLinks.voterServices?.length > 0 && (
+                <div className="px-3 pb-2.5 pt-0 border-t">
+                  <ul className="space-y-0.5 mt-1.5">
+                    {vi.adminLinks.voterServices.map((s: string, i: number) => (
+                      <li key={i} className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+                        <span className="mt-0.5 shrink-0 w-1 h-1 rounded-full bg-muted-foreground/40 inline-block" />
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Polling location */}
           {vi?.pollingLocations?.length > 0 && (
             <Section id="polling" label="Polling Location" count={vi.pollingLocations.length}>
