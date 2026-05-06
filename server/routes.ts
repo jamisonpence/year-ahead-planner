@@ -3469,6 +3469,76 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── AI candidate overview ─────────────────────────────────────────────────────
+  // POST /api/politics/candidate/summary
+  // Body: { name, displayName, office, state, party?, topContributors?, topicBreakdown? }
+  app.post("/api/politics/candidate/summary", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(uid);
+      if (!enc) return res.status(402).json({ error: "No Anthropic API key saved. Add one in Settings → AI Features." });
+
+      let apiKey: string;
+      try { apiKey = decrypt(enc); }
+      catch { return res.status(500).json({ error: "Failed to decrypt API key. Re-save it in Settings." }); }
+
+      const { displayName, office, state, party, topContributors = [], topicBreakdown = [] } = req.body as {
+        displayName: string; office: string; state: string; party?: string;
+        topContributors: Array<{ name: string; total: number }>;
+        topicBreakdown: Array<{ label: string; yea: number; nay: number; examples: Array<{ text: string; vote: string }> }>;
+      };
+
+      // Build a compact context block for Claude
+      const financeContext = topContributors.length
+        ? `Top campaign contributors: ${topContributors.slice(0, 5).map(c => c.name).join(", ")}.`
+        : "";
+
+      const voteContext = topicBreakdown.length
+        ? topicBreakdown.map(b => {
+            const total = b.yea + b.nay;
+            const pct   = Math.round((b.yea / total) * 100);
+            const stance = pct >= 65 ? "supports" : pct <= 35 ? "opposes" : "has a mixed record on";
+            return `${b.label}: generally ${stance} (${b.yea} yea / ${b.nay} nay)`;
+          }).join("; ")
+        : "";
+
+      const prompt = `You are a nonpartisan voter guide. Write a brief, factual overview of ${displayName} to help a voter understand who they'd be voting for.
+
+Candidate: ${displayName}
+Office sought: ${office} (${state})
+${party ? `Party: ${party}` : ""}
+${financeContext}
+${voteContext ? `Voting record summary: ${voteContext}` : ""}
+
+Write 3–4 concise paragraphs covering: (1) who they are and their background, (2) their key policy positions based on the voting data, (3) who funds their campaign and what that may indicate, and (4) a one-sentence neutral summary of what makes them distinctive.
+
+Be factual, balanced, and avoid partisan framing. If you lack data for a section, skip it. Keep the total response under 200 words.`;
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 400,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 200) });
+      }
+
+      const claudeData = await claudeRes.json() as any;
+      const summary: string = claudeData?.content?.[0]?.text ?? "";
+      res.json({ summary });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Google Civic Information — elections, polling location, contests, drop boxes
   // Accepts: ?address=FULL_ADDRESS
   app.get("/api/politics/elections/civic", requireAuth, async (req, res) => {
