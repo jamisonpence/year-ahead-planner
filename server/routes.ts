@@ -3198,7 +3198,7 @@ Rules:
           { signal: AbortSignal.timeout(12000) }
         ).then(safeJson),
         fetch(
-          `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
+          `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=50&sort=-contribution_receipt_amount&api_key=${apiKey}`,
           { signal: AbortSignal.timeout(12000) }
         ).then(safeJson),
         fetch(
@@ -3245,6 +3245,36 @@ Rules:
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
 
+      // Top individual donations from people with a real company employer
+      // Shows the single largest contribution per person, keeping their employer visible
+      const SKIP_EMPLOYERS_SET = new Set([
+        "N/A", "NONE", "NOT EMPLOYED", "INFORMATION REQUESTED", "INFORMATION REQUESTED PER BEST EFFORTS",
+        "SELF-EMPLOYED", "SELF EMPLOYED", "RETIRED", "HOMEMAKER", "NULL", "NONE", "NA", "",
+        "UNEMPLOYED", "STUDENT", "NOT APPLICABLE",
+      ]);
+      const orgDonorMap = new Map<string, { name: string; employer: string; occupation: string; amount: number }>();
+      for (const d of (donorsData.results ?? []) as any[]) {
+        const name     = (d.contributor_name ?? "").trim();
+        const employer = (d.contributor_employer ?? "").trim();
+        if (!name || !employer) continue;
+        if (SKIP_EMPLOYERS_SET.has(employer.toUpperCase())) continue;
+        const amount = d.contribution_receipt_amount ?? 0;
+        const existing = orgDonorMap.get(name);
+        if (existing) {
+          existing.amount += amount;
+        } else {
+          orgDonorMap.set(name, {
+            name,
+            employer,
+            occupation: (d.contributor_occupation ?? "").trim(),
+            amount,
+          });
+        }
+      }
+      const topOrgDonors = [...orgDonorMap.values()]
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
+
       // Top PAC / corporate donors — contributions from other committees
       const pacMap = new Map<string, { name: string; amount: number }>();
       for (const d of (pacData.results ?? []) as any[]) {
@@ -3271,6 +3301,7 @@ Rules:
         pacTotal,
         topContributors,
         topDonors,
+        topOrgDonors,
         topPacDonors,
         fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/`,
       });

@@ -1032,6 +1032,37 @@ function CandidateDetails({
                 </div>
               )}
 
+              {/* Top individuals linked to organizations */}
+              {fin.topOrgDonors?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Top individual donors from organizations</p>
+                  <div className="space-y-2">
+                    {fin.topOrgDonors.map((d: any, i: number) => {
+                      const maxAmt = fin.topOrgDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      const donorName  = tc(d.name);
+                      const employer   = tc(d.employer);
+                      const occupation = d.occupation && !["N/A","NONE"].includes(d.occupation.toUpperCase()) ? tc(d.occupation) : "";
+                      return (
+                        <div key={i} className="rounded-md border bg-secondary/30 p-2 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold truncate">{donorName}</p>
+                              <p className="text-[10px] text-primary/80 font-medium truncate">{employer}</p>
+                              {occupation && <p className="text-[9px] text-muted-foreground/60 truncate">{occupation}</p>}
+                            </div>
+                            <span className="text-[12px] font-bold text-emerald-400 shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-emerald-400/15 overflow-hidden">
+                            <div className="h-full bg-emerald-400/50 rounded-full transition-all" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Top PAC / company donors */}
               {fin.topPacDonors?.length > 0 && (
                 <div>
