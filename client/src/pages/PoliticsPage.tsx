@@ -807,6 +807,91 @@ function LocationCard({ loc }: { loc: any }) {
   );
 }
 
+// ── Upcoming Elections Panel ───────────────────────────────────────────────────
+
+function UpcomingElectionsPanel() {
+  const [state, setState] = useState("TX");
+
+  const { data: elections = [], isLoading, isError } = useQuery<any[]>({
+    queryKey: ["upcoming-elections", state],
+    queryFn: async () => {
+      const qs = state ? `?state=${encodeURIComponent(state)}` : "";
+      const r = await apiRequest("GET", `/api/politics/elections/upcoming${qs}`);
+      if (!r.ok) throw new Error(`Error ${r.status}`);
+      return r.json();
+    },
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+
+  // Group by month
+  const byMonth: Record<string, any[]> = {};
+  for (const e of elections) {
+    const key = e.date ? format(new Date(e.date + "T12:00:00"), "MMMM yyyy") : "Unknown";
+    (byMonth[key] ??= []).push(e);
+  }
+
+  return (
+    <div className="border rounded-xl bg-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b">
+        <div className="flex items-center gap-2">
+          <Vote size={14} className="text-primary" />
+          <h3 className="font-semibold text-sm">Upcoming Elections</h3>
+          <span className="text-[10px] text-muted-foreground">next 12 months</span>
+        </div>
+        <select
+          value={state}
+          onChange={e => setState(e.target.value)}
+          className="text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="">All States</option>
+          {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+        </select>
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+          <Loader2 size={13} className="animate-spin" />Loading elections…
+        </div>
+      )}
+      {isError && (
+        <p className="text-xs text-destructive px-4 py-3">Could not load elections. Check GOOGLE_CIVIC_API_KEY.</p>
+      )}
+      {!isLoading && !isError && elections.length === 0 && (
+        <p className="text-xs text-muted-foreground px-4 py-6 text-center">No elections found for the selected state in the next 12 months.</p>
+      )}
+      {!isLoading && !isError && Object.keys(byMonth).length > 0 && (
+        <div className="divide-y">
+          {Object.entries(byMonth).map(([month, group]) => (
+            <div key={month}>
+              <div className="px-4 py-1.5 bg-secondary/40">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{month}</span>
+              </div>
+              <div className="divide-y">
+                {group.map((e: any) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div>
+                      <p className="text-[12px] font-medium leading-tight">{e.name}</p>
+                      {e.ocdId && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {e.ocdId.includes("/state:") ? e.ocdId.split("/state:")[1]?.split("/")[0]?.toUpperCase() : "Federal"}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-muted-foreground shrink-0 font-medium">
+                      {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d") : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CivicElectionsLookup() {
   const [address, setAddress]       = useState("");
   const [submitted, setSubmitted]   = useState("");
@@ -1488,6 +1573,7 @@ function ElectionsTab() {
 
   return (
     <div className="space-y-4">
+      <UpcomingElectionsPanel />
       <CivicElectionsLookup />
 
       {!showForm ? (

@@ -3208,6 +3208,45 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Upcoming elections list — next 12 months, optionally filtered by state
+  // Accepts: ?state=TX  (optional; omit for all states)
+  app.get("/api/politics/elections/upcoming", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "GOOGLE_CIVIC_API_KEY not configured" });
+
+      const { state } = req.query as { state?: string };
+      const resp = await fetch(
+        `https://www.googleapis.com/civicinfo/v2/elections?key=${apiKey}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!resp.ok) return res.status(502).json({ error: "Elections lookup failed" });
+
+      const data = await resp.json() as any;
+      const today = new Date().toISOString().slice(0, 10);
+      const cutoff = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      let elections: any[] = ((data.elections ?? []) as any[])
+        .filter(e => e.electionDay && e.electionDay >= today && e.electionDay <= cutoff && e.id !== "2000")
+        .sort((a, b) => (a.electionDay as string).localeCompare(b.electionDay as string));
+
+      if (state?.trim()) {
+        const sc = state.trim().toLowerCase();
+        elections = elections.filter(e => {
+          const ocd: string = (e.ocdDivisionId ?? "").toLowerCase();
+          return ocd === "ocd-division/country:us" || ocd.includes(`/state:${sc}`);
+        });
+      }
+
+      res.json(elections.map(e => ({
+        id:    e.id,
+        name:  e.name,
+        date:  e.electionDay,
+        ocdId: e.ocdDivisionId ?? null,
+      })));
+    } catch (e) { handleError(res, e); }
+  });
+
   // Google Civic Information — elections, polling location, contests, drop boxes
   // Accepts: ?address=FULL_ADDRESS
   app.get("/api/politics/elections/civic", requireAuth, async (req, res) => {
