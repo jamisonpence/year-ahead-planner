@@ -931,7 +931,7 @@ function UpcomingElectionsPanel() {
         <div className="flex items-center gap-2">
           <Vote size={14} className="text-primary" />
           <h3 className="font-semibold text-sm">Upcoming Elections</h3>
-          <span className="text-[10px] text-muted-foreground">next 12 months</span>
+          <span className="text-[10px] text-muted-foreground">through 2028 · federal always shown</span>
         </div>
         <select
           value={state}
@@ -964,28 +964,38 @@ function UpcomingElectionsPanel() {
               <div className="divide-y">
                 {group.map((e: any) => {
                   const isOpen = expandedId === e.id;
-                  const sc = stateFromOcd(e.ocdId);
+                  const isFederal = e.federal || e.ocdId === "ocd-division/country:us";
+                  const sc = isFederal ? (state || "TX") : stateFromOcd(e.ocdId);
+                  const isHardcoded = (e.id as string).startsWith("fed-");
                   return (
                     <div key={e.id}>
                       <button
-                        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-secondary/30 transition-colors text-left"
-                        onClick={() => setExpandedId(isOpen ? null : e.id)}
+                        className="w-full flex items-start justify-between gap-3 px-4 py-2.5 hover:bg-secondary/30 transition-colors text-left"
+                        onClick={() => !isHardcoded && setExpandedId(isOpen ? null : e.id)}
                       >
-                        <div>
-                          <p className="text-[12px] font-medium leading-tight">{e.name}</p>
-                          {e.ocdId && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {e.ocdId.includes("/state:") ? sc : "Federal"} · {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d, yyyy") : ""}
-                            </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[12px] font-medium leading-tight">{e.name}</p>
+                            {isFederal && (
+                              <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[9px]">Federal</Badge>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d, yyyy") : ""}
+                          </p>
+                          {e.description && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">{e.description}</p>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {isOpen
-                            ? <ChevronUp size={13} className="text-muted-foreground" />
-                            : <ChevronDown size={13} className="text-muted-foreground" />}
-                        </div>
+                        {!isHardcoded && (
+                          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                            {isOpen
+                              ? <ChevronUp size={13} className="text-muted-foreground" />
+                              : <ChevronDown size={13} className="text-muted-foreground" />}
+                          </div>
+                        )}
                       </button>
-                      {isOpen && <ElectionCandidates electionId={e.id} stateCode={sc} />}
+                      {isOpen && !isHardcoded && <ElectionCandidates electionId={e.id} stateCode={sc} />}
                     </div>
                   );
                 })}

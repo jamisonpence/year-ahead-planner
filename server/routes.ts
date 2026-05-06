@@ -3208,7 +3208,7 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
-  // Upcoming elections list — next 12 months, optionally filtered by state
+  // Upcoming elections list — next 36 months, optionally filtered by state
   // Accepts: ?state=TX  (optional; omit for all states)
   app.get("/api/politics/elections/upcoming", requireAuth, async (req, res) => {
     try {
@@ -3216,34 +3216,78 @@ Rules:
       if (!apiKey) return res.status(500).json({ error: "GOOGLE_CIVIC_API_KEY not configured" });
 
       const { state } = req.query as { state?: string };
-      const resp = await fetch(
-        `https://www.googleapis.com/civicinfo/v2/elections?key=${apiKey}`,
-        { signal: AbortSignal.timeout(10000) }
-      );
-      if (!resp.ok) return res.status(502).json({ error: "Elections lookup failed" });
 
-      const data = await resp.json() as any;
+      // ── Known federal elections not yet in Google Civic's database ──
+      const FEDERAL_ELECTIONS = [
+        {
+          id: "fed-2026-midterm", federal: true,
+          name: "2026 Midterm General Election",
+          description: "All 435 House seats + 33 Senate seats up for election",
+          date: "2026-11-03", ocdId: "ocd-division/country:us",
+        },
+        {
+          id: "fed-2028-primary-iowa", federal: true,
+          name: "2028 Presidential Primary Season",
+          description: "Iowa caucuses kick off the presidential primary season",
+          date: "2028-02-07", ocdId: "ocd-division/country:us",
+        },
+        {
+          id: "fed-2028-super-tuesday", federal: true,
+          name: "2028 Super Tuesday",
+          description: "Multiple state presidential primaries held on a single day",
+          date: "2028-03-07", ocdId: "ocd-division/country:us",
+        },
+        {
+          id: "fed-2028-general", federal: true,
+          name: "2028 Presidential General Election",
+          description: "U.S. Presidential election — all 435 House seats and 34 Senate seats also on the ballot",
+          date: "2028-11-07", ocdId: "ocd-division/country:us",
+        },
+      ];
+
       const today = new Date().toISOString().slice(0, 10);
-      const cutoff = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const cutoff = new Date(Date.now() + 36 * 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-      let elections: any[] = ((data.elections ?? []) as any[])
-        .filter(e => e.electionDay && e.electionDay >= today && e.electionDay <= cutoff && e.id !== "2000")
-        .sort((a, b) => (a.electionDay as string).localeCompare(b.electionDay as string));
+      // Fetch Google Civic elections list
+      let civicElections: any[] = [];
+      try {
+        const resp = await fetch(
+          `https://www.googleapis.com/civicinfo/v2/elections?key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+        if (resp.ok) {
+          const data = await resp.json() as any;
+          civicElections = ((data.elections ?? []) as any[])
+            .filter(e => e.electionDay && e.electionDay >= today && e.electionDay <= cutoff && e.id !== "2000")
+            .map(e => ({
+              id: e.id, name: e.name, date: e.electionDay,
+              ocdId: e.ocdDivisionId ?? null, federal: false, description: null,
+            }));
+        }
+      } catch { /* Civic unavailable — continue with federal list */ }
 
+      // Merge: include federal hardcoded entries unless Civic already has a same-date country-level entry
+      const civicFederalDates = new Set(
+        civicElections.filter(e => e.ocdId === "ocd-division/country:us").map(e => e.date)
+      );
+      const federalToAdd = FEDERAL_ELECTIONS.filter(
+        f => f.date >= today && f.date <= cutoff && !civicFederalDates.has(f.date)
+      );
+
+      let all = [...civicElections, ...federalToAdd]
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // State filter — federal elections always shown; state filter applies to non-federal only
       if (state?.trim()) {
         const sc = state.trim().toLowerCase();
-        elections = elections.filter(e => {
-          const ocd: string = (e.ocdDivisionId ?? "").toLowerCase();
-          return ocd === "ocd-division/country:us" || ocd.includes(`/state:${sc}`);
+        all = all.filter(e => {
+          if (e.federal || e.ocdId === "ocd-division/country:us") return true;
+          const ocd: string = (e.ocdId ?? "").toLowerCase();
+          return ocd.includes(`/state:${sc}`);
         });
       }
 
-      res.json(elections.map(e => ({
-        id:    e.id,
-        name:  e.name,
-        date:  e.electionDay,
-        ocdId: e.ocdDivisionId ?? null,
-      })));
+      res.json(all);
     } catch (e) { handleError(res, e); }
   });
 
