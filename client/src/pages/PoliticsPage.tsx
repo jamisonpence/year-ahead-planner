@@ -809,28 +809,46 @@ function LocationCard({ loc }: { loc: any }) {
 
 // ── Upcoming Elections Panel ───────────────────────────────────────────────────
 
-// ── Per-candidate Finance + Votes detail panel ────────────────────────────────
+// ── Policy topic categorization (client-side) ─────────────────────────────────
+
+const POLICY_BUCKETS: Array<{ label: string; emoji: string; keywords: string[] }> = [
+  { label: "Healthcare",        emoji: "🏥", keywords: ["health", "medical", "medicare", "medicaid", "prescription", "drug", "hospital", "insurance", "opioid", "affordable care", "mental health"] },
+  { label: "Economy & Taxes",   emoji: "💵", keywords: ["tax", "budget", "fiscal", "deficit", "debt", "trade", "tariff", "jobs", "employment", "wage", "workforce", "small business", "economic"] },
+  { label: "Defense & Veterans",emoji: "🎖️", keywords: ["defense", "military", "veteran", "armed forces", "national security", "army", "navy", "air force", "pentagon"] },
+  { label: "Environment",       emoji: "🌿", keywords: ["climate", "energy", "clean", "environment", "epa", "emissions", "carbon", "oil", "gas", "renewable", "solar", "wind", "conservation"] },
+  { label: "Immigration",       emoji: "🌐", keywords: ["immigr", "border", "asylum", "daca", "refugee", "visa", "citizenship", "undocumented"] },
+  { label: "Education",         emoji: "📚", keywords: ["education", "school", "student", "university", "college", "loan", "teacher", "pell", "literacy"] },
+  { label: "Gun Policy",        emoji: "🔫", keywords: ["gun", "firearm", "second amendment", "background check", "weapon"] },
+  { label: "Foreign Policy",    emoji: "🌍", keywords: ["foreign", "israel", "ukraine", "china", "russia", "nato", "diplomacy", "sanction", "international aid"] },
+  { label: "Criminal Justice",  emoji: "⚖️", keywords: ["crime", "criminal", "justice", "police", "law enforcement", "prison", "sentencing", "fentanyl", "opioid"] },
+  { label: "Social Issues",     emoji: "🤝", keywords: ["abortion", "lgbtq", "civil rights", "discrimination", "women", "gender", "reproductive"] },
+];
+
+function categorizeVotes(votes: any[]): Array<{ label: string; emoji: string; yea: number; nay: number; examples: string[] }> {
+  return POLICY_BUCKETS.map(bucket => {
+    const matching = votes.filter(v => {
+      const text = `${v.bill ?? ""} ${v.question ?? ""}`.toLowerCase();
+      return bucket.keywords.some(kw => text.includes(kw));
+    });
+    const yea = matching.filter(v => /yea|yes|aye/i.test(v.vote ?? "")).length;
+    const nay = matching.filter(v => /nay|no/i.test(v.vote ?? "")).length;
+    const examples = matching.slice(0, 2).map(v => v.bill ?? v.question ?? "").filter(Boolean);
+    return { ...bucket, yea, nay, examples };
+  }).filter(b => b.yea + b.nay > 0)
+    .sort((a, b) => (b.yea + b.nay) - (a.yea + a.nay));
+}
+
+// ── Per-candidate Finance + Votes + Positions panel ───────────────────────────
 
 function CandidateDetails({
-  candidate, office, stateCode, isFecSource,
+  candidate, office, stateCode,
 }: {
   candidate: any; office: string; stateCode: string; isFecSource: boolean;
 }) {
-  const [tab, setTab] = useState<"finance" | "votes">("finance");
-  const isSenate = /senate/i.test(office);
-  const title    = isSenate ? "Senator" : "Representative";
+  const [tab, setTab] = useState<"finance" | "votes" | "positions">("finance");
+  const isSenate  = /senate/i.test(office);
+  const title     = isSenate ? "Senator" : "Representative";
   const fecOffice = isSenate ? "S" : "H";
-
-  // Build a pseudo-official that satisfies CampaignFinance + VotingRecords props
-  const pseudoOfficial = {
-    id: 0,
-    name:      candidate.name,
-    title,
-    level:     "Federal",
-    party:     candidate.party ?? null,
-    stateCode,
-    externalId: null,
-  } as unknown as PoliticalOfficial;
 
   // Finance query
   const finQuery = useQuery<any>({
@@ -846,7 +864,7 @@ function CandidateDetails({
     retry: false,
   });
 
-  // Votes query
+  // Votes query — also enabled when Positions tab is open (needed for topic analysis)
   const votesQuery = useQuery<any>({
     queryKey: ["cand-votes", candidate.name, title],
     queryFn: async () => {
@@ -854,7 +872,7 @@ function CandidateDetails({
       const r = await apiRequest("GET", `/api/politics/votes/federal/lookup?${p}`);
       return r.json();
     },
-    enabled: tab === "votes",
+    enabled: tab === "votes" || tab === "positions",
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -868,44 +886,42 @@ function CandidateDetails({
   const pacPct    = totalRaised > 0 ? Math.round((pacTotal        / totalRaised) * 100) : 0;
   const otherPct  = totalRaised > 0 ? Math.round((otherTotal      / totalRaised) * 100) : 0;
   const cycleLabel = fin?.cycle ? `${fin.cycle - 1}–${fin.cycle}` : "";
-
   const votes: any[] = Array.isArray(votesQuery.data) ? votesQuery.data : [];
+  const topicBreakdown = categorizeVotes(votes);
+
+  // Build Ballotpedia URL from name
+  const bpName = candidate.name.trim().replace(/\s+/g, "_");
+  const bpUrl  = `https://ballotpedia.org/${bpName}`;
+  const vsUrl  = `https://www.votesmart.org/candidates/search?query=${encodeURIComponent(candidate.name)}`;
+  const cgUrl  = `https://www.congress.gov/members?q=${encodeURIComponent(JSON.stringify({ search: candidate.name }))}`;
+
+  const TABS = [
+    { id: "finance",   label: "💰 Finance" },
+    { id: "votes",     label: "🗳️ Votes" },
+    { id: "positions", label: "📋 Positions" },
+  ] as const;
 
   return (
     <div className="mt-2 rounded-lg border bg-secondary/20 overflow-hidden">
       {/* Tab bar */}
       <div className="flex border-b">
-        {(["finance", "votes"] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${
-              tab === t
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`flex-1 px-2 py-1.5 text-[10px] font-medium transition-colors ${
+              tab === t.id
                 ? "bg-background border-b-2 border-primary text-primary"
                 : "text-muted-foreground hover:text-foreground"
             }`}
-          >
-            {t === "finance" ? "💰 Campaign Finance" : "🗳️ Recent Votes"}
-          </button>
+          >{t.label}</button>
         ))}
       </div>
 
-      {/* Finance tab */}
+      {/* ── Finance tab ── */}
       {tab === "finance" && (
         <div className="px-3 py-2.5">
-          {finQuery.isLoading && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-              <Loader2 size={11} className="animate-spin" />Loading…
-            </div>
-          )}
-          {finQuery.isError && (
-            <p className="text-[11px] text-destructive py-1">
-              {(finQuery.error as any)?.message ?? "Could not load finance data."}
-            </p>
-          )}
-          {fin && totalRaised === 0 && (
-            <p className="text-[11px] text-muted-foreground italic py-1">No FEC finance data found for this candidate.</p>
-          )}
+          {finQuery.isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground py-1"><Loader2 size={11} className="animate-spin" />Loading…</div>}
+          {finQuery.isError && <p className="text-[11px] text-destructive py-1">{(finQuery.error as any)?.message ?? "Could not load finance data."}</p>}
+          {fin && totalRaised === 0 && <p className="text-[11px] text-muted-foreground italic py-1">No FEC finance data found for this candidate.</p>}
           {fin && totalRaised > 0 && (
             <div className="space-y-2.5">
               <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold">FEC · {cycleLabel}</p>
@@ -947,8 +963,7 @@ function CandidateDetails({
                 </div>
               )}
               {fin.fecUrl && (
-                <a href={fin.fecUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[10px] text-primary hover:underline">
+                <a href={fin.fecUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-primary hover:underline">
                   <ExternalLink size={9} />View full FEC profile
                 </a>
               )}
@@ -957,26 +972,87 @@ function CandidateDetails({
         </div>
       )}
 
-      {/* Votes tab */}
+      {/* ── Votes tab ── */}
       {tab === "votes" && (
         <div className="px-3 py-2.5">
-          {votesQuery.isLoading && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-              <Loader2 size={11} className="animate-spin" />Loading…
-            </div>
-          )}
-          {votesQuery.isError && (
-            <p className="text-[11px] text-muted-foreground italic py-1">No voting record found — this candidate may not currently hold office.</p>
-          )}
-          {!votesQuery.isLoading && !votesQuery.isError && votes.length === 0 && (
-            <p className="text-[11px] text-muted-foreground italic py-1">No recent votes found — this candidate may not currently hold federal office.</p>
-          )}
+          {votesQuery.isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground py-1"><Loader2 size={11} className="animate-spin" />Loading…</div>}
+          {votesQuery.isError && <p className="text-[11px] text-muted-foreground italic py-1">No voting record found — this candidate may not currently hold office.</p>}
+          {!votesQuery.isLoading && !votesQuery.isError && votes.length === 0 && <p className="text-[11px] text-muted-foreground italic py-1">No recent votes found — this candidate may not currently hold federal office.</p>}
           {votes.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold">{votes.length} recent votes</p>
               {votes.map((v: any, i: number) => <VoteRow key={i} vote={v} isFederal={true} />)}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Positions tab ── */}
+      {tab === "positions" && (
+        <div className="px-3 py-2.5 space-y-3">
+
+          {/* Voting pattern by policy topic */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">
+              Voting pattern by issue {votes.length > 0 ? `· from ${votes.length} recent votes` : ""}
+            </p>
+            {votesQuery.isLoading && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Loader2 size={11} className="animate-spin" />Analyzing votes…
+              </div>
+            )}
+            {!votesQuery.isLoading && topicBreakdown.length === 0 && (
+              <p className="text-[11px] text-muted-foreground italic">
+                {votesQuery.isError || votes.length === 0
+                  ? "No voting record available — this candidate may not currently hold office."
+                  : "No votes matched known policy topics."}
+              </p>
+            )}
+            {topicBreakdown.length > 0 && (
+              <div className="space-y-2">
+                {topicBreakdown.map(b => {
+                  const total = b.yea + b.nay;
+                  const yeaPct = Math.round((b.yea / total) * 100);
+                  return (
+                    <div key={b.label} className="space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium">{b.emoji} {b.label}</span>
+                        <span className="text-[10px] text-muted-foreground">{b.yea}Y · {b.nay}N</span>
+                      </div>
+                      <div className="flex h-1.5 rounded-full overflow-hidden bg-secondary">
+                        <div className="bg-emerald-500 transition-all" style={{ width: `${yeaPct}%` }} />
+                        <div className="bg-red-400 transition-all" style={{ width: `${100 - yeaPct}%` }} />
+                      </div>
+                      {b.examples[0] && (
+                        <p className="text-[9px] text-muted-foreground/60 truncate">{b.examples[0]}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Research links */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Research their stated positions</p>
+            <div className="space-y-1">
+              {[
+                { label: "Ballotpedia", url: bpUrl, note: "Policy positions & biography" },
+                { label: "VoteSmart",   url: vsUrl, note: "Issue positions & ratings" },
+                { label: "Congress.gov",url: cgUrl, note: "Sponsored legislation" },
+              ].map(link => (
+                <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-between px-2.5 py-1.5 rounded-md border bg-background hover:bg-secondary/50 transition-colors">
+                  <div>
+                    <p className="text-[11px] font-medium text-primary">{link.label}</p>
+                    <p className="text-[9px] text-muted-foreground">{link.note}</p>
+                  </div>
+                  <ExternalLink size={10} className="text-muted-foreground shrink-0" />
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
