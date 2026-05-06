@@ -3316,64 +3316,86 @@ Rules:
       if (!apiKey) return res.status(500).json({ error: "FEC_API_KEY not configured" });
 
       const { name = "", state = "", office = "H" } = req.query as Record<string, string>;
-      const nameParts = name.trim().split(/\s+/);
-      const lastName  = nameParts[nameParts.length - 1].toLowerCase();
+      // Comma-aware FEC name parsing: "CRUZ, RAFAEL EDWARD TED" → lastName = "cruz"
+      const lastName = name.includes(",")
+        ? name.split(",")[0].trim().toLowerCase()
+        : name.trim().split(/\s+/).slice(-1)[0].toLowerCase();
       const fecOffice = office.toUpperCase() === "S" ? "S" : "H";
 
       const currentYear = new Date().getFullYear();
       let fecCycle = currentYear % 2 === 0 ? currentYear : currentYear + 1;
 
-      // Find FEC candidate (same logic as finance endpoint)
+      const safeJson = async (r: Response) => { try { return r.ok ? await r.json() : {}; } catch { return {}; } };
+
+      // Find FEC candidate — comma-aware match
       const findCandidate = async (cycle: number) => {
         const p = new URLSearchParams({ api_key: apiKey, q: lastName, office: fecOffice, cycle: String(cycle), per_page: "20", sort: "-receipts" });
         if (state) p.set("state", state.toUpperCase());
         const r = await fetch(`https://api.open.fec.gov/v1/candidates/?${p}`, { signal: AbortSignal.timeout(10000) });
         if (!r.ok) return null;
-        const d = await r.json();
-        const results: any[] = d.results ?? [];
-        return results.find(c => (c.name ?? "").toLowerCase().includes(lastName)) ?? results[0] ?? null;
+        const results: any[] = (await r.json()).results ?? [];
+        return results.find(c => (c.name ?? "").toLowerCase().startsWith(lastName)) ?? results[0] ?? null;
       };
 
+      // Find committee ID — try with cycle then without
+      const findCommittee = async (candidateId: string, cycle: number) => {
+        for (const url of [
+          `https://api.open.fec.gov/v1/candidate/${candidateId}/committees/?designation=P&cycle=${cycle}&per_page=1&api_key=${apiKey}`,
+          `https://api.open.fec.gov/v1/candidate/${candidateId}/committees/?designation=P&per_page=1&api_key=${apiKey}`,
+        ]) {
+          const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          const id = r.ok ? (await r.json()).results?.[0]?.committee_id : undefined;
+          if (id) return id as string;
+        }
+        return undefined;
+      };
+
+      // Fetch disbursements for a given committee + cycle; fall back to previous cycle if empty
+      const fetchSpending = async (committeeId: string, cycle: number) => {
+        const [purposeRes, vendorsRes] = await Promise.allSettled([
+          fetch(
+            `https://api.open.fec.gov/v1/schedules/schedule_b/by_purpose/?committee_id=${committeeId}&cycle=${cycle}&per_page=20&sort=-total&api_key=${apiKey}`,
+            { signal: AbortSignal.timeout(12000) }
+          ).then(safeJson),
+          fetch(
+            `https://api.open.fec.gov/v1/schedules/schedule_b/by_recipient/?committee_id=${committeeId}&cycle=${cycle}&per_page=10&sort=-total&api_key=${apiKey}`,
+            { signal: AbortSignal.timeout(12000) }
+          ).then(safeJson),
+        ]);
+        return {
+          purposeData: purposeRes.status === "fulfilled" ? purposeRes.value : {},
+          vendorsData: vendorsRes.status === "fulfilled" ? vendorsRes.value : {},
+        };
+      };
+
+      // Resolve candidate + committee, falling back two cycles at a time until we find spend data
       let candidate = await findCandidate(fecCycle);
       if (!candidate) { candidate = await findCandidate(fecCycle - 2); if (candidate) fecCycle -= 2; }
+      if (!candidate) { candidate = await findCandidate(fecCycle - 4); if (candidate) fecCycle -= 4; }
       if (!candidate) return res.status(404).json({ error: `No FEC record found for "${name}"` });
 
-      // Get principal committee
-      let committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
-      if (!committeeId) {
-        const cr = await fetch(`https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&cycle=${fecCycle}&per_page=1&api_key=${apiKey}`, { signal: AbortSignal.timeout(10000) });
-        if (cr.ok) committeeId = (await cr.json()).results?.[0]?.committee_id;
-      }
-      if (!committeeId) {
-        const cr2 = await fetch(`https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&per_page=1&api_key=${apiKey}`, { signal: AbortSignal.timeout(10000) });
-        if (cr2.ok) committeeId = (await cr2.json()).results?.[0]?.committee_id;
-      }
+      const committeeId: string | undefined =
+        candidate.principal_committees?.[0]?.committee_id ??
+        await findCommittee(candidate.candidate_id, fecCycle);
       if (!committeeId) return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
 
-      const safeJson = async (r: Response) => { try { return r.ok ? await r.json() : {}; } catch { return {}; } };
+      // Try current cycle, then step back until we find non-zero spend
+      let purposeData: any = {};
+      let vendorsData: any = {};
+      let activeCycle = fecCycle;
+      for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
+        const result = await fetchSpending(committeeId, tryCycle);
+        if ((result.purposeData.results ?? []).length > 0) {
+          purposeData = result.purposeData;
+          vendorsData = result.vendorsData;
+          activeCycle = tryCycle;
+          break;
+        }
+      }
 
-      // Parallel: totals + spending by purpose + top vendors
-      const [totalsRes, purposeRes, vendorsRes] = await Promise.allSettled([
-        fetch(
-          `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(12000) }
-        ).then(safeJson),
-        fetch(
-          `https://api.open.fec.gov/v1/schedules/schedule_b/by_purpose/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-total&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(12000) }
-        ).then(safeJson),
-        fetch(
-          `https://api.open.fec.gov/v1/schedules/schedule_b/by_recipient/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=10&sort=-total&api_key=${apiKey}`,
-          { signal: AbortSignal.timeout(12000) }
-        ).then(safeJson),
-      ]);
-
-      const totalsData  = totalsRes.status  === "fulfilled" ? totalsRes.value  : {};
-      const purposeData = purposeRes.status === "fulfilled" ? purposeRes.value : {};
-      const vendorsData = vendorsRes.status === "fulfilled" ? vendorsRes.value : {};
-
-      const totals = totalsData.results?.[0] ?? {};
-      const totalDisbursements: number = totals.disbursements ?? 0;
+      const byPurposeRaw: any[] = purposeData.results ?? [];
+      // Derive total from category sum — more reliable than totals endpoint
+      const totalDisbursements: number = byPurposeRaw.reduce((s: number, p: any) => s + (p.total ?? 0), 0);
 
       // Friendly labels for FEC purpose codes
       const PURPOSE_LABELS: Record<string, string> = {
@@ -3393,20 +3415,20 @@ Rules:
         "OTHER":           "Other",
       };
 
-      const byPurpose = ((purposeData.results ?? []) as any[])
-        .filter(p => p.purpose && p.total > 0)
-        .map(p => {
+      const byPurpose = byPurposeRaw
+        .filter((p: any) => p.purpose && p.total > 0)
+        .map((p: any) => {
           const key = (p.purpose as string).toUpperCase().split(/[\s\/]/)[0];
-          const friendly = PURPOSE_LABELS[key] ?? (p.purpose as string).split(/\b/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("");
+          const friendly = PURPOSE_LABELS[key] ?? (p.purpose as string).replace(/\b\w/g, (c: string) => c.toUpperCase());
           return { purpose: friendly, total: p.total as number, count: p.count as number };
         })
-        .sort((a, b) => b.total - a.total)
+        .sort((a: any, b: any) => b.total - a.total)
         .slice(0, 10);
 
       const topVendors = ((vendorsData.results ?? []) as any[])
-        .filter(v => v.recipient_name && v.total > 0)
+        .filter((v: any) => v.recipient_name && v.total > 0)
         .slice(0, 8)
-        .map(v => ({
+        .map((v: any) => ({
           name:    (v.recipient_name as string).trim(),
           purpose: (v.disbursement_description ?? v.purpose ?? "") as string,
           total:   v.total as number,
@@ -3414,7 +3436,7 @@ Rules:
 
       res.json({
         totalDisbursements,
-        cycleLabel: `${fecCycle - 1}–${fecCycle}`,
+        cycleLabel: `${activeCycle - 1}–${activeCycle}`,
         byPurpose,
         topVendors,
         fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/?tab=spending`,
