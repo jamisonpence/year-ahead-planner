@@ -5,7 +5,7 @@ import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
-  DollarSign, MapPin, Clock, Users2,
+  DollarSign, MapPin, Clock, Users2, TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -734,20 +734,96 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
                 </div>
               )}
 
-              {/* Top contributors */}
+              {/* Top individual donors */}
+              {data.topDonors?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top donors</p>
+                  <div className="space-y-1.5">
+                    {data.topDonors.map((d: any, i: number) => {
+                      const maxAmt = data.topDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      const detail = [d.occupation, d.employer].filter((s: string) => s && !["N/A","NONE","RETIRED","SELF-EMPLOYED","HOMEMAKER","NOT EMPLOYED","INFORMATION REQUESTED"].includes((s ?? "").toUpperCase())).map(tc).join(" · ");
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-[11px] font-medium truncate block">{tc(d.name)}</span>
+                              {detail && <span className="text-[9px] text-muted-foreground/70 truncate block">{detail}</span>}
+                            </div>
+                            <span className="text-[11px] font-semibold text-primary shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-primary/15 overflow-hidden">
+                            <div className="h-full bg-primary/50 rounded-full" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Top individuals from organizations */}
+              {data.topOrgDonors?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top individual donors from organizations</p>
+                  <div className="space-y-1.5">
+                    {data.topOrgDonors.map((d: any, i: number) => {
+                      const maxAmt = data.topOrgDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      return (
+                        <div key={i} className="rounded-md border bg-secondary/30 p-2 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold truncate">{tc(d.name)}</p>
+                              <p className="text-[10px] text-primary/80 font-medium truncate">{tc(d.employer)}</p>
+                              {d.occupation && !["N/A","NONE"].includes(d.occupation.toUpperCase()) && <p className="text-[9px] text-muted-foreground/60 truncate">{tc(d.occupation)}</p>}
+                            </div>
+                            <span className="text-[12px] font-bold text-emerald-400 shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-emerald-400/15 overflow-hidden">
+                            <div className="h-full bg-emerald-400/50 rounded-full" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Top PAC / company donors */}
+              {data.topPacDonors?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top company &amp; PAC donors</p>
+                  <div className="space-y-1.5">
+                    {data.topPacDonors.map((d: any, i: number) => {
+                      const maxAmt = data.topPacDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      const displayName = tc(d.name.replace(/\bPAC\b|\bSUPER PAC\b|\bFUND\b|\bCOMMITTEE\b/gi, "").trim().replace(/\s+/g, " "));
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-medium truncate" title={tc(d.name)}>{displayName}</span>
+                            <span className="text-[11px] font-semibold text-amber-400 shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-amber-400/15 overflow-hidden">
+                            <div className="h-full bg-amber-400/60 rounded-full" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Top employers of contributors */}
               {data.topContributors?.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Top contributing employers
-                  </p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top employers of contributors</p>
                   <div className="space-y-1">
-                    {data.topContributors.map((c: any, i: number) => {
-                      const barPct = data.topContributors[0]?.total > 0
-                        ? Math.round((c.total / data.topContributors[0].total) * 100)
-                        : 0;
+                    {data.topContributors.slice(0, 5).map((c: any, i: number) => {
+                      const barPct = data.topContributors[0]?.total > 0 ? Math.round((c.total / data.topContributors[0].total) * 100) : 0;
                       return (
                         <div key={i} className="flex items-center gap-2">
-                          <span className="text-[10px] text-muted-foreground/50 w-4 shrink-0 text-right">{i + 1}</span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                               <span className="text-[11px] font-medium truncate">{c.name}</span>
@@ -764,14 +840,125 @@ function CampaignFinance({ official }: { official: PoliticalOfficial }) {
                 </div>
               )}
 
-              <a
-                href={data.fecUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors"
-              >
+              <a href={data.fecUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors">
                 <ExternalLink size={10} />FEC.gov · {data.candidateName}
               </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Campaign Spending (Representatives) ───────────────────────────────────────
+
+function CampaignSpending({ official }: { official: PoliticalOfficial }) {
+  const isFederal = official.level?.toLowerCase() === "federal";
+  const canLookup = isFederal && !!official.name;
+  const [shown, setShown] = useState(false);
+  const fecOffice = official.title?.toLowerCase().includes("senator") ? "S" : "H";
+  const stateCode = (official as any).stateCode ?? "";
+
+  const { data, isLoading, isError, error } = useQuery<any>({
+    queryKey: ["spending", official.id],
+    queryFn: async () => {
+      const p = new URLSearchParams({ name: official.name, state: stateCode, office: fecOffice });
+      const r = await apiRequest("GET", `/api/politics/spending/federal?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    enabled: shown && canLookup,
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!canLookup) return null;
+
+  const sp = data ?? {};
+  const categories: any[] = sp.byPurpose ?? [];
+  const totalSpent: number = sp.totalDisbursements ?? 0;
+  const topVendors: any[] = sp.topVendors ?? [];
+  const maxCat = categories[0]?.total ?? 1;
+
+  return (
+    <div className="mt-3">
+      <button onClick={() => setShown(s => !s)}
+        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+        <TrendingDown size={12} />
+        {shown ? "Hide" : "Show"} campaign spending
+        {shown ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {shown && (
+        <div className="mt-2 space-y-3">
+          {isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 size={12} className="animate-spin" />Loading spending data…</div>}
+          {isError && <p className="text-xs text-destructive py-1">{(error as Error)?.message ?? "Could not load spending data."}</p>}
+          {!isLoading && !isError && data && (
+            <div className="space-y-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold">{fmt$(totalSpent)}</span>
+                <span className="text-xs text-muted-foreground">total spent · {sp.cycleLabel ?? ""}</span>
+              </div>
+
+              {categories.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Spending by category</p>
+                  <div className="space-y-1.5">
+                    {categories.map((c: any, i: number) => {
+                      const pct = totalSpent > 0 ? Math.round((c.total / totalSpent) * 100) : 0;
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-medium truncate">{c.purpose}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[9px] text-muted-foreground">{pct}%</span>
+                              <span className="text-[11px] font-semibold">{fmt$(c.total)}</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-primary/15 overflow-hidden">
+                            <div className="h-full bg-primary/50 rounded-full" style={{ width: `${Math.round((c.total / maxCat) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {topVendors.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top vendors paid</p>
+                  <div className="space-y-1.5">
+                    {topVendors.map((v: any, i: number) => {
+                      const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      const maxV = topVendors[0]?.total ?? 1;
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-medium truncate">{tc(v.name)}</p>
+                              {v.purpose && <p className="text-[9px] text-muted-foreground/60 truncate">{v.purpose}</p>}
+                            </div>
+                            <span className="text-[11px] font-semibold text-amber-400 shrink-0">{fmt$(v.total)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-amber-400/15 overflow-hidden">
+                            <div className="h-full bg-amber-400/50 rounded-full" style={{ width: `${Math.round((v.total / maxV) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {sp.fecUrl && (
+                <a href={sp.fecUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors">
+                  <ExternalLink size={10} />View full FEC disbursements
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -2039,6 +2226,7 @@ function OfficialsTab() {
                       {o.notes && <p className="text-muted-foreground text-xs mt-2 whitespace-pre-wrap">{o.notes}</p>}
                       <VotingRecords official={o} />
                       <CampaignFinance official={o} />
+                      <CampaignSpending official={o} />
                     </div>
                   )}
                 </div>
