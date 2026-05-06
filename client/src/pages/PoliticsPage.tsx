@@ -914,7 +914,7 @@ function CandidateDetails({
     queryKey: ["cand-spending", candidate.name, stateCode, fecOffice],
     queryFn: async () => {
       const p = new URLSearchParams({ name: candidate.name, state: stateCode, office: fecOffice });
-      const r = await apiRequest("GET", `/api/politics/finance/federal/spending?${p}`);
+      const r = await apiRequest("GET", `/api/politics/spending/federal?${p}`);
       if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
       return r.json();
     },

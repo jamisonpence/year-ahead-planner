@@ -3310,7 +3310,7 @@ Rules:
 
   // ── Campaign spending breakdown (FEC Schedule B) ─────────────────────────────
   // Accepts: ?name=FEC_NAME&state=TX&office=S|H
-  app.get("/api/politics/finance/federal/spending", requireAuth, async (req, res) => {
+  app.get("/api/politics/spending/federal", requireAuth, async (req, res) => {
     try {
       const apiKey = process.env.FEC_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "FEC_API_KEY not configured" });
