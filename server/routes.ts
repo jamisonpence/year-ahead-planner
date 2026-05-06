@@ -3343,6 +3343,7 @@ Rules:
         if (candidate) { fecCycle = tryCycle; break; }
       }
       if (!candidate) return res.status(404).json({ error: `No FEC record found for "${name}"` });
+      console.log(`[spending] candidate=${candidate.candidate_id} name=${candidate.name} cycle=${fecCycle}`);
 
       // Get the principal committee — try cycle-specific then any
       let committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
@@ -3356,23 +3357,25 @@ Rules:
           if (committeeId) break;
         }
       }
+      console.log(`[spending] committeeId=${committeeId}`);
       if (!committeeId) return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
 
       // Fetch raw Schedule B transactions — try multiple cycle params until we get data
-      // The FEC API uses `two_year_period` for schedule_b but `cycle` for candidates
       let disbursements: any[] = [];
       let activeCycle = fecCycle;
 
       for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
-        // Try both `two_year_period` and `cycle` since FEC endpoints are inconsistent
         for (const cycleParam of ["two_year_period", "cycle"]) {
           const url = `https://api.open.fec.gov/v1/schedules/schedule_b/?committee_id=${committeeId}&${cycleParam}=${tryCycle}&per_page=100&sort=-disbursement_amount&api_key=${apiKey}`;
+          console.log(`[spending] trying: ${url.replace(apiKey, "***")}`);
           const r = await fetch(url, { signal: AbortSignal.timeout(12000) }).then(safeJson);
+          console.log(`[spending] results count=${(r.results ?? []).length} pagination=${JSON.stringify(r.pagination ?? {})}`);
           disbursements = (r.results ?? []) as any[];
           if (disbursements.length > 0) { activeCycle = tryCycle; break; }
         }
         if (disbursements.length > 0) break;
       }
+      console.log(`[spending] final disbursements=${disbursements.length} activeCycle=${activeCycle}`);
 
       // Friendly labels for FEC disbursement purpose descriptions
       const PURPOSE_LABELS: Record<string, string> = {
