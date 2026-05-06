@@ -809,6 +809,24 @@ function LocationCard({ loc }: { loc: any }) {
 
 // ── Upcoming Elections Panel ───────────────────────────────────────────────────
 
+// ── FEC name normalizer ────────────────────────────────────────────────────────
+// FEC returns names as "LAST, FIRST MIDDLE NICK" — convert to "First Last" for URLs & display
+
+function normalizeFecName(raw: string): string {
+  const tc = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  if (raw.includes(",")) {
+    const [last, rest = ""] = raw.split(",");
+    const first = rest.trim().split(/\s+/)[0] ?? "";
+    return [first, last].filter(Boolean).map(tc).join(" ");
+  }
+  return raw.split(/\s+/).map(tc).join(" ");
+}
+
+// Build a Ballotpedia URL — try "First_Last" format (Ballotpedia usually redirects aliases)
+function ballotpediaUrl(rawName: string): string {
+  return `https://ballotpedia.org/${normalizeFecName(rawName).replace(/ /g, "_")}`;
+}
+
 // ── Policy topic categorization (client-side) ─────────────────────────────────
 
 const POLICY_BUCKETS: Array<{ label: string; emoji: string; keywords: string[] }> = [
@@ -864,10 +882,14 @@ function CandidateDetails({
     retry: false,
   });
 
+  // Normalize FEC name ("LAST, FIRST MIDDLE" → "First Last") for APIs and URLs
+  const displayName = normalizeFecName(candidate.name);
+
   // Votes query — also enabled when Positions tab is open (needed for topic analysis)
   const votesQuery = useQuery<any>({
     queryKey: ["cand-votes", candidate.name, title],
     queryFn: async () => {
+      // Pass raw FEC name so server can extract all possible first initials
       const p = new URLSearchParams({ name: candidate.name, title });
       const r = await apiRequest("GET", `/api/politics/votes/federal/lookup?${p}`);
       return r.json();
@@ -889,11 +911,10 @@ function CandidateDetails({
   const votes: any[] = Array.isArray(votesQuery.data) ? votesQuery.data : [];
   const topicBreakdown = categorizeVotes(votes);
 
-  // Build Ballotpedia URL from name
-  const bpName = candidate.name.trim().replace(/\s+/g, "_");
-  const bpUrl  = `https://ballotpedia.org/${bpName}`;
-  const vsUrl  = `https://www.votesmart.org/candidates/search?query=${encodeURIComponent(candidate.name)}`;
-  const cgUrl  = `https://www.congress.gov/members?q=${encodeURIComponent(JSON.stringify({ search: candidate.name }))}`;
+  // Build external links using normalized "First Last" form of the FEC name
+  const bpUrl = ballotpediaUrl(candidate.name);
+  const vsUrl = `https://www.votesmart.org/candidates/search?query=${encodeURIComponent(displayName)}`;
+  const cgUrl = `https://www.congress.gov/members?q=${encodeURIComponent(JSON.stringify({ search: displayName }))}`;
 
   const TABS = [
     { id: "finance",   label: "💰 Finance" },

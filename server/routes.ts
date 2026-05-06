@@ -2880,9 +2880,22 @@ Rules:
 
       if (!memberName) return res.status(400).json({ error: "Member name required (pass ?name=...)" });
 
-      const nameParts = memberName.trim().split(/\s+/);
-      const lastName = nameParts[nameParts.length - 1].toLowerCase();
-      const firstName = nameParts[0].toLowerCase();
+      // Support both "First Last" and FEC format "LAST, FIRST MIDDLE NICK"
+      // Collect ALL possible first-name initials so we still match preferred names
+      // (e.g. FEC "CRUZ, RAFAEL EDWARD TED" → lastName="cruz", firstInitials={'r','e','t'})
+      let lastName: string;
+      const firstInitials = new Set<string>();
+      if (memberName.includes(",")) {
+        // FEC format: "LAST, FIRST [MIDDLE] [NICK]"
+        const [lastPart, restPart = ""] = memberName.split(",");
+        lastName = lastPart.trim().toLowerCase();
+        restPart.trim().split(/\s+/).filter(Boolean).forEach(w => firstInitials.add(w[0].toLowerCase()));
+      } else {
+        const nameParts = memberName.trim().split(/\s+/);
+        lastName = nameParts[nameParts.length - 1].toLowerCase();
+        if (nameParts.length > 1) firstInitials.add(nameParts[0][0].toLowerCase());
+      }
+      const firstName = [...firstInitials][0] ?? ""; // used for display / fallback
 
       const isSenator = memberTitle.includes("senator") || memberTitle.includes("senate");
       const currentYear = new Date().getFullYear();
@@ -2934,11 +2947,13 @@ Rules:
             // Guard: ensure this file is actually for the expected congress
             const xmlCongress = xmlTag(xml, "congress");
             if (xmlCongress && xmlCongress !== String(CONGRESS)) return null;
-            // Find member by last name + first initial
+            // Find member by last name + any known first initial (handles FEC multi-name format)
             const memberBlock = xmlBlocks(xml, "member").find((m) => {
               const mLast = xmlTag(m, "last_name").toLowerCase();
+              if (mLast !== lastName) return false;
+              if (firstInitials.size === 0) return true; // no first name constraint
               const mFirst = xmlTag(m, "first_name").toLowerCase();
-              return mLast === lastName && mFirst.startsWith(firstName[0]);
+              return firstInitials.has(mFirst[0]);
             });
             if (!memberBlock) return null;
             return {
