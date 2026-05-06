@@ -809,8 +809,83 @@ function LocationCard({ loc }: { loc: any }) {
 
 // ── Upcoming Elections Panel ───────────────────────────────────────────────────
 
+// Sub-component: loads and displays contests + candidates for one election
+function ElectionCandidates({ electionId, stateCode }: { electionId: string; stateCode: string }) {
+  const { data, isLoading, isError, error } = useQuery<any>({
+    queryKey: ["election-candidates", electionId, stateCode],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/politics/elections/candidates?electionId=${encodeURIComponent(electionId)}&state=${encodeURIComponent(stateCode)}`
+      );
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `Error ${r.status}`);
+      }
+      return r.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+      <Loader2 size={12} className="animate-spin" />Loading candidates…
+    </div>
+  );
+  if (isError) return (
+    <p className="px-4 py-2 text-[11px] text-muted-foreground italic">
+      {(error as any)?.message ?? "Could not load candidates for this election."}
+    </p>
+  );
+
+  const contests: any[] = data?.contests ?? [];
+  if (contests.length === 0) return (
+    <p className="px-4 py-2 text-[11px] text-muted-foreground italic">No candidate data available yet for this election.</p>
+  );
+
+  return (
+    <div className="divide-y border-t">
+      {contests.map((c: any, ci: number) => (
+        <div key={ci} className="px-4 py-2.5 space-y-1.5">
+          <div>
+            <p className="text-[11px] font-semibold">{c.office}</p>
+            {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
+          </div>
+          <div className="space-y-1">
+            {(c.candidates ?? []).map((k: any, ki: number) => (
+              <div key={ki} className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-medium">{k.name}</span>
+                {k.party && (
+                  <Badge className={`text-[10px] ${PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground"}`}>
+                    {k.party}
+                  </Badge>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  {k.url && (
+                    <a href={k.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                      <Globe size={10} />Website
+                    </a>
+                  )}
+                  {k.phone && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                      <Phone size={10} />{k.phone}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UpcomingElectionsPanel() {
   const [state, setState] = useState("TX");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: elections = [], isLoading, isError } = useQuery<any[]>({
     queryKey: ["upcoming-elections", state],
@@ -831,6 +906,12 @@ function UpcomingElectionsPanel() {
     (byMonth[key] ??= []).push(e);
   }
 
+  function stateFromOcd(ocdId: string | null) {
+    if (!ocdId) return state || "TX";
+    const m = ocdId.match(/\/state:([a-z]+)/);
+    return m ? m[1].toUpperCase() : (state || "TX");
+  }
+
   return (
     <div className="border rounded-xl bg-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b">
@@ -841,7 +922,7 @@ function UpcomingElectionsPanel() {
         </div>
         <select
           value={state}
-          onChange={e => setState(e.target.value)}
+          onChange={e => { setState(e.target.value); setExpandedId(null); }}
           className="text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
           <option value="">All States</option>
@@ -868,21 +949,33 @@ function UpcomingElectionsPanel() {
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{month}</span>
               </div>
               <div className="divide-y">
-                {group.map((e: any) => (
-                  <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div>
-                      <p className="text-[12px] font-medium leading-tight">{e.name}</p>
-                      {e.ocdId && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {e.ocdId.includes("/state:") ? e.ocdId.split("/state:")[1]?.split("/")[0]?.toUpperCase() : "Federal"}
-                        </p>
-                      )}
+                {group.map((e: any) => {
+                  const isOpen = expandedId === e.id;
+                  const sc = stateFromOcd(e.ocdId);
+                  return (
+                    <div key={e.id}>
+                      <button
+                        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-secondary/30 transition-colors text-left"
+                        onClick={() => setExpandedId(isOpen ? null : e.id)}
+                      >
+                        <div>
+                          <p className="text-[12px] font-medium leading-tight">{e.name}</p>
+                          {e.ocdId && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {e.ocdId.includes("/state:") ? sc : "Federal"} · {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d, yyyy") : ""}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isOpen
+                            ? <ChevronUp size={13} className="text-muted-foreground" />
+                            : <ChevronDown size={13} className="text-muted-foreground" />}
+                        </div>
+                      </button>
+                      {isOpen && <ElectionCandidates electionId={e.id} stateCode={sc} />}
                     </div>
-                    <span className="text-[11px] text-muted-foreground shrink-0 font-medium">
-                      {e.date ? format(new Date(e.date + "T12:00:00"), "MMM d") : ""}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

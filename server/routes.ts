@@ -3247,6 +3247,106 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Candidates for a specific election — uses voterinfo with a state-capital address + electionId
+  // Accepts: ?electionId=ID&state=TX
+  app.get("/api/politics/elections/candidates", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CIVIC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "GOOGLE_CIVIC_API_KEY not configured" });
+
+      const { electionId, state } = req.query as { electionId?: string; state?: string };
+      if (!electionId) return res.status(400).json({ error: "electionId is required" });
+
+      // Map state codes to a representative address (state capital) for the voterinfo lookup
+      const STATE_CAPITALS: Record<string, string> = {
+        AL:"600 Dexter Ave, Montgomery, AL 36130",
+        AK:"120 4th St, Juneau, AK 99801",
+        AZ:"1700 W Washington St, Phoenix, AZ 85007",
+        AR:"500 Woodlane St, Little Rock, AR 72201",
+        CA:"1315 10th St, Sacramento, CA 95814",
+        CO:"200 E Colfax Ave, Denver, CO 80203",
+        CT:"210 Capitol Ave, Hartford, CT 06106",
+        DE:"411 Legislative Ave, Dover, DE 19901",
+        FL:"400 S Monroe St, Tallahassee, FL 32399",
+        GA:"206 Washington St SW, Atlanta, GA 30334",
+        HI:"415 S Beretania St, Honolulu, HI 96813",
+        ID:"700 W Jefferson St, Boise, ID 83702",
+        IL:"401 S 2nd St, Springfield, IL 62701",
+        IN:"200 W Washington St, Indianapolis, IN 46204",
+        IA:"1007 E Grand Ave, Des Moines, IA 50319",
+        KS:"300 SW 10th Ave, Topeka, KS 66612",
+        KY:"700 Capital Ave, Frankfort, KY 40601",
+        LA:"900 N 3rd St, Baton Rouge, LA 70802",
+        ME:"210 State St, Augusta, ME 04333",
+        MD:"100 State Cir, Annapolis, MD 21401",
+        MA:"24 Beacon St, Boston, MA 02133",
+        MI:"100 N Capitol Ave, Lansing, MI 48933",
+        MN:"75 Rev Dr Martin Luther King Jr Blvd, Saint Paul, MN 55155",
+        MS:"400 High St, Jackson, MS 39201",
+        MO:"201 W Capitol Ave, Jefferson City, MO 65101",
+        MT:"1301 E 6th Ave, Helena, MT 59601",
+        NE:"1445 K St, Lincoln, NE 68508",
+        NV:"101 N Carson St, Carson City, NV 89701",
+        NH:"107 N Main St, Concord, NH 03301",
+        NJ:"125 W State St, Trenton, NJ 08608",
+        NM:"490 Old Santa Fe Trail, Santa Fe, NM 87501",
+        NY:"State St, Albany, NY 12224",
+        NC:"1 E Edenton St, Raleigh, NC 27601",
+        ND:"600 E Boulevard Ave, Bismarck, ND 58505",
+        OH:"1 Capitol Sq, Columbus, OH 43215",
+        OK:"2300 N Lincoln Blvd, Oklahoma City, OK 73105",
+        OR:"900 Court St NE, Salem, OR 97301",
+        PA:"501 N 3rd St, Harrisburg, PA 17120",
+        RI:"82 Smith St, Providence, RI 02903",
+        SC:"1100 Gervais St, Columbia, SC 29201",
+        SD:"500 E Capitol Ave, Pierre, SD 57501",
+        TN:"600 Charlotte Ave, Nashville, TN 37243",
+        TX:"1100 Congress Ave, Austin, TX 78701",
+        UT:"350 N State St, Salt Lake City, UT 84114",
+        VT:"115 State St, Montpelier, VT 05633",
+        VA:"1000 Bank St, Richmond, VA 23219",
+        WA:"416 Sid Snyder Ave SW, Olympia, WA 98504",
+        WV:"1900 Kanawha Blvd E, Charleston, WV 25305",
+        WI:"2 E Main St, Madison, WI 53703",
+        WY:"200 W 24th St, Cheyenne, WY 82002",
+        DC:"1 Judiciary Square, Washington, DC 20001",
+      };
+
+      // Derive state from query param or fall back to TX
+      const stateCode = (state ?? "TX").toUpperCase();
+      const address = STATE_CAPITALS[stateCode] ?? STATE_CAPITALS["TX"];
+
+      const resp = await fetch(
+        `https://www.googleapis.com/civicinfo/v2/voterinfo?key=${apiKey}` +
+        `&address=${encodeURIComponent(address)}&electionId=${encodeURIComponent(electionId)}&officialOnly=false`,
+        { signal: AbortSignal.timeout(12000) }
+      );
+
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({})) as any;
+        return res.status(resp.status).json({ error: body.error?.message ?? `Civic API error ${resp.status}` });
+      }
+
+      const vd = await resp.json() as any;
+      const contests = ((vd.contests ?? []) as any[]).map((c: any) => ({
+        office:   c.office ?? c.type ?? "Unknown",
+        type:     c.type ?? null,
+        district: c.district?.name ?? null,
+        level:    (c.level ?? []).join(", ") || null,
+        candidates: ((c.candidates ?? []) as any[]).map((k: any) => ({
+          name:    k.name,
+          party:   k.party ?? null,
+          phone:   k.phone ?? null,
+          url:     k.candidateUrl ?? null,
+          email:   k.email ?? null,
+          photoUrl: k.photoUrl ?? null,
+        })),
+      }));
+
+      res.json({ contests });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Google Civic Information — elections, polling location, contests, drop boxes
   // Accepts: ?address=FULL_ADDRESS
   app.get("/api/politics/elections/civic", requireAuth, async (req, res) => {
