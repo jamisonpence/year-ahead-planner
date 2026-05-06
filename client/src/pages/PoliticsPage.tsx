@@ -809,8 +809,185 @@ function LocationCard({ loc }: { loc: any }) {
 
 // ── Upcoming Elections Panel ───────────────────────────────────────────────────
 
-// Sub-component: loads and displays contests + candidates for one election
+// ── Per-candidate Finance + Votes detail panel ────────────────────────────────
+
+function CandidateDetails({
+  candidate, office, stateCode, isFecSource,
+}: {
+  candidate: any; office: string; stateCode: string; isFecSource: boolean;
+}) {
+  const [tab, setTab] = useState<"finance" | "votes">("finance");
+  const isSenate = /senate/i.test(office);
+  const title    = isSenate ? "Senator" : "Representative";
+  const fecOffice = isSenate ? "S" : "H";
+
+  // Build a pseudo-official that satisfies CampaignFinance + VotingRecords props
+  const pseudoOfficial = {
+    id: 0,
+    name:      candidate.name,
+    title,
+    level:     "Federal",
+    party:     candidate.party ?? null,
+    stateCode,
+    externalId: null,
+  } as unknown as PoliticalOfficial;
+
+  // Finance query
+  const finQuery = useQuery<any>({
+    queryKey: ["cand-finance", candidate.name, stateCode, fecOffice],
+    queryFn: async () => {
+      const p = new URLSearchParams({ name: candidate.name, state: stateCode, office: fecOffice });
+      const r = await apiRequest("GET", `/api/politics/finance/federal/lookup?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    enabled: tab === "finance",
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+
+  // Votes query
+  const votesQuery = useQuery<any>({
+    queryKey: ["cand-votes", candidate.name, title],
+    queryFn: async () => {
+      const p = new URLSearchParams({ name: candidate.name, title });
+      const r = await apiRequest("GET", `/api/politics/votes/federal/lookup?${p}`);
+      return r.json();
+    },
+    enabled: tab === "votes",
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const fin = finQuery.data;
+  const totalRaised     = fin?.totalRaised     ?? 0;
+  const individualTotal = fin?.individualTotal ?? 0;
+  const pacTotal        = fin?.pacTotal        ?? 0;
+  const otherTotal      = Math.max(0, totalRaised - individualTotal - pacTotal);
+  const indivPct  = totalRaised > 0 ? Math.round((individualTotal / totalRaised) * 100) : 0;
+  const pacPct    = totalRaised > 0 ? Math.round((pacTotal        / totalRaised) * 100) : 0;
+  const otherPct  = totalRaised > 0 ? Math.round((otherTotal      / totalRaised) * 100) : 0;
+  const cycleLabel = fin?.cycle ? `${fin.cycle - 1}–${fin.cycle}` : "";
+
+  const votes: any[] = Array.isArray(votesQuery.data) ? votesQuery.data : [];
+
+  return (
+    <div className="mt-2 rounded-lg border bg-secondary/20 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex border-b">
+        {(["finance", "votes"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              tab === t
+                ? "bg-background border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t === "finance" ? "💰 Campaign Finance" : "🗳️ Recent Votes"}
+          </button>
+        ))}
+      </div>
+
+      {/* Finance tab */}
+      {tab === "finance" && (
+        <div className="px-3 py-2.5">
+          {finQuery.isLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+              <Loader2 size={11} className="animate-spin" />Loading…
+            </div>
+          )}
+          {finQuery.isError && (
+            <p className="text-[11px] text-destructive py-1">
+              {(finQuery.error as any)?.message ?? "Could not load finance data."}
+            </p>
+          )}
+          {fin && totalRaised === 0 && (
+            <p className="text-[11px] text-muted-foreground italic py-1">No FEC finance data found for this candidate.</p>
+          )}
+          {fin && totalRaised > 0 && (
+            <div className="space-y-2.5">
+              <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold">FEC · {cycleLabel}</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-base font-bold">{fmt$(totalRaised)}</span>
+                <span className="text-[11px] text-muted-foreground">total raised</span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex h-1.5 rounded-full overflow-hidden bg-secondary">
+                  <div className="bg-blue-500" style={{ width: `${indivPct}%` }} />
+                  <div className="bg-amber-500" style={{ width: `${pacPct}%` }} />
+                  <div className="bg-slate-400" style={{ width: `${otherPct}%` }} />
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-blue-500" />Individual {fmt$(individualTotal)} ({indivPct}%)</span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-amber-500" />PAC {fmt$(pacTotal)} ({pacPct}%)</span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-slate-400" />Other {fmt$(otherTotal)} ({otherPct}%)</span>
+                </div>
+              </div>
+              {fin.topContributors?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1">Top employers of contributors</p>
+                  <div className="space-y-1">
+                    {fin.topContributors.slice(0, 5).map((c: any, i: number) => {
+                      const maxAmt = fin.topContributors[0]?.total ?? 1;
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] truncate">{c.employer}</div>
+                            <div className="h-1 rounded-full bg-primary/20 mt-0.5 overflow-hidden">
+                              <div className="h-full bg-primary/60 rounded-full" style={{ width: `${Math.round((c.total / maxAmt) * 100)}%` }} />
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{fmt$(c.total)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {fin.fecUrl && (
+                <a href={fin.fecUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-primary hover:underline">
+                  <ExternalLink size={9} />View full FEC profile
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Votes tab */}
+      {tab === "votes" && (
+        <div className="px-3 py-2.5">
+          {votesQuery.isLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+              <Loader2 size={11} className="animate-spin" />Loading…
+            </div>
+          )}
+          {votesQuery.isError && (
+            <p className="text-[11px] text-muted-foreground italic py-1">No voting record found — this candidate may not currently hold office.</p>
+          )}
+          {!votesQuery.isLoading && !votesQuery.isError && votes.length === 0 && (
+            <p className="text-[11px] text-muted-foreground italic py-1">No recent votes found — this candidate may not currently hold federal office.</p>
+          )}
+          {votes.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold">{votes.length} recent votes</p>
+              {votes.map((v: any, i: number) => <VoteRow key={i} vote={v} isFederal={true} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contests + candidates for one election ─────────────────────────────────────
+
 function ElectionCandidates({ electionId, stateCode }: { electionId: string; stateCode: string }) {
+  const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
+
   const { data, isLoading, isError, error } = useQuery<any>({
     queryKey: ["election-candidates", electionId, stateCode],
     queryFn: async () => {
@@ -859,35 +1036,55 @@ function ElectionCandidates({ electionId, stateCode }: { electionId: string; sta
       )}
       <div className="divide-y">
         {contests.map((c: any, ci: number) => (
-          <div key={ci} className="px-4 py-2.5 space-y-1.5">
+          <div key={ci} className="px-4 py-2.5 space-y-2">
             <div>
               <p className="text-[11px] font-semibold">{c.office}</p>
               {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
             </div>
-            <div className="space-y-1">
-              {(c.candidates ?? []).map((k: any, ki: number) => (
-                <div key={ki} className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-medium">{k.name}</span>
-                  {k.party && (
-                    <Badge className={`text-[10px] ${PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground"}`}>
-                      {k.party}
-                    </Badge>
-                  )}
-                  <div className="flex gap-2 ml-auto">
-                    {k.url && (
-                      <a href={k.url} target="_blank" rel="noopener noreferrer"
-                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                        <Globe size={10} />{isFecSource ? "FEC" : "Website"}
-                      </a>
-                    )}
-                    {k.phone && (
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                        <Phone size={10} />{k.phone}
-                      </span>
+            <div className="space-y-2">
+              {(c.candidates ?? []).map((k: any, ki: number) => {
+                const key = `${ci}-${ki}-${k.name}`;
+                const isOpen = expandedCandidate === key;
+                return (
+                  <div key={ki} className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity"
+                        onClick={() => setExpandedCandidate(isOpen ? null : key)}
+                      >
+                        {isOpen ? <ChevronUp size={11} className="text-muted-foreground shrink-0" /> : <ChevronDown size={11} className="text-muted-foreground shrink-0" />}
+                        <span className="text-[11px] font-medium">{k.name}</span>
+                      </button>
+                      {k.party && (
+                        <Badge className={`text-[10px] ${PARTY_COLORS[k.party] ?? "bg-secondary text-muted-foreground"}`}>
+                          {k.party}
+                        </Badge>
+                      )}
+                      <div className="flex gap-2 ml-auto">
+                        {k.url && (
+                          <a href={k.url} target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                            <Globe size={10} />{isFecSource ? "FEC" : "Website"}
+                          </a>
+                        )}
+                        {k.phone && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Phone size={10} />{k.phone}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <CandidateDetails
+                        candidate={k}
+                        office={c.office}
+                        stateCode={stateCode}
+                        isFecSource={isFecSource}
+                      />
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
