@@ -3308,6 +3308,120 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Campaign spending breakdown (FEC Schedule B) ─────────────────────────────
+  // Accepts: ?name=FEC_NAME&state=TX&office=S|H
+  app.get("/api/politics/finance/federal/spending", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.FEC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "FEC_API_KEY not configured" });
+
+      const { name = "", state = "", office = "H" } = req.query as Record<string, string>;
+      const nameParts = name.trim().split(/\s+/);
+      const lastName  = nameParts[nameParts.length - 1].toLowerCase();
+      const fecOffice = office.toUpperCase() === "S" ? "S" : "H";
+
+      const currentYear = new Date().getFullYear();
+      let fecCycle = currentYear % 2 === 0 ? currentYear : currentYear + 1;
+
+      // Find FEC candidate (same logic as finance endpoint)
+      const findCandidate = async (cycle: number) => {
+        const p = new URLSearchParams({ api_key: apiKey, q: lastName, office: fecOffice, cycle: String(cycle), per_page: "20", sort: "-receipts" });
+        if (state) p.set("state", state.toUpperCase());
+        const r = await fetch(`https://api.open.fec.gov/v1/candidates/?${p}`, { signal: AbortSignal.timeout(10000) });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const results: any[] = d.results ?? [];
+        return results.find(c => (c.name ?? "").toLowerCase().includes(lastName)) ?? results[0] ?? null;
+      };
+
+      let candidate = await findCandidate(fecCycle);
+      if (!candidate) { candidate = await findCandidate(fecCycle - 2); if (candidate) fecCycle -= 2; }
+      if (!candidate) return res.status(404).json({ error: `No FEC record found for "${name}"` });
+
+      // Get principal committee
+      let committeeId: string | undefined = candidate.principal_committees?.[0]?.committee_id;
+      if (!committeeId) {
+        const cr = await fetch(`https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&cycle=${fecCycle}&per_page=1&api_key=${apiKey}`, { signal: AbortSignal.timeout(10000) });
+        if (cr.ok) committeeId = (await cr.json()).results?.[0]?.committee_id;
+      }
+      if (!committeeId) {
+        const cr2 = await fetch(`https://api.open.fec.gov/v1/candidate/${candidate.candidate_id}/committees/?designation=P&per_page=1&api_key=${apiKey}`, { signal: AbortSignal.timeout(10000) });
+        if (cr2.ok) committeeId = (await cr2.json()).results?.[0]?.committee_id;
+      }
+      if (!committeeId) return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
+
+      const safeJson = async (r: Response) => { try { return r.ok ? await r.json() : {}; } catch { return {}; } };
+
+      // Parallel: totals + spending by purpose + top vendors
+      const [totalsRes, purposeRes, vendorsRes] = await Promise.allSettled([
+        fetch(
+          `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
+        fetch(
+          `https://api.open.fec.gov/v1/schedules/schedule_b/by_purpose/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-total&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
+        fetch(
+          `https://api.open.fec.gov/v1/schedules/schedule_b/by_recipient/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=10&sort=-total&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(12000) }
+        ).then(safeJson),
+      ]);
+
+      const totalsData  = totalsRes.status  === "fulfilled" ? totalsRes.value  : {};
+      const purposeData = purposeRes.status === "fulfilled" ? purposeRes.value : {};
+      const vendorsData = vendorsRes.status === "fulfilled" ? vendorsRes.value : {};
+
+      const totals = totalsData.results?.[0] ?? {};
+      const totalDisbursements: number = totals.disbursements ?? 0;
+
+      // Friendly labels for FEC purpose codes
+      const PURPOSE_LABELS: Record<string, string> = {
+        "MEDIA":           "Advertising & Media",
+        "PAYROLL":         "Payroll & Staff",
+        "ADMINISTRATIVE":  "Administrative",
+        "FUNDRAISING":     "Fundraising",
+        "TRAVEL":          "Travel & Lodging",
+        "POLLING":         "Polling & Research",
+        "CONTRIBUTIONS":   "Contributions to Others",
+        "CONSULTING":      "Consulting",
+        "LEGAL":           "Legal & Compliance",
+        "PRINTING":        "Printing & Mailers",
+        "EVENTS":          "Events & Rallies",
+        "DIGITAL":         "Digital & Technology",
+        "VOLUNTEER":       "Volunteer Activities",
+        "OTHER":           "Other",
+      };
+
+      const byPurpose = ((purposeData.results ?? []) as any[])
+        .filter(p => p.purpose && p.total > 0)
+        .map(p => {
+          const key = (p.purpose as string).toUpperCase().split(/[\s\/]/)[0];
+          const friendly = PURPOSE_LABELS[key] ?? (p.purpose as string).split(/\b/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("");
+          return { purpose: friendly, total: p.total as number, count: p.count as number };
+        })
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 10);
+
+      const topVendors = ((vendorsData.results ?? []) as any[])
+        .filter(v => v.recipient_name && v.total > 0)
+        .slice(0, 8)
+        .map(v => ({
+          name:    (v.recipient_name as string).trim(),
+          purpose: (v.disbursement_description ?? v.purpose ?? "") as string,
+          total:   v.total as number,
+        }));
+
+      res.json({
+        totalDisbursements,
+        cycleLabel: `${fecCycle - 1}–${fecCycle}`,
+        byPurpose,
+        topVendors,
+        fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/?tab=spending`,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Upcoming elections list — next 36 months, optionally filtered by state
   // Accepts: ?state=TX  (optional; omit for all states)
   app.get("/api/politics/elections/upcoming", requireAuth, async (req, res) => {

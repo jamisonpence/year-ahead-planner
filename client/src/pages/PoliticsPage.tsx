@@ -870,7 +870,7 @@ function CandidateDetails({
 }: {
   candidate: any; office: string; stateCode: string; isFecSource: boolean;
 }) {
-  const [tab, setTab] = useState<"finance" | "votes" | "positions">("finance");
+  const [tab, setTab] = useState<"finance" | "spending" | "votes" | "positions">("finance");
   const [aiSummary, setAiSummary]     = useState<string | null>(null);
   const [aiLoading, setAiLoading]     = useState(false);
   const [aiError,   setAiError]       = useState<string | null>(null);
@@ -906,6 +906,20 @@ function CandidateDetails({
     },
     enabled: tab === "votes" || tab === "positions",
     staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  // Spending query — FEC Schedule B disbursements by purpose
+  const spendingQuery = useQuery<any>({
+    queryKey: ["cand-spending", candidate.name, stateCode, fecOffice],
+    queryFn: async () => {
+      const p = new URLSearchParams({ name: candidate.name, state: stateCode, office: fecOffice });
+      const r = await apiRequest("GET", `/api/politics/finance/federal/spending?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    enabled: tab === "spending",
+    staleTime: 30 * 60 * 1000,
     retry: false,
   });
 
@@ -959,6 +973,7 @@ function CandidateDetails({
 
   const TABS = [
     { id: "finance",   label: "💰 Finance" },
+    { id: "spending",  label: "💸 Spending" },
     { id: "votes",     label: "🗳️ Votes" },
     { id: "positions", label: "📋 Positions" },
   ] as const;
@@ -1118,6 +1133,95 @@ function CandidateDetails({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Spending tab ── */}
+      {tab === "spending" && (
+        <div className="px-3 py-2.5 space-y-3">
+          {spendingQuery.isLoading && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground py-1">
+              <Loader2 size={11} className="animate-spin" />Loading spending data…
+            </div>
+          )}
+          {spendingQuery.isError && (
+            <p className="text-[11px] text-muted-foreground italic py-1">{(spendingQuery.error as Error)?.message ?? "Could not load spending data."}</p>
+          )}
+          {spendingQuery.data && (() => {
+            const sp = spendingQuery.data;
+            const categories: any[] = sp.byPurpose ?? [];
+            const totalSpent: number = sp.totalDisbursements ?? 0;
+            const topVendors: any[] = sp.topVendors ?? [];
+            const maxCat = categories[0]?.total ?? 1;
+            return (
+              <div className="space-y-3">
+                {/* Total disbursements */}
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[18px] font-bold">{fmt$(totalSpent)}</span>
+                  <span className="text-[10px] text-muted-foreground">total spent · {sp.cycleLabel ?? ""}</span>
+                </div>
+
+                {/* Spending by category */}
+                {categories.length > 0 && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Spending by category</p>
+                    <div className="space-y-1.5">
+                      {categories.map((c: any, i: number) => {
+                        const pct = totalSpent > 0 ? Math.round((c.total / totalSpent) * 100) : 0;
+                        return (
+                          <div key={i} className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-medium truncate">{c.purpose}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[9px] text-muted-foreground">{pct}%</span>
+                                <span className="text-[11px] font-semibold">{fmt$(c.total)}</span>
+                              </div>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-primary/15 overflow-hidden">
+                              <div className="h-full bg-primary/50 rounded-full transition-all" style={{ width: `${Math.round((c.total / maxCat) * 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top vendors */}
+                {topVendors.length > 0 && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Top vendors paid</p>
+                    <div className="space-y-1.5">
+                      {topVendors.map((v: any, i: number) => {
+                        const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                        const maxV = topVendors[0]?.total ?? 1;
+                        return (
+                          <div key={i} className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-medium truncate">{tc(v.name)}</p>
+                                {v.purpose && <p className="text-[9px] text-muted-foreground/60 truncate">{v.purpose}</p>}
+                              </div>
+                              <span className="text-[11px] font-semibold text-amber-400 shrink-0">{fmt$(v.total)}</span>
+                            </div>
+                            <div className="h-1 rounded-full bg-amber-400/15 overflow-hidden">
+                              <div className="h-full bg-amber-400/50 rounded-full transition-all" style={{ width: `${Math.round((v.total / maxV) * 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {sp.fecUrl && (
+                  <a href={sp.fecUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-primary hover:underline">
+                    <ExternalLink size={9} />View full FEC disbursements
+                  </a>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
