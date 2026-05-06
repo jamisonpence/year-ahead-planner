@@ -1032,6 +1032,32 @@ function CandidateDetails({
                 </div>
               )}
 
+              {/* Top PAC / company donors */}
+              {fin.topPacDonors?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Top company &amp; PAC donors</p>
+                  <div className="space-y-1.5">
+                    {fin.topPacDonors.map((d: any, i: number) => {
+                      const maxAmt = fin.topPacDonors[0]?.amount ?? 1;
+                      const tc = (s: string) => s.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+                      // Strip common PAC suffixes for cleaner display, keep original as tooltip
+                      const displayName = tc(d.name.replace(/\bPAC\b|\bSUPER PAC\b|\bFUND\b|\bCOMMITTEE\b/gi, "").trim().replace(/\s+/g, " "));
+                      return (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-medium truncate" title={tc(d.name)}>{displayName}</span>
+                            <span className="text-[11px] font-semibold text-amber-400 shrink-0">{fmt$(d.amount)}</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-amber-400/15 overflow-hidden">
+                            <div className="h-full bg-amber-400/60 rounded-full transition-all" style={{ width: `${Math.round((d.amount / maxAmt) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Top employers of contributors */}
               {fin.topContributors?.length > 0 && (
                 <div>

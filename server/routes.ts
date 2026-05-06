@@ -3185,8 +3185,8 @@ Rules:
         return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
       }
 
-      // Parallel: committee totals + top employers + top individual donors
-      const [totalsResp, contribResp, donorsResp] = await Promise.all([
+      // Parallel: committee totals + top employers + top individual donors + top PAC/company donors
+      const [totalsResp, contribResp, donorsResp, pacResp] = await Promise.all([
         fetch(
           `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${fecCycle}&per_page=1&api_key=${apiKey}`,
           { signal: AbortSignal.timeout(10000) }
@@ -3199,11 +3199,16 @@ Rules:
           `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
           { signal: AbortSignal.timeout(10000) }
         ),
+        fetch(
+          `https://api.open.fec.gov/v1/schedules/schedule_a/?committee_id=${committeeId}&cycle=${fecCycle}&contributor_type=committee&per_page=20&sort=-contribution_receipt_amount&api_key=${apiKey}`,
+          { signal: AbortSignal.timeout(10000) }
+        ),
       ]);
 
       const totalsData = totalsResp.ok ? await totalsResp.json() : {};
       const contribData = contribResp.ok ? await contribResp.json() : {};
       const donorsData  = donorsResp.ok  ? await donorsResp.json()  : {};
+      const pacData     = pacResp.ok     ? await pacResp.json()     : {};
 
       const totals  = totalsData.results?.[0] ?? {};
       const totalRaised       = totals.receipts ?? 0;
@@ -3238,6 +3243,23 @@ Rules:
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
 
+      // Top PAC / corporate donors — contributions from other committees
+      const pacMap = new Map<string, { name: string; amount: number }>();
+      for (const d of (pacData.results ?? []) as any[]) {
+        const name = (d.contributor_name ?? "").trim();
+        if (!name) continue;
+        const amount = d.contribution_receipt_amount ?? 0;
+        const existing = pacMap.get(name);
+        if (existing) {
+          existing.amount += amount;
+        } else {
+          pacMap.set(name, { name, amount });
+        }
+      }
+      const topPacDonors = [...pacMap.values()]
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
+
       res.json({
         candidateName:   (candidate.name as string),
         candidateId:     (candidate.candidate_id as string),
@@ -3247,6 +3269,7 @@ Rules:
         pacTotal,
         topContributors,
         topDonors,
+        topPacDonors,
         fecUrl: `https://www.fec.gov/data/candidate/${candidate.candidate_id}/`,
       });
     } catch (e) { handleError(res, e); }
