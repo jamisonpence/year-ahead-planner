@@ -4192,12 +4192,16 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
         .map((e, i) => `${i + 1}. "${e.name}"${e.date ? ` on ${e.date}` : ""}${e.level ? ` [${e.level}]` : ""}`)
         .join("\n");
 
-      const prompt = `Based on these upcoming U.S. elections, identify the most notable candidates who would be on the ballot. Include major party candidates and any prominent independents.
+      const prompt = `You are helping a voter research candidates for upcoming U.S. elections.
 
-Elections:
+Elections to research:
 ${electionList}
 
-Return ONLY a valid JSON array — no markdown fences, no extra text. Schema:
+Your job: identify the most likely candidates who would appear on each ballot. Use your knowledge of the state's political landscape, recent primaries, and prominent politicians. If you don't know confirmed candidates for a specific runoff or future election, suggest the most prominent politicians from that state/party who are plausible contenders based on context clues (e.g., for a Texas Democratic primary runoff, list well-known Texas Democrats who run for statewide or congressional offices).
+
+IMPORTANT: Always return candidates for every election listed. Never return an empty array. If the exact candidates are unknown, make your best educated suggestions based on the state, party, and office type.
+
+Return ONLY a valid JSON array — no markdown fences, no explanation, no other text:
 [
   {
     "name": "Candidate Full Name",
@@ -4208,10 +4212,11 @@ Return ONLY a valid JSON array — no markdown fences, no extra text. Schema:
 ]
 
 Rules:
-- Include 2–5 major candidates per election
-- Only include real people with verifiable public records
-- Use full legal names (e.g. "Rafael Edward Cruz" not "Ted Cruz" — but common name is fine)
-- If an election is too far in the future and candidates aren't yet known, omit it`;
+- Include 2–6 candidates per election
+- For primary runoffs, focus on the relevant party's top candidates
+- Use the candidate's commonly used name (e.g., "Ted Cruz" not "Rafael Edward Cruz")
+- If you're not certain, still include your best guesses — the user can edit them
+- Do NOT return an empty array`;
 
       const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -4221,8 +4226,8 @@ Rules:
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1200,
+          model: "claude-sonnet-4-6",
+          max_tokens: 1500,
           messages: [{ role: "user", content: prompt }],
         }),
       });
@@ -4235,7 +4240,7 @@ Rules:
       const claudeData = await claudeRes.json() as any;
       const raw: string = claudeData?.content?.[0]?.text ?? "[]";
       const candidates = extractJsonArray(raw);
-      res.json({ candidates });
+      res.json({ candidates, note: candidates.length === 0 ? "no_candidates_found" : undefined });
     } catch (e) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
       handleError(res, e);

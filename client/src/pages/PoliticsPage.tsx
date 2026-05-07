@@ -4232,10 +4232,16 @@ function ElectionsTab() {
                     rows={4}
                     className="text-sm font-mono resize-none"
                   />
-                  {detectedCandidates && (
+                  {detectedCandidates && detectedCandidates.length > 0 && (
                     <p className="text-[11px] text-violet-500 flex items-center gap-1.5">
                       <Sparkles size={10} />
                       {detectedCandidates.length} candidates detected. Edit names above if needed.
+                    </p>
+                  )}
+                  {detectedCandidates && detectedCandidates.length === 0 && (
+                    <p className="text-[11px] text-amber-500 flex items-center gap-1.5">
+                      <Sparkles size={10} />
+                      Couldn't identify specific candidates for this election. Type them manually above, or use the ballot lookup in My Elections &amp; Ballot to pull real candidates from your address.
                     </p>
                   )}
                 </div>
