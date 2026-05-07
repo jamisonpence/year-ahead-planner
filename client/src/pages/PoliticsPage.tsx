@@ -5,7 +5,7 @@ import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
-  DollarSign, MapPin, Clock, Users2, TrendingDown,
+  DollarSign, MapPin, Clock, Users2, TrendingDown, Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -2550,11 +2550,12 @@ function CivicElectionsLookup() {
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "officials",    label: "Representatives", icon: Users    },
-  { id: "issues",       label: "Issues",          icon: BookOpen  },
-  { id: "elections",    label: "Elections",       icon: Vote      },
-  { id: "civic",        label: "Civic Actions",   icon: Zap       },
-  { id: "news",         label: "News Sources",    icon: Newspaper },
+  { id: "officials", label: "Representatives",  icon: Users    },
+  { id: "identity",  label: "Political Identity", icon: Compass },
+  { id: "issues",    label: "Issues",            icon: BookOpen },
+  { id: "elections", label: "Elections",         icon: Vote     },
+  { id: "civic",     label: "Civic Actions",     icon: Zap      },
+  { id: "news",      label: "News Sources",      icon: Newspaper},
 ];
 
 // ── Officials Tab ──────────────────────────────────────────────────────────────
@@ -2823,7 +2824,7 @@ function IssuesTab() {
     queryFn: () => apiRequest("GET", "/api/politics/issues").then(r => r.json()),
   });
 
-  const [view, setView]         = useState<"my" | "browse" | "identity">("my");
+  const [view, setView]         = useState<"my" | "browse">("my");
   const [browsecat, setBrowsecat] = useState(ISSUE_LIBRARY[0].category);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -2848,12 +2849,8 @@ function IssuesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
   });
 
-  // Separate political identity items from regular issues
-  const identityIssues = issues.filter(i => i.category === "Political Identity");
-  const regularIssues  = issues.filter(i => i.category !== "Political Identity");
-  const axisIssues     = identityIssues.filter(i => IDEOLOGY_AXES.some(a => a.topic === i.topic));
-  const ideologyIssues = identityIssues.filter(i => !IDEOLOGY_AXES.some(a => a.topic === i.topic));
-  const ideologyMap    = new Map(ideologyIssues.map(i => [i.topic?.toLowerCase().trim(), i]));
+  // Exclude Political Identity items (those live in the dedicated IdentityTab)
+  const regularIssues = issues.filter(i => i.category !== "Political Identity");
 
   const issueMap = new Map(regularIssues.map(i => [i.topic?.toLowerCase().trim(), i]));
   const categoriesWithIssues = ISSUE_LIBRARY.map(g => g.category).filter(cat =>
@@ -2884,10 +2881,6 @@ function IssuesTab() {
         <button onClick={() => setView("browse")}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "browse" ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
           🔍 Browse Issues
-        </button>
-        <button onClick={() => setView("identity")}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "identity" ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
-          🧭 Political Identity
         </button>
         <button onClick={() => { setCustomForm(c => !c); setView("my"); }}
           className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-secondary hover:bg-secondary/80 text-muted-foreground flex items-center gap-1.5">
@@ -3160,189 +3153,204 @@ function IssuesTab() {
         </div>
       )}
 
-      {/* ══ POLITICAL IDENTITY view ══ */}
-      {view === "identity" && (
-        <div className="space-y-6">
+    </div>
+  );
+}
 
-          {/* ── Ideology Summary Card ── */}
-          {(axisIssues.length > 0 || ideologyIssues.length > 0) && (
-            <div className="rounded-xl border bg-secondary/20 p-4 space-y-3">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Political Identity at a Glance</p>
-              {axisIssues.length > 0 && (
-                <div className="space-y-1.5">
-                  {axisIssues.map(ax => {
-                    const axDef  = IDEOLOGY_AXES.find(a => a.topic === ax.topic);
-                    if (!axDef) return null;
-                    const stepIdx = AXIS_POSITIONS.indexOf(ax.position as any);
-                    const step   = stepIdx >= 0 ? axDef.steps[stepIdx] : null;
-                    const pct    = stepIdx >= 0 ? (stepIdx / 6) * 100 : 50;
+// ── Political Identity Tab ──────────────────────────────────────────────────────
+
+function IdentityTab() {
+  const qc = useQueryClient();
+  const { data: issues = [] } = useQuery<PoliticalIssue[]>({
+    queryKey: ["/api/politics/issues"],
+    queryFn: () => apiRequest("GET", "/api/politics/issues").then(r => r.json()),
+  });
+  const createMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/politics/issues", data).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: any) => apiRequest("PATCH", `/api/politics/issues/${id}`, data).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/politics/issues/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
+  });
+
+  const identityIssues = issues.filter(i => i.category === "Political Identity");
+  const axisIssues     = identityIssues.filter(i => IDEOLOGY_AXES.some(a => a.topic === i.topic));
+  const ideologyIssues = identityIssues.filter(i => !IDEOLOGY_AXES.some(a => a.topic === i.topic));
+  const ideologyMap    = new Map(ideologyIssues.map(i => [i.topic?.toLowerCase().trim(), i]));
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── At-a-Glance Summary ── */}
+      {(axisIssues.length > 0 || ideologyIssues.length > 0) && (
+        <div className="rounded-xl border bg-secondary/20 p-4 space-y-3">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Political Identity at a Glance</p>
+          {axisIssues.length > 0 && (
+            <div className="space-y-1.5">
+              {axisIssues.map(ax => {
+                const axDef  = IDEOLOGY_AXES.find(a => a.topic === ax.topic);
+                if (!axDef) return null;
+                const stepIdx = AXIS_POSITIONS.indexOf(ax.position as any);
+                const step   = stepIdx >= 0 ? axDef.steps[stepIdx] : null;
+                const pct    = stepIdx >= 0 ? (stepIdx / 6) * 100 : 50;
+                return (
+                  <div key={ax.topic} className="flex items-center gap-2">
+                    <span className="text-xs shrink-0 w-4 text-center">{axDef.emoji}</span>
+                    <span className="text-[10px] text-muted-foreground w-28 shrink-0 truncate">{axDef.topic.replace(" Axis","")}</span>
+                    <div className="flex-1 relative h-2 rounded-full bg-gradient-to-r from-blue-400 via-stone-300 to-red-400 overflow-visible">
+                      <div className="absolute inset-y-0 left-1/2 w-px bg-white/60 z-10" />
+                      <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white bg-primary shadow-sm z-20 transition-all"
+                        style={{ left: `calc(${pct}% - 6px)` }} />
+                    </div>
+                    {step && <span className="text-[10px] font-medium text-foreground w-24 shrink-0 text-right">{step.label}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {ideologyIssues.filter(i => i.position === "strongly_support" || i.position === "support").length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1.5">Identifies with:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {ideologyIssues
+                  .filter(i => i.position === "strongly_support" || i.position === "support")
+                  .map(i => {
+                    const meta = IDEOLOGY_IDENTIFICATION_META[i.position ?? "neutral"];
+                    return <span key={i.topic} className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{i.topic}</span>;
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Political Compass Axes ── */}
+      <div className="space-y-3">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Political Compass — Where Do You Stand?</p>
+        {IDEOLOGY_AXES.map(axis => {
+          const saved   = axisIssues.find(i => i.topic === axis.topic);
+          const curIdx  = saved ? AXIS_POSITIONS.indexOf(saved.position as any) : -1;
+          const curStep = curIdx >= 0 ? axis.steps[curIdx] : null;
+          return (
+            <div key={axis.topic} className="border rounded-xl bg-card p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span>{axis.emoji}</span>
+                  <span className="text-sm font-medium">{axis.topic}</span>
+                </div>
+                {curStep && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{curStep.label}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+                <span className="shrink-0">{axis.leftLabel}</span>
+                <div className="flex-1 flex gap-0.5">
+                  {axis.steps.map((step, idx) => {
+                    const isActive = curIdx === idx;
                     return (
-                      <div key={ax.topic} className="flex items-center gap-2">
-                        <span className="text-xs shrink-0 w-4 text-center">{axDef.emoji}</span>
-                        <span className="text-[10px] text-muted-foreground w-28 shrink-0 truncate">{axDef.topic.replace(" Axis","")}</span>
-                        <div className="flex-1 relative h-2 rounded-full bg-gradient-to-r from-blue-400 via-stone-300 to-red-400 overflow-visible">
-                          <div className="absolute inset-y-0 left-1/2 w-px bg-white/60 z-10" />
-                          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white bg-primary shadow-sm z-20 transition-all"
-                            style={{ left: `calc(${pct}% - 6px)` }} />
-                        </div>
-                        {step && <span className="text-[10px] font-medium text-foreground w-24 shrink-0 text-right">{step.label}</span>}
-                      </div>
+                      <button key={idx} title={`${step.label}: ${step.desc}`}
+                        onClick={() => {
+                          const pos = AXIS_POSITIONS[idx];
+                          if (saved) {
+                            updateMut.mutate({ id: saved.id, data: { position: pos } });
+                          } else {
+                            createMut.mutate({ topic: axis.topic, category: "Political Identity", position: pos, importance: 1 });
+                          }
+                        }}
+                        className={`flex-1 h-7 rounded transition-all border text-[9px] font-medium leading-tight px-0.5 truncate ${
+                          isActive
+                            ? "bg-primary text-primary-foreground border-transparent shadow-sm"
+                            : "bg-secondary/40 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        }`}>
+                        <span className="block truncate">{step.label}</span>
+                      </button>
                     );
                   })}
                 </div>
-              )}
-              {ideologyIssues.filter(i => i.position === "strongly_support" || i.position === "support").length > 0 && (
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1.5">Identifies with:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ideologyIssues
-                      .filter(i => i.position === "strongly_support" || i.position === "support")
-                      .map(i => {
-                        const meta = IDEOLOGY_IDENTIFICATION_META[i.position ?? "neutral"];
-                        return <span key={i.topic} className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{i.topic}</span>;
-                      })}
-                  </div>
-                </div>
+                <span className="shrink-0">{axis.rightLabel}</span>
+              </div>
+              {curStep && <p className="text-[11px] text-muted-foreground pl-1">{curStep.desc}</p>}
+              {saved && (
+                <button onClick={() => deleteMut.mutate(saved.id)}
+                  className="text-[10px] text-muted-foreground/50 hover:text-destructive transition-colors">Clear</button>
               )}
             </div>
-          )}
+          );
+        })}
+      </div>
 
-          {/* ── Political Compass Axes ── */}
-          <div className="space-y-3">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Political Compass — Where Do You Stand?</p>
-            {IDEOLOGY_AXES.map(axis => {
-              const saved    = axisIssues.find(i => i.topic === axis.topic);
-              const curIdx   = saved ? AXIS_POSITIONS.indexOf(saved.position as any) : -1;
-              const curStep  = curIdx >= 0 ? axis.steps[curIdx] : null;
+      {/* ── Ideology Identification ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ideology Identification</p>
+          <p className="text-[10px] text-muted-foreground">Click a level to mark your relationship</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
+            const meta = IDEOLOGY_IDENTIFICATION_META[p];
+            return <span key={p} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{meta.short}</span>;
+          })}
+        </div>
+        {IDEOLOGY_LIBRARY.map(group => (
+          <div key={group.category} className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <span>{group.emoji}</span>{group.category}
+            </p>
+            {group.ideologies.map(ideo => {
+              const existing = ideologyMap.get(ideo.name.toLowerCase().trim());
+              const curPos   = existing?.position ?? null;
+              const curMeta  = curPos ? IDEOLOGY_IDENTIFICATION_META[curPos] : null;
               return (
-                <div key={axis.topic} className="border rounded-xl bg-card p-3.5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span>{axis.emoji}</span>
-                      <span className="text-sm font-medium">{axis.topic}</span>
+                <div key={ideo.name} className={`border rounded-xl overflow-hidden transition-colors ${existing ? "bg-secondary/10" : "bg-card"}`}>
+                  <div className="px-3.5 py-2.5">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="font-medium text-sm">{ideo.name}</span>
+                      {curMeta && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${curMeta.badge}`}>{curMeta.short}</span>}
                     </div>
-                    {curStep && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{curStep.label}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                    <span className="shrink-0">{axis.leftLabel}</span>
-                    <div className="flex-1 flex gap-0.5">
-                      {axis.steps.map((step, idx) => {
-                        const isActive = curIdx === idx;
+                    <p className="text-[11px] text-muted-foreground mb-2">{ideo.description}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
+                        const m = IDEOLOGY_IDENTIFICATION_META[p];
+                        const active = curPos === p;
                         return (
-                          <button key={idx} title={`${step.label}: ${step.desc}`}
+                          <button key={p}
                             onClick={() => {
-                              const pos = AXIS_POSITIONS[idx];
-                              if (saved) {
-                                updateMut.mutate({ id: saved.id, data: { position: pos } });
+                              if (active) {
+                                if (existing) deleteMut.mutate(existing.id);
+                              } else if (existing) {
+                                updateMut.mutate({ id: existing.id, data: { position: p } });
                               } else {
-                                createMut.mutate({ topic: axis.topic, category: "Political Identity", position: pos, importance: 1 });
+                                createMut.mutate({ topic: ideo.name, category: "Political Identity", position: p, importance: 1 });
                               }
                             }}
-                            className={`flex-1 h-7 rounded transition-all border text-[9px] font-medium leading-tight px-0.5 truncate ${
-                              isActive
-                                ? "bg-primary text-primary-foreground border-transparent shadow-sm"
-                                : "bg-secondary/40 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
+                              active
+                                ? `${m.badge} border-transparent shadow-sm`
+                                : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                             }`}>
-                            <span className="block truncate">{step.label}</span>
+                            {m.short}
                           </button>
                         );
                       })}
+                      {existing && (
+                        <button onClick={() => deleteMut.mutate(existing.id)}
+                          className="px-2 py-0.5 rounded text-[10px] border border-transparent text-muted-foreground/40 hover:text-destructive hover:border-destructive/30 transition-all ml-auto">
+                          Clear
+                        </button>
+                      )}
                     </div>
-                    <span className="shrink-0">{axis.rightLabel}</span>
                   </div>
-                  {curStep && (
-                    <p className="text-[11px] text-muted-foreground pl-1">{curStep.desc}</p>
-                  )}
-                  {saved && (
-                    <button onClick={() => deleteMut.mutate(saved.id)}
-                      className="text-[10px] text-muted-foreground/50 hover:text-destructive transition-colors">Clear</button>
-                  )}
                 </div>
               );
             })}
           </div>
-
-          {/* ── Ideology Identification ── */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ideology Identification</p>
-              <p className="text-[10px] text-muted-foreground">Click a level to mark your relationship to each ideology</p>
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap gap-1.5">
-              {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
-                const meta = IDEOLOGY_IDENTIFICATION_META[p];
-                return <span key={p} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{meta.short}</span>;
-              })}
-            </div>
-
-            {IDEOLOGY_LIBRARY.map(group => (
-              <div key={group.category} className="space-y-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <span>{group.emoji}</span>{group.category}
-                </p>
-                {group.ideologies.map(ideo => {
-                  const existing = ideologyMap.get(ideo.name.toLowerCase().trim());
-                  const curPos   = existing?.position ?? null;
-                  const curMeta  = curPos ? IDEOLOGY_IDENTIFICATION_META[curPos] : null;
-                  return (
-                    <div key={ideo.name} className={`border rounded-xl overflow-hidden transition-colors ${existing ? "bg-secondary/10" : "bg-card"}`}>
-                      <div className="px-3.5 py-2.5">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                              <span className="font-medium text-sm">{ideo.name}</span>
-                              {curMeta && (
-                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${curMeta.badge}`}>{curMeta.short}</span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">{ideo.description}</p>
-                          </div>
-                        </div>
-                        {/* Identification buttons */}
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
-                            const m = IDEOLOGY_IDENTIFICATION_META[p];
-                            const active = curPos === p;
-                            return (
-                              <button key={p}
-                                onClick={() => {
-                                  if (active) {
-                                    if (existing) deleteMut.mutate(existing.id);
-                                  } else if (existing) {
-                                    updateMut.mutate({ id: existing.id, data: { position: p } });
-                                  } else {
-                                    createMut.mutate({ topic: ideo.name, category: "Political Identity", position: p, importance: 1 });
-                                  }
-                                }}
-                                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
-                                  active
-                                    ? `${m.badge} border-transparent shadow-sm`
-                                    : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                                }`}>
-                                {m.short}
-                              </button>
-                            );
-                          })}
-                          {existing && (
-                            <button onClick={() => deleteMut.mutate(existing.id)}
-                              className="px-2 py-0.5 rounded text-[10px] border border-transparent text-muted-foreground/40 hover:text-destructive hover:border-destructive/30 transition-all ml-auto">
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -3822,11 +3830,12 @@ export default function PoliticsPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "officials"  && <OfficialsTab />}
-      {activeTab === "issues"     && <IssuesTab />}
-      {activeTab === "elections"  && <ElectionsTab />}
-      {activeTab === "civic"      && <CivicActionsTab />}
-      {activeTab === "news"       && <NewsSourcesTab />}
+      {activeTab === "officials" && <OfficialsTab />}
+      {activeTab === "identity"  && <IdentityTab />}
+      {activeTab === "issues"    && <IssuesTab />}
+      {activeTab === "elections" && <ElectionsTab />}
+      {activeTab === "civic"     && <CivicActionsTab />}
+      {activeTab === "news"      && <NewsSourcesTab />}
     </div>
   );
 }
