@@ -3583,7 +3583,7 @@ Rules:
         .map((p: any) => ({
           name:   (p.name ?? "").trim(),
           code:   p.code ?? "",
-          amount: (p.aggregated_amount ?? 0) as number,
+          amount: (p.amount ?? p.aggregated_amount ?? 0) as number,
         }))
         .filter((p: any) => p.name && p.amount > 0);
       const programTotal = rawPrograms.reduce((s: number, p: any) => s + p.amount, 0);
@@ -3597,7 +3597,7 @@ Rules:
         .slice(0, 8)
         .map((a: any) => ({
           name:   (a.name ?? a.awarding_agency_name ?? "").trim(),
-          amount: (a.aggregated_amount ?? a.obligated_amount ?? 0) as number,
+          amount: (a.amount ?? a.aggregated_amount ?? a.obligated_amount ?? 0) as number,
         }))
         .filter((a: any) => a.name && a.amount > 0);
 
@@ -3617,7 +3617,7 @@ Rules:
         .slice(0, 8)
         .map((r: any) => ({
           label:  recipientLabelMap[r.type ?? ""] ?? (r.name ?? r.type ?? "Other").trim(),
-          amount: (r.aggregated_amount ?? 0) as number,
+          amount: (r.amount ?? r.aggregated_amount ?? 0) as number,
         }))
         .filter((r: any) => r.label && r.amount > 0)
         .sort((a: any, b: any) => b.amount - a.amount);
