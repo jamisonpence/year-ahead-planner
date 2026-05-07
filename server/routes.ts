@@ -3464,7 +3464,7 @@ Rules:
       if (!state) return res.status(400).json({ error: "state is required" });
 
       const isSenate = office.toUpperCase() === "S";
-      const fy = new Date().getMonth() >= 9              // FY starts Oct 1
+      const fy = new Date().getMonth() >= 9
         ? new Date().getFullYear() + 1
         : new Date().getFullYear();
       const fyStart = `${fy - 1}-10-01`;
@@ -3482,61 +3482,84 @@ Rules:
         } catch { return {}; }
       };
 
-      // Geographic filter — senators get whole state, reps get congressional district
       const geoFilter = isSenate
         ? [{ country: "USA", state: state.toUpperCase() }]
         : [{ country: "USA", state: state.toUpperCase(), congressional_district: district.padStart(2, "0") }];
 
-      // Run requests in parallel: total + by award type + top agencies
       const baseFilters = {
-        time_period:                [{ start_date: fyStart, end_date: fyEnd }],
+        time_period:                    [{ start_date: fyStart, end_date: fyEnd }],
         place_of_performance_locations: geoFilter,
       };
 
-      const [totalRes, awardTypeRes, agencyRes] = await Promise.allSettled([
-        // Overall spending total
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", {
-          scope:            "place_of_performance",
-          geo_layer:        "state",
-          geo_layer_filters:[state.toUpperCase()],
-          filters:          { time_period: [{ start_date: fyStart, end_date: fyEnd }] },
-          subawards:        false,
-        }),
-        // Breakdown by award type (contracts, grants, direct payments, loans)
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_award_count/", {
-          filters: baseFilters,
-          subawards: false,
-        }),
-        // Top awarding agencies
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", {
-          filters: baseFilters,
-          limit:   8,
-          page:    1,
-          subawards: false,
-        }),
-      ]);
+      // Award type codes for each category
+      const contractCodes     = ["A","B","C","D"];
+      const grantCodes        = ["02","03","04","05"];
+      const directPayCodes    = ["06","10"];
+      const loanCodes         = ["07","08"];
 
-      const totalData     = totalRes.status     === "fulfilled" ? totalRes.value     : {};
-      const awardTypeData = awardTypeRes.status === "fulfilled" ? awardTypeRes.value : {};
-      const agencyData    = agencyRes.status    === "fulfilled" ? agencyRes.value    : {};
+      const geoBody = (typeCodes: string[]) => ({
+        scope:             "place_of_performance",
+        geo_layer:         "state",
+        geo_layer_filters: [state.toUpperCase()],
+        filters:           { time_period: [{ start_date: fyStart, end_date: fyEnd }], award_type_codes: typeCodes },
+        subawards:         false,
+      });
 
-      // Pull out state total from geography results
-      const stateRow = (totalData.results ?? []).find(
-        (r: any) => (r.shape_code ?? "").toUpperCase() === state.toUpperCase()
-      );
-      const totalSpending: number = stateRow?.aggregated_amount ?? 0;
+      const catBody = (limit = 8) => ({ filters: baseFilters, limit, page: 1, subawards: false });
 
-      // Award type breakdown
-      const counts = awardTypeData.results ?? {};
-      const awardTypes = [
-        { label: "Contracts",        count: (counts.contracts         ?? 0) as number },
-        { label: "Grants",           count: (counts.grants            ?? 0) as number },
-        { label: "Direct Payments",  count: (counts.direct_payments   ?? 0) as number },
-        { label: "Loans",            count: (counts.loans             ?? 0) as number },
-        { label: "Other",            count: (counts.other             ?? 0) as number },
-      ].filter(t => t.count > 0);
+      // 7 parallel requests
+      const [totalRes, contractsRes, grantsRes, directRes, loansRes, programRes, agencyRes, recipientRes] =
+        await Promise.allSettled([
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", {
+            scope: "place_of_performance", geo_layer: "state",
+            geo_layer_filters: [state.toUpperCase()],
+            filters: { time_period: [{ start_date: fyStart, end_date: fyEnd }] },
+            subawards: false,
+          }),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(contractCodes)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(grantCodes)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(directPayCodes)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(loanCodes)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",           catBody(8)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(8)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(10)),
+        ]);
 
-      // Top agencies
+      const getStateAmount = (res: PromiseSettledResult<any>) => {
+        if (res.status !== "fulfilled") return 0;
+        const row = ((res.value?.results ?? []) as any[]).find(
+          (r: any) => (r.shape_code ?? "").toUpperCase() === state.toUpperCase()
+        );
+        return (row?.aggregated_amount ?? 0) as number;
+      };
+
+      const totalSpending   = getStateAmount(totalRes);
+      const contractAmount  = getStateAmount(contractsRes);
+      const grantAmount     = getStateAmount(grantsRes);
+      const directAmount    = getStateAmount(directRes);
+      const loanAmount      = getStateAmount(loansRes);
+
+      // Spending by type with dollar amounts + plain-English descriptions
+      const awardTypeAmounts = [
+        { label: "Contracts",        amount: contractAmount, description: "Paid to businesses for goods & services",   color: "blue"   },
+        { label: "Grants",           amount: grantAmount,    description: "Research, education & community projects",   color: "emerald"},
+        { label: "Direct Payments",  amount: directAmount,   description: "Benefits to individuals (Social Security, veterans)", color: "orange" },
+        { label: "Loans",            amount: loanAmount,     description: "Federal loans & loan guarantees",            color: "purple" },
+      ].filter(t => t.amount > 0).sort((a, b) => b.amount - a.amount);
+
+      // Top federal assistance programs (CFDA)
+      const programData = programRes.status === "fulfilled" ? programRes.value : {};
+      const topPrograms = ((programData.results ?? []) as any[])
+        .slice(0, 8)
+        .map((p: any) => ({
+          name:   (p.name ?? "").trim(),
+          code:   p.code ?? "",
+          amount: (p.aggregated_amount ?? 0) as number,
+        }))
+        .filter((p: any) => p.name && p.amount > 0);
+
+      // Top awarding agencies
+      const agencyData = agencyRes.status === "fulfilled" ? agencyRes.value : {};
       const topAgencies = ((agencyData.results ?? []) as any[])
         .slice(0, 8)
         .map((a: any) => ({
@@ -3545,13 +3568,37 @@ Rules:
         }))
         .filter((a: any) => a.name && a.amount > 0);
 
+      // Who receives the money — map raw type keys to friendly labels
+      const recipientData = recipientRes.status === "fulfilled" ? recipientRes.value : {};
+      const recipientLabelMap: Record<string, string> = {
+        "small_business":                    "Small Businesses",
+        "other_than_small_business":         "Large Businesses",
+        "individuals":                       "Individuals",
+        "nonprofit":                         "Nonprofits",
+        "state_governments":                 "State Government",
+        "local_governments":                 "Local Government",
+        "higher_educational_institutions":   "Higher Education",
+        "tribal_governments":                "Tribal Governments",
+        "foreign_governments":               "Foreign Governments",
+      };
+      const recipientTypes = ((recipientData.results ?? []) as any[])
+        .slice(0, 8)
+        .map((r: any) => ({
+          label:  recipientLabelMap[r.type ?? ""] ?? (r.name ?? r.type ?? "Other").trim(),
+          amount: (r.aggregated_amount ?? 0) as number,
+        }))
+        .filter((r: any) => r.label && r.amount > 0)
+        .sort((a: any, b: any) => b.amount - a.amount);
+
       res.json({
-        state:        state.toUpperCase(),
-        fiscalYear:   fy,
-        scope:        isSenate ? "state" : `district ${district}`,
+        state:          state.toUpperCase(),
+        fiscalYear:     fy,
+        scope:          isSenate ? "state" : `district ${district}`,
         totalSpending,
-        awardTypes,
+        awardTypeAmounts,
+        topPrograms,
         topAgencies,
+        recipientTypes,
         usaSpendingUrl: `https://www.usaspending.gov/state/${state.toUpperCase()}/latest`,
       });
     } catch (e) { handleError(res, e); }

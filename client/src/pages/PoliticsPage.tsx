@@ -995,10 +995,27 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
   if (!canLookup) return null;
 
   const sp = data ?? {};
-  const totalSpending: number = sp.totalSpending ?? 0;
-  const agencies: any[]  = sp.topAgencies  ?? [];
-  const awardTypes: any[] = sp.awardTypes  ?? [];
-  const maxAgency = agencies[0]?.amount ?? 1;
+  const totalSpending: number  = sp.totalSpending    ?? 0;
+  const awardTypes: any[]      = sp.awardTypeAmounts ?? [];
+  const programs: any[]        = sp.topPrograms      ?? [];
+  const agencies: any[]        = sp.topAgencies      ?? [];
+  const recipients: any[]      = sp.recipientTypes   ?? [];
+  const maxProgram   = programs[0]?.amount   ?? 1;
+  const maxAgency    = agencies[0]?.amount   ?? 1;
+  const maxRecipient = recipients[0]?.amount ?? 1;
+
+  const typeBarColor: Record<string, string> = {
+    "Contracts":       "bg-blue-500",
+    "Grants":          "bg-emerald-500",
+    "Direct Payments": "bg-orange-500",
+    "Loans":           "bg-purple-500",
+  };
+
+  const SpendingBar = ({ amount, max, color }: { amount: number; max: number; color: string }) => (
+    <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+      <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.max(2, (amount / max) * 100)}%` }} />
+    </div>
+  );
 
   return (
     <div className="mt-3">
@@ -1010,48 +1027,92 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
       </button>
 
       {shown && (
-        <div className="mt-2 space-y-3">
+        <div className="mt-2 space-y-4">
           {isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 size={12} className="animate-spin" />Loading federal spending data…</div>}
           {isError  && <p className="text-xs text-destructive py-1">{(error as Error)?.message ?? "Could not load spending data."}</p>}
           {!isLoading && !isError && data && (
-            <div className="space-y-3">
-              {/* Header */}
+            <>
+              {/* ── Header ── */}
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold">{fmt$(totalSpending)}</span>
-                  <span className="text-xs text-muted-foreground">federal spending in {sp.state} · FY{sp.fiscalYear}</span>
+                  <span className="text-xs text-muted-foreground">in {sp.state} · FY{sp.fiscalYear}</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                  All federal contracts, grants &amp; direct payments · Source: USASpending.gov
-                </p>
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">All federal awards · Source: USASpending.gov</p>
               </div>
 
-              {/* Award type counts */}
+              {/* ── Where the money goes (by type) ── */}
               {awardTypes.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {awardTypes.map((t: any) => (
-                    <div key={t.label} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary/40 border">
-                      <span className="text-[10px] font-medium">{t.label}</span>
-                      <span className="text-[10px] text-muted-foreground">{t.count.toLocaleString()}</span>
-                    </div>
-                  ))}
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Where the money goes</p>
+                  <div className="space-y-2.5">
+                    {awardTypes.map((t: any) => (
+                      <div key={t.label}>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${typeBarColor[t.label] ?? "bg-primary"}`} />
+                            <span className="text-[11px] font-semibold">{t.label}</span>
+                            <span className="text-[10px] text-muted-foreground truncate">{t.description}</span>
+                          </div>
+                          <span className="text-[11px] font-bold shrink-0 ml-2">{fmt$(t.amount)}</span>
+                        </div>
+                        <div className="ml-3.5">
+                          <SpendingBar amount={t.amount} max={totalSpending || 1} color={typeBarColor[t.label] ?? "bg-primary"} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Top awarding agencies */}
+              {/* ── Top federal programs (CFDA) ── */}
+              {programs.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top funded programs</p>
+                  <div className="space-y-2">
+                    {programs.map((p: any, i: number) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-[11px] font-medium truncate">{p.name}</span>
+                          <span className="text-[11px] font-bold shrink-0">{fmt$(p.amount)}</span>
+                        </div>
+                        <SpendingBar amount={p.amount} max={maxProgram} color="bg-emerald-500/70" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Top awarding agencies ── */}
               {agencies.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Top federal agencies spending here</p>
-                  <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top federal agencies</p>
+                  <div className="space-y-2">
                     {agencies.map((a: any, i: number) => (
-                      <div key={i} className="space-y-0.5">
-                        <div className="flex items-center justify-between gap-2">
+                      <div key={i}>
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
                           <span className="text-[11px] font-medium truncate">{a.name}</span>
-                          <span className="text-[11px] font-semibold shrink-0">{fmt$(a.amount)}</span>
+                          <span className="text-[11px] font-bold shrink-0">{fmt$(a.amount)}</span>
                         </div>
-                        <div className="h-1 rounded-full bg-blue-400/15 overflow-hidden">
-                          <div className="h-full bg-blue-400/50 rounded-full" style={{ width: `${Math.round((a.amount / maxAgency) * 100)}%` }} />
+                        <SpendingBar amount={a.amount} max={maxAgency} color="bg-blue-500/60" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Who receives the money ── */}
+              {recipients.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Who receives it</p>
+                  <div className="space-y-2">
+                    {recipients.map((r: any, i: number) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-[11px] font-medium truncate">{r.label}</span>
+                          <span className="text-[11px] font-bold shrink-0">{fmt$(r.amount)}</span>
                         </div>
+                        <SpendingBar amount={r.amount} max={maxRecipient} color="bg-amber-500/60" />
                       </div>
                     ))}
                   </div>
@@ -1064,7 +1125,7 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
                   <ExternalLink size={10} />View full profile on USASpending.gov
                 </a>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
