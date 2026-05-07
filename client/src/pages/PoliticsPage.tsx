@@ -2699,10 +2699,43 @@ function UpcomingElectionsPanel() {
   );
 }
 
-function CivicElectionsLookup() {
+function CivicElectionsLookup({
+  savedElections = [],
+  onMatchCandidates,
+}: {
+  savedElections?: PoliticalElection[];
+  onMatchCandidates?: (candidates: Array<{ name: string; party?: string; office?: string }>) => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [address, setAddress]       = useState("");
   const [submitted, setSubmitted]   = useState("");
   const [openSection, setOpenSection] = useState<string | null>("polling");
+  const [savedIds, setSavedIds]     = useState<Set<string>>(new Set());
+
+  const saveMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/politics/elections", data).then(r => r.json()),
+    onSuccess: (_: any, vars: any) => {
+      qc.invalidateQueries({ queryKey: ["/api/politics/elections"] });
+      setSavedIds(s => new Set([...s, vars._trackKey]));
+      toast({ title: "Election saved to your list" });
+    },
+  });
+
+  function deriveLevel(ocdId?: string): string {
+    if (!ocdId || ocdId === "ocd-division/country:us") return "federal";
+    if (ocdId.includes("/state:") && !ocdId.includes("/county:") && !ocdId.includes("/city:")) return "state";
+    return "local";
+  }
+
+  function isSaved(name: string) {
+    return savedIds.has(name) ||
+      savedElections.some(e => e.name.toLowerCase().trim() === name.toLowerCase().trim());
+  }
+
+  function saveElection(name: string, date?: string, ocdId?: string) {
+    saveMut.mutate({ name, date, level: deriveLevel(ocdId), _trackKey: name });
+  }
 
   const { data, isLoading, isError, error } = useQuery<any>({
     queryKey: ["civic-elections", submitted],
@@ -2776,11 +2809,24 @@ function CivicElectionsLookup() {
         <div className="space-y-2">
           {/* Active election banner */}
           {vi?.election && (
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
-              <p className="text-xs font-semibold text-primary">{vi.election.name}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {vi.election.date ? format(new Date(vi.election.date + "T12:00:00"), "MMMM d, yyyy") : ""}
-              </p>
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-primary">{vi.election.name}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {vi.election.date ? format(new Date(vi.election.date + "T12:00:00"), "MMMM d, yyyy") : ""}
+                </p>
+              </div>
+              {!isSaved(vi.election.name) ? (
+                <button
+                  onClick={() => saveElection(vi.election.name, vi.election.date)}
+                  disabled={saveMut.isPending}
+                  className="text-[10px] font-semibold text-primary hover:text-primary/80 border border-primary/30 rounded-full px-2.5 py-1 hover:bg-primary/10 transition-colors shrink-0 flex items-center gap-1"
+                >
+                  <Plus size={9} />Follow
+                </button>
+              ) : (
+                <span className="text-[10px] text-emerald-500 flex items-center gap-1 shrink-0"><Check size={10} />Saved</span>
+              )}
             </div>
           )}
 
@@ -2909,11 +2955,40 @@ function CivicElectionsLookup() {
           {vi?.contests?.length > 0 && (
             <Section id="contests" label="Contests on Your Ballot" count={vi.contests.length}>
               <div className="space-y-3">
+                {/* Compare all candidates button */}
+                {onMatchCandidates && (() => {
+                  const allCands = vi.contests.flatMap((c: any) =>
+                    (c.candidates ?? []).map((k: any) => ({ name: k.name, party: k.party ?? undefined, office: c.office }))
+                  );
+                  if (allCands.length < 2) return null;
+                  return (
+                    <button
+                      onClick={() => onMatchCandidates(allCands)}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/10 hover:bg-violet-500/15 text-violet-600 dark:text-violet-400 text-xs font-semibold py-2 transition-colors"
+                    >
+                      <Sparkles size={12} />
+                      Compare all {allCands.length} candidates on my ballot with AI
+                    </button>
+                  );
+                })()}
+
                 {vi.contests.map((c: any, i: number) => (
                   <div key={i} className="space-y-1.5 pb-2 border-b last:border-0">
-                    <div>
-                      <p className="text-[11px] font-semibold">{c.office}</p>
-                      {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold">{c.office}</p>
+                        {c.district && <p className="text-[10px] text-muted-foreground">{c.district}</p>}
+                      </div>
+                      {onMatchCandidates && (c.candidates?.length ?? 0) >= 2 && (
+                        <button
+                          onClick={() => onMatchCandidates(
+                            (c.candidates ?? []).map((k: any) => ({ name: k.name, party: k.party ?? undefined, office: c.office }))
+                          )}
+                          className="text-[10px] font-semibold text-violet-500 hover:text-violet-400 border border-violet-400/30 rounded-full px-2 py-0.5 hover:bg-violet-500/10 transition-colors shrink-0 flex items-center gap-1"
+                        >
+                          <Sparkles size={9} />Match
+                        </button>
+                      )}
                     </div>
                     <div className="space-y-1">
                       {c.candidates?.map((k: any, j: number) => (
@@ -2949,14 +3024,27 @@ function CivicElectionsLookup() {
           {/* Upcoming elections list — always shown when available */}
           {data?.upcomingElections?.length > 0 && (
             <Section id="upcoming" label={`Upcoming Elections${data.detectedState ? ` in ${data.detectedState.toUpperCase()}` : ""}`} count={data.upcomingElections.length}>
-              <div className="space-y-1">
+              <div className="divide-y">
                 {data.upcomingElections.map((e: any) => (
-                  <div key={e.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
-                    <p className="text-[11px] font-medium">{e.name}</p>
-                    {e.date && (
-                      <p className="text-[10px] text-muted-foreground shrink-0 ml-2">
-                        {format(new Date(e.date + "T12:00:00"), "MMM d, yyyy")}
-                      </p>
+                  <div key={e.id} className="flex items-center gap-2 py-1.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium">{e.name}</p>
+                      {e.date && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {format(new Date(e.date + "T12:00:00"), "MMM d, yyyy")}
+                        </p>
+                      )}
+                    </div>
+                    {isSaved(e.name) ? (
+                      <span className="text-[10px] text-emerald-500 flex items-center gap-1 shrink-0"><Check size={10} />Saved</span>
+                    ) : (
+                      <button
+                        onClick={() => saveElection(e.name, e.date, e.ocdId)}
+                        disabled={saveMut.isPending}
+                        className="text-[10px] font-semibold text-primary hover:text-primary/80 border border-primary/30 rounded-full px-2.5 py-1 hover:bg-primary/10 transition-colors shrink-0 flex items-center gap-1"
+                      >
+                        <Plus size={9} />Follow
+                      </button>
                     )}
                   </div>
                 ))}
@@ -3847,6 +3935,7 @@ function IssueNotesEditor({ issue, onSave }: { issue: PoliticalIssue; onSave: (n
 function ElectionsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const matchPanelRef = React.useRef<HTMLDivElement>(null);
   const { data: elections = [] } = useQuery<PoliticalElection[]>({
     queryKey: ["/api/politics/elections"],
     queryFn: () => apiRequest("GET", "/api/politics/elections").then(r => r.json()),
@@ -3947,6 +4036,23 @@ function ElectionsTab() {
     }
   }
 
+  // Handler for "Compare candidates" triggered from the ballot lookup
+  function handleMatchFromBallot(candidates: Array<{ name: string; party?: string; office?: string }>) {
+    const lines = candidates.map(c =>
+      `${c.name}${c.party ? ` (${c.party})` : ""}${c.office ? ` — ${c.office}` : ""}`
+    );
+    setCandidateInput(lines.join("\n"));
+    setDetectedCandidates(candidates);
+    setMatchResult(null);
+    setMatchError(null);
+    setSelectedElectionId(null);
+    setMatchOpen(true);
+    // Scroll voter match panel into view
+    setTimeout(() => {
+      matchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
   const today = startOfDay(new Date());
   const upcoming = elections.filter(e => !e.date || isAfter(parseISO(e.date), today));
   const past = elections.filter(e => e.date && isBefore(parseISO(e.date), today));
@@ -4012,6 +4118,7 @@ function ElectionsTab() {
     <div className="space-y-4">
 
       {/* ── AI Voter Match ─────────────────────────────────────────────────── */}
+      <div ref={matchPanelRef} />
       {!matchOpen ? (
         /* CLOSED: Hero button */
         <button
@@ -4281,7 +4388,7 @@ function ElectionsTab() {
       )}
 
       <UpcomingElectionsPanel />
-      <CivicElectionsLookup />
+      <CivicElectionsLookup savedElections={elections} onMatchCandidates={handleMatchFromBallot} />
 
       {!showForm ? (
         <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5"><Plus size={14} />Add Election</Button>
