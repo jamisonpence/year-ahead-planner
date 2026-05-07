@@ -4373,35 +4373,63 @@ Rules:
       const { address } = req.query as { address?: string };
       if (!address?.trim()) return res.status(400).json({ error: "address is required" });
 
-      // Fetch voterinfo (polling location, contests, drop boxes for the upcoming election)
-      // and elections list in parallel
+      // Detect if address is just a US state name or abbreviation (no street number)
+      const US_STATE_BY_NAME: Record<string, string> = {
+        "alabama":"al","alaska":"ak","arizona":"az","arkansas":"ar","california":"ca",
+        "colorado":"co","connecticut":"ct","delaware":"de","florida":"fl","georgia":"ga",
+        "hawaii":"hi","idaho":"id","illinois":"il","indiana":"in","iowa":"ia","kansas":"ks",
+        "kentucky":"ky","louisiana":"la","maine":"me","maryland":"md","massachusetts":"ma",
+        "michigan":"mi","minnesota":"mn","mississippi":"ms","missouri":"mo","montana":"mt",
+        "nebraska":"ne","nevada":"nv","new hampshire":"nh","new jersey":"nj","new mexico":"nm",
+        "new york":"ny","north carolina":"nc","north dakota":"nd","ohio":"oh","oklahoma":"ok",
+        "oregon":"or","pennsylvania":"pa","rhode island":"ri","south carolina":"sc","south dakota":"sd",
+        "tennessee":"tn","texas":"tx","utah":"ut","vermont":"vt","virginia":"va","washington":"wa",
+        "west virginia":"wv","wisconsin":"wi","wyoming":"wy","district of columbia":"dc",
+      };
+      const VALID_ABBREVS = new Set(Object.values(US_STATE_BY_NAME));
+      const addrLower = address.trim().toLowerCase();
+      const detectedState: string | null =
+        US_STATE_BY_NAME[addrLower] ??
+        (VALID_ABBREVS.has(addrLower) ? addrLower : null);
+      // A "full address" has at least a street number — skip voterinfo for state-only input
+      const isFullAddress = !detectedState && /\d/.test(address.trim());
+
+      // Fetch elections list always; voterinfo only for real addresses
       const encoded = encodeURIComponent(address.trim());
       const [voterResp, electionsResp] = await Promise.all([
-        fetch(
-          `https://www.googleapis.com/civicinfo/v2/voterinfo?key=${apiKey}&address=${encoded}&officialOnly=false`,
-          { signal: AbortSignal.timeout(10000) }
-        ),
+        isFullAddress
+          ? fetch(
+              `https://www.googleapis.com/civicinfo/v2/voterinfo?key=${apiKey}&address=${encoded}&officialOnly=false`,
+              { signal: AbortSignal.timeout(10000) }
+            )
+          : Promise.resolve(null as any),
         fetch(
           `https://www.googleapis.com/civicinfo/v2/elections?key=${apiKey}`,
           { signal: AbortSignal.timeout(10000) }
         ),
       ]);
 
-      // Elections list — filter to upcoming only
+      // Elections list — filter to upcoming only, then filter by state if detected
       const today = new Date().toISOString().slice(0, 10);
       let upcomingElections: any[] = [];
       if (electionsResp.ok) {
         const ed = await electionsResp.json();
         upcomingElections = ((ed.elections ?? []) as any[])
           .filter(e => e.electionDay && e.electionDay >= today && e.id !== "2000") // 2000 = test election
+          .filter(e => {
+            if (!detectedState) return true;
+            const ocd = (e.ocdDivisionId ?? "").toLowerCase();
+            // Include national elections + elections for the detected state
+            return ocd === "ocd-division/country:us" || ocd.includes(`state:${detectedState}`);
+          })
           .sort((a, b) => a.electionDay.localeCompare(b.electionDay))
           .slice(0, 10)
           .map(e => ({ id: e.id, name: e.name, date: e.electionDay, ocdId: e.ocdDivisionId }));
       }
 
-      // Voter info — may 404 if no active election for address (that's OK)
+      // Voter info — only attempted for full addresses; null otherwise
       let voterInfo: any = null;
-      if (voterResp.ok) {
+      if (voterResp && voterResp.ok) {
         const vd = await voterResp.json();
         const clean = (locs: any[]) => (locs ?? []).map((l: any) => ({
           name:   l.address?.locationName ?? null,
@@ -4460,7 +4488,7 @@ Rules:
         };
       }
 
-      res.json({ upcomingElections, voterInfo });
+      res.json({ upcomingElections, voterInfo, detectedState, isFullAddress });
     } catch (e) { handleError(res, e); }
   });
 

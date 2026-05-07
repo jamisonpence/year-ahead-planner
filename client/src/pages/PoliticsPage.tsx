@@ -2759,7 +2759,7 @@ function CivicElectionsLookup() {
           value={address}
           onChange={e => setAddress(e.target.value)}
           onKeyDown={e => e.key === "Enter" && lookup()}
-          placeholder="Enter your registered address (e.g. 123 Main St, Austin TX 78701)"
+          placeholder="State name (e.g. Texas) or full address (e.g. 123 Main St, Austin TX 78701)"
           className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
         <Button size="sm" onClick={lookup} disabled={isLoading || !address.trim()} className="gap-1.5 shrink-0">
@@ -2946,8 +2946,39 @@ function CivicElectionsLookup() {
             </Section>
           )}
 
+          {/* Upcoming elections list — always shown when available */}
+          {data?.upcomingElections?.length > 0 && (
+            <Section id="upcoming" label={`Upcoming Elections${data.detectedState ? ` in ${data.detectedState.toUpperCase()}` : ""}`} count={data.upcomingElections.length}>
+              <div className="space-y-1">
+                {data.upcomingElections.map((e: any) => (
+                  <div key={e.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                    <p className="text-[11px] font-medium">{e.name}</p>
+                    {e.date && (
+                      <p className="text-[10px] text-muted-foreground shrink-0 ml-2">
+                        {format(new Date(e.date + "T12:00:00"), "MMM d, yyyy")}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Hint to enter full address for personalized voter info */}
+          {data && !data.isFullAddress && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                <span className="font-semibold">Want personalized voting info?</span> Enter your full registered address (e.g. "123 Main St, Austin TX 78701") to see your polling location, early voting sites, and the specific contests on your ballot.
+              </p>
+            </div>
+          )}
+
           {vi && !vi.election && vi.contests?.length === 0 && vi.pollingLocations?.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-2">No active election data found for this address right now.</p>
+          )}
+
+          {data && !vi && !data.isFullAddress && data?.upcomingElections?.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-2">No upcoming elections found. Try searching by state name or full address.</p>
           )}
         </div>
       )}
