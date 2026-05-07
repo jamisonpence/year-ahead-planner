@@ -1561,14 +1561,182 @@ function categorizeVotes(votes: any[]): Array<{
     .sort((a, b) => (b.yea + b.nay) - (a.yea + a.nay));
 }
 
+// ── Government spending for election candidates ────────────────────────────────
+
+function CandidateGovernmentSpending({
+  stateCode, isSenate, district,
+}: {
+  stateCode: string; isSenate: boolean; district?: string;
+}) {
+  const fecOffice = isSenate ? "S" : "H";
+  const districtNum = district ? String(district).replace(/\D/g, "") : "";
+
+  const { data, isLoading, isError, error } = useQuery<any>({
+    queryKey: ["gov-spending-cand", stateCode, fecOffice, districtNum],
+    queryFn: async () => {
+      const p = new URLSearchParams({ state: stateCode, office: fecOffice });
+      if (districtNum) p.set("district", districtNum);
+      const r = await apiRequest("GET", `/api/politics/spending/government?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  const sp = data ?? {};
+  const totalSpending: number  = sp.totalSpending    ?? 0;
+  const awardTypes: any[]      = sp.awardTypeAmounts ?? [];
+  const programs: any[]        = sp.topPrograms      ?? [];
+  const agencies: any[]        = sp.topAgencies      ?? [];
+  const recipients: any[]      = sp.recipientTypes   ?? [];
+  const maxProgram   = programs[0]?.amount   ?? 1;
+  const maxAgency    = agencies[0]?.amount   ?? 1;
+  const maxRecipient = recipients[0]?.amount ?? 1;
+
+  const typeBarColor: Record<string, string> = {
+    "Contracts":       "bg-blue-500",
+    "Grants":          "bg-emerald-500",
+    "Direct Payments": "bg-orange-500",
+    "Loans":           "bg-purple-500",
+  };
+
+  const SpendingBar = ({ amount, max, color }: { amount: number; max: number; color: string }) => (
+    <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+      <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.max(2, (amount / max) * 100)}%` }} />
+    </div>
+  );
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground py-3 px-1">
+      <Loader2 size={12} className="animate-spin" />Loading federal spending data…
+    </div>
+  );
+  if (isError) return (
+    <p className="text-xs text-destructive py-2 px-1">{(error as Error)?.message ?? "Could not load spending data."}</p>
+  );
+  if (!data) return (
+    <p className="text-[11px] text-muted-foreground italic py-2 px-1">No spending data available.</p>
+  );
+
+  return (
+    <div className="px-3 py-2.5 space-y-4">
+      {/* ── Header ── */}
+      <div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-base font-bold">{fmt$(totalSpending)}</span>
+          <span className="text-xs text-muted-foreground">in {sp.state} · FY{sp.fiscalYear}</span>
+        </div>
+        <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+          Federal awards {isSenate ? "statewide" : districtNum ? `district ${districtNum}` : "statewide"}
+          {sp.hasDistrict ? ` filtered to district ${sp.district}` : ""} · Source: USASpending.gov
+        </p>
+      </div>
+
+      {/* ── Where the money goes ── */}
+      {awardTypes.length > 0 && (
+        <div>
+          <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">Where the money goes</p>
+          <div className="space-y-2.5">
+            {awardTypes.map((t: any) => (
+              <div key={t.label}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${typeBarColor[t.label] ?? "bg-primary"}`} />
+                    <span className="text-[11px] font-semibold">{t.label}</span>
+                    <span className="text-[10px] text-muted-foreground truncate">{t.description}</span>
+                  </div>
+                  <span className="text-[11px] font-bold shrink-0 ml-2">{fmt$(t.amount)}</span>
+                </div>
+                <div className="ml-3.5">
+                  <SpendingBar amount={t.amount} max={totalSpending || 1} color={typeBarColor[t.label] ?? "bg-primary"} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Top federal programs ── */}
+      {programs.length > 0 && (
+        <div>
+          <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">
+            Spending by program{sp.hasDistrict ? ` · district ${sp.district}` : ""}
+          </p>
+          <div className="rounded-md border border-border/50 overflow-hidden divide-y divide-border/40">
+            {programs.map((p: any, i: number) => (
+              <div key={i} className="px-2.5 py-2 space-y-1 bg-card hover:bg-secondary/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold block truncate">{p.name}</span>
+                    {p.code && <span className="text-[9px] text-muted-foreground/50">CFDA {p.code}</span>}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[12px] font-bold block">{fmt$(p.amount)}</span>
+                    {p.pct != null && <span className="text-[9px] text-muted-foreground">{p.pct}% of top</span>}
+                  </div>
+                </div>
+                <SpendingBar amount={p.amount} max={maxProgram} color="bg-emerald-500/70" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Top awarding agencies ── */}
+      {agencies.length > 0 && (
+        <div>
+          <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">Top federal agencies</p>
+          <div className="space-y-2">
+            {agencies.map((a: any, i: number) => (
+              <div key={i}>
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="text-[11px] font-medium truncate">{a.name}</span>
+                  <span className="text-[11px] font-bold shrink-0">{fmt$(a.amount)}</span>
+                </div>
+                <SpendingBar amount={a.amount} max={maxAgency} color="bg-blue-500/60" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Who receives the money ── */}
+      {recipients.length > 0 && (
+        <div>
+          <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">Who receives it</p>
+          <div className="space-y-2">
+            {recipients.map((r: any, i: number) => (
+              <div key={i}>
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="text-[11px] font-medium truncate">{r.label}</span>
+                  <span className="text-[11px] font-bold shrink-0">{fmt$(r.amount)}</span>
+                </div>
+                <SpendingBar amount={r.amount} max={maxRecipient} color="bg-amber-500/60" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sp.usaSpendingUrl && (
+        <a href={sp.usaSpendingUrl} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary transition-colors">
+          <ExternalLink size={10} />View full profile on USASpending.gov
+        </a>
+      )}
+    </div>
+  );
+}
+
 // ── Per-candidate Finance + Votes + Positions panel ───────────────────────────
 
 function CandidateDetails({
-  candidate, office, stateCode,
+  candidate, office, stateCode, district,
 }: {
-  candidate: any; office: string; stateCode: string; isFecSource: boolean;
+  candidate: any; office: string; stateCode: string; isFecSource: boolean; district?: string;
 }) {
-  const [tab, setTab] = useState<"finance" | "spending" | "votes" | "positions">("finance");
+  const [tab, setTab] = useState<"finance" | "spending" | "votes" | "positions" | "gov">("finance");
   const [aiSummary, setAiSummary]     = useState<string | null>(null);
   const [aiLoading, setAiLoading]     = useState(false);
   const [aiError,   setAiError]       = useState<string | null>(null);
@@ -1674,6 +1842,7 @@ function CandidateDetails({
     { id: "spending",  label: "💸 Spending" },
     { id: "votes",     label: "🗳️ Votes" },
     { id: "positions", label: "📋 Positions" },
+    { id: "gov",       label: "🏛️ Gov. Spending" },
   ] as const;
 
   return (
@@ -2065,6 +2234,15 @@ function CandidateDetails({
           </div>
         </div>
       )}
+
+      {/* ── Gov. Spending tab ── */}
+      {tab === "gov" && (
+        <CandidateGovernmentSpending
+          stateCode={stateCode}
+          isSenate={isSenate}
+          district={district}
+        />
+      )}
     </div>
   );
 }
@@ -2166,6 +2344,7 @@ function ElectionCandidates({ electionId, stateCode }: { electionId: string; sta
                         office={c.office}
                         stateCode={stateCode}
                         isFecSource={isFecSource}
+                        district={c.district}
                       />
                     )}
                   </div>
