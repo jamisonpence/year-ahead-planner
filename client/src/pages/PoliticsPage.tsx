@@ -4028,7 +4028,10 @@ function ElectionsTab() {
     try {
       const r = await apiRequest("POST", "/api/politics/voter-match", { candidates });
       const body = await r.json();
-      if (!r.ok) throw new Error(body.error ?? "Failed to analyze candidates.");
+      if (!r.ok) {
+        const msg = body.error ?? "Failed to analyze candidates.";
+        throw new Error(r.status === 503 ? "The AI service is temporarily busy. Please wait a moment and try again." : msg);
+      }
       setMatchResult(body.matches ?? []);
       setExpandedMatch(0);
     } catch (e: any) {

@@ -4171,6 +4171,31 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
     throw new SyntaxError("No valid JSON array found in response");
   }
 
+  // Call Claude with automatic retry on transient 502/529 overload errors
+  async function claudeWithRetry(apiKey: string, body: object, maxRetries = 2): Promise<any> {
+    let lastError: string = "";
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return res.json();
+      const errText = await res.text();
+      lastError = errText;
+      // Only retry on transient overload errors
+      if (res.status !== 529 && res.status !== 502 && res.status !== 503) {
+        throw new Error(`Claude API error ${res.status}: ${errText.slice(0, 200)}`);
+      }
+    }
+    throw new Error(`Claude API temporarily unavailable. Please try again in a moment. (${lastError.slice(0, 100)})`);
+  }
+
   // ── Voter Match — Auto-detect candidates from election names ─────────────────
   // POST /api/politics/voter-match/suggest-candidates
   // Body: { elections: Array<{ name, date?, level? }> }
@@ -4225,27 +4250,21 @@ Rules:
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1500,
-          messages: [
-            { role: "user", content: prompt },
-            { role: "assistant", content: "[" },
-          ],
-        }),
+      const claudeData = await claudeWithRetry(apiKey, {
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "[" },
+        ],
       });
 
-      if (!claudeRes.ok) {
-        const errText = await claudeRes.text();
-        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 300) });
-      }
-
-      const claudeData = await claudeRes.json() as any;
       const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
       const candidates = extractJsonArray(raw);
       res.json({ candidates, note: candidates.length === 0 ? "no_candidates_found" : undefined });
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      if (e.message?.includes("temporarily unavailable")) return res.status(503).json({ error: e.message });
       handleError(res, e);
     }
   });
@@ -4336,35 +4355,22 @@ Rules:
 - Be concise — short strings, no redundancy
 - Unknown/local candidates: confidence=low, note limited info`;
 
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 6000,
-          messages: [
-            { role: "user", content: prompt },
-            { role: "assistant", content: "[" }, // prefill forces JSON array, no preamble
-          ],
-        }),
+      const claudeData = await claudeWithRetry(apiKey, {
+        model: "claude-sonnet-4-6",
+        max_tokens: 6000,
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "[" }, // prefill forces JSON array, no preamble
+        ],
       });
 
-      if (!claudeRes.ok) {
-        const errText = await claudeRes.text();
-        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 300) });
-      }
-
-      const claudeData = await claudeRes.json() as any;
       // Prepend the "[" we used as prefill since the response is the continuation
       const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
       const matches = extractJsonArray(raw);
       res.json({ matches });
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      if (e.message?.includes("temporarily unavailable")) return res.status(503).json({ error: e.message });
       handleError(res, e);
     }
   });
