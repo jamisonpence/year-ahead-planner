@@ -3505,8 +3505,6 @@ Rules:
         subawards:         false,
       });
 
-      const catBody = (limit = 8) => ({ filters: baseFilters, limit, page: 1, subawards: false });
-
       // Previous FY for fallback (complete year, full reporting lag resolved)
       const prevFyStart = `${fy - 2}-10-01`;
       const prevFyEnd   = `${fy - 1}-09-30`;
