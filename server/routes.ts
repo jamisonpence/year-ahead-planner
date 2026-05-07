@@ -3520,7 +3520,7 @@ Rules:
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(grantCodes)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(directPayCodes)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(loanCodes)),
-          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",           catBody(8)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",           catBody(5)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(8)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(10)),
         ]);
@@ -3550,7 +3550,7 @@ Rules:
       // Top federal assistance programs (CFDA)
       const programData = programRes.status === "fulfilled" ? programRes.value : {};
       const topPrograms = ((programData.results ?? []) as any[])
-        .slice(0, 8)
+        .slice(0, 5)
         .map((p: any) => ({
           name:   (p.name ?? "").trim(),
           code:   p.code ?? "",
