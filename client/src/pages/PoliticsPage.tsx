@@ -1550,8 +1550,8 @@ function categorizeVotes(votes: any[]): Array<{
       const text = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`.toLowerCase();
       return bucket.keywords.some(kw => text.includes(kw));
     });
-    const yea = matching.filter(v => /yea|yes|aye/i.test(v.memberVote ?? "")).length;
-    const nay = matching.filter(v => /nay|no/i.test(v.memberVote ?? "")).length;
+    const yea = matching.filter(v => /\byea\b|\byes\b|\baye\b/i.test(v.memberVote ?? "")).length;
+    const nay = matching.filter(v => /\bnay\b|\bno\b/i.test(v.memberVote ?? "")).length;
     const examples = matching
       .slice(0, 3)
       .map(v => ({ text: (v.billDescription || v.billNumber || "").trim(), vote: (v.memberVote || "").trim() }))
@@ -2192,8 +2192,8 @@ function CandidateDetails({
                         <div className="border-t border-border/30 pt-2 space-y-1.5">
                           <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-semibold">Recent votes</p>
                           {b.examples.map((ex, i) => {
-                            const isYea = /yea|yes|aye/i.test(ex.vote);
-                            const isNay = /nay|no/i.test(ex.vote);
+                            const isYea = /\byea\b|\byes\b|\baye\b/i.test(ex.vote);
+                            const isNay = /\bnay\b|\bno\b/i.test(ex.vote);
                             return (
                               <div key={i} className="flex items-start gap-1.5">
                                 <span className={`text-[10px] font-bold shrink-0 mt-px ${isYea ? "text-emerald-400" : isNay ? "text-red-400" : "text-muted-foreground"}`}>
