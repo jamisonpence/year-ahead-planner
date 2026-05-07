@@ -2782,32 +2782,46 @@ Rules:
       if (!resp.ok) return res.status(resp.status).json({ error: "Congress.gov API error" });
       const data = await resp.json() as { members?: any[] };
       // Normalise fields for the client
-      const members = (data.members ?? []).map((m: any) => {
-        // Congress.gov returns name as "LastName, FirstName [Middle]"
-        const rawName: string = m.name ?? "";
-        const commaIdx = rawName.indexOf(",");
-        const name = commaIdx > -1
-          ? `${rawName.slice(commaIdx + 1).trim()} ${rawName.slice(0, commaIdx).trim()}`
-          : rawName;
-        // Determine chamber from most-recent term
-        const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
-          : m.terms?.item ? [m.terms.item] : [];
-        const latestTerm = terms[terms.length - 1];
-        const chamber: string = latestTerm?.chamber ?? "";
-        const isSenate = chamber.toLowerCase().includes("senate");
-        const title = isSenate ? "U.S. Senator" : `U.S. Representative${m.district ? `, District ${m.district}` : ""}`;
-        return {
-          bioguideId: m.bioguideId,
-          name,
-          title,
-          chamber: isSenate ? "Senate" : "House",
-          party: m.partyName ?? "",
-          state: m.state ?? state,
-          district: m.district ? String(m.district) : null,
-          website: m.officialWebsiteUrl ?? null,
-          imageUrl: m.depiction?.imageUrl ?? null,
-        };
-      });
+      const members = (data.members ?? [])
+        .filter((m: any) => {
+          // Filter server-side in case the API doesn't honour stateCode param
+          const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
+            : m.terms?.item ? [m.terms.item] : [];
+          const latestTerm  = terms[terms.length - 1];
+          const termState   = (latestTerm?.stateCode ?? "").toUpperCase().trim();
+          const memberState = (m.state ?? m.stateCode ?? "").toUpperCase().trim();
+          // If neither field is populated, trust the API's stateCode param already filtered
+          if (!termState && !memberState) return true;
+          // Accept only 2-letter-code matches (ignore full-name "Texas" etc — those are wrong API responses)
+          return (termState.length === 2 && termState === state) ||
+                 (memberState.length === 2 && memberState === state);
+        })
+        .map((m: any) => {
+          // Congress.gov returns name as "LastName, FirstName [Middle]"
+          const rawName: string = m.name ?? "";
+          const commaIdx = rawName.indexOf(",");
+          const name = commaIdx > -1
+            ? `${rawName.slice(commaIdx + 1).trim()} ${rawName.slice(0, commaIdx).trim()}`
+            : rawName;
+          // Determine chamber from most-recent term
+          const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
+            : m.terms?.item ? [m.terms.item] : [];
+          const latestTerm = terms[terms.length - 1];
+          const chamber: string = latestTerm?.chamber ?? "";
+          const isSenate = chamber.toLowerCase().includes("senate");
+          const title = isSenate ? "U.S. Senator" : `U.S. Representative${m.district ? `, District ${m.district}` : ""}`;
+          return {
+            bioguideId: m.bioguideId,
+            name,
+            title,
+            chamber: isSenate ? "Senate" : "House",
+            party: m.partyName ?? "",
+            state,
+            district: m.district ? String(m.district) : null,
+            website: m.officialWebsiteUrl ?? null,
+            imageUrl: m.depiction?.imageUrl ?? null,
+          };
+        });
       // Sort: Senate first, then House by district
       members.sort((a: any, b: any) => {
         if (a.chamber !== b.chamber) return a.chamber === "Senate" ? -1 : 1;
