@@ -174,6 +174,195 @@ const ISSUE_LIBRARY: { category: string; emoji: string; issues: { topic: string;
 ];
 
 const ISSUE_CATEGORIES = ISSUE_LIBRARY.map(g => g.category);
+
+// Political Ideology axes — stored as issues with category "Political Identity"
+// position field maps to step index: strongly_support=0(left) … strongly_oppose=6(right)
+const AXIS_POSITIONS = ["strongly_support","support","lean_support","neutral","lean_oppose","oppose","strongly_oppose"] as const;
+const IDEOLOGY_AXES: { topic: string; emoji: string; leftLabel: string; rightLabel: string; steps: { label: string; desc: string }[] }[] = [
+  { topic: "Economic Axis", emoji: "💵", leftLabel: "Socialist", rightLabel: "Laissez-Faire",
+    steps: [
+      { label: "Socialist",       desc: "Collective ownership, planned economy, full redistribution" },
+      { label: "Social Democrat", desc: "Large public sector, strong welfare, high wealth taxes" },
+      { label: "Center-Left",     desc: "Mixed economy, robust safety net, regulated capitalism" },
+      { label: "Centrist",        desc: "Moderate, pragmatic mixed economy" },
+      { label: "Center-Right",    desc: "Free markets preferred, limited welfare, deregulation" },
+      { label: "Capitalist",      desc: "Low taxes, minimal regulation, market-driven solutions" },
+      { label: "Laissez-Faire",   desc: "Zero government economic intervention — pure free market" },
+    ]},
+  { topic: "Social Axis", emoji: "🌈", leftLabel: "Progressive", rightLabel: "Traditionalist",
+    steps: [
+      { label: "Progressive",         desc: "Bold social change, equity, challenging traditional norms" },
+      { label: "Liberal",             desc: "Civil liberties, individual expression, cultural openness" },
+      { label: "Center-Left Social",  desc: "Generally open, supportive of diversity and reform" },
+      { label: "Moderate",            desc: "Mix of traditional and modern values" },
+      { label: "Center-Right Social", desc: "Values tradition while accepting gradual social change" },
+      { label: "Conservative",        desc: "Family values, cultural heritage, religious influence" },
+      { label: "Traditionalist",      desc: "Strict adherence to traditional norms, opposes cultural change" },
+    ]},
+  { topic: "Government Authority Axis", emoji: "⚖️", leftLabel: "Anarchist", rightLabel: "Authoritarian",
+    steps: [
+      { label: "Anarchist",        desc: "No state authority — voluntary cooperation only" },
+      { label: "Libertarian",      desc: "Minimal state, maximum individual freedom" },
+      { label: "Classical Liberal",desc: "Limited government protecting rights and free markets" },
+      { label: "Moderate",         desc: "Balanced government authority with individual rights" },
+      { label: "Statist",          desc: "Government as primary vehicle for order and public good" },
+      { label: "Authoritarian",    desc: "Strong state authority prioritized over individual freedom" },
+      { label: "Totalitarian",     desc: "Total government control over all aspects of life" },
+    ]},
+  { topic: "Foreign Policy Axis", emoji: "🌍", leftLabel: "Isolationist", rightLabel: "Interventionist",
+    steps: [
+      { label: "Isolationist",      desc: "No foreign entanglements, focus entirely at home" },
+      { label: "Non-Interventionist",desc: "Avoid foreign military action, minimize commitments" },
+      { label: "Multilateralist",   desc: "Prefer international institutions and coalition action" },
+      { label: "Moderate",          desc: "Selective engagement, case-by-case decisions" },
+      { label: "Internationalist",  desc: "Active global leadership through diplomacy and alliances" },
+      { label: "Hawkish",           desc: "Strong military presence, willing to use force proactively" },
+      { label: "Interventionist",   desc: "Active military and political intervention to shape world order" },
+    ]},
+  { topic: "National vs. Global Axis", emoji: "🗺️", leftLabel: "Nationalist", rightLabel: "Globalist",
+    steps: [
+      { label: "Nationalist",      desc: "Nation first, protect sovereignty and national identity" },
+      { label: "National-First",   desc: "Strong national pride, skeptical of international commitments" },
+      { label: "National-Leaning", desc: "Prioritizes domestic interests with selective global engagement" },
+      { label: "Balanced",         desc: "Balances national interest and global cooperation" },
+      { label: "Global-Leaning",   desc: "Values international cooperation and shared norms" },
+      { label: "Internationalist", desc: "Believes in global institutions and international law" },
+      { label: "Globalist",        desc: "World citizenship, open borders, global governance preferred" },
+    ]},
+  { topic: "Government Size Axis", emoji: "🏛️", leftLabel: "Minimal State", rightLabel: "Expansive State",
+    steps: [
+      { label: "Minimal State",      desc: "Government does almost nothing beyond basic security" },
+      { label: "Small Government",   desc: "Very limited programs, low taxes, maximum local control" },
+      { label: "Lean Government",    desc: "Selective programs, fiscal restraint, state-level preference" },
+      { label: "Moderate",           desc: "Balanced size and role of government" },
+      { label: "Active Government",  desc: "Government as partner in solving social problems" },
+      { label: "Large Government",   desc: "Extensive programs, services, and regulation" },
+      { label: "Expansive State",    desc: "Government as primary provider across all major life domains" },
+    ]},
+];
+
+const IDEOLOGY_IDENTIFICATION_META: Record<string, { label: string; short: string; badge: string }> = {
+  strongly_support: { label: "Primary Identity",   short: "Primary",  badge: "bg-violet-600 text-white" },
+  support:          { label: "I Identify With",     short: "Identify", badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" },
+  lean_support:     { label: "Partially",           short: "Partial",  badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
+  neutral:          { label: "Neutral / Exploring", short: "Exploring",badge: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300" },
+  lean_oppose:      { label: "Lean Against",        short: "Lean ✗",   badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300" },
+  oppose:           { label: "Oppose",              short: "Oppose",   badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
+  strongly_oppose:  { label: "Strongly Oppose",     short: "Strong ✗", badge: "bg-red-700 text-white" },
+};
+
+const IDEOLOGY_LIBRARY: { category: string; emoji: string; ideologies: { name: string; description: string }[] }[] = [
+  { category: "Mainstream American", emoji: "🇺🇸", ideologies: [
+    { name: "Liberal",            description: "Center-left: civil rights, social programs, regulated markets, climate action" },
+    { name: "Progressive",        description: "Left of liberal: economic justice, racial equity, bold climate policy, anti-corporate power" },
+    { name: "Conservative",       description: "Center-right: limited government, free markets, traditional values, strong national defense" },
+    { name: "Moderate / Centrist",description: "Pragmatic blend of both; rejects ideological extremes, issue-by-issue decisions" },
+    { name: "Libertarian",        description: "Minimal government in economic and personal life — free markets and civil liberties" },
+    { name: "Left-Populist",      description: "Anti-establishment left: working class vs. corporate elite, economic democracy" },
+    { name: "Right-Populist",     description: "Anti-establishment right: nationalism, anti-globalism, skeptical of institutions" },
+  ]},
+  { category: "Economic Schools", emoji: "📊", ideologies: [
+    { name: "Keynesian",               description: "Government spending and fiscal stimulus to manage economic cycles" },
+    { name: "Supply-Side (Trickle-Down)",description: "Tax cuts for businesses and wealthy drive broader economic growth" },
+    { name: "Social Democrat",         description: "Capitalism with strong welfare state, labor rights, heavy redistribution" },
+    { name: "Democratic Socialist",    description: "Political democracy combined with socialist economic ownership" },
+    { name: "Market Socialist",        description: "Worker-owned enterprises competing in free markets" },
+    { name: "Classical Liberal (Economic)",description: "Free markets, private property, limited government — 19th century tradition" },
+    { name: "Neoliberal",              description: "Free trade, deregulation, privatization, globalization, fiscal discipline" },
+    { name: "Laissez-Faire Capitalist",description: "Zero government economic interference — pure free market" },
+    { name: "Distributist",            description: "Widespread ownership of productive property; neither corporate capitalism nor socialism" },
+    { name: "Georgist",                description: "Land value tax as primary revenue; otherwise free markets" },
+    { name: "MMT Advocate",            description: "Government currency creation means deficits less constrained than mainstream economics holds" },
+  ]},
+  { category: "Conservative Variants", emoji: "🦅", ideologies: [
+    { name: "Fiscal Conservative",        description: "Low taxes, balanced budgets, spending cuts as top priority" },
+    { name: "Social Conservative",        description: "Traditional family, religious values, opposition to rapid social change" },
+    { name: "Neoconservative",            description: "Strong military, democracy promotion abroad, assertive foreign policy" },
+    { name: "Paleoconservative",          description: "America First, non-interventionism, cultural heritage, immigration restriction" },
+    { name: "National Conservative",      description: "Sovereign nation, cultural conservatism, skeptical of globalism" },
+    { name: "Christian Conservative",     description: "Policy grounded in Christian values and scripture" },
+    { name: "Fusionist",                  description: "Free-market economics fused with social conservatism (Reagan coalition)" },
+    { name: "Reform Conservative",        description: "Updated conservatism focused on middle-class concerns and practical governance" },
+    { name: "Compassionate Conservative", description: "Conservative values combined with active social programs" },
+    { name: "Traditionalist Conservative",description: "Preserving inherited culture, institutions, and organic social order" },
+    { name: "Post-Liberal Conservative",  description: "Critiques liberalism's individualism; emphasizes community and common good" },
+  ]},
+  { category: "Liberal / Progressive Variants", emoji: "🕊️", ideologies: [
+    { name: "Third Way / New Democrat",   description: "Center-left market economics with social inclusion (Clinton-era approach)" },
+    { name: "Social Liberal",             description: "Civil liberties, personal freedom, and tolerance as core political values" },
+    { name: "Green Liberal",              description: "Liberal politics with environmentalism as a top-tier priority" },
+    { name: "Feminist",                   description: "Gender equality as a central organizing political principle" },
+    { name: "Egalitarian",                description: "Reducing all forms of social and economic inequality" },
+    { name: "Communitarian",              description: "Balancing individual rights with community responsibilities" },
+    { name: "Anti-Imperialist Left",      description: "Opposition to U.S. military and economic dominance abroad" },
+    { name: "Democratic Socialism (Left-Liberal)", description: "Reform through democratic institutions, strong welfare, progressive taxation" },
+  ]},
+  { category: "Libertarian Variants", emoji: "🗽", ideologies: [
+    { name: "Classical Libertarian",  description: "Non-aggression principle, minimal state, free markets, personal freedom" },
+    { name: "Minarchist",             description: "Government limited to courts, police, and national defense only" },
+    { name: "Anarcho-Capitalist",     description: "No state at all — private voluntary markets replace all government functions" },
+    { name: "Civil Libertarian",      description: "Focus on constitutional rights, free speech, due process, privacy" },
+    { name: "Left-Libertarian",       description: "Freedom from both state and capitalist authority — decentralized, egalitarian" },
+    { name: "Voluntaryist",           description: "All human relations should be voluntary — reject coercive institutions" },
+    { name: "Agorist",                description: "Libertarianism through counter-economics and peaceful market resistance to state" },
+  ]},
+  { category: "Governance & Structure", emoji: "⚙️", ideologies: [
+    { name: "Federalist",             description: "Strong national government with clear federal authority over states" },
+    { name: "States' Rights Advocate",description: "Power devolved to states, strictly limited federal government" },
+    { name: "Constitutionalist",      description: "Strict adherence to the Constitution as written or originally intended" },
+    { name: "Technocrat",             description: "Governance by experts and evidence-based policy over partisan politics" },
+    { name: "Civic Republican",       description: "Active citizenship, public duty, participation as foundation of governance" },
+    { name: "Deliberative Democrat",  description: "Democracy centered on reasoned public debate and consensus" },
+    { name: "Direct Democrat",        description: "Governance through direct citizen votes rather than representatives" },
+  ]},
+  { category: "Environmental", emoji: "🌿", ideologies: [
+    { name: "Environmentalist",         description: "Environmental protection as a central political priority" },
+    { name: "Eco-Socialist",            description: "Capitalism structurally incompatible with ecological survival" },
+    { name: "Green Politics",           description: "Ecology, social justice, grassroots democracy, and nonviolence" },
+    { name: "Degrowth Advocate",        description: "Reducing economic output to achieve ecological sustainability" },
+    { name: "Environmental Conservative",description: "Conservative stewardship of natural resources and public lands" },
+    { name: "Solarpunk",                description: "Radical ecological optimism — green technology and social equity" },
+  ]},
+  { category: "Identity & Culture", emoji: "🤝", ideologies: [
+    { name: "Multiculturalist",           description: "Celebrating and preserving diverse cultural identities within society" },
+    { name: "Nationalist",                description: "Prioritizing national identity, culture, and sovereignty" },
+    { name: "Cultural Pluralist",         description: "Multiple distinct cultures coexisting and mutually enriching society" },
+    { name: "Cosmopolitan",               description: "World citizenship — all humans share one moral community" },
+    { name: "Indigenous Rights Advocate", description: "Centering indigenous sovereignty, land rights, and self-determination" },
+    { name: "Pan-Africanist",             description: "Unity and solidarity among African peoples and the diaspora" },
+    { name: "Secular Humanist",           description: "Human-centered ethics and governance without religious authority" },
+    { name: "Religious Pluralist",        description: "All religions deserve equal respect and accommodation in public life" },
+  ]},
+  { category: "Far-Left", emoji: "✊", ideologies: [
+    { name: "Socialist",          description: "Social ownership of means of production, class-conscious politics" },
+    { name: "Communist",          description: "Classless, stateless society via revolution; collective ownership of production" },
+    { name: "Marxist-Leninist",   description: "Vanguard party leads revolutionary socialism toward communism" },
+    { name: "Trotskyist",         description: "Permanent revolution, internationalism, opposition to Stalinism" },
+    { name: "Anarchist",          description: "No hierarchical authority; voluntary cooperation and mutual aid" },
+    { name: "Anarcho-Communist",  description: "Communal ownership without state — stateless communism" },
+    { name: "Syndicalist",        description: "Worker control of industry through trade unions" },
+    { name: "Maoist",             description: "Rural revolutionary socialism; mass line politics; continuous revolution" },
+    { name: "Council Communist",  description: "Worker councils as the revolutionary vehicle, not vanguard parties" },
+  ]},
+  { category: "Far-Right", emoji: "⚠️", ideologies: [
+    { name: "Fascist",                 description: "Authoritarian ultranationalism, militarism, suppression of opposition" },
+    { name: "Neo-Fascist",             description: "Contemporary adaptations of fascist ideology" },
+    { name: "Theocrat",                description: "Government based on religious law or clerical authority" },
+    { name: "Authoritarian Nationalist",description: "Strong-state nationalism with anti-democratic tendencies" },
+    { name: "Reactionary",             description: "Reversal of progressive changes; restoring a prior social order" },
+    { name: "Ethno-Nationalist",       description: "Nation defined by shared ethnic or racial identity" },
+  ]},
+  { category: "Philosophical / Meta", emoji: "🔭", ideologies: [
+    { name: "Pragmatist",                description: "What works matters more than ideological purity — empirical problem-solving" },
+    { name: "Utilitarian",               description: "Greatest good for greatest number as the political north star" },
+    { name: "Deontological Liberal",     description: "Rights-based politics — duties and rights, not just outcomes" },
+    { name: "Post-Liberal",              description: "Critiques classical liberalism's individualism and market assumptions" },
+    { name: "Social Contract Theorist",  description: "Government legitimacy derives from consent of the governed" },
+    { name: "Paternalist",               description: "Government may restrict freedom to protect people's own wellbeing" },
+    { name: "Anti-Politics / Apolitical",description: "Skeptical of political systems and ideological labels altogether" },
+  ]},
+];
+
 const ELECTION_LEVELS = ["Federal", "State", "Local", "Primary", "Special"];
 const ACTION_TYPES = [
   { value: "voted",       label: "Voted",                   emoji: "🗳️" },
@@ -2633,7 +2822,7 @@ function IssuesTab() {
     queryFn: () => apiRequest("GET", "/api/politics/issues").then(r => r.json()),
   });
 
-  const [view, setView]         = useState<"my" | "browse">("my");
+  const [view, setView]         = useState<"my" | "browse" | "identity">("my");
   const [browsecat, setBrowsecat] = useState(ISSUE_LIBRARY[0].category);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -2658,12 +2847,19 @@ function IssuesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
   });
 
-  const issueMap = new Map(issues.map(i => [i.topic?.toLowerCase().trim(), i]));
+  // Separate political identity items from regular issues
+  const identityIssues = issues.filter(i => i.category === "Political Identity");
+  const regularIssues  = issues.filter(i => i.category !== "Political Identity");
+  const axisIssues     = identityIssues.filter(i => IDEOLOGY_AXES.some(a => a.topic === i.topic));
+  const ideologyIssues = identityIssues.filter(i => !IDEOLOGY_AXES.some(a => a.topic === i.topic));
+  const ideologyMap    = new Map(ideologyIssues.map(i => [i.topic?.toLowerCase().trim(), i]));
+
+  const issueMap = new Map(regularIssues.map(i => [i.topic?.toLowerCase().trim(), i]));
   const categoriesWithIssues = ISSUE_LIBRARY.map(g => g.category).filter(cat =>
-    issues.some(i => i.category === cat)
+    regularIssues.some(i => i.category === cat)
   );
-  const allCategories = ["All", ...categoriesWithIssues, ...(issues.some(i => !ISSUE_LIBRARY.find(g => g.category === i.category)) ? ["Other"] : [])];
-  const filtered = filterCat === "All" ? issues : issues.filter(i => i.category === filterCat);
+  const allCategories = ["All", ...categoriesWithIssues, ...(regularIssues.some(i => !ISSUE_LIBRARY.find(g => g.category === i.category)) ? ["Other"] : [])];
+  const filtered = filterCat === "All" ? regularIssues : regularIssues.filter(i => i.category === filterCat);
 
   function quickAdd(topic: string, category: string) {
     setAddingTopic(topic); setAddPos("neutral"); setAddImportance(3); setAddNotes("");
@@ -2680,12 +2876,18 @@ function IssuesTab() {
     <div className="space-y-4">
       {/* ── Tab switcher ── */}
       <div className="flex items-center gap-2 flex-wrap">
-        {(["my", "browse"] as const).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
-            {v === "my" ? `📋 My Positions (${issues.length})` : "🔍 Browse Issues"}
-          </button>
-        ))}
+        <button onClick={() => setView("my")}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "my" ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+          📋 My Positions ({regularIssues.length})
+        </button>
+        <button onClick={() => setView("browse")}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "browse" ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+          🔍 Browse Issues
+        </button>
+        <button onClick={() => setView("identity")}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === "identity" ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+          🧭 Political Identity
+        </button>
         <button onClick={() => { setCustomForm(c => !c); setView("my"); }}
           className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-secondary hover:bg-secondary/80 text-muted-foreground flex items-center gap-1.5">
           <Plus size={13} />Custom Issue
@@ -2726,23 +2928,23 @@ function IssuesTab() {
       {/* ══ MY POSITIONS view ══ */}
       {view === "my" && (
         <div className="space-y-3">
-          {issues.length === 0 && (
+          {regularIssues.length === 0 && (
             <div className="text-center py-10 space-y-3">
               <p className="text-muted-foreground text-sm">No positions tracked yet.</p>
               <Button size="sm" onClick={() => setView("browse")} className="gap-1.5"><Search size={13} />Browse Issues to Add</Button>
             </div>
           )}
 
-          {issues.length > 0 && (
+          {regularIssues.length > 0 && (
             <>
               {/* Summary bar */}
               <div className="rounded-xl border bg-secondary/20 px-4 py-3 flex items-center gap-6 flex-wrap">
                 <div className="text-center">
-                  <div className="text-xl font-bold">{issues.length}</div>
+                  <div className="text-xl font-bold">{regularIssues.length}</div>
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Issues tracked</div>
                 </div>
                 {(["strongly_support","support","lean_support"] as const).map(p => {
-                  const count = issues.filter(i => i.position === p).length;
+                  const count = regularIssues.filter(i => i.position === p).length;
                   return count > 0 ? (
                     <div key={p} className="text-center">
                       <div className={`text-lg font-bold ${POSITION_META[p].badge.includes("emerald") || POSITION_META[p].badge.includes("teal") ? "text-emerald-500" : "text-teal-500"}`}>{count}</div>
@@ -2751,7 +2953,7 @@ function IssuesTab() {
                   ) : null;
                 })}
                 {(["lean_oppose","oppose","strongly_oppose"] as const).map(p => {
-                  const count = issues.filter(i => i.position === p).length;
+                  const count = regularIssues.filter(i => i.position === p).length;
                   return count > 0 ? (
                     <div key={p} className="text-center">
                       <div className="text-lg font-bold text-red-500">{count}</div>
@@ -2760,7 +2962,7 @@ function IssuesTab() {
                   ) : null;
                 })}
                 <div className="text-center">
-                  <div className="text-lg font-bold text-stone-400">{issues.filter(i => !i.position || i.position === "neutral" || i.position === "undecided").length}</div>
+                  <div className="text-lg font-bold text-stone-400">{regularIssues.filter(i => !i.position || i.position === "neutral" || i.position === "undecided").length}</div>
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Neutral/TBD</div>
                 </div>
               </div>
@@ -2953,6 +3155,190 @@ function IssuesTab() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ══ POLITICAL IDENTITY view ══ */}
+      {view === "identity" && (
+        <div className="space-y-6">
+
+          {/* ── Ideology Summary Card ── */}
+          {(axisIssues.length > 0 || ideologyIssues.length > 0) && (
+            <div className="rounded-xl border bg-secondary/20 p-4 space-y-3">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Political Identity at a Glance</p>
+              {axisIssues.length > 0 && (
+                <div className="space-y-1.5">
+                  {axisIssues.map(ax => {
+                    const axDef  = IDEOLOGY_AXES.find(a => a.topic === ax.topic);
+                    if (!axDef) return null;
+                    const stepIdx = AXIS_POSITIONS.indexOf(ax.position as any);
+                    const step   = stepIdx >= 0 ? axDef.steps[stepIdx] : null;
+                    const pct    = stepIdx >= 0 ? (stepIdx / 6) * 100 : 50;
+                    return (
+                      <div key={ax.topic} className="flex items-center gap-2">
+                        <span className="text-xs shrink-0 w-4 text-center">{axDef.emoji}</span>
+                        <span className="text-[10px] text-muted-foreground w-28 shrink-0 truncate">{axDef.topic.replace(" Axis","")}</span>
+                        <div className="flex-1 relative h-2 rounded-full bg-gradient-to-r from-blue-400 via-stone-300 to-red-400 overflow-visible">
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-white/60 z-10" />
+                          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white bg-primary shadow-sm z-20 transition-all"
+                            style={{ left: `calc(${pct}% - 6px)` }} />
+                        </div>
+                        {step && <span className="text-[10px] font-medium text-foreground w-24 shrink-0 text-right">{step.label}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {ideologyIssues.filter(i => i.position === "strongly_support" || i.position === "support").length > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1.5">Identifies with:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ideologyIssues
+                      .filter(i => i.position === "strongly_support" || i.position === "support")
+                      .map(i => {
+                        const meta = IDEOLOGY_IDENTIFICATION_META[i.position ?? "neutral"];
+                        return <span key={i.topic} className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{i.topic}</span>;
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Political Compass Axes ── */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Political Compass — Where Do You Stand?</p>
+            {IDEOLOGY_AXES.map(axis => {
+              const saved    = axisIssues.find(i => i.topic === axis.topic);
+              const curIdx   = saved ? AXIS_POSITIONS.indexOf(saved.position as any) : -1;
+              const curStep  = curIdx >= 0 ? axis.steps[curIdx] : null;
+              return (
+                <div key={axis.topic} className="border rounded-xl bg-card p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span>{axis.emoji}</span>
+                      <span className="text-sm font-medium">{axis.topic}</span>
+                    </div>
+                    {curStep && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{curStep.label}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+                    <span className="shrink-0">{axis.leftLabel}</span>
+                    <div className="flex-1 flex gap-0.5">
+                      {axis.steps.map((step, idx) => {
+                        const isActive = curIdx === idx;
+                        return (
+                          <button key={idx} title={`${step.label}: ${step.desc}`}
+                            onClick={() => {
+                              const pos = AXIS_POSITIONS[idx];
+                              if (saved) {
+                                updateMut.mutate({ id: saved.id, data: { position: pos } });
+                              } else {
+                                createMut.mutate({ topic: axis.topic, category: "Political Identity", position: pos, importance: 1 });
+                              }
+                            }}
+                            className={`flex-1 h-7 rounded transition-all border text-[9px] font-medium leading-tight px-0.5 truncate ${
+                              isActive
+                                ? "bg-primary text-primary-foreground border-transparent shadow-sm"
+                                : "bg-secondary/40 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                            }`}>
+                            <span className="block truncate">{step.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="shrink-0">{axis.rightLabel}</span>
+                  </div>
+                  {curStep && (
+                    <p className="text-[11px] text-muted-foreground pl-1">{curStep.desc}</p>
+                  )}
+                  {saved && (
+                    <button onClick={() => deleteMut.mutate(saved.id)}
+                      className="text-[10px] text-muted-foreground/50 hover:text-destructive transition-colors">Clear</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Ideology Identification ── */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ideology Identification</p>
+              <p className="text-[10px] text-muted-foreground">Click a level to mark your relationship to each ideology</p>
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-1.5">
+              {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
+                const meta = IDEOLOGY_IDENTIFICATION_META[p];
+                return <span key={p} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${meta.badge}`}>{meta.short}</span>;
+              })}
+            </div>
+
+            {IDEOLOGY_LIBRARY.map(group => (
+              <div key={group.category} className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <span>{group.emoji}</span>{group.category}
+                </p>
+                {group.ideologies.map(ideo => {
+                  const existing = ideologyMap.get(ideo.name.toLowerCase().trim());
+                  const curPos   = existing?.position ?? null;
+                  const curMeta  = curPos ? IDEOLOGY_IDENTIFICATION_META[curPos] : null;
+                  return (
+                    <div key={ideo.name} className={`border rounded-xl overflow-hidden transition-colors ${existing ? "bg-secondary/10" : "bg-card"}`}>
+                      <div className="px-3.5 py-2.5">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <span className="font-medium text-sm">{ideo.name}</span>
+                              {curMeta && (
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${curMeta.badge}`}>{curMeta.short}</span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">{ideo.description}</p>
+                          </div>
+                        </div>
+                        {/* Identification buttons */}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {(["strongly_support","support","lean_support","lean_oppose","oppose"] as const).map(p => {
+                            const m = IDEOLOGY_IDENTIFICATION_META[p];
+                            const active = curPos === p;
+                            return (
+                              <button key={p}
+                                onClick={() => {
+                                  if (active) {
+                                    if (existing) deleteMut.mutate(existing.id);
+                                  } else if (existing) {
+                                    updateMut.mutate({ id: existing.id, data: { position: p } });
+                                  } else {
+                                    createMut.mutate({ topic: ideo.name, category: "Political Identity", position: p, importance: 1 });
+                                  }
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
+                                  active
+                                    ? `${m.badge} border-transparent shadow-sm`
+                                    : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                                }`}>
+                                {m.short}
+                              </button>
+                            );
+                          })}
+                          {existing && (
+                            <button onClick={() => deleteMut.mutate(existing.id)}
+                              className="px-2 py-0.5 rounded text-[10px] border border-transparent text-muted-foreground/40 hover:text-destructive hover:border-destructive/30 transition-all ml-auto">
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
       )}
