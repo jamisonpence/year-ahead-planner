@@ -2853,32 +2853,42 @@ Rules:
 
       const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
       const isSenate = office.toUpperCase() === "S";
-      const lastName = name.includes(",")
+      // Extract last name: "CRUZ, RAFAEL EDWARD TED" → "cruz"
+      const lastName = (name.includes(",")
         ? name.split(",")[0].trim()
-        : name.trim().split(/\s+/).slice(-1)[0];
+        : name.trim().split(/\s+/).slice(-1)[0]
+      ).toLowerCase();
 
       const safeJson = async (url: string) => {
         try {
-          const r = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+          const r = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12000) });
           return r.ok ? await r.json() : {};
         } catch { return {}; }
       };
 
-      // Search Congress.gov for member by last name
-      const searchData: any = await safeJson(
-        `https://api.congress.gov/v3/member?name=${encodeURIComponent(lastName)}&currentMember=true&limit=20&api_key=${apiKey}`
-      );
-      const candidates: any[] = searchData.members ?? [];
+      // Congress.gov name= param is unreliable — fetch all members and filter by last name
+      // (same approach as the whoismyrep name-search fix)
+      const [page1, page2] = await Promise.all([
+        safeJson(`https://api.congress.gov/v3/member?currentMember=true&limit=300&offset=0&api_key=${apiKey}`),
+        safeJson(`https://api.congress.gov/v3/member?currentMember=true&limit=300&offset=300&api_key=${apiKey}`),
+      ]);
+      const allMembers: any[] = [...((page1.members ?? []) as any[]), ...((page2.members ?? []) as any[])];
 
-      // Pick best match: state + chamber alignment
-      const member = candidates.find(m => {
+      // Filter to members whose last name matches (Congress.gov format: "LAST, FIRST MIDDLE")
+      const byLastName = allMembers.filter(m =>
+        (m.name ?? "").toLowerCase().startsWith(lastName + ",") ||
+        (m.name ?? "").toLowerCase() === lastName
+      );
+
+      // Pick the best match: prefer correct state + chamber
+      const member = byLastName.find(m => {
         const stateMatch = !state || (m.stateCode ?? "").toUpperCase() === state.toUpperCase();
         const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item : m.terms?.item ? [m.terms.item] : [];
         const latestTerm = terms[terms.length - 1];
         const chamberStr = (latestTerm?.chamber ?? "").toLowerCase();
         const chamberMatch = isSenate ? chamberStr.includes("senate") : chamberStr.includes("house");
         return stateMatch && chamberMatch;
-      }) ?? candidates[0];
+      }) ?? byLastName[0];
 
       if (!member?.bioguideId) return res.status(404).json({ error: "Member not found in Congress.gov" });
       const bioguideId: string = member.bioguideId;
