@@ -2929,15 +2929,32 @@ Rules:
       const { zip, name } = req.query as { zip?: string; name?: string };
       if (!zip && !name) return res.status(400).json({ error: "Provide zip or name" });
 
-      // ── Name search: use Congress.gov API ──────────────────────────────────
+      // ── Name search: fetch all current members, filter server-side ────────────
+      // (Congress.gov v3 does not support reliable free-text name filtering)
       if (name) {
         const trimmed = name.trim();
         if (!trimmed) return res.status(400).json({ error: "Name cannot be empty" });
         const cgApiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
-        const cgUrl = `https://api.congress.gov/v3/member?name=${encodeURIComponent(trimmed)}&currentMember=true&limit=50&api_key=${cgApiKey}`;
-        const cgResp = await fetch(cgUrl, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
-        if (!cgResp.ok) return res.status(cgResp.status).json({ error: "Congress.gov API error" });
-        const cgData = await cgResp.json() as { members?: any[] };
+        const searchLower = trimmed.toLowerCase();
+
+        // Fetch all ~535 current Congress members in two parallel pages
+        const safePageFetch = async (offset: number) => {
+          try {
+            const r = await fetch(
+              `https://api.congress.gov/v3/member?currentMember=true&limit=300&offset=${offset}&api_key=${cgApiKey}`,
+              { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12000) }
+            );
+            return r.ok ? (await r.json()).members ?? [] : [];
+          } catch { return []; }
+        };
+
+        const [page1, page2] = await Promise.all([safePageFetch(0), safePageFetch(300)]);
+        const allMembers: any[] = [...page1, ...page2];
+
+        // Congress.gov stores names as "LAST, FIRST MIDDLE" — match against any part
+        const matched = allMembers.filter(m =>
+          (m.name ?? "").toLowerCase().includes(searchLower)
+        );
 
         const STATE_NAME_TO_CODE: Record<string,string> = {
           "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
@@ -2953,7 +2970,7 @@ Rules:
           "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC",
         };
 
-        const members = (cgData.members ?? []).map((m: any) => {
+        const members = matched.map((m: any) => {
           const rawName: string = m.name ?? "";
           const commaIdx = rawName.indexOf(",");
           const displayName = commaIdx > -1
@@ -2971,7 +2988,7 @@ Rules:
             bioguideId: m.bioguideId ?? `cg-${displayName.replace(/\s+/g, "-")}`,
             name: displayName,
             title,
-            chamber: isSenate ? "Senate" : "House" as "Senate" | "House",
+            chamber: (isSenate ? "Senate" : "House") as "Senate" | "House",
             party: m.partyName ?? "",
             state: stateCode,
             district: m.district ? String(m.district) : null,
