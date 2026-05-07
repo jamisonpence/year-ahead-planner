@@ -1036,10 +1036,11 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold">{fmt$(totalSpending)}</span>
-                  <span className="text-xs text-muted-foreground">in {sp.scopeLabel ?? sp.state} · FY{sp.fiscalYear}</span>
+                  <span className="text-xs text-muted-foreground">in {sp.state} (statewide) · FY{sp.fiscalYear}</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                  {sp.isSenate ? "All federal awards statewide" : `All federal awards in congressional district ${sp.district}`} · Source: USASpending.gov
+                  Total federal awards in state · Programs &amp; agencies below
+                  {sp.hasDistrict ? ` filtered to district ${sp.district}` : ""} · Source: USASpending.gov
                 </p>
               </div>
 
@@ -1070,7 +1071,9 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
               {/* ── Top federal programs (CFDA) ── */}
               {programs.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Spending by program</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Spending by program{sp.hasDistrict ? ` · district ${sp.district}` : ""}
+                  </p>
                   <div className="rounded-md border border-border/50 overflow-hidden divide-y divide-border/40">
                     {programs.map((p: any, i: number) => (
                       <div key={i} className="px-2.5 py-2 space-y-1 bg-card hover:bg-secondary/20 transition-colors">
