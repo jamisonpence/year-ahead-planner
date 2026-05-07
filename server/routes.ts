@@ -2844,32 +2844,90 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
-  // WhoIsMyRepresentative.com proxy — search by ZIP code or last name
+  // WhoIsMyRepresentative.com proxy — search by ZIP code
+  // Name search uses Congress.gov API (more reliable)
   app.get("/api/politics/whoismyrep", requireAuth, async (req, res) => {
     try {
       const { zip, name } = req.query as { zip?: string; name?: string };
       if (!zip && !name) return res.status(400).json({ error: "Provide zip or name" });
+
+      // ── Name search: use Congress.gov API ──────────────────────────────────
+      if (name) {
+        const trimmed = name.trim();
+        if (!trimmed) return res.status(400).json({ error: "Name cannot be empty" });
+        const cgApiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
+        const cgUrl = `https://api.congress.gov/v3/member?name=${encodeURIComponent(trimmed)}&currentMember=true&limit=50&api_key=${cgApiKey}`;
+        const cgResp = await fetch(cgUrl, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+        if (!cgResp.ok) return res.status(cgResp.status).json({ error: "Congress.gov API error" });
+        const cgData = await cgResp.json() as { members?: any[] };
+
+        const STATE_NAME_TO_CODE: Record<string,string> = {
+          "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+          "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+          "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
+          "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
+          "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
+          "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
+          "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND",
+          "Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI",
+          "South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT",
+          "Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV",
+          "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC",
+        };
+
+        const members = (cgData.members ?? []).map((m: any) => {
+          const rawName: string = m.name ?? "";
+          const commaIdx = rawName.indexOf(",");
+          const displayName = commaIdx > -1
+            ? `${rawName.slice(commaIdx + 1).trim()} ${rawName.slice(0, commaIdx).trim()}`
+            : rawName;
+          const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
+            : m.terms?.item ? [m.terms.item] : [];
+          const latestTerm = terms[terms.length - 1];
+          const chamber: string = latestTerm?.chamber ?? "";
+          const isSenate = chamber.toLowerCase().includes("senate");
+          const stateRaw = (m.stateCode ?? m.state ?? "").trim();
+          const stateCode = stateRaw.length === 2 ? stateRaw.toUpperCase() : (STATE_NAME_TO_CODE[stateRaw] ?? stateRaw);
+          const title = isSenate ? "U.S. Senator" : `U.S. Representative${m.district ? `, District ${m.district}` : ""}`;
+          return {
+            bioguideId: m.bioguideId ?? `cg-${displayName.replace(/\s+/g, "-")}`,
+            name: displayName,
+            title,
+            chamber: isSenate ? "Senate" : "House" as "Senate" | "House",
+            party: m.partyName ?? "",
+            state: stateCode,
+            district: m.district ? String(m.district) : null,
+            website: m.officialWebsiteUrl ?? null,
+            imageUrl: m.depiction?.imageUrl ?? null,
+          };
+        });
+        members.sort((a: any, b: any) => {
+          if (a.chamber !== b.chamber) return a.chamber === "Senate" ? -1 : 1;
+          return (Number(a.district) || 0) - (Number(b.district) || 0);
+        });
+        return res.json(members);
+      }
+
+      // ── ZIP search: WhoIsMyRepresentative.com ──────────────────────────────
+      if (!/^\d{5}$/.test(zip!)) return res.status(400).json({ error: "ZIP must be 5 digits" });
 
       const partyFull: Record<string, string> = {
         D: "Democrat", R: "Republican", I: "Independent",
         L: "Libertarian", G: "Green", ID: "Independent Democrat",
       };
 
-      let url: string;
-      if (zip) {
-        if (!/^\d{5}$/.test(zip)) return res.status(400).json({ error: "ZIP must be 5 digits" });
-        url = `https://whoismyrepresentative.com/getall_mems.php?zip=${zip}&output=json`;
-      } else {
-        url = `https://whoismyrepresentative.com/getall_mems.php?name=${encodeURIComponent(name!)}&output=json`;
-      }
-
-      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      const url = `https://whoismyrepresentative.com/getall_mems.php?zip=${zip}&output=json`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
       // API returns 406 with message when no results found
       if (resp.status === 406) return res.json([]);
       if (!resp.ok) return res.status(resp.status).json({ error: "WhoIsMyRepresentative API error" });
 
-      const data = await resp.json() as { results?: any[] };
-      const members = (data.results ?? []).map((m: any, idx: number) => {
+      // Guard: API sometimes returns HTML on errors even with 200 status
+      const text = await resp.text();
+      let wimrData: { results?: any[] };
+      try { wimrData = JSON.parse(text); } catch { return res.json([]); }
+
+      const members = (wimrData.results ?? []).map((m: any, idx: number) => {
         const isSenate = !m.district || m.district === "" || m.district === "0";
         const district = isSenate ? null : String(m.district);
         return {
@@ -2886,7 +2944,6 @@ Rules:
           imageUrl: null,
         };
       });
-      // Sort senators first
       members.sort((a: any, b: any) => {
         if (a.chamber !== b.chamber) return a.chamber === "Senate" ? -1 : 1;
         return (Number(a.district) || 0) - (Number(b.district) || 0);
