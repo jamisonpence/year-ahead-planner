@@ -3509,13 +3509,10 @@ Rules:
         } catch { return {}; }
       };
 
-      // For House reps use congressional_district geo layer; senators use state
       const districtPadded = district ? district.replace(/\D/g, "").padStart(2, "0") : "00";
-      const districtCode   = `${state.toUpperCase()}-${districtPadded}`;   // e.g. "TX-07"
-      const geoLayer       = isSenate ? "state" : "congressional_district";
-      const geoLayerFilter = isSenate ? state.toUpperCase() : districtCode;
+      const districtCode   = `${state.toUpperCase()}-${districtPadded}`;
 
-      // place_of_performance_locations filter (for category endpoints)
+      // place_of_performance_locations — senators get whole state, reps get their district
       const geoFilter = isSenate
         ? [{ country: "USA", state: state.toUpperCase() }]
         : [{ country: "USA", state: state.toUpperCase(), congressional_district: districtPadded }];
@@ -3525,20 +3522,26 @@ Rules:
         place_of_performance_locations: geoFilter,
       };
 
-      // Award type codes
       const contractCodes  = ["A","B","C","D"];
       const grantCodes     = ["02","03","04","05"];
       const directPayCodes = ["06","10"];
       const loanCodes      = ["07","08"];
 
-      // Geography body — uses correct layer for senator vs rep
-      const geoBody = (typeCodes: string[]) => ({
-        scope:             "place_of_performance",
-        geo_layer:         geoLayer,
-        geo_layer_filters: [geoLayerFilter],
-        filters:           { time_period: [{ start_date: fyStart, end_date: fyEnd }], award_type_codes: typeCodes },
-        subawards:         false,
+      // Senators: geo_layer "state" with geo_layer_filters (fast, returns one row).
+      // House reps: geo_layer "congressional_district" with place_of_performance_locations filter
+      //   (geo_layer_filters doesn't support "TX-07" format — use filters instead and sum results).
+      const senateGeoBody = (extra: object = {}) => ({
+        scope: "place_of_performance", geo_layer: "state",
+        geo_layer_filters: [state.toUpperCase()],
+        filters: { time_period: [{ start_date: fyStart, end_date: fyEnd }], ...extra },
+        subawards: false,
       });
+      const houseGeoBody = (extra: object = {}) => ({
+        scope: "place_of_performance", geo_layer: "congressional_district",
+        filters: { time_period: [{ start_date: fyStart, end_date: fyEnd }], place_of_performance_locations: geoFilter, ...extra },
+        subawards: false,
+      });
+      const geoBody = (extra: object = {}) => isSenate ? senateGeoBody(extra) : houseGeoBody(extra);
 
       // Previous FY fallback
       const prevFyStart = `${fy - 2}-10-01`;
@@ -3553,22 +3556,16 @@ Rules:
       const cfdaFiltersPrev = { ...prevBaseFilters, award_type_codes: assistanceCodes };
       const catBody = (filters: object, limit = 10) => ({ filters, limit, page: 1, subawards: false });
 
-      // 11 parallel requests
       const [
         totalRes, contractsRes, grantsRes, directRes, loansRes,
         programRes,   agencyRes,   recipientRes,
         programResPrev, agencyResPrev, recipientResPrev,
       ] = await Promise.allSettled([
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", {
-          scope: "place_of_performance", geo_layer: geoLayer,
-          geo_layer_filters: [geoLayerFilter],
-          filters: { time_period: [{ start_date: fyStart, end_date: fyEnd }] },
-          subawards: false,
-        }),
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(contractCodes)),
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(grantCodes)),
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(directPayCodes)),
-        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(loanCodes)),
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody()),
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody({ award_type_codes: contractCodes })),
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody({ award_type_codes: grantCodes })),
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody({ award_type_codes: directPayCodes })),
+        safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody({ award_type_codes: loanCodes })),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",            catBody(cfdaFilters, 10)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(baseFilters, 8)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(baseFilters, 10)),
@@ -3589,11 +3586,16 @@ Rules:
 
       const getGeoAmount = (res: PromiseSettledResult<any>) => {
         if (res.status !== "fulfilled") return 0;
-        const target = geoLayerFilter.toUpperCase();
-        const row = ((res.value?.results ?? []) as any[]).find(
-          (r: any) => (r.shape_code ?? "").toUpperCase() === target
-        );
-        return (row?.aggregated_amount ?? 0) as number;
+        const results: any[] = res.value?.results ?? [];
+        if (isSenate) {
+          // State layer returns one row per state — find ours by shape_code
+          const row = results.find((r: any) => (r.shape_code ?? "").toUpperCase() === state.toUpperCase());
+          return (row?.aggregated_amount ?? 0) as number;
+        } else {
+          // Congressional district layer filtered by place_of_performance_locations —
+          // sum all returned rows (should be just the one matching district)
+          return results.reduce((sum: number, r: any) => sum + ((r.aggregated_amount ?? 0) as number), 0);
+        }
       };
 
       const totalSpending  = getGeoAmount(totalRes);
