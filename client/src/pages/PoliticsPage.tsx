@@ -1528,21 +1528,56 @@ function ballotpediaUrl(rawName: string): string {
 
 // ── Policy topic categorization (client-side) ─────────────────────────────────
 
-const POLICY_BUCKETS: Array<{ label: string; emoji: string; keywords: string[] }> = [
-  { label: "Healthcare",        emoji: "🏥", keywords: ["health", "medical", "medicare", "medicaid", "prescription", "drug", "hospital", "insurance", "opioid", "affordable care", "mental health"] },
-  { label: "Economy & Taxes",   emoji: "💵", keywords: ["tax", "budget", "fiscal", "deficit", "debt", "trade", "tariff", "jobs", "employment", "wage", "workforce", "small business", "economic"] },
-  { label: "Defense & Veterans",emoji: "🎖️", keywords: ["defense", "military", "veteran", "armed forces", "national security", "army", "navy", "air force", "pentagon"] },
-  { label: "Environment",       emoji: "🌿", keywords: ["climate", "energy", "clean", "environment", "epa", "emissions", "carbon", "oil", "gas", "renewable", "solar", "wind", "conservation"] },
-  { label: "Immigration",       emoji: "🌐", keywords: ["immigr", "border", "asylum", "daca", "refugee", "visa", "citizenship", "undocumented"] },
-  { label: "Education",         emoji: "📚", keywords: ["education", "school", "student", "university", "college", "loan", "teacher", "pell", "literacy"] },
-  { label: "Gun Policy",        emoji: "🔫", keywords: ["gun", "firearm", "second amendment", "background check", "weapon"] },
-  { label: "Foreign Policy",    emoji: "🌍", keywords: ["foreign", "israel", "ukraine", "china", "russia", "nato", "diplomacy", "sanction", "international aid"] },
-  { label: "Criminal Justice",  emoji: "⚖️", keywords: ["crime", "criminal", "justice", "police", "law enforcement", "prison", "sentencing", "fentanyl", "opioid"] },
-  { label: "Social Issues",     emoji: "🤝", keywords: ["abortion", "lgbtq", "civil rights", "discrimination", "women", "gender", "reproductive"] },
+const POLICY_BUCKETS: Array<{
+  label: string; emoji: string; keywords: string[];
+  forLabel: string;     // What voting FOR bills in this area typically means
+  againstLabel: string; // What voting AGAINST typically means
+}> = [
+  { label: "Healthcare",         emoji: "🏥",
+    keywords: ["health", "medical", "medicare", "medicaid", "prescription", "drug", "hospital", "insurance", "opioid", "affordable care", "mental health"],
+    forLabel:     "Expand healthcare coverage & access",
+    againstLabel: "Limit healthcare mandates & spending" },
+  { label: "Economy & Taxes",    emoji: "💵",
+    keywords: ["tax", "budget", "fiscal", "deficit", "debt", "trade", "tariff", "jobs", "employment", "wage", "workforce", "small business", "economic"],
+    forLabel:     "Support economic programs & spending",
+    againstLabel: "Cut spending & oppose fiscal programs" },
+  { label: "Defense & Veterans", emoji: "🎖️",
+    keywords: ["defense", "military", "veteran", "armed forces", "national security", "army", "navy", "air force", "pentagon"],
+    forLabel:     "Increase defense & veterans' funding",
+    againstLabel: "Reduce defense budget & military spending" },
+  { label: "Environment",        emoji: "🌿",
+    keywords: ["climate", "energy", "clean", "environment", "epa", "emissions", "carbon", "oil", "gas", "renewable", "solar", "wind", "conservation"],
+    forLabel:     "Support climate action & clean energy",
+    againstLabel: "Oppose climate regulations & green mandates" },
+  { label: "Immigration",        emoji: "🌐",
+    keywords: ["immigr", "border", "asylum", "daca", "refugee", "visa", "citizenship", "undocumented"],
+    forLabel:     "Support immigration pathways & protections",
+    againstLabel: "Restrict immigration & tighten border security" },
+  { label: "Education",          emoji: "📚",
+    keywords: ["education", "school", "student", "university", "college", "loan", "teacher", "pell", "literacy"],
+    forLabel:     "Expand education funding & student aid",
+    againstLabel: "Reduce federal education spending & control" },
+  { label: "Gun Policy",         emoji: "🔫",
+    keywords: ["gun", "firearm", "second amendment", "background check", "weapon", "atf", "ammunition"],
+    forLabel:     "Pro-gun rights & 2nd Amendment",
+    againstLabel: "Support gun safety measures & restrictions" },
+  { label: "Foreign Policy",     emoji: "🌍",
+    keywords: ["foreign", "israel", "ukraine", "china", "russia", "nato", "diplomacy", "sanction", "international aid", "overseas"],
+    forLabel:     "Support foreign engagement & international aid",
+    againstLabel: "Oppose foreign aid & overseas intervention" },
+  { label: "Criminal Justice",   emoji: "⚖️",
+    keywords: ["crime", "criminal", "justice", "police", "law enforcement", "prison", "sentencing", "fentanyl"],
+    forLabel:     "Tough on crime & support law enforcement",
+    againstLabel: "Support criminal justice reform & rehabilitation" },
+  { label: "Social Issues",      emoji: "🤝",
+    keywords: ["abortion", "lgbtq", "civil rights", "discrimination", "women", "gender", "reproductive", "equality"],
+    forLabel:     "Support civil rights & social justice measures",
+    againstLabel: "Oppose social justice legislation" },
 ];
 
 function categorizeVotes(votes: any[]): Array<{
   label: string; emoji: string; yea: number; nay: number;
+  forLabel: string; againstLabel: string;
   examples: Array<{ text: string; vote: string }>;
 }> {
   return POLICY_BUCKETS.map(bucket => {
@@ -1854,9 +1889,9 @@ function CandidateDetails({
   const TABS = [
     { id: "finance",   label: "💰 Finance" },
     { id: "spending",  label: "💸 Campaign $" },
+    { id: "gov",       label: "🏛️ Gov. Spending" },
     { id: "votes",     label: "🗳️ Votes" },
     { id: "positions", label: "📋 Positions" },
-    { id: "gov",       label: "🏛️ Gov. Spending" },
   ] as const;
 
   return (
@@ -2175,16 +2210,18 @@ function CandidateDetails({
                 {topicBreakdown.map(b => {
                   const total = b.yea + b.nay;
                   const yeaPct = Math.round((b.yea / total) * 100);
-                  const stance    = yeaPct >= 65 ? "Generally Supports" : yeaPct <= 35 ? "Generally Opposes" : "Mixed Record";
-                  const stanceCls = yeaPct >= 65 ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
-                                  : yeaPct <= 35 ? "text-red-400 bg-red-400/10 border-red-400/20"
+                  const isFor     = yeaPct >= 65;
+                  const isAgainst = yeaPct <= 35;
+                  const stance    = isFor ? b.forLabel : isAgainst ? b.againstLabel : "Mixed record";
+                  const stanceCls = isFor    ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
+                                  : isAgainst ? "text-red-400 bg-red-400/10 border-red-400/20"
                                   : "text-amber-400 bg-amber-400/10 border-amber-400/20";
                   return (
                     <div key={b.label} className="rounded-lg border bg-secondary/20 p-2.5 space-y-2">
                       {/* Header row */}
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-start justify-between gap-2">
                         <span className="text-[12px] font-semibold">{b.emoji} {b.label}</span>
-                        <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${stanceCls}`}>
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border text-right leading-snug ${stanceCls}`}>
                           {stance}
                         </span>
                       </div>
@@ -2195,10 +2232,22 @@ function CandidateDetails({
                         <div className="bg-red-400 transition-all" style={{ width: `${100 - yeaPct}%` }} />
                       </div>
 
-                      {/* Vote tally */}
+                      {/* Vote tally with context */}
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-emerald-400 font-medium">✓ {b.yea} voted for</span>
-                        <span className="text-red-400 font-medium">✗ {b.nay} voted against</span>
+                        <span className="text-emerald-400 font-medium">✓ {b.yea} yea{b.yea !== 1 ? "s" : ""}</span>
+                        <span className="text-[9px] text-muted-foreground/50 italic truncate mx-2 hidden sm:block">{b.forLabel}</span>
+                        <span className="text-red-400 font-medium">✗ {b.nay} nay{b.nay !== 1 ? "s" : ""}</span>
+                      </div>
+                      {/* What yea/nay actually means */}
+                      <div className="grid grid-cols-2 gap-1 text-[9px]">
+                        <div className="flex items-start gap-1 text-muted-foreground/60">
+                          <span className="text-emerald-400/70 shrink-0 mt-px">✓</span>
+                          <span className="leading-snug">{b.forLabel}</span>
+                        </div>
+                        <div className="flex items-start gap-1 text-muted-foreground/60">
+                          <span className="text-red-400/70 shrink-0 mt-px">✗</span>
+                          <span className="leading-snug">{b.againstLabel}</span>
+                        </div>
                       </div>
 
                       {/* Example votes */}
