@@ -3387,9 +3387,23 @@ Rules:
       console.log(`[spending] committeeId=${committeeId}`);
       if (!committeeId) return res.status(404).json({ error: `No FEC committee found for ${candidate.name}` });
 
-      // Fetch raw Schedule B transactions — try multiple cycle params until we get data
-      let disbursements: any[] = [];
+      // Fetch official total disbursements from committee totals (accurate, not limited by pagination)
+      let officialTotal = 0;
       let activeCycle = fecCycle;
+      for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
+        const totalsUrl = `https://api.open.fec.gov/v1/committee/${committeeId}/totals/?cycle=${tryCycle}&per_page=2&api_key=${apiKey}`;
+        const totalsData = await fetch(totalsUrl, { signal: AbortSignal.timeout(10000) }).then(safeJson);
+        const t = (totalsData.results ?? [])[0];
+        if (t?.disbursements != null) {
+          officialTotal = t.disbursements;
+          activeCycle = tryCycle;
+          console.log(`[spending] officialTotal=${officialTotal} from committee totals cycle=${tryCycle}`);
+          break;
+        }
+      }
+
+      // Fetch raw Schedule B transactions for category breakdown (top 100 by amount)
+      let disbursements: any[] = [];
 
       for (const tryCycle of [fecCycle, fecCycle - 2, fecCycle - 4]) {
         for (const cycleParam of ["two_year_period", "cycle"]) {
@@ -3461,7 +3475,9 @@ Rules:
         }
       }
 
-      const totalDisbursements = [...categoryMap.values()].reduce((s, v) => s + v, 0);
+      // Use official total from FEC committee totals; fall back to summing records if unavailable
+      const summedDisbursements = [...categoryMap.values()].reduce((s, v) => s + v, 0);
+      const totalDisbursements = officialTotal > 0 ? officialTotal : summedDisbursements;
 
       const byPurpose = [...categoryMap.entries()]
         .map(([purpose, total]) => ({ purpose, total }))

@@ -1839,7 +1839,7 @@ function CandidateDetails({
 
   const TABS = [
     { id: "finance",   label: "💰 Finance" },
-    { id: "spending",  label: "💸 Spending" },
+    { id: "spending",  label: "💸 Campaign $" },
     { id: "votes",     label: "🗳️ Votes" },
     { id: "positions", label: "📋 Positions" },
     { id: "gov",       label: "🏛️ Gov. Spending" },
