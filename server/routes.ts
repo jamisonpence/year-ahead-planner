@@ -4160,6 +4160,17 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
     } catch (e) { handleError(res, e); }
   });
 
+  // Robust JSON array extraction — handles markdown fences, preamble text, etc.
+  function extractJsonArray(raw: string): any[] {
+    const attempt = (s: string) => { const v = JSON.parse(s); if (!Array.isArray(v)) throw new Error("not array"); return v; };
+    try { return attempt(raw.trim()); } catch {}
+    const stripped = raw.replace(/^```(?:json)?\s*/im, "").replace(/\s*```\s*$/im, "").trim();
+    try { return attempt(stripped); } catch {}
+    const m = stripped.match(/\[[\s\S]*\]/);
+    if (m) try { return attempt(m[0]); } catch {}
+    throw new SyntaxError("No valid JSON array found in response");
+  }
+
   // ── Voter Match — Auto-detect candidates from election names ─────────────────
   // POST /api/politics/voter-match/suggest-candidates
   // Body: { elections: Array<{ name, date?, level? }> }
@@ -4223,8 +4234,7 @@ Rules:
 
       const claudeData = await claudeRes.json() as any;
       const raw: string = claudeData?.content?.[0]?.text ?? "[]";
-      const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      const candidates = JSON.parse(cleaned);
+      const candidates = extractJsonArray(raw);
       res.json({ candidates });
     } catch (e) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
@@ -4345,8 +4355,7 @@ Rules:
 
       const claudeData = await claudeRes.json() as any;
       const raw: string = claudeData?.content?.[0]?.text ?? "";
-      const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      const matches = JSON.parse(cleaned);
+      const matches = extractJsonArray(raw);
       res.json({ matches });
     } catch (e) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });

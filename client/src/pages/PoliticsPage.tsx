@@ -3859,26 +3859,27 @@ function ElectionsTab() {
   const [matchResult, setMatchResult]         = useState<any[] | null>(null);
   const [matchError, setMatchError]           = useState<string | null>(null);
   const [expandedMatch, setExpandedMatch]     = useState<number | null>(null);
-  // detectedCandidates: parsed objects from auto-detect, so we can send richer data
   const [detectedCandidates, setDetectedCandidates] = useState<any[] | null>(null);
+  // Which of the user's saved elections is selected for auto-suggest
+  const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
-  async function suggestCandidates() {
-    const upcomingElections = elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date())));
-    if (upcomingElections.length === 0) {
+  async function suggestCandidates(electionList?: Array<{ name: string; date?: string | null; level?: string | null }>) {
+    const list = electionList ?? elections
+      .filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date())))
+      .map(e => ({ name: e.name, date: e.date, level: e.level }));
+    if (list.length === 0) {
       toast({ title: "No upcoming elections found", description: "Add elections first, then auto-detect candidates.", variant: "destructive" });
       return;
     }
     setSuggestLoading(true);
     setMatchError(null);
+    setMatchResult(null);
     try {
-      const r = await apiRequest("POST", "/api/politics/voter-match/suggest-candidates", {
-        elections: upcomingElections.map(e => ({ name: e.name, date: e.date, level: e.level })),
-      });
+      const r = await apiRequest("POST", "/api/politics/voter-match/suggest-candidates", { elections: list });
       const body = await r.json();
       if (!r.ok) throw new Error(body.error ?? "Failed to detect candidates.");
       const candidates: any[] = body.candidates ?? [];
       setDetectedCandidates(candidates);
-      // Format for textarea display
       const lines = candidates.map((c: any) =>
         `${c.name}${c.party ? ` (${c.party})` : ""}${c.office ? ` — ${c.office}` : ""}`
       );
@@ -4012,7 +4013,7 @@ function ElectionsTab() {
               <p className="text-xs text-muted-foreground">Scored against your Issues &amp; Political Identity</p>
             </div>
             <button
-              onClick={() => { setMatchOpen(false); setMatchResult(null); setMatchError(null); setCandidateInput(""); setDetectedCandidates(null); }}
+              onClick={() => { setMatchOpen(false); setMatchResult(null); setMatchError(null); setCandidateInput(""); setDetectedCandidates(null); setSelectedElectionId(null); }}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               <X size={16} />
@@ -4023,33 +4024,82 @@ function ElectionsTab() {
             {/* Step 1: Candidate input */}
             {!matchResult && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Who are you deciding between?</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={suggestCandidates}
-                    disabled={suggestLoading}
-                    className="gap-1.5 text-xs h-7 border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
-                  >
-                    {suggestLoading
-                      ? <><Loader2 size={11} className="animate-spin" />Detecting…</>
-                      : <><RefreshCw size={11} />Auto-detect from my elections</>}
-                  </Button>
-                </div>
-                <Textarea
-                  value={candidateInput}
-                  onChange={e => { setCandidateInput(e.target.value); setDetectedCandidates(null); }}
-                  placeholder={"Ted Cruz (Republican) — U.S. Senate\nBeto O'Rourke (Democrat) — U.S. Senate\n\nOr just type names, one per line"}
-                  rows={5}
-                  className="text-sm font-mono resize-none"
-                />
-                {detectedCandidates && (
-                  <p className="text-[11px] text-violet-500 flex items-center gap-1">
-                    <Sparkles size={10} />
-                    {detectedCandidates.length} candidates auto-detected from your {elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date()))).length} upcoming election(s). Edit as needed.
+                {/* Election chips */}
+                {(() => {
+                  const upcomingUserElections = elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date())));
+                  if (upcomingUserElections.length === 0) return null;
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select an election to research</p>
+                      <div className="flex flex-wrap gap-2">
+                        {upcomingUserElections.map(e => {
+                          const isSelected = selectedElectionId === e.id;
+                          return (
+                            <button
+                              key={e.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedElectionId(null);
+                                  setCandidateInput("");
+                                  setDetectedCandidates(null);
+                                } else {
+                                  setSelectedElectionId(e.id);
+                                  setCandidateInput("");
+                                  setDetectedCandidates(null);
+                                  suggestCandidates([{ name: e.name, date: e.date, level: e.level }]);
+                                }
+                              }}
+                              disabled={suggestLoading}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                                isSelected
+                                  ? "bg-violet-600 text-white border-violet-600"
+                                  : "border-violet-400/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+                              }`}
+                            >
+                              {suggestLoading && isSelected
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <Vote size={10} />}
+                              {e.name}
+                              {e.date && <span className="opacity-70">· {format(parseISO(e.date), "M/d/yy")}</span>}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => suggestCandidates()}
+                          disabled={suggestLoading}
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-violet-400/50 hover:text-violet-500 transition-all flex items-center gap-1.5"
+                        >
+                          {suggestLoading && selectedElectionId === null
+                            ? <Loader2 size={10} className="animate-spin" />
+                            : <RefreshCw size={10} />}
+                          All elections
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date()))).length > 0
+                      ? "Or enter candidates manually"
+                      : "Who are you deciding between?"}
                   </p>
-                )}
+                  <Textarea
+                    value={candidateInput}
+                    onChange={e => { setCandidateInput(e.target.value); setDetectedCandidates(null); setSelectedElectionId(null); }}
+                    placeholder={"Ted Cruz (Republican) — U.S. Senate\nBeto O'Rourke (Democrat) — U.S. Senate\n\nOr just type names, one per line"}
+                    rows={4}
+                    className="text-sm font-mono resize-none"
+                  />
+                  {detectedCandidates && (
+                    <p className="text-[11px] text-violet-500 flex items-center gap-1.5">
+                      <Sparkles size={10} />
+                      {detectedCandidates.length} candidates detected. Edit names above if needed.
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={runVoterMatch}
@@ -4078,7 +4128,7 @@ function ElectionsTab() {
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Match Results · Ranked by alignment</p>
                   <Button
                     size="sm" variant="ghost"
-                    onClick={() => { setMatchResult(null); setCandidateInput(""); setDetectedCandidates(null); setMatchError(null); }}
+                    onClick={() => { setMatchResult(null); setCandidateInput(""); setDetectedCandidates(null); setMatchError(null); setSelectedElectionId(null); }}
                     className="text-xs h-7 gap-1"
                   >
                     <RefreshCw size={11} />New analysis
