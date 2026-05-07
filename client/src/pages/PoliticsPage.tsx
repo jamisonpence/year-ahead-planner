@@ -5,7 +5,8 @@ import {
   Landmark, Users, BookOpen, Zap, Newspaper, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
-  DollarSign, MapPin, Clock, Users2, TrendingDown, Compass,
+  DollarSign, MapPin, Clock, Users2, TrendingDown, Compass, Sparkles,
+  ChevronRight, RefreshCw, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -3850,6 +3851,70 @@ function ElectionsTab() {
     else createMut.mutate(form);
   }
 
+  // ── Voter Match state ──────────────────────────────────────────────────────
+  const [matchOpen, setMatchOpen]             = useState(false);
+  const [candidateInput, setCandidateInput]   = useState("");
+  const [matchLoading, setMatchLoading]       = useState(false);
+  const [suggestLoading, setSuggestLoading]   = useState(false);
+  const [matchResult, setMatchResult]         = useState<any[] | null>(null);
+  const [matchError, setMatchError]           = useState<string | null>(null);
+  const [expandedMatch, setExpandedMatch]     = useState<number | null>(null);
+  // detectedCandidates: parsed objects from auto-detect, so we can send richer data
+  const [detectedCandidates, setDetectedCandidates] = useState<any[] | null>(null);
+
+  async function suggestCandidates() {
+    const upcomingElections = elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date())));
+    if (upcomingElections.length === 0) {
+      toast({ title: "No upcoming elections found", description: "Add elections first, then auto-detect candidates.", variant: "destructive" });
+      return;
+    }
+    setSuggestLoading(true);
+    setMatchError(null);
+    try {
+      const r = await apiRequest("POST", "/api/politics/voter-match/suggest-candidates", {
+        elections: upcomingElections.map(e => ({ name: e.name, date: e.date, level: e.level })),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? "Failed to detect candidates.");
+      const candidates: any[] = body.candidates ?? [];
+      setDetectedCandidates(candidates);
+      // Format for textarea display
+      const lines = candidates.map((c: any) =>
+        `${c.name}${c.party ? ` (${c.party})` : ""}${c.office ? ` — ${c.office}` : ""}`
+      );
+      setCandidateInput(lines.join("\n"));
+    } catch (e: any) {
+      setMatchError(e.message ?? "Could not auto-detect candidates.");
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+
+  async function runVoterMatch() {
+    const lines = candidateInput.split(/[\n]+/).map(s => s.trim()).filter(Boolean);
+    if (lines.length === 0) { toast({ title: "Enter at least one candidate name", variant: "destructive" }); return; }
+    // Parse formatted lines: "Name (Party) — Office"
+    const candidates = lines.map(line => {
+      const m = line.match(/^(.+?)\s*\(([^)]+)\)\s*(?:[—–-]\s*(.+))?$/);
+      if (m) return { name: m[1].trim(), party: m[2].trim(), office: m[3]?.trim() };
+      return { name: line };
+    });
+    setMatchLoading(true);
+    setMatchError(null);
+    setMatchResult(null);
+    try {
+      const r = await apiRequest("POST", "/api/politics/voter-match", { candidates });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? "Failed to analyze candidates.");
+      setMatchResult(body.matches ?? []);
+      setExpandedMatch(0);
+    } catch (e: any) {
+      setMatchError(e.message ?? "Something went wrong. Try again.");
+    } finally {
+      setMatchLoading(false);
+    }
+  }
+
   const today = startOfDay(new Date());
   const upcoming = elections.filter(e => !e.date || isAfter(parseISO(e.date), today));
   const past = elections.filter(e => e.date && isBefore(parseISO(e.date), today));
@@ -3913,6 +3978,227 @@ function ElectionsTab() {
 
   return (
     <div className="space-y-4">
+
+      {/* ── AI Voter Match ─────────────────────────────────────────────────── */}
+      {!matchOpen ? (
+        /* CLOSED: Hero button */
+        <button
+          onClick={() => setMatchOpen(true)}
+          className="w-full text-left rounded-xl border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/10 via-blue-500/5 to-transparent hover:from-violet-500/15 hover:border-violet-500/50 transition-all overflow-hidden"
+        >
+          <div className="px-5 py-5 flex items-center gap-4">
+            <div className="w-11 h-11 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
+              <Sparkles size={20} className="text-violet-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-base">AI Voter Match</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Research candidates against your Issues &amp; Political Identity to find who to vote for
+              </p>
+            </div>
+            <ArrowRight size={18} className="text-violet-400 shrink-0" />
+          </div>
+        </button>
+      ) : (
+        /* OPEN: Full analysis panel */
+        <div className="rounded-xl border-2 border-violet-500/30 bg-card overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b bg-gradient-to-r from-violet-500/10 to-transparent">
+            <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
+              <Sparkles size={15} className="text-violet-500" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm">AI Voter Match</p>
+              <p className="text-xs text-muted-foreground">Scored against your Issues &amp; Political Identity</p>
+            </div>
+            <button
+              onClick={() => { setMatchOpen(false); setMatchResult(null); setMatchError(null); setCandidateInput(""); setDetectedCandidates(null); }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            {/* Step 1: Candidate input */}
+            {!matchResult && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Who are you deciding between?</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={suggestCandidates}
+                    disabled={suggestLoading}
+                    className="gap-1.5 text-xs h-7 border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+                  >
+                    {suggestLoading
+                      ? <><Loader2 size={11} className="animate-spin" />Detecting…</>
+                      : <><RefreshCw size={11} />Auto-detect from my elections</>}
+                  </Button>
+                </div>
+                <Textarea
+                  value={candidateInput}
+                  onChange={e => { setCandidateInput(e.target.value); setDetectedCandidates(null); }}
+                  placeholder={"Ted Cruz (Republican) — U.S. Senate\nBeto O'Rourke (Democrat) — U.S. Senate\n\nOr just type names, one per line"}
+                  rows={5}
+                  className="text-sm font-mono resize-none"
+                />
+                {detectedCandidates && (
+                  <p className="text-[11px] text-violet-500 flex items-center gap-1">
+                    <Sparkles size={10} />
+                    {detectedCandidates.length} candidates auto-detected from your {elections.filter(e => !e.date || isAfter(parseISO(e.date), startOfDay(new Date()))).length} upcoming election(s). Edit as needed.
+                  </p>
+                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={runVoterMatch}
+                    disabled={matchLoading || !candidateInput.trim()}
+                    className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  >
+                    {matchLoading
+                      ? <><Loader2 size={14} className="animate-spin" />Analyzing…</>
+                      : <><Sparkles size={14} />Find My Best Match</>}
+                  </Button>
+                  {matchLoading && (
+                    <p className="text-xs text-muted-foreground">Researching public records…</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {matchError && (
+              <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{matchError}</p>
+            )}
+
+            {/* Results */}
+            {matchResult && matchResult.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Match Results · Ranked by alignment</p>
+                  <Button
+                    size="sm" variant="ghost"
+                    onClick={() => { setMatchResult(null); setCandidateInput(""); setDetectedCandidates(null); setMatchError(null); }}
+                    className="text-xs h-7 gap-1"
+                  >
+                    <RefreshCw size={11} />New analysis
+                  </Button>
+                </div>
+                {matchResult
+                  .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
+                  .map((m, idx) => {
+                    const score = m.matchScore ?? 0;
+                    const barColor = score >= 70 ? "bg-emerald-500" : score >= 45 ? "bg-amber-500" : "bg-red-500";
+                    const badgeColor = score >= 70
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                      : score >= 45
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                        : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+                    const isExpanded = expandedMatch === idx;
+                    const isTop = idx === 0;
+                    return (
+                      <div key={idx} className={`rounded-xl overflow-hidden border ${isTop ? "border-violet-400/40 ring-1 ring-violet-400/20" : ""}`}>
+                        {isTop && (
+                          <div className="px-4 py-1.5 bg-violet-500/10 border-b border-violet-400/20">
+                            <p className="text-[10px] font-bold text-violet-500 uppercase tracking-widest">⭐ Best Match</p>
+                          </div>
+                        )}
+                        <button
+                          className="w-full px-4 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors text-left"
+                          onClick={() => setExpandedMatch(isExpanded ? null : idx)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <span className="font-semibold text-sm">{m.name}</span>
+                              {m.party && <Badge className="bg-secondary text-muted-foreground text-[10px]">{m.party}</Badge>}
+                              {m.office && <span className="text-xs text-muted-foreground truncate">{m.office}</span>}
+                              <Badge className={`${badgeColor} ml-auto text-xs font-bold px-2`}>{score}% match</Badge>
+                            </div>
+                            <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${score}%` }} />
+                            </div>
+                          </div>
+                          <div className="shrink-0 ml-2">
+                            {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="border-t px-4 pb-4 pt-3 space-y-3 bg-secondary/10">
+                            {m.recommendation && (
+                              <p className="text-sm italic text-muted-foreground border-l-2 border-violet-400/40 pl-3">"{m.recommendation}"</p>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {m.alignments?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5">✅ Alignments</p>
+                                  <ul className="space-y-1">
+                                    {m.alignments.map((a: string, i: number) => (
+                                      <li key={i} className="text-xs flex gap-2">
+                                        <span className="text-emerald-500 shrink-0 mt-0.5">✓</span>
+                                        <span>{a}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {m.divergences?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1.5">⚠️ Divergences</p>
+                                  <ul className="space-y-1">
+                                    {m.divergences.map((d: string, i: number) => (
+                                      <li key={i} className="text-xs flex gap-2">
+                                        <span className="text-amber-500 shrink-0 mt-0.5">!</span>
+                                        <span>{d}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+
+                            {m.keyIssueBreakdown?.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">📋 Issue-by-Issue Breakdown</p>
+                                <div className="space-y-1.5">
+                                  {m.keyIssueBreakdown.map((ib: any, i: number) => (
+                                    <div key={i} className="flex items-start gap-2 text-xs bg-background/50 rounded-lg px-3 py-2">
+                                      <span className={ib.aligned ? "text-emerald-500 shrink-0 mt-0.5" : "text-red-400 shrink-0 mt-0.5"}>
+                                        {ib.aligned ? "✓" : "✗"}
+                                      </span>
+                                      <div>
+                                        <span className="font-semibold">{ib.issue}:</span>{" "}
+                                        <span className="text-muted-foreground">{ib.stance}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-3 flex-wrap pt-1 border-t">
+                              {m.confidence && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  Confidence: <span className="font-medium capitalize">{m.confidence}</span>
+                                </span>
+                              )}
+                              {m.note && <span className="text-[10px] text-muted-foreground italic">· {m.note}</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                <p className="text-[10px] text-muted-foreground text-center pt-1">
+                  AI analysis based on publicly available information · Always verify with primary sources
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <UpcomingElectionsPanel />
       <CivicElectionsLookup />
 

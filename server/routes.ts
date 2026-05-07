@@ -4160,6 +4160,200 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Voter Match — Auto-detect candidates from election names ─────────────────
+  // POST /api/politics/voter-match/suggest-candidates
+  // Body: { elections: Array<{ name, date?, level? }> }
+  // Uses Claude to identify notable candidates for each election.
+  app.post("/api/politics/voter-match/suggest-candidates", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const enc = (user as any).anthropicApiKeyEnc;
+      if (!enc) return res.status(402).json({ error: "No Anthropic API key saved. Add one in Settings → AI Features." });
+
+      let apiKey: string;
+      try { apiKey = decrypt(enc); }
+      catch { return res.status(500).json({ error: "Failed to decrypt API key. Re-save it in Settings." }); }
+
+      const { elections = [] } = req.body as { elections: Array<{ name: string; date?: string; level?: string }> };
+      if (elections.length === 0) return res.json({ candidates: [] });
+
+      const electionList = elections
+        .map((e, i) => `${i + 1}. "${e.name}"${e.date ? ` on ${e.date}` : ""}${e.level ? ` [${e.level}]` : ""}`)
+        .join("\n");
+
+      const prompt = `Based on these upcoming U.S. elections, identify the most notable candidates who would be on the ballot. Include major party candidates and any prominent independents.
+
+Elections:
+${electionList}
+
+Return ONLY a valid JSON array — no markdown fences, no extra text. Schema:
+[
+  {
+    "name": "Candidate Full Name",
+    "party": "Party name",
+    "office": "Office or race description",
+    "race": "Which election name this is for"
+  }
+]
+
+Rules:
+- Include 2–5 major candidates per election
+- Only include real people with verifiable public records
+- Use full legal names (e.g. "Rafael Edward Cruz" not "Ted Cruz" — but common name is fine)
+- If an election is too far in the future and candidates aren't yet known, omit it`;
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1200,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 300) });
+      }
+
+      const claudeData = await claudeRes.json() as any;
+      const raw: string = claudeData?.content?.[0]?.text ?? "[]";
+      const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      const candidates = JSON.parse(cleaned);
+      res.json({ candidates });
+    } catch (e) {
+      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      handleError(res, e);
+    }
+  });
+
+  // ── Voter Match — AI-powered candidate alignment analysis ────────────────────
+  // POST /api/politics/voter-match
+  // Body: { candidates: Array<{ name, party?, office?, race? }> }
+  // Reads user's issues + political identity from DB; returns per-candidate match scores.
+  app.post("/api/politics/voter-match", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const enc = (user as any).anthropicApiKeyEnc;
+      if (!enc) return res.status(402).json({ error: "No Anthropic API key saved. Add one in Settings → AI Features." });
+
+      let apiKey: string;
+      try { apiKey = decrypt(enc); }
+      catch { return res.status(500).json({ error: "Failed to decrypt API key. Re-save it in Settings." }); }
+
+      const { candidates = [] } = req.body as {
+        candidates: Array<{ name: string; party?: string; office?: string; race?: string }>;
+      };
+      if (candidates.length === 0) return res.status(400).json({ error: "Provide at least one candidate name." });
+
+      // Fetch user's issues + political identity from DB
+      const uid = await storage.getTabUserId(user.id, "politics");
+      const allIssues = await storage.getPoliticalIssues(uid);
+
+      const myIssues = allIssues
+        .filter((i: any) => i.category !== "Political Identity" && i.position && i.position !== "neutral")
+        .sort((a: any, b: any) => (b.importance ?? 3) - (a.importance ?? 3));
+
+      const identityItems = allIssues.filter((i: any) => i.category === "Political Identity");
+
+      if (myIssues.length === 0 && identityItems.length === 0) {
+        return res.status(400).json({ error: "No issues or political identity found. Add them in the Issues / Political Identity tabs first." });
+      }
+
+      // Build compact profile text
+      const issueSummary = myIssues.length > 0
+        ? myIssues.map((i: any) => {
+            const imp = i.importance ?? 3;
+            const impLabel = imp >= 5 ? "Critical" : imp >= 4 ? "Very important" : imp >= 3 ? "Important" : "Minor";
+            return `- ${i.topic}: ${i.position} (${impLabel}${i.notes ? `; ${i.notes}` : ""})`;
+          }).join("\n")
+        : "No specific issues added.";
+
+      const identitySummary = identityItems.length > 0
+        ? identityItems.map((i: any) => `- ${i.topic}: ${i.position}`).join("\n")
+        : "Not specified.";
+
+      const candidateList = candidates
+        .map((c, idx) =>
+          `${idx + 1}. ${c.name}${c.party ? ` (${c.party})` : ""}${c.office ? ` — ${c.office}` : ""}${c.race ? ` [${c.race}]` : ""}`
+        )
+        .join("\n");
+
+      const prompt = `You are a nonpartisan voter guide helping a voter identify which candidates best align with their stated priorities and values.
+
+VOTER'S POLITICAL PROFILE
+Issues & Positions (sorted by importance):
+${issueSummary}
+
+Political Identity:
+${identitySummary}
+
+CANDIDATES TO EVALUATE
+${candidateList}
+
+TASK
+For each candidate, use your knowledge of their public record, stated positions, voting history, and campaign messaging to analyze alignment with this voter's profile.
+
+Return ONLY a valid JSON array — no other text, no markdown fences. Schema:
+[
+  {
+    "name": "Exact candidate name from list",
+    "matchScore": 0-100,
+    "confidence": "high" | "medium" | "low",
+    "party": "party name or null",
+    "office": "office or race description",
+    "alignments": ["2-3 specific alignment points based on their record"],
+    "divergences": ["1-2 key differences or concerns"],
+    "keyIssueBreakdown": [
+      { "issue": "Issue topic from voter profile", "stance": "candidate's known stance in 1 sentence", "aligned": true | false }
+    ],
+    "recommendation": "One balanced sentence summarizing fit for this voter.",
+    "note": "Optional: if limited public info is available, note that here"
+  }
+]
+
+Rules:
+- matchScore reflects alignment with THIS voter's specific profile, not general electability
+- weight highly-important issues more in the score
+- Be factual and cite specific votes, bills, or public statements when possible
+- If a candidate is little-known, lower confidence and note it
+- Include keyIssueBreakdown for the voter's top 5 most important issues only`;
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 3000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        return res.status(502).json({ error: "Claude API error", detail: errText.slice(0, 300) });
+      }
+
+      const claudeData = await claudeRes.json() as any;
+      const raw: string = claudeData?.content?.[0]?.text ?? "";
+      const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      const matches = JSON.parse(cleaned);
+      res.json({ matches });
+    } catch (e) {
+      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      handleError(res, e);
+    }
+  });
+
   // Google Civic Information — elections, polling location, contests, drop boxes
   // Accepts: ?address=FULL_ADDRESS
   app.get("/api/politics/elections/civic", requireAuth, async (req, res) => {
