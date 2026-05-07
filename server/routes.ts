@@ -4388,11 +4388,29 @@ Rules:
       };
       const VALID_ABBREVS = new Set(Object.values(US_STATE_BY_NAME));
       const addrLower = address.trim().toLowerCase();
-      const detectedState: string | null =
+
+      // Try to detect state from input — works for both state names AND embedded in full addresses
+      let detectedState: string | null =
         US_STATE_BY_NAME[addrLower] ??
         (VALID_ABBREVS.has(addrLower) ? addrLower : null);
-      // A "full address" has at least a street number — skip voterinfo for state-only input
-      const isFullAddress = !detectedState && /\d/.test(address.trim());
+
+      // For full addresses, extract the 2-letter state code (e.g. "Austin, TX 78702" → "tx")
+      if (!detectedState) {
+        const m = address.match(/,\s*([A-Za-z]{2})\s*\d{5}/);  // ", TX 78702"
+        if (!m) {
+          // Also try trailing abbreviation: "Austin TX" or just "TX"
+          const m2 = address.trim().match(/\b([A-Za-z]{2})\s*$/);
+          if (m2 && VALID_ABBREVS.has(m2[1].toLowerCase())) {
+            detectedState = m2[1].toLowerCase();
+          }
+        } else if (VALID_ABBREVS.has(m[1].toLowerCase())) {
+          detectedState = m[1].toLowerCase();
+        }
+      }
+
+      // A "full address" has a street number — skip voterinfo for state-only input
+      const isFullAddress = /\d/.test(address.trim()) &&
+        !(VALID_ABBREVS.has(addrLower) || US_STATE_BY_NAME[addrLower]);
 
       // Fetch elections list always; voterinfo only for real addresses
       const encoded = encodeURIComponent(address.trim());
