@@ -2800,6 +2800,29 @@ function OfficialsTab() {
   }, {} as Record<string, PoliticalOfficial[]>);
   const ungrouped = officials.filter(o => !o.level || !LEVELS.map(l => l.toLowerCase()).includes(o.level.toLowerCase()));
 
+  // Sub-group a list of officials by stateCode, sorted alphabetically
+  function byState(list: PoliticalOfficial[]): { stateLabel: string; officials: PoliticalOfficial[] }[] {
+    const stateMap = new Map<string, PoliticalOfficial[]>();
+    for (const o of list) {
+      const key = o.stateCode?.toUpperCase() ?? "";
+      if (!stateMap.has(key)) stateMap.set(key, []);
+      stateMap.get(key)!.push(o);
+    }
+    return [...stateMap.entries()]
+      .sort(([a], [b]) => {
+        // Empty (no state) goes last
+        if (!a && b) return 1;
+        if (a && !b) return -1;
+        const nameA = US_STATES.find(s => s.code === a)?.name ?? a;
+        const nameB = US_STATES.find(s => s.code === b)?.name ?? b;
+        return nameA.localeCompare(nameB);
+      })
+      .map(([code, officials]) => ({
+        stateLabel: code ? (US_STATES.find(s => s.code === code)?.name ?? code) : "",
+        officials,
+      }));
+  }
+
   return (
     <div className="space-y-4">
       {/* Congress.gov search */}
@@ -2870,57 +2893,70 @@ function OfficialsTab() {
       {[...LEVELS, "Other"].map(level => {
         const group = level === "Other" ? ungrouped : grouped[level] ?? [];
         if (group.length === 0) return null;
+        const stateGroups = byState(group);
         return (
           <div key={level}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{level}</h3>
-            <div className="space-y-2">
-              {group.map(o => (
-                <div key={o.id} className="border rounded-xl bg-card">
-                  <div
-                    className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                    onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{o.name}</span>
-                        {o.title && <span className="text-xs text-muted-foreground">{o.title}</span>}
-                        {o.party && <Badge className={PARTY_COLORS[o.party] ?? "bg-secondary text-muted-foreground"}>{o.party}</Badge>}
-                        {o.district && <Badge className="bg-secondary text-muted-foreground">{o.district}</Badge>}
-                      </div>
-                      {o.termEnd && (
-                        <p className="text-xs text-muted-foreground mt-0.5">Term ends {format(parseISO(o.termEnd), "MMM yyyy")}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><Pencil size={13} /></button>
-                      <button onClick={e => { e.stopPropagation(); deleteMut.mutate(o.id); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 size={13} /></button>
-                      {expandedId === o.id ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                    </div>
-                  </div>
-                  {expandedId === o.id && (
-                    <div className="px-4 pb-4 border-t pt-3 space-y-2 text-sm">
-                      {o.phone && (
-                        <a href={`tel:${o.phone}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                          <Phone size={13} />{o.phone}
-                        </a>
-                      )}
-                      {o.email && (
-                        <a href={`mailto:${o.email}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                          <Mail size={13} />{o.email}
-                        </a>
-                      )}
-                      {o.website && (
-                        <a href={o.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline transition-colors">
-                          <Globe size={13} />Official website <ExternalLink size={11} />
-                        </a>
-                      )}
-                      {o.notes && <p className="text-muted-foreground text-xs mt-2 whitespace-pre-wrap">{o.notes}</p>}
-                      <VotingRecords official={o} />
-                      <CampaignFinance official={o} />
-                      <CampaignSpending official={o} />
-                      <GovernmentSpending official={o} />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{level}</h3>
+            <div className="space-y-4">
+              {stateGroups.map(({ stateLabel, officials: stateOfficials }) => (
+                <div key={stateLabel || "__none__"}>
+                  {stateLabel && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wide">{stateLabel}</span>
+                      <div className="flex-1 h-px bg-border/50" />
                     </div>
                   )}
+                  <div className="space-y-2">
+                    {stateOfficials.map(o => (
+                      <div key={o.id} className="border rounded-xl bg-card">
+                        <div
+                          className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                          onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm">{o.name}</span>
+                              {o.title && <span className="text-xs text-muted-foreground">{o.title}</span>}
+                              {o.party && <Badge className={PARTY_COLORS[o.party] ?? "bg-secondary text-muted-foreground"}>{o.party}</Badge>}
+                              {o.district && <Badge className="bg-secondary text-muted-foreground">{o.district}</Badge>}
+                            </div>
+                            {o.termEnd && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Term ends {format(parseISO(o.termEnd), "MMM yyyy")}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><Pencil size={13} /></button>
+                            <button onClick={e => { e.stopPropagation(); deleteMut.mutate(o.id); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 size={13} /></button>
+                            {expandedId === o.id ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                          </div>
+                        </div>
+                        {expandedId === o.id && (
+                          <div className="px-4 pb-4 border-t pt-3 space-y-2 text-sm">
+                            {o.phone && (
+                              <a href={`tel:${o.phone}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                                <Phone size={13} />{o.phone}
+                              </a>
+                            )}
+                            {o.email && (
+                              <a href={`mailto:${o.email}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                                <Mail size={13} />{o.email}
+                              </a>
+                            )}
+                            {o.website && (
+                              <a href={o.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline transition-colors">
+                                <Globe size={13} />Official website <ExternalLink size={11} />
+                              </a>
+                            )}
+                            {o.notes && <p className="text-muted-foreground text-xs mt-2 whitespace-pre-wrap">{o.notes}</p>}
+                            <VotingRecords official={o} />
+                            <CampaignFinance official={o} />
+                            <CampaignSpending official={o} />
+                            <GovernmentSpending official={o} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
