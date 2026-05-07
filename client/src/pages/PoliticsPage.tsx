@@ -1576,13 +1576,14 @@ const POLICY_BUCKETS: Array<{
 ];
 
 // Procedural votes that carry no direct policy signal — exclude from analysis
+// Truly content-free procedural votes — no policy signal, exclude from analysis.
+// NOTE: Cloture and Motion to Proceed are intentionally NOT here because they
+// carry real policy signal (voting for cloture on a budget bill = supporting that bill).
 const NOISE_VOTE_PATTERNS = [
-  /\bcloture\b/i,
-  /motion to waive/i,
-  /motion to proceed/i,
-  /motion to instruct/i,
   /unanimous consent/i,
   /adjournment/i,
+  /motion to instruct/i,
+  /quorum call/i,
 ];
 
 // Motions where a Nay vote SUPPORTS the underlying bill / policy position
