@@ -2332,6 +2332,7 @@ function OfficialsTab() {
                       <VotingRecords official={o} />
                       <CampaignFinance official={o} />
                       <CampaignSpending official={o} />
+                      <GovernmentSpending official={o} />
                     </div>
                   )}
                 </div>
