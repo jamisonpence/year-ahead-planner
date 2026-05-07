@@ -4228,7 +4228,10 @@ Rules:
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 1500,
-          messages: [{ role: "user", content: prompt }],
+          messages: [
+            { role: "user", content: prompt },
+            { role: "assistant", content: "[" },
+          ],
         }),
       });
 
@@ -4238,7 +4241,7 @@ Rules:
       }
 
       const claudeData = await claudeRes.json() as any;
-      const raw: string = claudeData?.content?.[0]?.text ?? "[]";
+      const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
       const candidates = extractJsonArray(raw);
       res.json({ candidates, note: candidates.length === 0 ? "no_candidates_found" : undefined });
     } catch (e) {
@@ -4299,45 +4302,39 @@ Rules:
         )
         .join("\n");
 
-      const prompt = `You are a nonpartisan voter guide helping a voter identify which candidates best align with their stated priorities and values.
+      const prompt = `You are a nonpartisan voter guide. Analyze how well each candidate aligns with this voter's profile. Be concise.
 
-VOTER'S POLITICAL PROFILE
-Issues & Positions (sorted by importance):
+VOTER'S PROFILE
+Issues (by importance):
 ${issueSummary}
 
 Political Identity:
 ${identitySummary}
 
-CANDIDATES TO EVALUATE
+CANDIDATES
 ${candidateList}
 
-TASK
-For each candidate, use your knowledge of their public record, stated positions, voting history, and campaign messaging to analyze alignment with this voter's profile.
-
-Return ONLY a valid JSON array — no other text, no markdown fences. Schema:
-[
-  {
-    "name": "Exact candidate name from list",
-    "matchScore": 0-100,
-    "confidence": "high" | "medium" | "low",
-    "party": "party name or null",
-    "office": "office or race description",
-    "alignments": ["2-3 specific alignment points based on their record"],
-    "divergences": ["1-2 key differences or concerns"],
-    "keyIssueBreakdown": [
-      { "issue": "Issue topic from voter profile", "stance": "candidate's known stance in 1 sentence", "aligned": true | false }
-    ],
-    "recommendation": "One balanced sentence summarizing fit for this voter.",
-    "note": "Optional: if limited public info is available, note that here"
-  }
-]
+Output ONLY a JSON array — no preamble, no markdown. For each candidate:
+{
+  "name": "Exact name from list",
+  "matchScore": 0-100,
+  "confidence": "high"|"medium"|"low",
+  "party": "party or null",
+  "office": "office description",
+  "alignments": ["up to 2 key alignment points"],
+  "divergences": ["up to 2 key differences"],
+  "keyIssueBreakdown": [
+    { "issue": "topic", "stance": "one sentence", "aligned": true|false }
+  ],
+  "recommendation": "One sentence summary for this voter.",
+  "note": "if limited info available, say so"
+}
 
 Rules:
-- matchScore reflects alignment with THIS voter's specific profile, not general electability
-- weight highly-important issues more in the score
-- Be factual and cite specific votes, bills, or public statements when possible
-- If a candidate is little-known, lower confidence and note it
-- Include keyIssueBreakdown for the voter's top 5 most important issues only`;
+- matchScore = alignment with THIS voter's priorities (weight important issues heavily)
+- keyIssueBreakdown: top 3 voter issues only
+- Be concise — short strings, no redundancy
+- Unknown/local candidates: confidence=low, note limited info`;
 
       const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -4348,8 +4345,11 @@ Rules:
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 3000,
-          messages: [{ role: "user", content: prompt }],
+          max_tokens: 6000,
+          messages: [
+            { role: "user", content: prompt },
+            { role: "assistant", content: "[" }, // prefill forces JSON array, no preamble
+          ],
         }),
       });
 
@@ -4359,7 +4359,8 @@ Rules:
       }
 
       const claudeData = await claudeRes.json() as any;
-      const raw: string = claudeData?.content?.[0]?.text ?? "";
+      // Prepend the "[" we used as prefill since the response is the continuation
+      const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
       const matches = extractJsonArray(raw);
       res.json({ matches });
     } catch (e) {
