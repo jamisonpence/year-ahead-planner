@@ -3544,6 +3544,16 @@ export const storage: IStorage = {
   async getDebateMembers(debateId: number) {
     return db.select().from(politicalDebateMembers).where(eq(politicalDebateMembers.debateId, debateId));
   },
+  async getDebateMembersWithNames(debateId: number) {
+    const rows = await pool.query(`
+      SELECT u.id, u.name, u.email, u.avatar_url as "avatarUrl", dm.joined_at as "joinedAt"
+      FROM political_debate_members dm
+      JOIN users u ON u.id = dm.user_id
+      WHERE dm.debate_id = $1
+      ORDER BY dm.joined_at ASC
+    `, [debateId]);
+    return rows.rows as Array<{ id: number; name: string; email: string; avatarUrl: string | null; joinedAt: string }>;
+  },
 
   // Posts
   async getDebatePosts(debateId: number) {

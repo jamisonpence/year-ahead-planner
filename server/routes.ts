@@ -4655,6 +4655,32 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // POST /api/politics/debates/:id/invite — invite a friend by userId
+  app.post("/api/politics/debates/:id/invite", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const debateId = parseInt(req.params.id);
+      const { friendId } = req.body as { friendId: number };
+      if (!friendId) return res.status(400).json({ error: "friendId required" });
+      // Verify they are actually friends
+      const friends = await storage.getFriends(user.id);
+      if (!friends.find(f => f.id === friendId)) return res.status(403).json({ error: "Not a friend" });
+      const debate = await storage.getDebateById(debateId);
+      if (!debate) return res.status(404).json({ error: "Debate not found" });
+      await storage.joinDebate(debateId, friendId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/politics/debates/:id/members — members with names
+  app.get("/api/politics/debates/:id/members", requireAuth, async (req, res) => {
+    try {
+      const debateId = parseInt(req.params.id);
+      const members = await storage.getDebateMembersWithNames(debateId);
+      res.json(members);
+    } catch (e) { handleError(res, e); }
+  });
+
   // LegiScan — recent votes for a state member
   // Accepts: ?peopleId=ID  (if already known/cached)  OR  ?name=NAME&stateCode=TX  (auto-lookup)
   app.get("/api/politics/votes/state", requireAuth, async (req, res) => {

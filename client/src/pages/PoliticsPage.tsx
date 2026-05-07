@@ -4625,6 +4625,90 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
   );
 }
 
+function DebateFriendInvite({ debateId, currentUserId }: { debateId: number; currentUserId: number }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [inviting, setInviting] = useState<number | null>(null);
+
+  const { data: friends = [] } = useQuery<any[]>({
+    queryKey: ["/api/friends"],
+    queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()),
+    enabled: open,
+  });
+
+  const { data: members = [], refetch: refetchMembers } = useQuery<any[]>({
+    queryKey: ["debate-members", debateId],
+    queryFn: () => apiRequest("GET", `/api/politics/debates/${debateId}/members`).then(r => r.json()),
+    enabled: open,
+  });
+
+  const memberIds = new Set(members.map((m: any) => m.id));
+
+  async function invite(friendId: number, friendName: string) {
+    setInviting(friendId);
+    try {
+      const r = await apiRequest("POST", `/api/politics/debates/${debateId}/invite`, { friendId });
+      if (!r.ok) { const b = await r.json(); throw new Error(b.error ?? "Failed"); }
+      refetchMembers();
+      toast({ title: `${friendName} added to the debate` });
+    } catch (e: any) {
+      toast({ title: "Failed to add friend", description: e.message, variant: "destructive" });
+    } finally { setInviting(null); }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-[10px] font-medium border rounded-lg px-2 py-1 hover:bg-violet-500/10 hover:border-violet-400/50 hover:text-violet-500 transition-colors"
+      >
+        <UserPlus size={9} />Add Friend
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-8 z-50 w-64 rounded-xl border bg-card shadow-xl p-3 space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold">Invite a Friend</p>
+            <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+          </div>
+          {friends.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2 text-center">No friends yet. Add friends from the People tab.</p>
+          ) : (
+            <div className="space-y-1 max-h-52 overflow-y-auto">
+              {friends.map((f: any) => {
+                const isIn = memberIds.has(f.id) || f.id === currentUserId;
+                return (
+                  <div key={f.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-secondary/40">
+                    <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0 text-[10px] font-bold text-violet-600">
+                      {f.avatarUrl
+                        ? <img src={f.avatarUrl} alt={f.name} className="w-7 h-7 rounded-full object-cover" />
+                        : f.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="flex-1 text-xs font-medium truncate">{f.name}</span>
+                    {isIn ? (
+                      <span className="text-[10px] text-emerald-500 flex items-center gap-0.5 shrink-0">
+                        <Check size={10} />Joined
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => invite(f.id, f.name)}
+                        disabled={inviting === f.id}
+                        className="shrink-0 text-[10px] font-medium text-violet-600 hover:text-violet-700 border border-violet-400/40 rounded-md px-2 py-0.5 hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                      >
+                        {inviting === f.id ? <Loader2 size={9} className="animate-spin" /> : "Invite"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DebatesTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -4718,6 +4802,8 @@ function DebatesTab() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Add Friend */}
+            <DebateFriendInvite debateId={activeDebate.id} currentUserId={currentUserId} />
             {/* Share code */}
             <button
               onClick={() => copyCode(activeDebate.shareCode)}
