@@ -18,18 +18,162 @@ import type {
 
 const LEVELS = ["Federal", "State", "Local"];
 const PARTIES = ["Democrat", "Republican", "Independent", "Green", "Libertarian", "Other"];
-const POSITIONS = ["support", "oppose", "neutral", "undecided"] as const;
-const POSITION_META: Record<string, { label: string; color: string }> = {
-  support:   { label: "Support",   color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
-  oppose:    { label: "Oppose",    color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
-  neutral:   { label: "Neutral",   color: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300" },
-  undecided: { label: "Undecided", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
+const POSITIONS = ["strongly_support","support","lean_support","neutral","lean_oppose","oppose","strongly_oppose"] as const;
+const POSITION_META: Record<string, { label: string; short: string; score: number; badge: string; bar: string }> = {
+  strongly_support: { label: "Strongly Support", short: "Strong ✓", score:  3, badge: "bg-emerald-600 text-white",                                          bar: "bg-emerald-500" },
+  support:          { label: "Support",           short: "Support",  score:  2, badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", bar: "bg-emerald-400" },
+  lean_support:     { label: "Lean Support",      short: "Lean ✓",  score:  1, badge: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",   bar: "bg-teal-400" },
+  neutral:          { label: "Neutral",            short: "Neutral", score:  0, badge: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",  bar: "bg-stone-400" },
+  lean_oppose:      { label: "Lean Oppose",        short: "Lean ✗",  score: -1, badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300", bar: "bg-orange-400" },
+  oppose:           { label: "Oppose",             short: "Oppose",  score: -2, badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",       bar: "bg-red-400" },
+  strongly_oppose:  { label: "Strongly Oppose",    short: "Strong ✗",score: -3, badge: "bg-red-700 text-white",                                               bar: "bg-red-600" },
+  // legacy aliases
+  undecided:        { label: "Undecided",          short: "?",       score:  0, badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", bar: "bg-amber-400" },
 };
-const ISSUE_CATEGORIES = [
-  "Economy", "Healthcare", "Education", "Environment", "Immigration",
-  "Criminal Justice", "Foreign Policy", "Gun Policy", "Housing", "Infrastructure",
-  "Social Issues", "Taxation", "Veterans", "Other",
+
+const ISSUE_LIBRARY: { category: string; emoji: string; issues: { topic: string; description: string }[] }[] = [
+  { category: "Economy", emoji: "📈", issues: [
+    { topic: "Minimum Wage Increase",      description: "Raising the federal minimum wage" },
+    { topic: "Corporate Tax Rate",         description: "Raising or cutting taxes on corporate profits" },
+    { topic: "Free Trade & Tariffs",       description: "Trade agreements vs. protectionist tariffs" },
+    { topic: "Universal Basic Income",     description: "Monthly government stipend for all citizens" },
+    { topic: "Deficit Reduction",          description: "Cutting spending to reduce the national debt" },
+    { topic: "Labor Union Rights",         description: "Collective bargaining and union organizing" },
+    { topic: "Gig Economy Regulation",     description: "Worker protections for contractors and gig workers" },
+    { topic: "Wealth Tax",                 description: "Annual tax on accumulated wealth above a threshold" },
+    { topic: "Student Loan Forgiveness",   description: "Cancellation of federal student loan debt" },
+    { topic: "Cryptocurrency Regulation",  description: "Regulatory framework for digital assets" },
+  ]},
+  { category: "Healthcare", emoji: "🏥", issues: [
+    { topic: "Medicare for All",           description: "Single-payer government-funded universal healthcare" },
+    { topic: "Affordable Care Act",        description: "Preserving, expanding, or repealing the ACA" },
+    { topic: "Drug Price Negotiation",     description: "Allowing Medicare to negotiate prescription prices" },
+    { topic: "Medicaid Expansion",         description: "Expanding Medicaid to more low-income adults" },
+    { topic: "Abortion Access",            description: "Legal access to abortion and reproductive healthcare" },
+    { topic: "Mental Health Parity",       description: "Equal insurance coverage for mental health care" },
+    { topic: "Vaccine Policy",             description: "Mandates, exemptions, and public health authority" },
+    { topic: "Opioid & Addiction Care",    description: "Treatment funding and harm reduction programs" },
+    { topic: "End-of-Life Care Rights",    description: "Medical aid in dying and patient autonomy" },
+  ]},
+  { category: "Environment", emoji: "🌍", issues: [
+    { topic: "Climate Change Policy",      description: "Government action to reduce carbon emissions" },
+    { topic: "Green New Deal",             description: "Federal jobs and clean energy investment program" },
+    { topic: "Fossil Fuel Subsidies",      description: "Ending government subsidies for oil and gas" },
+    { topic: "Nuclear Energy",             description: "Expanding nuclear power as clean energy source" },
+    { topic: "Carbon Tax",                 description: "Taxing emissions to incentivize clean energy" },
+    { topic: "Electric Vehicle Incentives",description: "Tax credits and charging infrastructure for EVs" },
+    { topic: "Offshore Drilling",          description: "Allowing oil drilling in coastal federal waters" },
+    { topic: "National Park Protection",   description: "Preserving and expanding federal public lands" },
+    { topic: "Plastic Pollution Rules",    description: "Bans or taxes on single-use plastics" },
+  ]},
+  { category: "Immigration", emoji: "🌐", issues: [
+    { topic: "Border Wall / Security",     description: "Physical barriers and enforcement at the border" },
+    { topic: "DACA / Dreamers",            description: "Legal status for those brought undocumented as children" },
+    { topic: "Legal Immigration Levels",   description: "Increasing or reducing annual immigration quotas" },
+    { topic: "Asylum Policy",              description: "Processing and standards for granting asylum" },
+    { topic: "Path to Citizenship",        description: "Route to citizenship for undocumented long-term residents" },
+    { topic: "Guest Worker Programs",      description: "Temporary visas for foreign workers in various sectors" },
+    { topic: "ICE & Deportation",          description: "Enforcement priorities and deportation policies" },
+    { topic: "Sanctuary Cities",           description: "Local limits on cooperation with federal immigration" },
+    { topic: "Refugee Admissions",         description: "Annual caps and vetting for refugee resettlement" },
+  ]},
+  { category: "Gun Policy", emoji: "🔫", issues: [
+    { topic: "Universal Background Checks",description: "Requiring background checks for all gun sales" },
+    { topic: "Red Flag Laws",              description: "Temporarily removing guns from people deemed dangerous" },
+    { topic: "Assault Weapons Ban",        description: "Banning semi-automatic rifles and high-cap magazines" },
+    { topic: "Concealed Carry Reciprocity",description: "Honoring concealed carry permits across all states" },
+    { topic: "National Gun Registry",      description: "Federal database of firearm ownership" },
+    { topic: "Waiting Periods",            description: "Mandatory delay between purchase and pickup" },
+    { topic: "Bump Stock & Modifier Bans", description: "Restrictions on legal gun modifications" },
+    { topic: "Minimum Purchase Age (21)",  description: "Raising minimum age to purchase long guns to 21" },
+  ]},
+  { category: "Education", emoji: "🎓", issues: [
+    { topic: "School Choice & Vouchers",   description: "Public funding flowing to private/charter schools" },
+    { topic: "Free Community College",     description: "Tuition-free two-year college for all" },
+    { topic: "Federal Education Standards",description: "National curriculum standards like Common Core" },
+    { topic: "Teacher Pay",                description: "Increasing base pay and benefits for teachers" },
+    { topic: "School Prayer",              description: "Allowing religious expression in public schools" },
+    { topic: "Sex Education Standards",    description: "Comprehensive vs. abstinence-only sex ed" },
+    { topic: "Critical Race Theory Bans",  description: "Restricting teaching of race-based history frameworks" },
+    { topic: "Special Education Funding",  description: "Federal support for students with disabilities" },
+    { topic: "Student Debt Cap / Reform",  description: "Limiting how much students can borrow federally" },
+  ]},
+  { category: "Criminal Justice", emoji: "⚖️", issues: [
+    { topic: "Police Reform",              description: "Accountability, training, and oversight of law enforcement" },
+    { topic: "Mandatory Minimum Sentences",description: "Required minimum prison terms for specific crimes" },
+    { topic: "Death Penalty",              description: "Capital punishment for the most serious crimes" },
+    { topic: "Drug Decriminalization",     description: "Reducing criminal penalties for personal drug use" },
+    { topic: "Cannabis Legalization",      description: "Federal legalization and regulation of marijuana" },
+    { topic: "Prison Reform",              description: "Rehabilitation-focused incarceration approach" },
+    { topic: "Qualified Immunity",         description: "Legal protections shielding officers from civil suits" },
+    { topic: "Cash Bail Reform",           description: "Eliminating or reforming pre-trial cash bail system" },
+    { topic: "Private Prisons",            description: "For-profit prison contracts with the government" },
+  ]},
+  { category: "Social Issues", emoji: "🤝", issues: [
+    { topic: "LGBTQ+ Anti-Discrimination",description: "Federal protections against discrimination" },
+    { topic: "Transgender in Sports",      description: "Policies on trans athletes in competitive sports" },
+    { topic: "Same-Sex Marriage",          description: "Federal legal protection of same-sex marriage" },
+    { topic: "Affirmative Action",         description: "Race-conscious college admissions and hiring" },
+    { topic: "Reparations",               description: "Compensation for descendants of enslaved people" },
+    { topic: "Religious Freedom Laws",     description: "Protections for businesses citing religious beliefs" },
+    { topic: "Voting Rights Expansion",    description: "Expanding access to voting and reducing restrictions" },
+    { topic: "Electoral College Reform",   description: "Reforming or abolishing the Electoral College" },
+    { topic: "Citizens United / Campaign Finance", description: "Limiting corporate money in political campaigns" },
+  ]},
+  { category: "Foreign Policy", emoji: "🌏", issues: [
+    { topic: "NATO & Military Alliances",  description: "U.S. commitments to international defense pacts" },
+    { topic: "Foreign Aid",               description: "U.S. financial and military assistance abroad" },
+    { topic: "China Relations",           description: "Trade, military, and diplomatic policy toward China" },
+    { topic: "Israel-Palestine Policy",   description: "U.S. stance on the conflict and military aid" },
+    { topic: "Ukraine Military Aid",      description: "Weapons and financial support for Ukraine" },
+    { topic: "Nuclear Non-Proliferation", description: "Arms control treaties and nuclear disarmament" },
+    { topic: "Cuba & Iran Sanctions",     description: "Economic pressure on adversarial governments" },
+    { topic: "Defense Budget",            description: "Overall level of military spending" },
+    { topic: "Drone Warfare",             description: "Use of armed drones in counterterrorism operations" },
+  ]},
+  { category: "Taxation", emoji: "💰", issues: [
+    { topic: "Top Income Tax Rate",        description: "Marginal rate for the highest earners" },
+    { topic: "Capital Gains Tax",          description: "Tax on profits from investments" },
+    { topic: "Estate / Inheritance Tax",   description: "Taxes on wealth transferred at death" },
+    { topic: "Flat Tax",                   description: "Single tax rate regardless of income level" },
+    { topic: "Offshore Tax Haven Rules",   description: "Closing loopholes for overseas tax avoidance" },
+    { topic: "Child Tax Credit Expansion", description: "Expanding monthly payments to families with children" },
+    { topic: "Tax Code Simplification",    description: "Streamlining and simplifying the tax filing process" },
+  ]},
+  { category: "Housing", emoji: "🏠", issues: [
+    { topic: "Rent Control",              description: "Government limits on how much landlords can charge" },
+    { topic: "Zoning Reform",             description: "Allowing more housing density in cities and suburbs" },
+    { topic: "Affordable Housing Funding",description: "Federal investment in below-market housing units" },
+    { topic: "Homelessness Solutions",    description: "Housing-first vs. treatment-first policy approaches" },
+    { topic: "First-Time Buyer Assistance",description: "Down payment help and favorable loans" },
+    { topic: "Eviction Protections",      description: "Tenant protections during financial hardship" },
+  ]},
+  { category: "Technology", emoji: "💻", issues: [
+    { topic: "Social Media Regulation",   description: "Oversight of content moderation and algorithm transparency" },
+    { topic: "Data Privacy Rights",       description: "Laws protecting personal data from corporations" },
+    { topic: "Net Neutrality",            description: "Rules requiring equal treatment of internet traffic" },
+    { topic: "Section 230 Reform",        description: "Liability rules for online platforms over user content" },
+    { topic: "AI Regulation",             description: "Government oversight of artificial intelligence systems" },
+    { topic: "Big Tech Antitrust",        description: "Breaking up or regulating dominant tech companies" },
+    { topic: "Digital Dollar (CBDC)",     description: "A government-issued central bank digital currency" },
+  ]},
+  { category: "Infrastructure", emoji: "🏗️", issues: [
+    { topic: "Infrastructure Investment",  description: "Federal spending on roads, bridges, and transit" },
+    { topic: "High-Speed Rail",           description: "Building a national passenger rail network" },
+    { topic: "Broadband Access",          description: "Universal high-speed internet as a public utility" },
+    { topic: "Water System Safety",       description: "Replacing lead pipes and upgrading water infrastructure" },
+    { topic: "Public Transit Funding",    description: "Federal support for buses, subways, and light rail" },
+  ]},
+  { category: "Veterans", emoji: "🎖️", issues: [
+    { topic: "VA Healthcare Funding",     description: "Budget and capacity of veterans health services" },
+    { topic: "Veterans Disability Benefits",description:"Compensation and pensions for service-related injuries" },
+    { topic: "PTSD & Mental Health Care", description: "Treatment programs for combat-related trauma" },
+    { topic: "GI Bill Expansion",         description: "Education and training benefits for veterans" },
+    { topic: "Military Housing Allowance",description: "Pay and housing for active-duty service members" },
+  ]},
 ];
+
+const ISSUE_CATEGORIES = ISSUE_LIBRARY.map(g => g.category);
 const ELECTION_LEVELS = ["Federal", "State", "Local", "Primary", "Special"];
 const ACTION_TYPES = [
   { value: "voted",       label: "Voted",                   emoji: "🗳️" },
@@ -2419,6 +2563,42 @@ function OfficialsTab() {
 
 // ── Issues Tab ─────────────────────────────────────────────────────────────────
 
+function PositionPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {POSITIONS.filter(p => !["undecided"].includes(p)).map(p => {
+        const meta = POSITION_META[p];
+        const active = value === p;
+        return (
+          <button key={p} onClick={() => onChange(p)}
+            className={`px-2 py-1 rounded text-[11px] font-medium border transition-all ${
+              active ? `${meta.badge} border-transparent shadow-sm` : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            }`}>
+            {meta.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PositionBar({ position }: { position: string }) {
+  const meta = POSITION_META[position];
+  if (!meta) return null;
+  const score = meta.score; // -3 to 3
+  const pct   = ((score + 3) / 6) * 100; // 0-100%
+  return (
+    <div className="relative h-1.5 rounded-full bg-secondary overflow-hidden">
+      <div className="absolute inset-y-0 left-1/2 w-px bg-border/60 z-10" />
+      <div className={`absolute inset-y-0 ${meta.bar} transition-all`}
+        style={score >= 0
+          ? { left: "50%", width: `${pct - 50}%` }
+          : { left: `${pct}%`, width: `${50 - pct}%` }}
+      />
+    </div>
+  );
+}
+
 function IssuesTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2427,112 +2607,329 @@ function IssuesTab() {
     queryFn: () => apiRequest("GET", "/api/politics/issues").then(r => r.json()),
   });
 
-  const [form, setForm] = useState<Partial<PoliticalIssue>>({ importance: 3, position: "neutral" });
-  const [editing, setEditing] = useState<number | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [view, setView]         = useState<"my" | "browse">("my");
+  const [browsecat, setBrowsecat] = useState(ISSUE_LIBRARY[0].category);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [filterCat, setFilterCat] = useState("All");
+  const [addingTopic, setAddingTopic] = useState<string | null>(null); // topic being quick-added
+  const [addPos, setAddPos]     = useState("neutral");
+  const [addImportance, setAddImportance] = useState(3);
+  const [addNotes, setAddNotes] = useState("");
+  const [customForm, setCustomForm] = useState(false);
+  const [cForm, setCForm]       = useState<Partial<PoliticalIssue>>({ importance: 3, position: "neutral" });
 
   const createMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/politics/issues", data).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }); setShowForm(false); setForm({ importance: 3, position: "neutral" }); toast({ title: "Issue added" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }); setAddingTopic(null); setAddPos("neutral"); setAddNotes(""); setCustomForm(false); setCForm({ importance: 3, position: "neutral" }); toast({ title: "Issue added" }); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: any) => apiRequest("PATCH", `/api/politics/issues/${id}`, data).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }); setEditing(null); setForm({ importance: 3, position: "neutral" }); toast({ title: "Updated" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }); setEditingId(null); toast({ title: "Updated" }); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/politics/issues/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/politics/issues"] }),
   });
 
-  function openEdit(i: PoliticalIssue) { setEditing(i.id); setForm(i); setShowForm(true); }
-  function cancel() { setEditing(null); setForm({ importance: 3, position: "neutral" }); setShowForm(false); }
-  function submit() {
-    if (!form.topic?.trim()) return;
-    if (editing) updateMut.mutate({ id: editing, data: form });
-    else createMut.mutate(form);
+  const issueMap = new Map(issues.map(i => [i.topic?.toLowerCase().trim(), i]));
+  const categoriesWithIssues = ISSUE_LIBRARY.map(g => g.category).filter(cat =>
+    issues.some(i => i.category === cat)
+  );
+  const allCategories = ["All", ...categoriesWithIssues, ...(issues.some(i => !ISSUE_LIBRARY.find(g => g.category === i.category)) ? ["Other"] : [])];
+  const filtered = filterCat === "All" ? issues : issues.filter(i => i.category === filterCat);
+
+  function quickAdd(topic: string, category: string) {
+    setAddingTopic(topic); setAddPos("neutral"); setAddImportance(3); setAddNotes("");
+    const libCat = ISSUE_LIBRARY.find(g => g.issues.some(i => i.topic === topic))?.category ?? category;
+    setCForm(f => ({ ...f, topic, category: libCat }));
+  }
+  function confirmQuickAdd() {
+    createMut.mutate({ topic: cForm.topic, category: cForm.category, position: addPos, importance: addImportance, notes: addNotes });
   }
 
-  const categories = ["All", ...Array.from(new Set(issues.map(i => i.category).filter(Boolean)))];
-  const filtered = filterCat === "All" ? issues : issues.filter(i => i.category === filterCat);
+  const browseCatIssues = ISSUE_LIBRARY.find(g => g.category === browsecat)?.issues ?? [];
 
   return (
     <div className="space-y-4">
-      {!showForm ? (
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5"><Plus size={14} />Add Issue</Button>
-          {categories.length > 1 && (
-            <div className="flex gap-1.5 flex-wrap">
-              {categories.map(c => (
-                <button key={c} onClick={() => setFilterCat(c)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${filterCat === c ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="border rounded-xl p-4 bg-secondary/30 space-y-3">
-          <h3 className="font-medium text-sm">{editing ? "Edit Issue" : "Add Issue"}</h3>
+      {/* ── Tab switcher ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(["my", "browse"] as const).map(v => (
+          <button key={v} onClick={() => setView(v)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+            {v === "my" ? `📋 My Positions (${issues.length})` : "🔍 Browse Issues"}
+          </button>
+        ))}
+        <button onClick={() => { setCustomForm(c => !c); setView("my"); }}
+          className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-secondary hover:bg-secondary/80 text-muted-foreground flex items-center gap-1.5">
+          <Plus size={13} />Custom Issue
+        </button>
+      </div>
+
+      {/* ── Custom issue form ── */}
+      {customForm && (
+        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add custom issue</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Topic *">
-              <Input value={form.topic ?? ""} onChange={e => setForm(f => ({ ...f, topic: e.target.value }))} placeholder="e.g. Universal Healthcare" />
+              <Input value={cForm.topic ?? ""} onChange={e => setCForm(f => ({ ...f, topic: e.target.value }))} placeholder="e.g. Universal Basic Income" />
             </Field>
             <Field label="Category">
-              <Select value={form.category ?? ""} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                <option value="">Select category…</option>
+              <Select value={cForm.category ?? ""} onChange={e => setCForm(f => ({ ...f, category: e.target.value }))}>
+                <option value="">Select…</option>
                 {ISSUE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </Select>
             </Field>
-            <Field label="My Position">
-              <Select value={form.position ?? "neutral"} onChange={e => setForm(f => ({ ...f, position: e.target.value }))}>
-                {POSITIONS.map(p => <option key={p} value={p}>{POSITION_META[p].label}</option>)}
-              </Select>
-            </Field>
-            <Field label="Importance">
-              <StarRating value={form.importance ?? 3} onChange={v => setForm(f => ({ ...f, importance: v }))} />
+          </div>
+          <Field label="My Position"><PositionPicker value={cForm.position ?? "neutral"} onChange={v => setCForm(f => ({ ...f, position: v }))} /></Field>
+          <div className="flex items-center gap-3">
+            <Field label="Importance (1–5)">
+              <StarRating value={cForm.importance ?? 3} onChange={v => setCForm(f => ({ ...f, importance: v }))} />
             </Field>
           </div>
           <Field label="Notes">
-            <Textarea value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Context, nuance, research…" />
+            <Textarea value={cForm.notes ?? ""} onChange={e => setCForm(f => ({ ...f, notes: e.target.value }))} placeholder="Your reasoning, nuance, context…" rows={2} />
           </Field>
           <div className="flex gap-2">
-            <Button size="sm" onClick={submit}><Check size={13} className="mr-1" />{editing ? "Save" : "Add"}</Button>
-            <Button size="sm" variant="ghost" onClick={cancel}><X size={13} /></Button>
+            <Button size="sm" onClick={() => { if (!cForm.topic?.trim()) return; createMut.mutate(cForm); }}><Check size={13} className="mr-1" />Add</Button>
+            <Button size="sm" variant="ghost" onClick={() => setCustomForm(false)}><X size={13} /></Button>
           </div>
         </div>
       )}
 
-      {issues.length === 0 && !showForm && (
-        <p className="text-sm text-muted-foreground text-center py-8">No issues tracked yet. Add topics you care about and your position on them.</p>
-      )}
+      {/* ══ MY POSITIONS view ══ */}
+      {view === "my" && (
+        <div className="space-y-3">
+          {issues.length === 0 && (
+            <div className="text-center py-10 space-y-3">
+              <p className="text-muted-foreground text-sm">No positions tracked yet.</p>
+              <Button size="sm" onClick={() => setView("browse")} className="gap-1.5"><Search size={13} />Browse Issues to Add</Button>
+            </div>
+          )}
 
-      <div className="space-y-2">
-        {filtered.map(issue => (
-          <div key={issue.id} className="border rounded-xl px-4 py-3 bg-card flex items-start gap-3">
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">{issue.topic}</span>
-                {issue.position && <Badge className={POSITION_META[issue.position]?.color ?? "bg-secondary"}>{POSITION_META[issue.position]?.label}</Badge>}
-                {issue.category && <Badge className="bg-secondary text-muted-foreground"><Tag size={10} className="mr-1" />{issue.category}</Badge>}
+          {issues.length > 0 && (
+            <>
+              {/* Summary bar */}
+              <div className="rounded-xl border bg-secondary/20 px-4 py-3 flex items-center gap-6 flex-wrap">
+                <div className="text-center">
+                  <div className="text-xl font-bold">{issues.length}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Issues tracked</div>
+                </div>
+                {(["strongly_support","support","lean_support"] as const).map(p => {
+                  const count = issues.filter(i => i.position === p).length;
+                  return count > 0 ? (
+                    <div key={p} className="text-center">
+                      <div className={`text-lg font-bold ${POSITION_META[p].badge.includes("emerald") || POSITION_META[p].badge.includes("teal") ? "text-emerald-500" : "text-teal-500"}`}>{count}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{POSITION_META[p].short}</div>
+                    </div>
+                  ) : null;
+                })}
+                {(["lean_oppose","oppose","strongly_oppose"] as const).map(p => {
+                  const count = issues.filter(i => i.position === p).length;
+                  return count > 0 ? (
+                    <div key={p} className="text-center">
+                      <div className="text-lg font-bold text-red-500">{count}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{POSITION_META[p].short}</div>
+                    </div>
+                  ) : null;
+                })}
+                <div className="text-center">
+                  <div className="text-lg font-bold text-stone-400">{issues.filter(i => !i.position || i.position === "neutral" || i.position === "undecided").length}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Neutral/TBD</div>
+                </div>
               </div>
-              {issue.importance && (
-                <div className="flex gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={11} className={i < issue.importance! ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20"} />
+
+              {/* Category filter */}
+              {allCategories.length > 2 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {allCategories.map(c => (
+                    <button key={c} onClick={() => setFilterCat(c)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${filterCat === c ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+                      {c}
+                    </button>
                   ))}
                 </div>
               )}
-              {issue.notes && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{issue.notes}</p>}
-            </div>
-            <div className="flex gap-1 shrink-0">
-              <button onClick={() => openEdit(issue)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><Pencil size={13} /></button>
-              <button onClick={() => deleteMut.mutate(issue.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 size={13} /></button>
-            </div>
+
+              {/* Issue cards grouped by category */}
+              {(() => {
+                const cats = filterCat === "All"
+                  ? Array.from(new Set(filtered.map(i => i.category ?? "Other")))
+                  : [filterCat];
+                return cats.map(cat => {
+                  const catIssues = filtered.filter(i => (i.category ?? "Other") === cat);
+                  if (!catIssues.length) return null;
+                  const emoji = ISSUE_LIBRARY.find(g => g.category === cat)?.emoji ?? "📌";
+                  return (
+                    <div key={cat} className="space-y-1.5">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                        <span>{emoji}</span>{cat}
+                      </p>
+                      {catIssues.map(issue => {
+                        const meta    = POSITION_META[issue.position ?? "neutral"] ?? POSITION_META.neutral;
+                        const isEditing = editingId === issue.id;
+                        const isExpanded = expandedId === issue.id;
+                        return (
+                          <div key={issue.id} className="border rounded-xl bg-card overflow-hidden">
+                            <div className="px-3.5 py-2.5 flex items-center gap-3 cursor-pointer"
+                              onClick={() => setExpandedId(isExpanded ? null : issue.id)}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm">{issue.topic}</span>
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${meta.badge}`}>{meta.short}</span>
+                                  {issue.importance != null && (
+                                    <div className="flex gap-0.5 ml-1">
+                                      {Array.from({ length: 5 }).map((_, i) => (
+                                        <Star key={i} size={9} className={i < issue.importance! ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20"} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="mt-1.5"><PositionBar position={issue.position ?? "neutral"} /></div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={e => { e.stopPropagation(); setEditingId(isEditing ? null : issue.id); setExpandedId(issue.id); }}
+                                  className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><Pencil size={12} /></button>
+                                <button onClick={e => { e.stopPropagation(); deleteMut.mutate(issue.id); }}
+                                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 size={12} /></button>
+                                {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="border-t px-3.5 py-3 space-y-3 bg-secondary/10">
+                                {isEditing ? (
+                                  <>
+                                    <Field label="My Position">
+                                      <PositionPicker value={issue.position ?? "neutral"} onChange={v => updateMut.mutate({ id: issue.id, data: { position: v } })} />
+                                    </Field>
+                                    <div className="flex items-center gap-4">
+                                      <Field label="Importance">
+                                        <StarRating value={issue.importance ?? 3} onChange={v => updateMut.mutate({ id: issue.id, data: { importance: v } })} />
+                                      </Field>
+                                    </div>
+                                    <Field label="Notes">
+                                      <IssueNotesEditor issue={issue} onSave={notes => { updateMut.mutate({ id: issue.id, data: { notes } }); setEditingId(null); }} />
+                                    </Field>
+                                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X size={12} className="mr-1" />Done</Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <p className="text-[10px] text-muted-foreground mb-1.5 font-semibold uppercase tracking-wider">Position spectrum</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[9px] text-red-400 font-medium shrink-0">Oppose</span>
+                                        <div className="flex-1"><PositionBar position={issue.position ?? "neutral"} /></div>
+                                        <span className="text-[9px] text-emerald-400 font-medium shrink-0">Support</span>
+                                      </div>
+                                      <p className="text-[11px] text-center mt-1 font-medium">{meta.label}</p>
+                                    </div>
+                                    {issue.notes && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{issue.notes}</p>}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══ BROWSE view ══ */}
+      {view === "browse" && (
+        <div className="space-y-3">
+          {/* Category pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {ISSUE_LIBRARY.map(g => (
+              <button key={g.category} onClick={() => setBrowsecat(g.category)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${browsecat === g.category ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-muted-foreground"}`}>
+                {g.emoji} {g.category}
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+
+          {/* Issues grid */}
+          <div className="space-y-2">
+            {browseCatIssues.map(lib => {
+              const existing = issueMap.get(lib.topic.toLowerCase().trim());
+              const isAdding  = addingTopic === lib.topic;
+              return (
+                <div key={lib.topic} className={`border rounded-xl overflow-hidden transition-colors ${existing ? "bg-secondary/10" : "bg-card"}`}>
+                  <div className="px-3.5 py-2.5 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{lib.topic}</span>
+                        {existing && (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${(POSITION_META[existing.position ?? "neutral"] ?? POSITION_META.neutral).badge}`}>
+                            {(POSITION_META[existing.position ?? "neutral"] ?? POSITION_META.neutral).short}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{lib.description}</p>
+                      {existing && <div className="mt-1.5"><PositionBar position={existing.position ?? "neutral"} /></div>}
+                    </div>
+                    <div className="shrink-0">
+                      {existing ? (
+                        <button onClick={() => { setView("my"); setExpandedId(existing.id); setEditingId(existing.id); }}
+                          className="text-[11px] text-primary hover:underline px-2 py-1">Edit</button>
+                      ) : (
+                        <button onClick={() => isAdding ? setAddingTopic(null) : quickAdd(lib.topic, browsecat)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${isAdding ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary hover:bg-primary/20"}`}>
+                          {isAdding ? "Cancel" : "+ Add"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Inline add panel */}
+                  {isAdding && (
+                    <div className="border-t px-3.5 py-3 bg-secondary/10 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">My position on {lib.topic}</p>
+                        <PositionPicker value={addPos} onChange={setAddPos} />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-1">How much does this affect my vote?</p>
+                          <StarRating value={addImportance} onChange={setAddImportance} />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Notes (optional)</p>
+                        <Textarea value={addNotes} onChange={e => setAddNotes(e.target.value)} placeholder="Your reasoning or nuance…" rows={2} />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={confirmQuickAdd} disabled={createMut.isPending}>
+                          <Check size={13} className="mr-1" />Save Position
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setAddingTopic(null)}><X size={13} /></Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IssueNotesEditor({ issue, onSave }: { issue: PoliticalIssue; onSave: (notes: string) => void }) {
+  const [val, setVal] = useState(issue.notes ?? "");
+  return (
+    <div className="space-y-2">
+      <Textarea value={val} onChange={e => setVal(e.target.value)} placeholder="Your reasoning, nuance, context…" rows={2} />
+      {val !== (issue.notes ?? "") && (
+        <Button size="sm" onClick={() => onSave(val)}><Check size={12} className="mr-1" />Save notes</Button>
+      )}
     </div>
   );
 }
