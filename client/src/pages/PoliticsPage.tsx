@@ -31,145 +31,145 @@ const POSITION_META: Record<string, { label: string; short: string; score: numbe
   undecided:        { label: "Undecided",          short: "?",       score:  0, badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", bar: "bg-amber-400" },
 };
 
-const ISSUE_LIBRARY: { category: string; emoji: string; issues: { topic: string; description: string }[] }[] = [
+const ISSUE_LIBRARY: { category: string; emoji: string; issues: { topic: string; description: string; supportStance: string; opposeStance: string }[] }[] = [
   { category: "Economy", emoji: "📈", issues: [
-    { topic: "Minimum Wage Increase",      description: "Raising the federal minimum wage" },
-    { topic: "Corporate Tax Rate",         description: "Raising or cutting taxes on corporate profits" },
-    { topic: "Free Trade & Tariffs",       description: "Trade agreements vs. protectionist tariffs" },
-    { topic: "Universal Basic Income",     description: "Monthly government stipend for all citizens" },
-    { topic: "Deficit Reduction",          description: "Cutting spending to reduce the national debt" },
-    { topic: "Labor Union Rights",         description: "Collective bargaining and union organizing" },
-    { topic: "Gig Economy Regulation",     description: "Worker protections for contractors and gig workers" },
-    { topic: "Wealth Tax",                 description: "Annual tax on accumulated wealth above a threshold" },
-    { topic: "Student Loan Forgiveness",   description: "Cancellation of federal student loan debt" },
-    { topic: "Cryptocurrency Regulation",  description: "Regulatory framework for digital assets" },
+    { topic: "Minimum Wage Increase",      description: "Raising the federal minimum wage",                       supportStance: "Raise the federal minimum wage",                    opposeStance: "Keep or lower the minimum wage" },
+    { topic: "Corporate Tax Rate",         description: "Raising or cutting taxes on corporate profits",          supportStance: "Raise corporate tax rates",                          opposeStance: "Cut or keep corporate taxes low" },
+    { topic: "Free Trade & Tariffs",       description: "Trade agreements vs. protectionist tariffs",            supportStance: "Free trade agreements with fewer tariffs",           opposeStance: "Protectionist tariffs to shield domestic industry" },
+    { topic: "Universal Basic Income",     description: "Monthly government stipend for all citizens",           supportStance: "Give every citizen a monthly government stipend",    opposeStance: "Reject a universal basic income program" },
+    { topic: "Deficit Reduction",          description: "Cutting spending to reduce the national debt",          supportStance: "Cut spending to reduce the national debt",           opposeStance: "Allow deficit spending for investment and programs" },
+    { topic: "Labor Union Rights",         description: "Collective bargaining and union organizing",            supportStance: "Expand collective bargaining and union power",        opposeStance: "Limit union organizing rights" },
+    { topic: "Gig Economy Regulation",     description: "Worker protections for contractors and gig workers",   supportStance: "Require worker protections and benefits for gig workers", opposeStance: "Keep gig workers classified as independent contractors" },
+    { topic: "Wealth Tax",                 description: "Annual tax on accumulated wealth above a threshold",    supportStance: "Tax accumulated wealth above a set threshold annually", opposeStance: "No annual tax on accumulated wealth" },
+    { topic: "Student Loan Forgiveness",   description: "Cancellation of federal student loan debt",            supportStance: "Cancel federal student loan debt",                  opposeStance: "Oppose cancellation of student loans" },
+    { topic: "Cryptocurrency Regulation",  description: "Regulatory framework for digital assets",              supportStance: "Regulate crypto with federal oversight",             opposeStance: "Keep crypto largely unregulated" },
   ]},
   { category: "Healthcare", emoji: "🏥", issues: [
-    { topic: "Medicare for All",           description: "Single-payer government-funded universal healthcare" },
-    { topic: "Affordable Care Act",        description: "Preserving, expanding, or repealing the ACA" },
-    { topic: "Drug Price Negotiation",     description: "Allowing Medicare to negotiate prescription prices" },
-    { topic: "Medicaid Expansion",         description: "Expanding Medicaid to more low-income adults" },
-    { topic: "Abortion Access",            description: "Legal access to abortion and reproductive healthcare" },
-    { topic: "Mental Health Parity",       description: "Equal insurance coverage for mental health care" },
-    { topic: "Vaccine Policy",             description: "Mandates, exemptions, and public health authority" },
-    { topic: "Opioid & Addiction Care",    description: "Treatment funding and harm reduction programs" },
-    { topic: "End-of-Life Care Rights",    description: "Medical aid in dying and patient autonomy" },
+    { topic: "Medicare for All",           description: "Single-payer government-funded universal healthcare",   supportStance: "Single-payer government healthcare for everyone",     opposeStance: "Keep private insurance as the primary system" },
+    { topic: "Affordable Care Act",        description: "Preserving, expanding, or repealing the ACA",          supportStance: "Preserve or expand the ACA",                        opposeStance: "Repeal or reduce the ACA" },
+    { topic: "Drug Price Negotiation",     description: "Allowing Medicare to negotiate prescription prices",    supportStance: "Let Medicare negotiate drug prices directly",        opposeStance: "Leave drug pricing to market competition" },
+    { topic: "Medicaid Expansion",         description: "Expanding Medicaid to more low-income adults",         supportStance: "Expand Medicaid to more low-income adults",         opposeStance: "Limit or roll back Medicaid expansion" },
+    { topic: "Abortion Access",            description: "Legal access to abortion and reproductive healthcare",  supportStance: "Protect legal access to abortion",                  opposeStance: "Restrict or ban abortion access" },
+    { topic: "Mental Health Parity",       description: "Equal insurance coverage for mental health care",      supportStance: "Require equal insurance coverage for mental health", opposeStance: "Leave mental health coverage to market decisions" },
+    { topic: "Vaccine Policy",             description: "Mandates, exemptions, and public health authority",    supportStance: "Support public health vaccine mandates",            opposeStance: "Oppose vaccine mandates, protect exemptions" },
+    { topic: "Opioid & Addiction Care",    description: "Treatment funding and harm reduction programs",        supportStance: "Fund treatment and harm reduction programs",         opposeStance: "Prioritize enforcement over treatment programs" },
+    { topic: "End-of-Life Care Rights",    description: "Medical aid in dying and patient autonomy",           supportStance: "Allow medical aid in dying as a patient right",      opposeStance: "Oppose physician-assisted death" },
   ]},
   { category: "Environment", emoji: "🌍", issues: [
-    { topic: "Climate Change Policy",      description: "Government action to reduce carbon emissions" },
-    { topic: "Green New Deal",             description: "Federal jobs and clean energy investment program" },
-    { topic: "Fossil Fuel Subsidies",      description: "Ending government subsidies for oil and gas" },
-    { topic: "Nuclear Energy",             description: "Expanding nuclear power as clean energy source" },
-    { topic: "Carbon Tax",                 description: "Taxing emissions to incentivize clean energy" },
-    { topic: "Electric Vehicle Incentives",description: "Tax credits and charging infrastructure for EVs" },
-    { topic: "Offshore Drilling",          description: "Allowing oil drilling in coastal federal waters" },
-    { topic: "National Park Protection",   description: "Preserving and expanding federal public lands" },
-    { topic: "Plastic Pollution Rules",    description: "Bans or taxes on single-use plastics" },
+    { topic: "Climate Change Policy",      description: "Government action to reduce carbon emissions",         supportStance: "Strong government action to cut carbon emissions",   opposeStance: "Limit government climate intervention" },
+    { topic: "Green New Deal",             description: "Federal jobs and clean energy investment program",     supportStance: "Federal investment in clean energy jobs and infrastructure", opposeStance: "Reject the Green New Deal program" },
+    { topic: "Fossil Fuel Subsidies",      description: "Ending government subsidies for oil and gas",         supportStance: "End government subsidies for oil and gas",          opposeStance: "Keep fossil fuel subsidies in place" },
+    { topic: "Nuclear Energy",             description: "Expanding nuclear power as clean energy source",      supportStance: "Expand nuclear power as clean energy",              opposeStance: "Phase out or restrict nuclear energy" },
+    { topic: "Carbon Tax",                 description: "Taxing emissions to incentivize clean energy",        supportStance: "Tax carbon emissions to incentivize clean energy",  opposeStance: "No carbon tax on emissions" },
+    { topic: "Electric Vehicle Incentives",description: "Tax credits and charging infrastructure for EVs",     supportStance: "Tax credits and public infrastructure for EVs",     opposeStance: "End government EV subsidies" },
+    { topic: "Offshore Drilling",          description: "Allowing oil drilling in coastal federal waters",     supportStance: "Allow oil drilling in coastal federal waters",       opposeStance: "Ban new offshore oil drilling" },
+    { topic: "National Park Protection",   description: "Preserving and expanding federal public lands",       supportStance: "Preserve and expand federal public lands",          opposeStance: "Open federal lands to development and resource extraction" },
+    { topic: "Plastic Pollution Rules",    description: "Bans or taxes on single-use plastics",               supportStance: "Ban or tax single-use plastics",                    opposeStance: "Leave plastic regulation to industry" },
   ]},
   { category: "Immigration", emoji: "🌐", issues: [
-    { topic: "Border Wall / Security",     description: "Physical barriers and enforcement at the border" },
-    { topic: "DACA / Dreamers",            description: "Legal status for those brought undocumented as children" },
-    { topic: "Legal Immigration Levels",   description: "Increasing or reducing annual immigration quotas" },
-    { topic: "Asylum Policy",              description: "Processing and standards for granting asylum" },
-    { topic: "Path to Citizenship",        description: "Route to citizenship for undocumented long-term residents" },
-    { topic: "Guest Worker Programs",      description: "Temporary visas for foreign workers in various sectors" },
-    { topic: "ICE & Deportation",          description: "Enforcement priorities and deportation policies" },
-    { topic: "Sanctuary Cities",           description: "Local limits on cooperation with federal immigration" },
-    { topic: "Refugee Admissions",         description: "Annual caps and vetting for refugee resettlement" },
+    { topic: "Border Wall / Security",     description: "Physical barriers and enforcement at the border",     supportStance: "Build physical barriers and increase border enforcement", opposeStance: "Oppose a border wall, prefer alternative measures" },
+    { topic: "DACA / Dreamers",            description: "Legal status for those brought undocumented as children", supportStance: "Protect Dreamers with permanent legal status",    opposeStance: "End DACA protections" },
+    { topic: "Legal Immigration Levels",   description: "Increasing or reducing annual immigration quotas",   supportStance: "Increase annual legal immigration",                 opposeStance: "Reduce legal immigration levels" },
+    { topic: "Asylum Policy",              description: "Processing and standards for granting asylum",       supportStance: "Expand asylum access and processing capacity",       opposeStance: "Tighten asylum standards and eligibility" },
+    { topic: "Path to Citizenship",        description: "Route to citizenship for undocumented long-term residents", supportStance: "Create a path to citizenship for long-term undocumented residents", opposeStance: "No amnesty or path to citizenship" },
+    { topic: "Guest Worker Programs",      description: "Temporary visas for foreign workers in various sectors", supportStance: "Expand temporary visas for foreign workers",     opposeStance: "Limit or reduce guest worker programs" },
+    { topic: "ICE & Deportation",          description: "Enforcement priorities and deportation policies",    supportStance: "Limit ICE enforcement to serious crimes",            opposeStance: "Expand deportation enforcement broadly" },
+    { topic: "Sanctuary Cities",           description: "Local limits on cooperation with federal immigration", supportStance: "Allow cities to limit immigration enforcement cooperation", opposeStance: "Ban sanctuary city policies" },
+    { topic: "Refugee Admissions",         description: "Annual caps and vetting for refugee resettlement",   supportStance: "Increase refugee admissions",                        opposeStance: "Reduce or cap refugee admissions" },
   ]},
   { category: "Gun Policy", emoji: "🔫", issues: [
-    { topic: "Universal Background Checks",description: "Requiring background checks for all gun sales" },
-    { topic: "Red Flag Laws",              description: "Temporarily removing guns from people deemed dangerous" },
-    { topic: "Assault Weapons Ban",        description: "Banning semi-automatic rifles and high-cap magazines" },
-    { topic: "Concealed Carry Reciprocity",description: "Honoring concealed carry permits across all states" },
-    { topic: "National Gun Registry",      description: "Federal database of firearm ownership" },
-    { topic: "Waiting Periods",            description: "Mandatory delay between purchase and pickup" },
-    { topic: "Bump Stock & Modifier Bans", description: "Restrictions on legal gun modifications" },
-    { topic: "Minimum Purchase Age (21)",  description: "Raising minimum age to purchase long guns to 21" },
+    { topic: "Universal Background Checks",description: "Requiring background checks for all gun sales",      supportStance: "Require background checks for all gun sales",        opposeStance: "Oppose expanded background check requirements" },
+    { topic: "Red Flag Laws",              description: "Temporarily removing guns from people deemed dangerous", supportStance: "Allow courts to temporarily remove guns from dangerous people", opposeStance: "Oppose red flag gun seizure laws" },
+    { topic: "Assault Weapons Ban",        description: "Banning semi-automatic rifles and high-cap magazines", supportStance: "Ban semi-automatic rifles and high-capacity magazines", opposeStance: "Oppose an assault weapons ban" },
+    { topic: "Concealed Carry Reciprocity",description: "Honoring concealed carry permits across all states", supportStance: "Honor concealed carry permits in all states",         opposeStance: "Let each state set its own carry laws" },
+    { topic: "National Gun Registry",      description: "Federal database of firearm ownership",              supportStance: "Create a federal database of gun ownership",        opposeStance: "Oppose a national firearm registry" },
+    { topic: "Waiting Periods",            description: "Mandatory delay between purchase and pickup",        supportStance: "Require a waiting period before gun pickup",         opposeStance: "Oppose mandatory waiting periods" },
+    { topic: "Bump Stock & Modifier Bans", description: "Restrictions on legal gun modifications",           supportStance: "Ban bump stocks and certain gun modifications",      opposeStance: "Allow legal gun modifications" },
+    { topic: "Minimum Purchase Age (21)",  description: "Raising minimum age to purchase long guns to 21",   supportStance: "Raise the long gun purchase age to 21",             opposeStance: "Keep the current purchase age at 18" },
   ]},
   { category: "Education", emoji: "🎓", issues: [
-    { topic: "School Choice & Vouchers",   description: "Public funding flowing to private/charter schools" },
-    { topic: "Free Community College",     description: "Tuition-free two-year college for all" },
-    { topic: "Federal Education Standards",description: "National curriculum standards like Common Core" },
-    { topic: "Teacher Pay",                description: "Increasing base pay and benefits for teachers" },
-    { topic: "School Prayer",              description: "Allowing religious expression in public schools" },
-    { topic: "Sex Education Standards",    description: "Comprehensive vs. abstinence-only sex ed" },
-    { topic: "Critical Race Theory Bans",  description: "Restricting teaching of race-based history frameworks" },
-    { topic: "Special Education Funding",  description: "Federal support for students with disabilities" },
-    { topic: "Student Debt Cap / Reform",  description: "Limiting how much students can borrow federally" },
+    { topic: "School Choice & Vouchers",   description: "Public funding flowing to private/charter schools",  supportStance: "Allow public funds to flow to private and charter schools", opposeStance: "Keep public funds exclusively in public schools" },
+    { topic: "Free Community College",     description: "Tuition-free two-year college for all",             supportStance: "Make two-year college tuition-free for all",        opposeStance: "Keep community college tuition-based" },
+    { topic: "Federal Education Standards",description: "National curriculum standards like Common Core",    supportStance: "Set national curriculum standards",                 opposeStance: "Leave curriculum decisions to states and localities" },
+    { topic: "Teacher Pay",                description: "Increasing base pay and benefits for teachers",     supportStance: "Increase teacher base pay and benefits",             opposeStance: "Keep teacher compensation to local and market decisions" },
+    { topic: "School Prayer",              description: "Allowing religious expression in public schools",   supportStance: "Allow religious expression in public schools",       opposeStance: "Keep prayer out of public schools" },
+    { topic: "Sex Education Standards",    description: "Comprehensive vs. abstinence-only sex ed",         supportStance: "Require comprehensive sex education",               opposeStance: "Support abstinence-only or local-choice sex ed" },
+    { topic: "Critical Race Theory Bans",  description: "Restricting teaching of race-based history frameworks", supportStance: "Restrict CRT-based curriculum in schools",      opposeStance: "Allow schools to teach race-based history frameworks" },
+    { topic: "Special Education Funding",  description: "Federal support for students with disabilities",   supportStance: "Increase federal special education funding",         opposeStance: "Reduce federal special ed mandates" },
+    { topic: "Student Debt Cap / Reform",  description: "Limiting how much students can borrow federally",  supportStance: "Cap or reform how much students can borrow federally", opposeStance: "Keep the current federal borrowing system" },
   ]},
   { category: "Criminal Justice", emoji: "⚖️", issues: [
-    { topic: "Police Reform",              description: "Accountability, training, and oversight of law enforcement" },
-    { topic: "Mandatory Minimum Sentences",description: "Required minimum prison terms for specific crimes" },
-    { topic: "Death Penalty",              description: "Capital punishment for the most serious crimes" },
-    { topic: "Drug Decriminalization",     description: "Reducing criminal penalties for personal drug use" },
-    { topic: "Cannabis Legalization",      description: "Federal legalization and regulation of marijuana" },
-    { topic: "Prison Reform",              description: "Rehabilitation-focused incarceration approach" },
-    { topic: "Qualified Immunity",         description: "Legal protections shielding officers from civil suits" },
-    { topic: "Cash Bail Reform",           description: "Eliminating or reforming pre-trial cash bail system" },
-    { topic: "Private Prisons",            description: "For-profit prison contracts with the government" },
+    { topic: "Police Reform",              description: "Accountability, training, and oversight of law enforcement", supportStance: "Increase police accountability and civilian oversight", opposeStance: "Oppose new restrictions on law enforcement" },
+    { topic: "Mandatory Minimum Sentences",description: "Required minimum prison terms for specific crimes",     supportStance: "Keep mandatory minimum sentencing laws",             opposeStance: "Repeal mandatory minimum sentencing laws" },
+    { topic: "Death Penalty",              description: "Capital punishment for the most serious crimes",         supportStance: "Maintain capital punishment for the most serious crimes", opposeStance: "Abolish the death penalty" },
+    { topic: "Drug Decriminalization",     description: "Reducing criminal penalties for personal drug use",     supportStance: "Reduce criminal penalties for personal drug use",     opposeStance: "Maintain criminal penalties for drug use" },
+    { topic: "Cannabis Legalization",      description: "Federal legalization and regulation of marijuana",      supportStance: "Federally legalize and regulate marijuana",           opposeStance: "Keep marijuana federally illegal" },
+    { topic: "Prison Reform",              description: "Rehabilitation-focused incarceration approach",         supportStance: "Shift to rehabilitation-focused incarceration",       opposeStance: "Maintain a punitive incarceration approach" },
+    { topic: "Qualified Immunity",         description: "Legal protections shielding officers from civil suits", supportStance: "Keep qualified immunity protections for officers",    opposeStance: "End or limit qualified immunity" },
+    { topic: "Cash Bail Reform",           description: "Eliminating or reforming pre-trial cash bail system",  supportStance: "Eliminate or reform pre-trial cash bail",            opposeStance: "Keep the cash bail system in place" },
+    { topic: "Private Prisons",            description: "For-profit prison contracts with the government",      supportStance: "Allow for-profit prison contracts with government",   opposeStance: "Ban private for-profit prisons" },
   ]},
   { category: "Social Issues", emoji: "🤝", issues: [
-    { topic: "LGBTQ+ Anti-Discrimination",description: "Federal protections against discrimination" },
-    { topic: "Transgender in Sports",      description: "Policies on trans athletes in competitive sports" },
-    { topic: "Same-Sex Marriage",          description: "Federal legal protection of same-sex marriage" },
-    { topic: "Affirmative Action",         description: "Race-conscious college admissions and hiring" },
-    { topic: "Reparations",               description: "Compensation for descendants of enslaved people" },
-    { topic: "Religious Freedom Laws",     description: "Protections for businesses citing religious beliefs" },
-    { topic: "Voting Rights Expansion",    description: "Expanding access to voting and reducing restrictions" },
-    { topic: "Electoral College Reform",   description: "Reforming or abolishing the Electoral College" },
-    { topic: "Citizens United / Campaign Finance", description: "Limiting corporate money in political campaigns" },
+    { topic: "LGBTQ+ Anti-Discrimination",description: "Federal protections against discrimination",            supportStance: "Federal anti-discrimination protections for LGBTQ+ people", opposeStance: "Leave protections to states and private entities" },
+    { topic: "Transgender in Sports",      description: "Policies on trans athletes in competitive sports",     supportStance: "Allow trans athletes to compete per gender identity", opposeStance: "Restrict trans athletes to biological sex category" },
+    { topic: "Same-Sex Marriage",          description: "Federal legal protection of same-sex marriage",        supportStance: "Federal legal protection of same-sex marriage",       opposeStance: "Leave marriage definition to states" },
+    { topic: "Affirmative Action",         description: "Race-conscious college admissions and hiring",         supportStance: "Allow race-conscious admissions and hiring decisions", opposeStance: "Ban race-conscious affirmative action" },
+    { topic: "Reparations",               description: "Compensation for descendants of enslaved people",      supportStance: "Compensate descendants of enslaved people",           opposeStance: "Oppose reparations payments" },
+    { topic: "Religious Freedom Laws",     description: "Protections for businesses citing religious beliefs",  supportStance: "Protect businesses from requirements that conflict with their religion", opposeStance: "Oppose religion-based exemptions from anti-discrimination law" },
+    { topic: "Voting Rights Expansion",    description: "Expanding access to voting and reducing restrictions", supportStance: "Expand voting access and reduce restrictions",         opposeStance: "Support voter ID and tighter election security measures" },
+    { topic: "Electoral College Reform",   description: "Reforming or abolishing the Electoral College",       supportStance: "Reform or abolish the Electoral College",             opposeStance: "Keep the Electoral College as is" },
+    { topic: "Citizens United / Campaign Finance", description: "Limiting corporate money in political campaigns", supportStance: "Limit corporate and dark money in elections",   opposeStance: "Protect unlimited political spending as free speech" },
   ]},
   { category: "Foreign Policy", emoji: "🌏", issues: [
-    { topic: "NATO & Military Alliances",  description: "U.S. commitments to international defense pacts" },
-    { topic: "Foreign Aid",               description: "U.S. financial and military assistance abroad" },
-    { topic: "China Relations",           description: "Trade, military, and diplomatic policy toward China" },
-    { topic: "Israel-Palestine Policy",   description: "U.S. stance on the conflict and military aid" },
-    { topic: "Ukraine Military Aid",      description: "Weapons and financial support for Ukraine" },
-    { topic: "Nuclear Non-Proliferation", description: "Arms control treaties and nuclear disarmament" },
-    { topic: "Cuba & Iran Sanctions",     description: "Economic pressure on adversarial governments" },
-    { topic: "Defense Budget",            description: "Overall level of military spending" },
-    { topic: "Drone Warfare",             description: "Use of armed drones in counterterrorism operations" },
+    { topic: "NATO & Military Alliances",  description: "U.S. commitments to international defense pacts",     supportStance: "Maintain strong U.S. commitments to NATO and allies", opposeStance: "Reduce U.S. financial obligations to alliances" },
+    { topic: "Foreign Aid",               description: "U.S. financial and military assistance abroad",        supportStance: "Maintain or increase U.S. foreign assistance programs", opposeStance: "Cut or eliminate foreign aid programs" },
+    { topic: "China Relations",           description: "Trade, military, and diplomatic policy toward China",  supportStance: "Firm stance on trade, military, and diplomacy with China", opposeStance: "More cooperative and diplomatic approach with China" },
+    { topic: "Israel-Palestine Policy",   description: "U.S. stance on the conflict and military aid",        supportStance: "Strong military and diplomatic support for Israel",   opposeStance: "Condition or reduce U.S. military support for Israel" },
+    { topic: "Ukraine Military Aid",      description: "Weapons and financial support for Ukraine",           supportStance: "Continue weapons and financial support for Ukraine",   opposeStance: "End or reduce U.S. aid to Ukraine" },
+    { topic: "Nuclear Non-Proliferation", description: "Arms control treaties and nuclear disarmament",       supportStance: "Pursue arms control and disarmament treaties",         opposeStance: "Maintain full nuclear deterrence, limit treaty obligations" },
+    { topic: "Cuba & Iran Sanctions",     description: "Economic pressure on adversarial governments",       supportStance: "Keep or strengthen economic sanctions",               opposeStance: "Ease sanctions and pursue diplomatic engagement" },
+    { topic: "Defense Budget",            description: "Overall level of military spending",                  supportStance: "Increase the defense budget",                         opposeStance: "Cut or cap military spending" },
+    { topic: "Drone Warfare",             description: "Use of armed drones in counterterrorism operations",  supportStance: "Use armed drones in counterterrorism operations",     opposeStance: "Restrict or end drone warfare programs" },
   ]},
   { category: "Taxation", emoji: "💰", issues: [
-    { topic: "Top Income Tax Rate",        description: "Marginal rate for the highest earners" },
-    { topic: "Capital Gains Tax",          description: "Tax on profits from investments" },
-    { topic: "Estate / Inheritance Tax",   description: "Taxes on wealth transferred at death" },
-    { topic: "Flat Tax",                   description: "Single tax rate regardless of income level" },
-    { topic: "Offshore Tax Haven Rules",   description: "Closing loopholes for overseas tax avoidance" },
-    { topic: "Child Tax Credit Expansion", description: "Expanding monthly payments to families with children" },
-    { topic: "Tax Code Simplification",    description: "Streamlining and simplifying the tax filing process" },
+    { topic: "Top Income Tax Rate",        description: "Marginal rate for the highest earners",               supportStance: "Raise the top marginal income tax rate",             opposeStance: "Cut or keep top income taxes low" },
+    { topic: "Capital Gains Tax",          description: "Tax on profits from investments",                     supportStance: "Raise taxes on investment profits",                  opposeStance: "Keep capital gains taxes low to encourage investment" },
+    { topic: "Estate / Inheritance Tax",   description: "Taxes on wealth transferred at death",               supportStance: "Maintain or raise the estate tax on inherited wealth", opposeStance: "Reduce or repeal the estate tax" },
+    { topic: "Flat Tax",                   description: "Single tax rate regardless of income level",          supportStance: "Single flat tax rate for all income levels",          opposeStance: "Keep a progressive graduated tax system" },
+    { topic: "Offshore Tax Haven Rules",   description: "Closing loopholes for overseas tax avoidance",       supportStance: "Close offshore tax avoidance loopholes",              opposeStance: "Keep current international tax rules" },
+    { topic: "Child Tax Credit Expansion", description: "Expanding monthly payments to families with children", supportStance: "Expand monthly child tax credit payments to families", opposeStance: "Keep child tax credit at current levels" },
+    { topic: "Tax Code Simplification",    description: "Streamlining and simplifying the tax filing process", supportStance: "Streamline and simplify the tax code and filing",    opposeStance: "Keep the current tax code structure" },
   ]},
   { category: "Housing", emoji: "🏠", issues: [
-    { topic: "Rent Control",              description: "Government limits on how much landlords can charge" },
-    { topic: "Zoning Reform",             description: "Allowing more housing density in cities and suburbs" },
-    { topic: "Affordable Housing Funding",description: "Federal investment in below-market housing units" },
-    { topic: "Homelessness Solutions",    description: "Housing-first vs. treatment-first policy approaches" },
-    { topic: "First-Time Buyer Assistance",description: "Down payment help and favorable loans" },
-    { topic: "Eviction Protections",      description: "Tenant protections during financial hardship" },
+    { topic: "Rent Control",              description: "Government limits on how much landlords can charge",   supportStance: "Set government limits on rent increases",            opposeStance: "Let market forces determine rental prices" },
+    { topic: "Zoning Reform",             description: "Allowing more housing density in cities and suburbs",  supportStance: "Allow more housing density in cities and suburbs",   opposeStance: "Preserve local zoning and neighborhood character" },
+    { topic: "Affordable Housing Funding",description: "Federal investment in below-market housing units",    supportStance: "Federal investment in below-market affordable housing", opposeStance: "Leave affordable housing primarily to the market" },
+    { topic: "Homelessness Solutions",    description: "Housing-first vs. treatment-first policy approaches", supportStance: "Housing-first approach — provide housing before treatment requirements", opposeStance: "Treatment-first — require treatment before housing benefits" },
+    { topic: "First-Time Buyer Assistance",description: "Down payment help and favorable loans",             supportStance: "Government down payment help and favorable loans for first buyers", opposeStance: "Let home buying remain market-driven without subsidies" },
+    { topic: "Eviction Protections",      description: "Tenant protections during financial hardship",       supportStance: "Strong tenant protections from eviction during hardship", opposeStance: "Prioritize landlord property rights over eviction limits" },
   ]},
   { category: "Technology", emoji: "💻", issues: [
-    { topic: "Social Media Regulation",   description: "Oversight of content moderation and algorithm transparency" },
-    { topic: "Data Privacy Rights",       description: "Laws protecting personal data from corporations" },
-    { topic: "Net Neutrality",            description: "Rules requiring equal treatment of internet traffic" },
-    { topic: "Section 230 Reform",        description: "Liability rules for online platforms over user content" },
-    { topic: "AI Regulation",             description: "Government oversight of artificial intelligence systems" },
-    { topic: "Big Tech Antitrust",        description: "Breaking up or regulating dominant tech companies" },
-    { topic: "Digital Dollar (CBDC)",     description: "A government-issued central bank digital currency" },
+    { topic: "Social Media Regulation",   description: "Oversight of content moderation and algorithm transparency", supportStance: "Regulate content moderation and require algorithm transparency", opposeStance: "Minimal government oversight of social media platforms" },
+    { topic: "Data Privacy Rights",       description: "Laws protecting personal data from corporations",      supportStance: "Strong laws protecting personal data from corporations", opposeStance: "Let companies self-regulate data collection and use" },
+    { topic: "Net Neutrality",            description: "Rules requiring equal treatment of internet traffic",  supportStance: "Require ISPs to treat all internet traffic equally",  opposeStance: "Let ISPs prioritize and manage traffic as they choose" },
+    { topic: "Section 230 Reform",        description: "Liability rules for online platforms over user content", supportStance: "Reform or reduce platform liability protections (Section 230)", opposeStance: "Keep current Section 230 protections for online platforms" },
+    { topic: "AI Regulation",             description: "Government oversight of artificial intelligence systems", supportStance: "Government oversight and safety rules for AI systems", opposeStance: "Let AI develop with minimal government regulation" },
+    { topic: "Big Tech Antitrust",        description: "Breaking up or regulating dominant tech companies",   supportStance: "Break up or heavily regulate dominant tech companies", opposeStance: "Allow tech companies to compete and grow freely" },
+    { topic: "Digital Dollar (CBDC)",     description: "A government-issued central bank digital currency",   supportStance: "Create a government-issued central bank digital currency", opposeStance: "Oppose a government-controlled digital dollar" },
   ]},
   { category: "Infrastructure", emoji: "🏗️", issues: [
-    { topic: "Infrastructure Investment",  description: "Federal spending on roads, bridges, and transit" },
-    { topic: "High-Speed Rail",           description: "Building a national passenger rail network" },
-    { topic: "Broadband Access",          description: "Universal high-speed internet as a public utility" },
-    { topic: "Water System Safety",       description: "Replacing lead pipes and upgrading water infrastructure" },
-    { topic: "Public Transit Funding",    description: "Federal support for buses, subways, and light rail" },
+    { topic: "Infrastructure Investment",  description: "Federal spending on roads, bridges, and transit",    supportStance: "Major federal spending on roads, bridges, and transit", opposeStance: "Leave infrastructure primarily to states and private sector" },
+    { topic: "High-Speed Rail",           description: "Building a national passenger rail network",         supportStance: "Build a national high-speed passenger rail network",  opposeStance: "Focus transportation investment elsewhere" },
+    { topic: "Broadband Access",          description: "Universal high-speed internet as a public utility",  supportStance: "Universal high-speed internet as a public utility",   opposeStance: "Let private companies build broadband without mandates" },
+    { topic: "Water System Safety",       description: "Replacing lead pipes and upgrading water infrastructure", supportStance: "Federal funding to replace lead pipes and upgrade water systems", opposeStance: "Leave water infrastructure investment to local governments" },
+    { topic: "Public Transit Funding",    description: "Federal support for buses, subways, and light rail", supportStance: "Increase federal support for public transit systems",  opposeStance: "Reduce federal transit subsidies" },
   ]},
   { category: "Veterans", emoji: "🎖️", issues: [
-    { topic: "VA Healthcare Funding",     description: "Budget and capacity of veterans health services" },
-    { topic: "Veterans Disability Benefits",description:"Compensation and pensions for service-related injuries" },
-    { topic: "PTSD & Mental Health Care", description: "Treatment programs for combat-related trauma" },
-    { topic: "GI Bill Expansion",         description: "Education and training benefits for veterans" },
-    { topic: "Military Housing Allowance",description: "Pay and housing for active-duty service members" },
+    { topic: "VA Healthcare Funding",     description: "Budget and capacity of veterans health services",    supportStance: "Increase VA healthcare budget and capacity",          opposeStance: "Reform VA with private-sector alternatives instead" },
+    { topic: "Veterans Disability Benefits",description:"Compensation and pensions for service-related injuries", supportStance: "Expand compensation for service-related injuries", opposeStance: "Tighten eligibility standards for disability benefits" },
+    { topic: "PTSD & Mental Health Care", description: "Treatment programs for combat-related trauma",       supportStance: "Increase funding for veteran PTSD and mental health treatment", opposeStance: "Reform rather than expand current veteran mental health programs" },
+    { topic: "GI Bill Expansion",         description: "Education and training benefits for veterans",       supportStance: "Expand education and training benefits under the GI Bill", opposeStance: "Keep GI Bill at current benefit levels" },
+    { topic: "Military Housing Allowance",description: "Pay and housing for active-duty service members",   supportStance: "Increase housing pay and benefits for service members", opposeStance: "Keep military pay and housing at current levels" },
   ]},
 ];
 
@@ -2563,21 +2563,47 @@ function OfficialsTab() {
 
 // ── Issues Tab ─────────────────────────────────────────────────────────────────
 
-function PositionPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function PositionPicker({ value, onChange, supportStance, opposeStance }: {
+  value: string;
+  onChange: (v: string) => void;
+  supportStance?: string;
+  opposeStance?: string;
+}) {
+  const meta  = POSITION_META[value];
+  const score = meta?.score ?? 0;
+  const showStance = supportStance || opposeStance;
+  const stanceText = !meta || value === "neutral"
+    ? null
+    : score > 0
+      ? supportStance
+      : opposeStance;
+  const stanceColor = score > 0 ? "text-emerald-600 dark:text-emerald-400" : score < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground";
+
   return (
-    <div className="flex flex-wrap gap-1">
-      {POSITIONS.filter(p => !["undecided"].includes(p)).map(p => {
-        const meta = POSITION_META[p];
-        const active = value === p;
-        return (
-          <button key={p} onClick={() => onChange(p)}
-            className={`px-2 py-1 rounded text-[11px] font-medium border transition-all ${
-              active ? `${meta.badge} border-transparent shadow-sm` : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-            }`}>
-            {meta.label}
-          </button>
-        );
-      })}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1">
+        {POSITIONS.filter(p => !["undecided"].includes(p)).map(p => {
+          const m = POSITION_META[p];
+          const active = value === p;
+          return (
+            <button key={p} onClick={() => onChange(p)}
+              className={`px-2 py-1 rounded text-[11px] font-medium border transition-all ${
+                active ? `${m.badge} border-transparent shadow-sm` : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}>
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+      {showStance && stanceText && (
+        <p className={`text-[11px] font-medium flex items-start gap-1 ${stanceColor}`}>
+          <span className="shrink-0 mt-px">{score > 0 ? "✓" : "✗"}</span>
+          <span>{stanceText}</span>
+        </p>
+      )}
+      {showStance && value === "neutral" && (
+        <p className="text-[11px] text-muted-foreground">— You're neutral on this issue</p>
+      )}
     </div>
   );
 }
@@ -2769,6 +2795,7 @@ function IssuesTab() {
                         const meta    = POSITION_META[issue.position ?? "neutral"] ?? POSITION_META.neutral;
                         const isEditing = editingId === issue.id;
                         const isExpanded = expandedId === issue.id;
+                        const libEntry = ISSUE_LIBRARY.flatMap(g => g.issues).find(i => i.topic === issue.topic);
                         return (
                           <div key={issue.id} className="border rounded-xl bg-card overflow-hidden">
                             <div className="px-3.5 py-2.5 flex items-center gap-3 cursor-pointer"
@@ -2801,7 +2828,7 @@ function IssuesTab() {
                                 {isEditing ? (
                                   <>
                                     <Field label="My Position">
-                                      <PositionPicker value={issue.position ?? "neutral"} onChange={v => updateMut.mutate({ id: issue.id, data: { position: v } })} />
+                                      <PositionPicker value={issue.position ?? "neutral"} onChange={v => updateMut.mutate({ id: issue.id, data: { position: v } })} supportStance={libEntry?.supportStance} opposeStance={libEntry?.opposeStance} />
                                     </Field>
                                     <div className="flex items-center gap-4">
                                       <Field label="Importance">
@@ -2816,13 +2843,24 @@ function IssuesTab() {
                                 ) : (
                                   <>
                                     <div>
-                                      <p className="text-[10px] text-muted-foreground mb-1.5 font-semibold uppercase tracking-wider">Position spectrum</p>
                                       <div className="flex items-center gap-2">
                                         <span className="text-[9px] text-red-400 font-medium shrink-0">Oppose</span>
                                         <div className="flex-1"><PositionBar position={issue.position ?? "neutral"} /></div>
                                         <span className="text-[9px] text-emerald-400 font-medium shrink-0">Support</span>
                                       </div>
-                                      <p className="text-[11px] text-center mt-1 font-medium">{meta.label}</p>
+                                      {(() => {
+                                        const score = meta.score;
+                                        const stanceText = score > 0 ? libEntry?.supportStance : score < 0 ? libEntry?.opposeStance : null;
+                                        const stanceColor = score > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400";
+                                        return stanceText ? (
+                                          <p className={`text-[11px] font-medium mt-1.5 flex items-start gap-1 ${stanceColor}`}>
+                                            <span className="shrink-0">{score > 0 ? "✓" : "✗"}</span>
+                                            <span>{stanceText}</span>
+                                          </p>
+                                        ) : (
+                                          <p className="text-[11px] text-center mt-1 font-medium text-muted-foreground">{meta.label}</p>
+                                        );
+                                      })()}
                                     </div>
                                     {issue.notes && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{issue.notes}</p>}
                                   </>
@@ -2892,7 +2930,7 @@ function IssuesTab() {
                     <div className="border-t px-3.5 py-3 bg-secondary/10 space-y-3">
                       <div>
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">My position on {lib.topic}</p>
-                        <PositionPicker value={addPos} onChange={setAddPos} />
+                        <PositionPicker value={addPos} onChange={setAddPos} supportStance={lib.supportStance} opposeStance={lib.opposeStance} />
                       </div>
                       <div className="flex items-center gap-4">
                         <div>
