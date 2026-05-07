@@ -3509,30 +3509,38 @@ Rules:
         } catch { return {}; }
       };
 
+      // For House reps use congressional_district geo layer; senators use state
+      const districtPadded = district ? district.replace(/\D/g, "").padStart(2, "0") : "00";
+      const districtCode   = `${state.toUpperCase()}-${districtPadded}`;   // e.g. "TX-07"
+      const geoLayer       = isSenate ? "state" : "congressional_district";
+      const geoLayerFilter = isSenate ? state.toUpperCase() : districtCode;
+
+      // place_of_performance_locations filter (for category endpoints)
       const geoFilter = isSenate
         ? [{ country: "USA", state: state.toUpperCase() }]
-        : [{ country: "USA", state: state.toUpperCase(), congressional_district: district.padStart(2, "0") }];
+        : [{ country: "USA", state: state.toUpperCase(), congressional_district: districtPadded }];
 
       const baseFilters = {
         time_period:                    [{ start_date: fyStart, end_date: fyEnd }],
         place_of_performance_locations: geoFilter,
       };
 
-      // Award type codes for each category
-      const contractCodes     = ["A","B","C","D"];
-      const grantCodes        = ["02","03","04","05"];
-      const directPayCodes    = ["06","10"];
-      const loanCodes         = ["07","08"];
+      // Award type codes
+      const contractCodes  = ["A","B","C","D"];
+      const grantCodes     = ["02","03","04","05"];
+      const directPayCodes = ["06","10"];
+      const loanCodes      = ["07","08"];
 
+      // Geography body — uses correct layer for senator vs rep
       const geoBody = (typeCodes: string[]) => ({
         scope:             "place_of_performance",
-        geo_layer:         "state",
-        geo_layer_filters: [state.toUpperCase()],
+        geo_layer:         geoLayer,
+        geo_layer_filters: [geoLayerFilter],
         filters:           { time_period: [{ start_date: fyStart, end_date: fyEnd }], award_type_codes: typeCodes },
         subawards:         false,
       });
 
-      // Previous FY for fallback (complete year, full reporting lag resolved)
+      // Previous FY fallback
       const prevFyStart = `${fy - 2}-10-01`;
       const prevFyEnd   = `${fy - 1}-09-30`;
       const prevBaseFilters = {
@@ -3540,22 +3548,20 @@ Rules:
         place_of_performance_locations: geoFilter,
       };
 
-      // CFDA only applies to financial assistance, not contracts
       const assistanceCodes = ["02","03","04","05","06","07","08","09","10","11"];
       const cfdaFilters     = { ...baseFilters,     award_type_codes: assistanceCodes };
       const cfdaFiltersPrev = { ...prevBaseFilters, award_type_codes: assistanceCodes };
-
       const catBody = (filters: object, limit = 10) => ({ filters, limit, page: 1, subawards: false });
 
-      // 11 parallel requests — geography for type amounts + categories in current & prev FY
+      // 11 parallel requests
       const [
         totalRes, contractsRes, grantsRes, directRes, loansRes,
         programRes,   agencyRes,   recipientRes,
         programResPrev, agencyResPrev, recipientResPrev,
       ] = await Promise.allSettled([
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", {
-          scope: "place_of_performance", geo_layer: "state",
-          geo_layer_filters: [state.toUpperCase()],
+          scope: "place_of_performance", geo_layer: geoLayer,
+          geo_layer_filters: [geoLayerFilter],
           filters: { time_period: [{ start_date: fyStart, end_date: fyEnd }] },
           subawards: false,
         }),
@@ -3563,11 +3569,9 @@ Rules:
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(grantCodes)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(directPayCodes)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(loanCodes)),
-        // Current FY categories
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",            catBody(cfdaFilters, 10)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(baseFilters, 8)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(baseFilters, 10)),
-        // Previous FY fallbacks
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",            catBody(cfdaFiltersPrev, 10)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(prevBaseFilters, 8)),
         safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(prevBaseFilters, 10)),
@@ -3583,19 +3587,20 @@ Rules:
       const agencyData   = pickBest(agencyRes,    agencyResPrev);
       const recipientData = pickBest(recipientRes, recipientResPrev);
 
-      const getStateAmount = (res: PromiseSettledResult<any>) => {
+      const getGeoAmount = (res: PromiseSettledResult<any>) => {
         if (res.status !== "fulfilled") return 0;
+        const target = geoLayerFilter.toUpperCase();
         const row = ((res.value?.results ?? []) as any[]).find(
-          (r: any) => (r.shape_code ?? "").toUpperCase() === state.toUpperCase()
+          (r: any) => (r.shape_code ?? "").toUpperCase() === target
         );
         return (row?.aggregated_amount ?? 0) as number;
       };
 
-      const totalSpending  = getStateAmount(totalRes);
-      const contractAmount = getStateAmount(contractsRes);
-      const grantAmount    = getStateAmount(grantsRes);
-      const directAmount   = getStateAmount(directRes);
-      const loanAmount     = getStateAmount(loansRes);
+      const totalSpending  = getGeoAmount(totalRes);
+      const contractAmount = getGeoAmount(contractsRes);
+      const grantAmount    = getGeoAmount(grantsRes);
+      const directAmount   = getGeoAmount(directRes);
+      const loanAmount     = getGeoAmount(loansRes);
 
       const awardTypeAmounts = [
         { label: "Contracts",       amount: contractAmount, description: "Paid to businesses for goods & services" },
@@ -3652,13 +3657,18 @@ Rules:
       res.json({
         state:          state.toUpperCase(),
         fiscalYear:     fy,
-        scope:          isSenate ? "state" : `district ${district}`,
+        isSenate,
+        district:       districtPadded,
+        districtCode,
+        scopeLabel:     isSenate ? state.toUpperCase() : `${state.toUpperCase()}-${districtPadded}`,
         totalSpending,
         awardTypeAmounts,
         topPrograms,
         topAgencies,
         recipientTypes,
-        usaSpendingUrl: `https://www.usaspending.gov/state/${state.toUpperCase()}/latest`,
+        usaSpendingUrl: isSenate
+          ? `https://www.usaspending.gov/state/${state.toUpperCase()}/latest`
+          : `https://www.usaspending.gov/search/?hash=abc&filters=%7B%22place_of_performance_locations%22%3A%5B%7B%22country%22%3A%22USA%22%2C%22state%22%3A%22${state.toUpperCase()}%22%2C%22congressional_district%22%3A%22${districtPadded}%22%7D%5D%7D`,
       });
     } catch (e) { handleError(res, e); }
   });

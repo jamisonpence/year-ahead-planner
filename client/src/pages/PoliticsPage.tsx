@@ -1022,7 +1022,7 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
       <button onClick={() => setShown(s => !s)}
         className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
         <Landmark size={12} />
-        {shown ? "Hide" : "Show"} government spending in {isSenate ? "state" : "district"}
+        {shown ? "Hide" : "Show"} federal spending in {isSenate ? `${stateCode} (statewide)` : `district ${district}`}
         {shown ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
       </button>
 
@@ -1036,9 +1036,11 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold">{fmt$(totalSpending)}</span>
-                  <span className="text-xs text-muted-foreground">in {sp.state} · FY{sp.fiscalYear}</span>
+                  <span className="text-xs text-muted-foreground">in {sp.scopeLabel ?? sp.state} · FY{sp.fiscalYear}</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground/50 mt-0.5">All federal awards · Source: USASpending.gov</p>
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                  {sp.isSenate ? "All federal awards statewide" : `All federal awards in congressional district ${sp.district}`} · Source: USASpending.gov
+                </p>
               </div>
 
               {/* ── Where the money goes (by type) ── */}
