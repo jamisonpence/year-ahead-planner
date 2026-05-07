@@ -1377,3 +1377,47 @@ export const politicalNewsSources = pgTable("political_news_sources", {
 export const insertPoliticalNewsSourceSchema = createInsertSchema(politicalNewsSources).omit({ id: true });
 export type InsertPoliticalNewsSource = z.infer<typeof insertPoliticalNewsSourceSchema>;
 export type PoliticalNewsSource = typeof politicalNewsSources.$inferSelect;
+
+// ── Political Debates ──────────────────────────────────────────────────────────
+export const politicalDebates = pgTable("political_debates", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").notNull(),       // creator
+  title:       text("title").notNull(),
+  description: text("description"),
+  issueRef:    text("issue_ref"),                  // optional issue topic reference
+  shareCode:   text("share_code").notNull(),        // 8-char code for friends to join
+  status:      text("status").default("open"),      // "open" | "closed"
+  createdAt:   timestamp("created_at").defaultNow(),
+});
+export const insertPoliticalDebateSchema = createInsertSchema(politicalDebates).omit({ id: true, createdAt: true });
+export type InsertPoliticalDebate = z.infer<typeof insertPoliticalDebateSchema>;
+export type PoliticalDebate = typeof politicalDebates.$inferSelect;
+
+export const politicalDebatePosts = pgTable("political_debate_posts", {
+  id:          serial("id").primaryKey(),
+  debateId:    integer("debate_id").notNull(),
+  userId:      integer("user_id").notNull(),
+  displayName: text("display_name"),               // cached name of poster
+  content:     text("content").notNull(),
+  side:        text("side"),                       // "for" | "against" | "neutral"
+  upvoteCount: integer("upvote_count").default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+});
+export const insertPoliticalDebatePostSchema = createInsertSchema(politicalDebatePosts).omit({ id: true, createdAt: true, upvoteCount: true });
+export type InsertPoliticalDebatePost = z.infer<typeof insertPoliticalDebatePostSchema>;
+export type PoliticalDebatePost = typeof politicalDebatePosts.$inferSelect;
+
+export const politicalDebateUpvotes = pgTable("political_debate_upvotes", {
+  id:        serial("id").primaryKey(),
+  postId:    integer("post_id").notNull(),
+  userId:    integer("user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type PoliticalDebateUpvote = typeof politicalDebateUpvotes.$inferSelect;
+
+export const politicalDebateMembers = pgTable("political_debate_members", {
+  id:        serial("id").primaryKey(),
+  debateId:  integer("debate_id").notNull(),
+  userId:    integer("user_id").notNull(),
+  joinedAt:  timestamp("joined_at").defaultNow(),
+});

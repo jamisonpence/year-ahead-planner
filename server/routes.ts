@@ -4510,6 +4510,146 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Political Debates ─────────────────────────────────────────────────────────
+
+  function makeShareCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  // GET /api/politics/debates — list debates for current user
+  app.get("/api/politics/debates", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const uid = await storage.getTabUserId(user.id, "politics");
+      const debates = await storage.getDebatesForUser(uid);
+      // Annotate with post count + member count
+      const enriched = await Promise.all(debates.map(async d => {
+        const posts = await storage.getDebatePosts(d.id);
+        const members = await storage.getDebateMembers(d.id);
+        return { ...d, postCount: posts.length, memberCount: members.length };
+      }));
+      res.json(enriched);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // POST /api/politics/debates — create a debate
+  app.post("/api/politics/debates", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const uid = await storage.getTabUserId(user.id, "politics");
+      const { title, description, issueRef } = req.body;
+      if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+      let shareCode = makeShareCode();
+      // Ensure uniqueness
+      for (let i = 0; i < 5; i++) {
+        const existing = await storage.getDebateByShareCode(shareCode);
+        if (!existing) break;
+        shareCode = makeShareCode();
+      }
+      const debate = await storage.createDebate({ title: title.trim(), description, issueRef, shareCode, status: "open" }, uid);
+      res.json(debate);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/politics/debates/:id — get debate + posts + upvotes
+  app.get("/api/politics/debates/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const debate = await storage.getDebateById(id);
+      if (!debate) return res.status(404).json({ error: "Debate not found" });
+      const posts = await storage.getDebatePosts(id);
+      const upvotes = await storage.getUpvotesForDebate(id);
+      const members = await storage.getDebateMembers(id);
+      // My upvoted post IDs
+      const myUpvotes = upvotes.filter(u => u.userId === (req.user as User).id).map(u => u.postId);
+      res.json({ debate, posts, myUpvotes, memberCount: members.length });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // PATCH /api/politics/debates/:id — update (title, description, status)
+  app.patch("/api/politics/debates/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const debate = await storage.getDebateById(id);
+      if (!debate) return res.status(404).json({ error: "Not found" });
+      const uid = await storage.getTabUserId(user.id, "politics");
+      if (debate.userId !== uid) return res.status(403).json({ error: "Not your debate" });
+      const updated = await storage.updateDebate(id, req.body);
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/politics/debates/:id
+  app.delete("/api/politics/debates/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const debate = await storage.getDebateById(id);
+      if (!debate) return res.status(404).json({ error: "Not found" });
+      const uid = await storage.getTabUserId(user.id, "politics");
+      if (debate.userId !== uid) return res.status(403).json({ error: "Not your debate" });
+      await storage.deleteDebate(id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // POST /api/politics/debates/join — join by share code
+  app.post("/api/politics/debates/join", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { shareCode } = req.body as { shareCode?: string };
+      if (!shareCode?.trim()) return res.status(400).json({ error: "shareCode is required" });
+      const debate = await storage.getDebateByShareCode(shareCode.trim().toUpperCase());
+      if (!debate) return res.status(404).json({ error: "No debate found with that code" });
+      await storage.joinDebate(debate.id, user.id);
+      res.json(debate);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // POST /api/politics/debates/:id/posts — add a post
+  app.post("/api/politics/debates/:id/posts", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const debateId = parseInt(req.params.id);
+      const debate = await storage.getDebateById(debateId);
+      if (!debate) return res.status(404).json({ error: "Debate not found" });
+      if (debate.status === "closed") return res.status(400).json({ error: "This debate is closed" });
+      const { content, side, displayName } = req.body;
+      if (!content?.trim()) return res.status(400).json({ error: "content is required" });
+      const post = await storage.createDebatePost({ debateId, content: content.trim(), side, displayName }, user.id);
+      res.json(post);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/politics/debates/:id/posts/:postId
+  app.delete("/api/politics/debates/:id/posts/:postId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const postId = parseInt(req.params.postId);
+      const posts = await storage.getDebatePosts(parseInt(req.params.id));
+      const post = posts.find(p => p.id === postId);
+      if (!post) return res.status(404).json({ error: "Post not found" });
+      if (post.userId !== user.id) return res.status(403).json({ error: "Not your post" });
+      await storage.deleteDebatePost(postId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // POST /api/politics/debates/:id/posts/:postId/upvote — toggle upvote
+  app.post("/api/politics/debates/:id/posts/:postId/upvote", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const postId = parseInt(req.params.postId);
+      const added = await storage.toggleUpvote(postId, user.id);
+      res.json({ added });
+    } catch (e) { handleError(res, e); }
+  });
+
   // LegiScan — recent votes for a state member
   // Accepts: ?peopleId=ID  (if already known/cached)  OR  ?name=NAME&stateCode=TX  (auto-lookup)
   app.get("/api/politics/votes/state", requireAuth, async (req, res) => {

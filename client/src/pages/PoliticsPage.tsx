@@ -6,7 +6,8 @@ import {
   ChevronDown, ChevronUp, Phone, Mail, Globe, Star, Vote, Calendar,
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
   DollarSign, MapPin, Clock, Users2, TrendingDown, Compass, Sparkles,
-  ChevronRight, RefreshCw, ArrowRight,
+  ChevronRight, RefreshCw, ArrowRight, MessageSquare, ThumbsUp, Share2,
+  Copy, UserPlus, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
@@ -3077,12 +3078,13 @@ function CivicElectionsLookup({
 // ── Tab definitions ────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "officials", label: "Representatives",  icon: Users    },
-  { id: "identity",  label: "Political Identity", icon: Compass },
-  { id: "issues",    label: "Issues",            icon: BookOpen },
-  { id: "elections", label: "Elections",         icon: Vote     },
-  { id: "civic",     label: "Civic Actions",     icon: Zap      },
-  { id: "news",      label: "News Sources",      icon: Newspaper},
+  { id: "officials", label: "Representatives",  icon: Users         },
+  { id: "identity",  label: "Political Identity", icon: Compass     },
+  { id: "issues",    label: "Issues",            icon: BookOpen      },
+  { id: "elections", label: "Elections",         icon: Vote          },
+  { id: "debates",   label: "Debates",           icon: MessageSquare },
+  { id: "civic",     label: "Civic Actions",     icon: Zap           },
+  { id: "news",      label: "News Sources",      icon: Newspaper     },
 ];
 
 // ── Officials Tab ──────────────────────────────────────────────────────────────
@@ -4445,6 +4447,434 @@ function ElectionsTab() {
   );
 }
 
+// ── Debates Tab ───────────────────────────────────────────────────────────────
+
+const SIDE_META = {
+  for:     { label: "For",     color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", bar: "bg-emerald-500" },
+  against: { label: "Against", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",               bar: "bg-red-500" },
+  neutral: { label: "Neutral", color: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",           bar: "bg-stone-400" },
+} as const;
+
+function DebateThread({ debateId, currentUserId }: { debateId: number; currentUserId: number }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [content, setContent]   = useState("");
+  const [side, setSide]         = useState<"for" | "against" | "neutral">("neutral");
+  const [posting, setPosting]   = useState(false);
+  const [upvoting, setUpvoting] = useState<number | null>(null);
+
+  const { data, isLoading, refetch } = useQuery<any>({
+    queryKey: ["debate-thread", debateId],
+    queryFn: () => apiRequest("GET", `/api/politics/debates/${debateId}`).then(r => r.json()),
+    refetchInterval: 15000, // poll every 15s for new posts
+    staleTime: 5000,
+  });
+
+  const posts: any[]       = data?.posts ?? [];
+  const myUpvotes: number[] = data?.myUpvotes ?? [];
+  const debate              = data?.debate;
+
+  // Tally sides
+  const forCount     = posts.filter(p => p.side === "for").length;
+  const againstCount = posts.filter(p => p.side === "against").length;
+  const total        = posts.length || 1;
+
+  async function submitPost() {
+    if (!content.trim()) return;
+    setPosting(true);
+    try {
+      const r = await apiRequest("POST", `/api/politics/debates/${debateId}/posts`, { content: content.trim(), side });
+      if (!r.ok) { const b = await r.json(); throw new Error(b.error ?? "Failed"); }
+      setContent("");
+      refetch();
+      qc.invalidateQueries({ queryKey: ["debates-list"] });
+    } catch (e: any) {
+      toast({ title: "Failed to post", description: e.message, variant: "destructive" });
+    } finally { setPosting(false); }
+  }
+
+  async function handleUpvote(postId: number) {
+    setUpvoting(postId);
+    try {
+      await apiRequest("POST", `/api/politics/debates/${debateId}/posts/${postId}/upvote`, {});
+      refetch();
+    } finally { setUpvoting(null); }
+  }
+
+  async function deletePost(postId: number) {
+    await apiRequest("DELETE", `/api/politics/debates/${debateId}/posts/${postId}`, {});
+    refetch();
+    qc.invalidateQueries({ queryKey: ["debates-list"] });
+  }
+
+  if (isLoading) return <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />Loading discussion…</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Side tally bar */}
+      {posts.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span className="text-emerald-500 font-semibold">{forCount} For</span>
+            <span className="text-red-400 font-semibold">{againstCount} Against</span>
+          </div>
+          <div className="h-2 rounded-full bg-secondary overflow-hidden flex">
+            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(forCount / total) * 100}%` }} />
+            <div className="h-full bg-red-400 transition-all" style={{ width: `${(againstCount / total) * 100}%` }} />
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center">{posts.length} post{posts.length !== 1 ? "s" : ""} · {data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
+        </div>
+      )}
+
+      {/* Posts */}
+      <div className="space-y-2">
+        {posts.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">No posts yet — be the first to share your view.</p>
+        )}
+        {posts.map((p: any) => {
+          const sideMeta = SIDE_META[p.side as keyof typeof SIDE_META] ?? SIDE_META.neutral;
+          const isUpvoted = myUpvotes.includes(p.id);
+          const isOwn = p.userId === currentUserId;
+          return (
+            <div key={p.id} className="rounded-xl border bg-card p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-xs font-semibold">{p.displayName ?? "Anonymous"}</span>
+                    {p.side && <Badge className={`text-[10px] ${sideMeta.color}`}>{sideMeta.label}</Badge>}
+                    <span className="text-[10px] text-muted-foreground ml-auto">
+                      {p.createdAt ? format(new Date(p.createdAt), "MMM d, h:mm a") : ""}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed">{p.content}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={() => handleUpvote(p.id)}
+                  disabled={upvoting === p.id}
+                  className={`flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border transition-all ${
+                    isUpvoted
+                      ? "bg-violet-500/20 border-violet-400/40 text-violet-500"
+                      : "border-secondary text-muted-foreground hover:border-violet-400/40 hover:text-violet-500"
+                  }`}
+                >
+                  {upvoting === p.id ? <Loader2 size={11} className="animate-spin" /> : <ThumbsUp size={11} />}
+                  {p.upvoteCount ?? 0}
+                </button>
+                {isOwn && (
+                  <button
+                    onClick={() => deletePost(p.id)}
+                    className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                  >
+                    <Trash2 size={10} />Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* New post composer */}
+      {debate?.status !== "closed" && (
+        <div className="border rounded-xl p-3 bg-secondary/20 space-y-2">
+          <div className="flex gap-1.5">
+            {(["for", "against", "neutral"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setSide(s)}
+                className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition-all capitalize ${
+                  side === s
+                    ? `${SIDE_META[s].color} border-transparent`
+                    : "border-secondary text-muted-foreground hover:border-primary/30"
+                }`}
+              >
+                {SIDE_META[s].label}
+              </button>
+            ))}
+          </div>
+          <Textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitPost(); }}
+            placeholder="Share your perspective… (⌘↵ to post)"
+            rows={3}
+            className="text-sm resize-none"
+          />
+          <div className="flex justify-end">
+            <Button size="sm" onClick={submitPost} disabled={posting || !content.trim()} className="gap-1.5">
+              {posting ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+              Post
+            </Button>
+          </div>
+        </div>
+      )}
+      {debate?.status === "closed" && (
+        <p className="text-xs text-muted-foreground text-center py-2 flex items-center justify-center gap-1.5">
+          <Lock size={11} />This debate is closed to new posts.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DebatesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [activeDebateId, setActiveDebateId] = useState<number | null>(null);
+  const [showCreate, setShowCreate]         = useState(false);
+  const [showJoin, setShowJoin]             = useState(false);
+  const [newTitle, setNewTitle]             = useState("");
+  const [newDesc, setNewDesc]               = useState("");
+  const [newIssue, setNewIssue]             = useState("");
+  const [joinCode, setJoinCode]             = useState("");
+  const [joining, setJoining]               = useState(false);
+  const [creating, setCreating]             = useState(false);
+  const [copiedCode, setCopiedCode]         = useState<string | null>(null);
+
+  // Current user id (read from query cache via /api/user)
+  const { data: me } = useQuery<any>({ queryKey: ["/api/user"], queryFn: () => apiRequest("GET", "/api/user").then(r => r.json()), staleTime: Infinity });
+  const currentUserId = me?.id ?? 0;
+
+  const { data: debates = [], isLoading } = useQuery<any[]>({
+    queryKey: ["debates-list"],
+    queryFn: () => apiRequest("GET", "/api/politics/debates").then(r => r.json()),
+  });
+
+  const activeDebate = debates.find(d => d.id === activeDebateId);
+
+  async function createDebate() {
+    if (!newTitle.trim()) return;
+    setCreating(true);
+    try {
+      const r = await apiRequest("POST", "/api/politics/debates", { title: newTitle.trim(), description: newDesc.trim() || undefined, issueRef: newIssue.trim() || undefined });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["debates-list"] });
+      setShowCreate(false); setNewTitle(""); setNewDesc(""); setNewIssue("");
+      setActiveDebateId(d.id);
+      toast({ title: "Debate created", description: `Share code: ${d.shareCode}` });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    } finally { setCreating(false); }
+  }
+
+  async function joinDebate() {
+    if (!joinCode.trim()) return;
+    setJoining(true);
+    try {
+      const r = await apiRequest("POST", "/api/politics/debates/join", { shareCode: joinCode.trim().toUpperCase() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Not found");
+      qc.invalidateQueries({ queryKey: ["debates-list"] });
+      setShowJoin(false); setJoinCode("");
+      setActiveDebateId(d.id);
+      toast({ title: `Joined "${d.title}"` });
+    } catch (e: any) {
+      toast({ title: "Failed to join", description: e.message, variant: "destructive" });
+    } finally { setJoining(false); }
+  }
+
+  async function closeDebate(id: number) {
+    await apiRequest("PATCH", `/api/politics/debates/${id}`, { status: "closed" });
+    qc.invalidateQueries({ queryKey: ["debates-list"] });
+    qc.invalidateQueries({ queryKey: ["debate-thread", id] });
+  }
+
+  async function deleteDebate(id: number) {
+    await apiRequest("DELETE", `/api/politics/debates/${id}`, {});
+    qc.invalidateQueries({ queryKey: ["debates-list"] });
+    if (activeDebateId === id) setActiveDebateId(null);
+  }
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 2000);
+    });
+  }
+
+  // ── Active debate view ─────────────────────────────────────────────────────
+  if (activeDebateId && activeDebate) {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <button onClick={() => setActiveDebateId(null)} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
+            <ChevronRight size={16} className="rotate-180" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-base leading-tight">{activeDebate.title}</h2>
+            {activeDebate.description && <p className="text-xs text-muted-foreground mt-0.5">{activeDebate.description}</p>}
+            {activeDebate.issueRef && (
+              <Badge className="mt-1 bg-primary/10 text-primary text-[10px]">{activeDebate.issueRef}</Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Share code */}
+            <button
+              onClick={() => copyCode(activeDebate.shareCode)}
+              className="flex items-center gap-1.5 text-[10px] font-mono font-bold border rounded-lg px-2 py-1 hover:bg-secondary/60 transition-colors"
+            >
+              {copiedCode === activeDebate.shareCode ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+              {activeDebate.shareCode}
+            </button>
+            {/* Close / Delete for owner */}
+            {activeDebate.userId === currentUserId && activeDebate.status === "open" && (
+              <button onClick={() => closeDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-amber-500 border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                <Lock size={9} />Close
+              </button>
+            )}
+            {activeDebate.userId === currentUserId && (
+              <button onClick={() => deleteDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-destructive border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                <Trash2 size={9} />Delete
+              </button>
+            )}
+          </div>
+        </div>
+
+        <DebateThread debateId={activeDebateId} currentUserId={currentUserId} />
+      </div>
+    );
+  }
+
+  // ── Debate list ────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4">
+      {/* Hero banner */}
+      <div className="rounded-xl border bg-gradient-to-r from-violet-500/5 to-blue-500/5 p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full bg-violet-500/20 flex items-center justify-center">
+            <MessageSquare size={16} className="text-violet-500" />
+          </div>
+          <div>
+            <p className="font-bold text-sm">Debate with Friends</p>
+            <p className="text-xs text-muted-foreground">Create a debate topic, share the code, and discuss issues together</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => { setShowCreate(true); setShowJoin(false); }} className="gap-1.5">
+            <Plus size={13} />New Debate
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setShowJoin(true); setShowCreate(false); }} className="gap-1.5">
+            <UserPlus size={13} />Join with Code
+          </Button>
+        </div>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+          <h3 className="font-semibold text-sm">New Debate</h3>
+          <div className="space-y-2">
+            <input
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              placeholder="Debate topic (e.g. Should the US increase foreign aid?)"
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <input
+              value={newIssue}
+              onChange={e => setNewIssue(e.target.value)}
+              placeholder="Issue category (optional, e.g. Foreign Policy)"
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <Textarea
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              placeholder="Background or context (optional)"
+              rows={2}
+              className="text-sm resize-none"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={createDebate} disabled={creating || !newTitle.trim()} className="gap-1.5">
+              {creating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Create
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)}><X size={13} /></Button>
+          </div>
+        </div>
+      )}
+
+      {/* Join form */}
+      {showJoin && (
+        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+          <h3 className="font-semibold text-sm">Join a Debate</h3>
+          <p className="text-xs text-muted-foreground">Ask a friend to share their 6-character debate code.</p>
+          <div className="flex gap-2">
+            <input
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="Enter code (e.g. AB3X7K)"
+              maxLength={6}
+              className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono uppercase bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <Button size="sm" onClick={joinDebate} disabled={joining || joinCode.trim().length < 4} className="gap-1.5">
+              {joining ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}Join
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowJoin(false)}><X size={13} /></Button>
+          </div>
+        </div>
+      )}
+
+      {/* Debates list */}
+      {isLoading && (
+        <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground justify-center">
+          <Loader2 size={13} className="animate-spin" />Loading debates…
+        </div>
+      )}
+
+      {!isLoading && debates.length === 0 && !showCreate && (
+        <div className="text-center py-10 space-y-2">
+          <MessageSquare size={28} className="mx-auto text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No debates yet.</p>
+          <p className="text-xs text-muted-foreground">Create a topic and invite friends with a share code to discuss issues together.</p>
+        </div>
+      )}
+
+      {debates.length > 0 && (
+        <div className="space-y-2">
+          {debates.map((d: any) => {
+            const isOwn = d.userId === currentUserId;
+            return (
+              <button
+                key={d.id}
+                onClick={() => setActiveDebateId(d.id)}
+                className="w-full text-left border rounded-xl bg-card hover:bg-secondary/30 transition-colors overflow-hidden"
+              >
+                <div className="px-4 py-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-semibold text-sm">{d.title}</span>
+                      {d.status === "closed" && (
+                        <Badge className="bg-secondary text-muted-foreground text-[10px] flex items-center gap-0.5"><Lock size={8} />Closed</Badge>
+                      )}
+                      {isOwn && <Badge className="bg-violet-500/15 text-violet-500 text-[10px]">Creator</Badge>}
+                      {d.issueRef && <Badge className="bg-primary/10 text-primary text-[10px]">{d.issueRef}</Badge>}
+                    </div>
+                    {d.description && <p className="text-xs text-muted-foreground line-clamp-1">{d.description}</p>}
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <MessageSquare size={10} />{d.postCount ?? 0} post{d.postCount !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Users2 size={10} />{d.memberCount ?? 1} participant{(d.memberCount ?? 1) !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground ml-auto">{d.shareCode}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Civic Actions Tab ──────────────────────────────────────────────────────────
 
 function CivicActionsTab() {
@@ -4751,6 +5181,7 @@ export default function PoliticsPage() {
       {activeTab === "identity"  && <IdentityTab />}
       {activeTab === "issues"    && <IssuesTab />}
       {activeTab === "elections" && <ElectionsTab />}
+      {activeTab === "debates"   && <DebatesTab />}
       {activeTab === "civic"     && <CivicActionsTab />}
       {activeTab === "news"      && <NewsSourcesTab />}
     </div>

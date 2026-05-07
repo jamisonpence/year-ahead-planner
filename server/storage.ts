@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
@@ -1083,6 +1083,42 @@ export async function initializeStorage() {
       type TEXT,
       topics TEXT,
       notes TEXT
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS political_debates (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      issue_ref TEXT,
+      share_code TEXT NOT NULL UNIQUE,
+      status TEXT DEFAULT 'open',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS political_debate_posts (
+      id SERIAL PRIMARY KEY,
+      debate_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      display_name TEXT,
+      content TEXT NOT NULL,
+      side TEXT,
+      upvote_count INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS political_debate_upvotes (
+      id SERIAL PRIMARY KEY,
+      post_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(post_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS political_debate_members (
+      id SERIAL PRIMARY KEY,
+      debate_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      joined_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(debate_id, user_id)
     );
   `);
 }
@@ -3465,6 +3501,94 @@ export const storage: IStorage = {
   async deletePoliticalNewsSource(id: number) {
     const result = await db.delete(politicalNewsSources).where(eq(politicalNewsSources.id, id));
     return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Political Debates ──────────────────────────────────────────────────────
+  async getDebatesForUser(userId: number) {
+    // Debates the user created OR joined
+    const created = await db.select().from(politicalDebates).where(eq(politicalDebates.userId, userId));
+    const memberships = await db.select().from(politicalDebateMembers).where(eq(politicalDebateMembers.userId, userId));
+    const joinedIds = memberships.map(m => m.debateId).filter(id => !created.find(d => d.id === id));
+    let joined: any[] = [];
+    if (joinedIds.length > 0) {
+      joined = await Promise.all(joinedIds.map(id => db.select().from(politicalDebates).where(eq(politicalDebates.id, id)).then(r => r[0]).catch(() => null)));
+      joined = joined.filter(Boolean);
+    }
+    return [...created, ...joined].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+  async getDebateById(id: number) {
+    const rows = await db.select().from(politicalDebates).where(eq(politicalDebates.id, id));
+    return rows[0] ?? null;
+  },
+  async getDebateByShareCode(shareCode: string) {
+    const rows = await db.select().from(politicalDebates).where(eq(politicalDebates.shareCode, shareCode));
+    return rows[0] ?? null;
+  },
+  async createDebate(data: any, userId: number) {
+    const result = await db.insert(politicalDebates).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateDebate(id: number, data: any) {
+    const result = await db.update(politicalDebates).set(data).where(eq(politicalDebates.id, id)).returning();
+    return result[0];
+  },
+  async deleteDebate(id: number) {
+    await db.delete(politicalDebatePosts).where(eq(politicalDebatePosts.debateId, id));
+    await db.delete(politicalDebateMembers).where(eq(politicalDebateMembers.debateId, id));
+    const result = await db.delete(politicalDebates).where(eq(politicalDebates.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async joinDebate(debateId: number, userId: number) {
+    await db.insert(politicalDebateMembers).values({ debateId, userId }).onConflictDoNothing();
+  },
+  async getDebateMembers(debateId: number) {
+    return db.select().from(politicalDebateMembers).where(eq(politicalDebateMembers.debateId, debateId));
+  },
+
+  // Posts
+  async getDebatePosts(debateId: number) {
+    return db.select().from(politicalDebatePosts).where(eq(politicalDebatePosts.debateId, debateId)).orderBy(asc(politicalDebatePosts.createdAt));
+  },
+  async createDebatePost(data: any, userId: number) {
+    const result = await db.insert(politicalDebatePosts).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateDebatePost(id: number, data: any) {
+    const result = await db.update(politicalDebatePosts).set(data).where(eq(politicalDebatePosts.id, id)).returning();
+    return result[0];
+  },
+  async deleteDebatePost(id: number) {
+    await db.delete(politicalDebateUpvotes).where(eq(politicalDebateUpvotes.postId, id));
+    const result = await db.delete(politicalDebatePosts).where(eq(politicalDebatePosts.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // Upvotes
+  async getUpvotesForDebate(debateId: number) {
+    // Get all upvotes for posts in this debate
+    const posts = await db.select({ id: politicalDebatePosts.id }).from(politicalDebatePosts).where(eq(politicalDebatePosts.debateId, debateId));
+    if (posts.length === 0) return [];
+    const postIds = posts.map(p => p.id);
+    const all: any[] = [];
+    for (const pid of postIds) {
+      const uvs = await db.select().from(politicalDebateUpvotes).where(eq(politicalDebateUpvotes.postId, pid));
+      all.push(...uvs);
+    }
+    return all;
+  },
+  async toggleUpvote(postId: number, userId: number) {
+    const existing = await db.select().from(politicalDebateUpvotes)
+      .where(eq(politicalDebateUpvotes.postId, postId));
+    const mine = existing.find(u => u.userId === userId);
+    if (mine) {
+      await db.delete(politicalDebateUpvotes).where(eq(politicalDebateUpvotes.id, mine.id));
+      await db.update(politicalDebatePosts).set({ upvoteCount: Math.max(0, existing.length - 1) }).where(eq(politicalDebatePosts.id, postId));
+      return false; // removed
+    } else {
+      await db.insert(politicalDebateUpvotes).values({ postId, userId });
+      await db.update(politicalDebatePosts).set({ upvoteCount: existing.length + 1 }).where(eq(politicalDebatePosts.id, postId));
+      return true; // added
+    }
   },
 };
 
