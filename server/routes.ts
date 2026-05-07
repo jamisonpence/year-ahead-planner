@@ -4145,7 +4145,10 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
 
   // Officials / Representatives
   app.get("/api/politics/officials", requireAuth, async (req, res) => {
-    try { res.json(await storage.getPoliticalOfficials((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json(await storage.getPoliticalOfficials(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/politics/officials", requireAuth, async (req, res) => {
     try { res.json(await storage.createPoliticalOfficial(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
@@ -4164,7 +4167,10 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
 
   // Issues
   app.get("/api/politics/issues", requireAuth, async (req, res) => {
-    try { res.json(await storage.getPoliticalIssues((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json(await storage.getPoliticalIssues(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/politics/issues", requireAuth, async (req, res) => {
     try { res.json(await storage.createPoliticalIssue(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
@@ -4183,7 +4189,10 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
 
   // Elections
   app.get("/api/politics/elections", requireAuth, async (req, res) => {
-    try { res.json(await storage.getPoliticalElections((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json(await storage.getPoliticalElections(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/politics/elections", requireAuth, async (req, res) => {
     try { res.json(await storage.createPoliticalElection(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
@@ -4202,7 +4211,10 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
 
   // Civic Actions
   app.get("/api/politics/civic-actions", requireAuth, async (req, res) => {
-    try { res.json(await storage.getCivicActions((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json(await storage.getCivicActions(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/politics/civic-actions", requireAuth, async (req, res) => {
     try { res.json(await storage.createCivicAction(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
@@ -4221,7 +4233,10 @@ Be factual, balanced, and avoid partisan framing. If you lack data for a section
 
   // News Sources
   app.get("/api/politics/news-sources", requireAuth, async (req, res) => {
-    try { res.json(await storage.getPoliticalNewsSources((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json(await storage.getPoliticalNewsSources(uid));
+    } catch (e) { handleError(res, e); }
   });
   app.post("/api/politics/news-sources", requireAuth, async (req, res) => {
     try { res.json(await storage.createPoliticalNewsSource(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }

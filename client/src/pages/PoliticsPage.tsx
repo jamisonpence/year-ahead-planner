@@ -12,6 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
   PoliticalOfficial, PoliticalIssue, PoliticalElection, CivicAction, PoliticalNewsSource,
+  TabCollaborationWithUser,
 } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -3770,6 +3771,12 @@ function NewsSourcesTab() {
 export default function PoliticsPage() {
   const [activeTab, setActiveTab] = useState("officials");
 
+  const { data: collabs = [] } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+  const politicsCollab = collabs.find(c => c.tabName === "politics" && c.status === "accepted");
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
@@ -3782,6 +3789,17 @@ export default function PoliticsPage() {
           <p className="text-sm text-muted-foreground">Track your representatives, issues, elections, and civic engagement</p>
         </div>
       </div>
+
+      {/* Collaboration banner */}
+      {politicsCollab && (
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300">
+          <Users size={14} className="shrink-0" />
+          <span>
+            Collaborating with <strong>{politicsCollab.otherUser.name}</strong>
+            {politicsCollab.role === "collaborator" ? " — viewing their politics" : " — they can see your politics"}
+          </span>
+        </div>
+      )}
 
       {/* Sub-nav */}
       <div className="flex gap-1 flex-wrap border-b">
