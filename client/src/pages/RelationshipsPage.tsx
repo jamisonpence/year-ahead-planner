@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
@@ -7,7 +8,7 @@ import {
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
   UserX, Send, Loader2, Link, Bell,
-  Sparkles,
+  Sparkles, LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -539,6 +540,7 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const [, forceUpdate] = useState(0);
+  const [, navigate] = useLocation();
 
   const spouse = person.spouseId ? allPeople.find((p) => p.id === person.spouseId) : null;
   const childIds = parseChildIds(person.childrenJson);
@@ -571,7 +573,15 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
                   )}
                 </div>
                 {friend && (
-                  <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
+                  <>
+                    <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
+                    <button
+                      onClick={() => navigate(`/profile/${friend.id}`)}
+                      className="mt-1 flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+                    >
+                      <LayoutGrid size={10} /> View shared tabs
+                    </button>
+                  </>
                 )}
                 {!friend && (spouse ? (
                   <p className="text-xs text-rose-500 dark:text-rose-400 flex items-center gap-1 mt-0.5">
@@ -591,6 +601,11 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
                     <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal size={13} /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {friend && (
+                      <DropdownMenuItem onClick={() => navigate(`/profile/${friend.id}`)}>
+                        <LayoutGrid size={13} className="mr-2" />View shared tabs
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => onEdit(person)}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(person.id)}>
                       <Trash2 size={13} className="mr-2" />Delete
@@ -678,6 +693,7 @@ function FriendCard({
   onUnfriend: (id: number) => void;
   onEditProfile: (friend: PublicUser) => void;
 }) {
+  const [, navigate] = useLocation();
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
       <div className="h-1.5 bg-primary/20" />
@@ -692,20 +708,28 @@ function FriendCard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground truncate">{friend.email}</p>
-            <button
-              onClick={() => onEditProfile(friend)}
-              className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <Pencil size={10} /> Add to a group & set up profile
-            </button>
+            <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => navigate(`/profile/${friend.id}`)}
+                className="flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+              >
+                <LayoutGrid size={10} /> View shared tabs
+              </button>
+              <button
+                onClick={() => onEditProfile(friend)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                <Pencil size={10} /> Add to group
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => onEditProfile(friend)}
-              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-primary transition-colors"
-              title="Edit profile"
+              onClick={() => navigate(`/profile/${friend.id}`)}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+              title="View shared tabs"
             >
-              <Pencil size={14} />
+              <LayoutGrid size={14} />
             </button>
             <button
               onClick={() => onUnfriend(friend.id)}
