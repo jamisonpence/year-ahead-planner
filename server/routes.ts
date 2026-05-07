@@ -2784,17 +2784,30 @@ Rules:
       // Normalise fields for the client
       const members = (data.members ?? [])
         .filter((m: any) => {
-          // Filter server-side in case the API doesn't honour stateCode param
+          // Congress.gov may return m.state as full name ("Texas") so map both ways
+          const STATE_NAME_TO_CODE: Record<string,string> = {
+            "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+            "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+            "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
+            "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
+            "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
+            "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
+            "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND",
+            "Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI",
+            "South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT",
+            "Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV",
+            "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC",
+          };
           const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item
             : m.terms?.item ? [m.terms.item] : [];
-          const latestTerm  = terms[terms.length - 1];
-          const termState   = (latestTerm?.stateCode ?? "").toUpperCase().trim();
-          const memberState = (m.state ?? m.stateCode ?? "").toUpperCase().trim();
-          // If neither field is populated, trust the API's stateCode param already filtered
-          if (!termState && !memberState) return true;
-          // Accept only 2-letter-code matches (ignore full-name "Texas" etc — those are wrong API responses)
-          return (termState.length === 2 && termState === state) ||
-                 (memberState.length === 2 && memberState === state);
+          const latestTerm    = terms[terms.length - 1];
+          const termCode      = (latestTerm?.stateCode ?? "").toUpperCase().trim();
+          const memberCode    = (m.stateCode ?? "").toUpperCase().trim();
+          const memberName    = (m.state ?? "").trim();
+          const mappedCode    = STATE_NAME_TO_CODE[memberName] ?? "";
+          // If no state info at all, trust API's stateCode param
+          if (!termCode && !memberCode && !memberName) return true;
+          return termCode === state || memberCode === state || mappedCode === state;
         })
         .map((m: any) => {
           // Congress.gov returns name as "LastName, FirstName [Middle]"
