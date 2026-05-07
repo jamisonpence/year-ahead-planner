@@ -1775,6 +1775,20 @@ function CandidateDetails({
     retry: false,
   });
 
+  // Congress.gov member profile — sponsored bills + committees
+  const profileQuery = useQuery<any>({
+    queryKey: ["cand-profile", candidate.name, stateCode, fecOffice],
+    queryFn: async () => {
+      const p = new URLSearchParams({ name: candidate.name, state: stateCode, office: fecOffice });
+      const r = await apiRequest("GET", `/api/politics/congress/member-profile?${p}`);
+      if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.error ?? `${r.status}`); }
+      return r.json();
+    },
+    enabled: tab === "positions",
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+
   // Spending query — FEC Schedule B disbursements by purpose
   const spendingQuery = useQuery<any>({
     queryKey: ["cand-spending", candidate.name, stateCode, fecOffice],
@@ -2212,14 +2226,115 @@ function CandidateDetails({
             )}
           </div>
 
+          {/* ── Sponsored Legislation ── */}
+          <div>
+            <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">
+              Legislation they've introduced
+            </p>
+            {profileQuery.isLoading && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Loader2 size={11} className="animate-spin" />Looking up sponsored bills…
+              </div>
+            )}
+            {profileQuery.isError && (
+              <p className="text-[11px] text-muted-foreground italic">
+                No bill data found — this candidate may not currently hold federal office.
+              </p>
+            )}
+            {profileQuery.data && (() => {
+              const bills: any[] = profileQuery.data.bills ?? [];
+              const committees: any[] = profileQuery.data.committees ?? [];
+              const leadership: string[] = profileQuery.data.leadership ?? [];
+
+              // Group bills by policy area
+              const areaMap = new Map<string, any[]>();
+              for (const b of bills) {
+                const area = b.policyArea || "Other";
+                if (!areaMap.has(area)) areaMap.set(area, []);
+                areaMap.get(area)!.push(b);
+              }
+              const groupedBills = [...areaMap.entries()].sort((a, b) => b[1].length - a[1].length);
+
+              return (
+                <div className="space-y-3">
+                  {/* Leadership roles */}
+                  {leadership.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {leadership.map((l, i) => (
+                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bills by policy area */}
+                  {bills.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic">No sponsored bills found for this candidate.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {groupedBills.map(([area, areaBills]) => (
+                        <div key={area} className="rounded-lg border bg-secondary/20 overflow-hidden">
+                          <div className="flex items-center justify-between px-2.5 py-1.5 bg-secondary/40 border-b border-border/30">
+                            <span className="text-[10px] font-semibold">{area}</span>
+                            <span className="text-[9px] text-muted-foreground">{areaBills.length} bill{areaBills.length !== 1 ? "s" : ""}</span>
+                          </div>
+                          <div className="divide-y divide-border/30">
+                            {areaBills.map((b: any, i: number) => (
+                              <div key={i} className="px-2.5 py-2 space-y-0.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-[11px] leading-snug font-medium flex-1">{b.title}</p>
+                                  <span className="text-[9px] text-muted-foreground/60 shrink-0 font-mono">{b.number}</span>
+                                </div>
+                                {b.latestAction && (
+                                  <p className="text-[9px] text-muted-foreground/70 leading-snug">{b.latestAction}</p>
+                                )}
+                                {b.introducedDate && (
+                                  <p className="text-[9px] text-muted-foreground/50">Introduced {b.introducedDate}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Committee assignments */}
+                  {committees.length > 0 && (
+                    <div>
+                      <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Committee assignments</p>
+                      <div className="space-y-1">
+                        {committees.map((c: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-secondary/30 border border-border/40">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-medium truncate">{c.name}</p>
+                              {c.rank && <p className="text-[9px] text-muted-foreground">{c.rank}</p>}
+                            </div>
+                            {c.chamber && (
+                              <span className="text-[9px] text-muted-foreground/60 shrink-0">{c.chamber}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Research links */}
           <div>
             <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-1.5">Research their stated positions</p>
             <div className="space-y-1">
               {[
-                { label: "Ballotpedia", url: bpUrl, note: "Policy positions & biography" },
-                { label: "VoteSmart",   url: vsUrl, note: "Issue positions & ratings" },
-                { label: "Congress.gov",url: cgUrl, note: "Sponsored legislation" },
+                { label: "On The Issues",  url: `https://www.ontheissues.org/search.htm?q=${encodeURIComponent(displayName)}`,                    note: "Quoted positions on every issue" },
+                { label: "Ballotpedia",    url: bpUrl,                                                                                              note: "Policy positions & biography" },
+                { label: "VoteSmart",      url: vsUrl,                                                                                              note: "Issue positions & interest group ratings" },
+                { label: "GovTrack",       url: `https://www.govtrack.us/congress/members?query=${encodeURIComponent(displayName)}`,                note: "Ideology score & legislative activity" },
+                { label: "OpenSecrets",    url: `https://www.opensecrets.org/search?type=candidates&q=${encodeURIComponent(displayName)}`,          note: "Who funds them & industry breakdown" },
+                { label: "Congress.gov",   url: cgUrl,                                                                                              note: "Official bills & committee work" },
               ].map(link => (
                 <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-between px-2.5 py-1.5 rounded-md border bg-background hover:bg-secondary/50 transition-colors">

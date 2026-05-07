@@ -2844,6 +2844,84 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Congress.gov — member profile: sponsored bills + committees for a candidate
+  // Accepts: ?name=FEC_NAME&state=TX&office=S|H
+  app.get("/api/politics/congress/member-profile", requireAuth, async (req, res) => {
+    try {
+      const { name = "", state = "", office = "H" } = req.query as Record<string, string>;
+      if (!name) return res.status(400).json({ error: "name is required" });
+
+      const apiKey = process.env.CONGRESS_API_KEY || "DEMO_KEY";
+      const isSenate = office.toUpperCase() === "S";
+      const lastName = name.includes(",")
+        ? name.split(",")[0].trim()
+        : name.trim().split(/\s+/).slice(-1)[0];
+
+      const safeJson = async (url: string) => {
+        try {
+          const r = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+          return r.ok ? await r.json() : {};
+        } catch { return {}; }
+      };
+
+      // Search Congress.gov for member by last name
+      const searchData: any = await safeJson(
+        `https://api.congress.gov/v3/member?name=${encodeURIComponent(lastName)}&currentMember=true&limit=20&api_key=${apiKey}`
+      );
+      const candidates: any[] = searchData.members ?? [];
+
+      // Pick best match: state + chamber alignment
+      const member = candidates.find(m => {
+        const stateMatch = !state || (m.stateCode ?? "").toUpperCase() === state.toUpperCase();
+        const terms: any[] = Array.isArray(m.terms?.item) ? m.terms.item : m.terms?.item ? [m.terms.item] : [];
+        const latestTerm = terms[terms.length - 1];
+        const chamberStr = (latestTerm?.chamber ?? "").toLowerCase();
+        const chamberMatch = isSenate ? chamberStr.includes("senate") : chamberStr.includes("house");
+        return stateMatch && chamberMatch;
+      }) ?? candidates[0];
+
+      if (!member?.bioguideId) return res.status(404).json({ error: "Member not found in Congress.gov" });
+      const bioguideId: string = member.bioguideId;
+
+      // Parallel: sponsored legislation + full member details (includes committees)
+      const [billsData, memberData] = await Promise.all([
+        safeJson(`https://api.congress.gov/v3/member/${bioguideId}/sponsored-legislation?limit=20&sort=introducedDate+desc&api_key=${apiKey}`),
+        safeJson(`https://api.congress.gov/v3/member/${bioguideId}?api_key=${apiKey}`),
+      ]) as any[];
+
+      const bills = ((billsData.sponsoredLegislation ?? []) as any[]).slice(0, 15).map((b: any) => ({
+        number:         b.number        ?? "",
+        title:          b.title         ?? "",
+        type:           b.type          ?? "",
+        introducedDate: b.introducedDate ?? "",
+        latestAction:   b.latestAction?.text ?? "",
+        congress:       b.congress      ?? "",
+        policyArea:     b.policyArea?.name ?? "",
+        url:            b.url           ?? "",
+      }));
+
+      // Committees from member details
+      const memberDetails: any = memberData.member ?? {};
+      const committeeHistory: any[] = memberDetails.committeeAssignments?.item ?? [];
+      const committees = (Array.isArray(committeeHistory) ? committeeHistory : [committeeHistory])
+        .filter((c: any) => c?.committeeName)
+        .slice(0, 10)
+        .map((c: any) => ({
+          name:    c.committeeName ?? "",
+          chamber: c.chamber ?? "",
+          rank:    c.rank ?? "",
+        }));
+
+      // Leadership roles
+      const leadershipRaw: any[] = memberDetails.leadership ?? [];
+      const leadership = (Array.isArray(leadershipRaw) ? leadershipRaw : [leadershipRaw])
+        .filter((l: any) => l?.type)
+        .map((l: any) => l.type as string);
+
+      res.json({ bioguideId, bills, committees, leadership, party: member.partyName ?? "" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // WhoIsMyRepresentative.com proxy — search by ZIP code
   // Name search uses Congress.gov API (more reliable)
   app.get("/api/politics/whoismyrep", requireAuth, async (req, res) => {
