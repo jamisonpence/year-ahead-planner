@@ -1575,21 +1575,64 @@ const POLICY_BUCKETS: Array<{
     againstLabel: "Oppose social justice legislation" },
 ];
 
+// Procedural votes that carry no direct policy signal — exclude from analysis
+const NOISE_VOTE_PATTERNS = [
+  /\bcloture\b/i,
+  /motion to waive/i,
+  /motion to proceed/i,
+  /motion to instruct/i,
+  /unanimous consent/i,
+  /adjournment/i,
+];
+
+// Motions where a Nay vote SUPPORTS the underlying bill / policy position
+// (e.g., Nay on "Motion to Discharge troops withdrawal" = supports keeping troops)
+const INVERTED_MOTION_PATTERNS = [
+  /motion to discharge/i,
+  /motion to table/i,
+  /motion to recommit/i,
+  /motion to kill/i,
+];
+
+function voteDirection(voteText: string, description: string): "yea" | "nay" | null {
+  const isYea = /\byea\b|\byes\b|\baye\b/i.test(voteText);
+  const isNay = /\bnay\b|\bno\b/i.test(voteText);
+  if (!isYea && !isNay) return null;
+  const invert = INVERTED_MOTION_PATTERNS.some(p => p.test(description));
+  // For inverted motions: voting Nay means supporting the blocked measure
+  if (invert) return isNay ? "yea" : "nay";
+  return isYea ? "yea" : "nay";
+}
+
 function categorizeVotes(votes: any[]): Array<{
   label: string; emoji: string; yea: number; nay: number;
   forLabel: string; againstLabel: string;
-  examples: Array<{ text: string; vote: string }>;
+  examples: Array<{ text: string; vote: string; inverted: boolean }>;
 }> {
   return POLICY_BUCKETS.map(bucket => {
     const matching = votes.filter(v => {
-      const text = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`.toLowerCase();
-      return bucket.keywords.some(kw => text.includes(kw));
+      const desc = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`;
+      // Skip pure procedural noise
+      if (NOISE_VOTE_PATTERNS.some(p => p.test(desc))) return false;
+      return bucket.keywords.some(kw => desc.toLowerCase().includes(kw));
     });
-    const yea = matching.filter(v => /\byea\b|\byes\b|\baye\b/i.test(v.memberVote ?? "")).length;
-    const nay = matching.filter(v => /\bnay\b|\bno\b/i.test(v.memberVote ?? "")).length;
+    let yea = 0, nay = 0;
+    for (const v of matching) {
+      const dir = voteDirection(v.memberVote ?? "", `${v.billNumber ?? ""} ${v.billDescription ?? ""}`);
+      if (dir === "yea") yea++;
+      else if (dir === "nay") nay++;
+    }
     const examples = matching
       .slice(0, 3)
-      .map(v => ({ text: (v.billDescription || v.billNumber || "").trim(), vote: (v.memberVote || "").trim() }))
+      .map(v => {
+        const desc = `${v.billNumber ?? ""} ${v.billDescription ?? ""}`;
+        const inverted = INVERTED_MOTION_PATTERNS.some(p => p.test(desc));
+        return {
+          text:     (v.billDescription || v.billNumber || "").trim(),
+          vote:     (v.memberVote || "").trim(),
+          inverted,
+        };
+      })
       .filter(e => e.text);
     return { ...bucket, yea, nay, examples };
   }).filter(b => b.yea + b.nay > 0)
@@ -2255,14 +2298,22 @@ function CandidateDetails({
                         <div className="border-t border-border/30 pt-2 space-y-1.5">
                           <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-semibold">Recent votes</p>
                           {b.examples.map((ex, i) => {
-                            const isYea = /\byea\b|\byes\b|\baye\b/i.test(ex.vote);
-                            const isNay = /\bnay\b|\bno\b/i.test(ex.vote);
+                            const dir = voteDirection(ex.vote, ex.text);
+                            const effectiveFor     = dir === "yea";
+                            const effectiveAgainst = dir === "nay";
                             return (
-                              <div key={i} className="flex items-start gap-1.5">
-                                <span className={`text-[10px] font-bold shrink-0 mt-px ${isYea ? "text-emerald-400" : isNay ? "text-red-400" : "text-muted-foreground"}`}>
-                                  {isYea ? "✓" : isNay ? "✗" : "·"}
-                                </span>
-                                <p className="text-[10px] text-muted-foreground leading-snug">{ex.text}</p>
+                              <div key={i} className="space-y-0.5">
+                                <div className="flex items-start gap-1.5">
+                                  <span className={`text-[10px] font-bold shrink-0 mt-px ${effectiveFor ? "text-emerald-400" : effectiveAgainst ? "text-red-400" : "text-muted-foreground"}`}>
+                                    {effectiveFor ? "✓" : effectiveAgainst ? "✗" : "·"}
+                                  </span>
+                                  <p className="text-[10px] text-muted-foreground leading-snug">{ex.text}</p>
+                                </div>
+                                {ex.inverted && (
+                                  <p className="text-[9px] text-amber-400/70 italic ml-4 leading-snug">
+                                    Voted {ex.vote} to block this motion — counts as supporting the underlying position
+                                  </p>
+                                )}
                               </div>
                             );
                           })}
