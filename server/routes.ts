@@ -3520,7 +3520,7 @@ Rules:
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(grantCodes)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(directPayCodes)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_geography/", geoBody(loanCodes)),
-          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",           catBody(5)),
+          safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/cfda/",           catBody(10)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/", catBody(8)),
           safePost("https://api.usaspending.gov/api/v2/search/spending_by_category/recipient_type/",  catBody(10)),
         ]);
@@ -3549,14 +3549,19 @@ Rules:
 
       // Top federal assistance programs (CFDA)
       const programData = programRes.status === "fulfilled" ? programRes.value : {};
-      const topPrograms = ((programData.results ?? []) as any[])
-        .slice(0, 5)
+      const rawPrograms = ((programData.results ?? []) as any[])
+        .slice(0, 10)
         .map((p: any) => ({
           name:   (p.name ?? "").trim(),
           code:   p.code ?? "",
           amount: (p.aggregated_amount ?? 0) as number,
         }))
         .filter((p: any) => p.name && p.amount > 0);
+      const programTotal = rawPrograms.reduce((s: number, p: any) => s + p.amount, 0);
+      const topPrograms = rawPrograms.map((p: any) => ({
+        ...p,
+        pct: programTotal > 0 ? Math.round((p.amount / programTotal) * 100) : 0,
+      }));
 
       // Top awarding agencies
       const agencyData = agencyRes.status === "fulfilled" ? agencyRes.value : {};

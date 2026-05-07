@@ -1068,13 +1068,19 @@ function GovernmentSpending({ official }: { official: PoliticalOfficial }) {
               {/* ── Top federal programs (CFDA) ── */}
               {programs.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top funded programs</p>
-                  <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Spending by program</p>
+                  <div className="rounded-md border border-border/50 overflow-hidden divide-y divide-border/40">
                     {programs.map((p: any, i: number) => (
-                      <div key={i}>
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <span className="text-[11px] font-medium truncate">{p.name}</span>
-                          <span className="text-[11px] font-bold shrink-0">{fmt$(p.amount)}</span>
+                      <div key={i} className="px-2.5 py-2 space-y-1 bg-card hover:bg-secondary/20 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-semibold block truncate">{p.name}</span>
+                            {p.code && <span className="text-[9px] text-muted-foreground/50">CFDA {p.code}</span>}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[12px] font-bold block">{fmt$(p.amount)}</span>
+                            {p.pct != null && <span className="text-[9px] text-muted-foreground">{p.pct}% of top programs</span>}
+                          </div>
                         </div>
                         <SpendingBar amount={p.amount} max={maxProgram} color="bg-emerald-500/70" />
                       </div>
