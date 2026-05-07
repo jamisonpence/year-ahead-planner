@@ -2271,34 +2271,46 @@ function CandidateDetails({
                   {/* Bills by policy area */}
                   {bills.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground italic">No sponsored bills found for this candidate.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {groupedBills.map(([area, areaBills]) => (
-                        <div key={area} className="rounded-lg border bg-secondary/20 overflow-hidden">
-                          <div className="flex items-center justify-between px-2.5 py-1.5 bg-secondary/40 border-b border-border/30">
-                            <span className="text-[10px] font-semibold">{area}</span>
-                            <span className="text-[9px] text-muted-foreground">{areaBills.length} bill{areaBills.length !== 1 ? "s" : ""}</span>
-                          </div>
-                          <div className="divide-y divide-border/30">
-                            {areaBills.map((b: any, i: number) => (
-                              <div key={i} className="px-2.5 py-2 space-y-0.5">
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="text-[11px] leading-snug font-medium flex-1">{b.title}</p>
-                                  <span className="text-[9px] text-muted-foreground/60 shrink-0 font-mono">{b.number}</span>
+                  ) : (() => {
+                    // Simplify boilerplate Senate/House action text into just the committee name
+                    const summarizeAction = (action: string): string => {
+                      const m = action.match(/referred to (?:the )?(.+?)\.?\s*$/i);
+                      if (m) return `📋 ${m[1]}`;
+                      if (/became public law/i.test(action)) return "✅ Signed into law";
+                      if (/passed senate|passed house|passed by/i.test(action)) return "✅ Passed";
+                      if (/vetoed/i.test(action)) return "❌ Vetoed";
+                      return action.length > 80 ? action.slice(0, 80) + "…" : action;
+                    };
+
+                    return (
+                      <div className="space-y-2">
+                        {groupedBills.map(([area, areaBills]) => (
+                          <div key={area} className="rounded-lg border bg-secondary/20 overflow-hidden">
+                            <div className="flex items-center justify-between px-2.5 py-1.5 bg-secondary/40 border-b border-border/30">
+                              <span className="text-[10px] font-semibold">{area}</span>
+                              <span className="text-[9px] text-muted-foreground">{areaBills.length} bill{areaBills.length !== 1 ? "s" : ""}</span>
+                            </div>
+                            <div className="divide-y divide-border/30">
+                              {areaBills.map((b: any, i: number) => (
+                                <div key={i} className="px-2.5 py-2 space-y-0.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-[11px] leading-snug font-medium flex-1">{b.title}</p>
+                                    <span className="text-[9px] text-muted-foreground/60 shrink-0 font-mono">{b.number}</span>
+                                  </div>
+                                  {b.latestAction && (
+                                    <p className="text-[9px] text-muted-foreground/60 leading-snug">{summarizeAction(b.latestAction)}</p>
+                                  )}
+                                  {b.introducedDate && (
+                                    <p className="text-[9px] text-muted-foreground/40">Introduced {b.introducedDate}</p>
+                                  )}
                                 </div>
-                                {b.latestAction && (
-                                  <p className="text-[9px] text-muted-foreground/70 leading-snug">{b.latestAction}</p>
-                                )}
-                                {b.introducedDate && (
-                                  <p className="text-[9px] text-muted-foreground/50">Introduced {b.introducedDate}</p>
-                                )}
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   {/* Committee assignments */}
                   {committees.length > 0 && (

@@ -2885,11 +2885,14 @@ Rules:
 
       // Parallel: sponsored legislation + full member details (includes committees)
       const [billsData, memberData] = await Promise.all([
-        safeJson(`https://api.congress.gov/v3/member/${bioguideId}/sponsored-legislation?limit=20&sort=introducedDate+desc&api_key=${apiKey}`),
+        safeJson(`https://api.congress.gov/v3/member/${bioguideId}/sponsored-legislation?limit=40&sort=introducedDate+desc&api_key=${apiKey}`),
         safeJson(`https://api.congress.gov/v3/member/${bioguideId}?api_key=${apiKey}`),
       ]) as any[];
 
-      const bills = ((billsData.sponsoredLegislation ?? []) as any[]).slice(0, 15).map((b: any) => ({
+      const bills = ((billsData.sponsoredLegislation ?? []) as any[])
+        .filter((b: any) => (b.title ?? "").trim().length > 0)   // drop blank-title entries
+        .slice(0, 15)
+        .map((b: any) => ({
         number:         b.number        ?? "",
         title:          b.title         ?? "",
         type:           b.type          ?? "",
