@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { SacredText, SavedPassage, FaithPractice, Sermon, PrayerItem } from "@shared/schema";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type SubView = "texts" | "practices" | "teachings" | "prayer" | "bible" | "quran" | "torah" | "lds";
+type SubView = "texts" | "practices" | "teachings" | "prayer";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDate(s?: string | null) {
@@ -2551,15 +2551,52 @@ function FaithPrivacyBanner() {
   );
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────────
-export default function FaithPage() {
-  const [subView, setSubView] = useState<SubView>("texts");
+// ── Sacred Texts Section (with nested scripture browser sub-nav) ───────────────
+type TextsSubView = "my-texts" | "bible" | "quran" | "torah" | "lds";
 
-  const TABS: { id: SubView; label: string; icon: React.ReactNode }[] = [
-    { id: "bible",     label: "Bible",               icon: <BookMarked size={14} /> },
-    { id: "quran",     label: "Quran",               icon: <Moon size={14} /> },
-    { id: "torah",     label: "Torah",               icon: <ScrollText size={14} /> },
-    { id: "lds",       label: "LDS Scriptures",      icon: <Star size={14} /> },
+function SacredTextsSection() {
+  const [sub, setSub] = useState<TextsSubView>("my-texts");
+
+  const SUB_TABS: { id: TextsSubView; label: string; icon: React.ReactNode }[] = [
+    { id: "my-texts", label: "My Texts",       icon: <BookOpen size={13} /> },
+    { id: "bible",    label: "Bible",          icon: <BookMarked size={13} /> },
+    { id: "quran",    label: "Quran",          icon: <Moon size={13} /> },
+    { id: "torah",    label: "Torah",          icon: <ScrollText size={13} /> },
+    { id: "lds",      label: "LDS Scriptures", icon: <Star size={13} /> },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Inner sub-navigation */}
+      <div className="flex gap-1 flex-wrap bg-stone-100 dark:bg-stone-800/60 rounded-xl p-1">
+        {SUB_TABS.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-1 justify-center
+              ${sub === t.id
+                ? "bg-white dark:bg-stone-900 shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+              }`}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === "my-texts" && <TextsTab />}
+      {sub === "bible"    && <BibleBrowserTab />}
+      {sub === "quran"    && <QuranBrowserTab />}
+      {sub === "torah"    && <TorahBrowserTab />}
+      {sub === "lds"      && <LDSBrowserTab />}
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+type MainSubView = "texts" | "practices" | "teachings" | "prayer";
+
+export default function FaithPage() {
+  const [subView, setSubView] = useState<MainSubView>("texts");
+
+  const TABS: { id: MainSubView; label: string; icon: React.ReactNode }[] = [
     { id: "texts",     label: "Sacred Texts",        icon: <BookOpen size={14} /> },
     { id: "practices", label: "Practices",           icon: <Flame size={14} /> },
     { id: "teachings", label: "Teachings",           icon: <Mic2 size={14} /> },
@@ -2596,11 +2633,7 @@ export default function FaithPage() {
       </div>
 
       {/* Content */}
-      {subView === "bible"     && <BibleBrowserTab />}
-      {subView === "quran"     && <QuranBrowserTab />}
-      {subView === "torah"     && <TorahBrowserTab />}
-      {subView === "lds"       && <LDSBrowserTab />}
-      {subView === "texts"     && <TextsTab />}
+      {subView === "texts"     && <SacredTextsSection />}
       {subView === "practices" && <PracticesTab />}
       {subView === "teachings" && <TeachingsTab />}
       {subView === "prayer"    && <PrayerTab />}
