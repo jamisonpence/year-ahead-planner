@@ -1413,8 +1413,31 @@ Return exactly this structure:
       const r = await fetch(`https://raw.githubusercontent.com/bcbooks/scriptures-json/master/${vol}.json`);
       if (!r.ok) throw new Error(`GitHub returned ${r.status}`);
       const data = await r.json() as any;
-      const books: any[] = data.books ?? [];
-      if (books.length === 0) throw new Error("Unexpected JSON structure — no books array");
+
+      // Different volumes use different top-level shapes; normalise everything
+      // to [{ book, chapters: [{ chapter, verses: [{ verse, text }] }] }]
+      let books: any[] = [];
+
+      if (Array.isArray(data.books) && data.books.length > 0) {
+        // BOM / PGP: { books: [{ book, chapters }] }
+        books = data.books;
+      } else if (Array.isArray(data.sections) && data.sections.length > 0) {
+        // D&C variant A: { sections: [{ section, verses }] }
+        books = [{ book: "Doctrine and Covenants", chapters: data.sections.map((s: any) => ({
+          chapter: s.section ?? s.chapter ?? s.number,
+          verses: s.verses ?? [],
+        })) }];
+      } else if (Array.isArray(data) && data.length > 0 && data[0].verses) {
+        // Flat array of sections/chapters
+        books = [{ book: vol.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), chapters: data.map((s: any, i: number) => ({
+          chapter: s.section ?? s.chapter ?? i + 1,
+          verses: s.verses ?? [],
+        })) }];
+      } else {
+        // Last resort: expose raw keys for debugging and return 500
+        throw new Error(`Unrecognised JSON shape. Top-level keys: ${Object.keys(data).join(", ")}`);
+      }
+
       LDS_SERVER_CACHE[vol] = books;
       res.json({ books });
     } catch (e) { handleError(res, e); }
