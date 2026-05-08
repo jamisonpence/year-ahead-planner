@@ -9,8 +9,69 @@ import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
-  Bell, ChevronRight, Sparkles, Flame, Activity, Landmark,
+  Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
 } from "lucide-react";
+
+// ── Per-tab custom "shared" descriptions ─────────────────────────────────────
+const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
+  "/":              "Your dashboard summary is visible to friends",
+  "/calendar":      "Your calendar events are visible to friends",
+  "/goals":         "Your goals, projects, and tasks are visible to friends",
+  "/reading":       "Your reading list and progress are visible to friends",
+  "/workouts":      "Your workouts and fitness logs are visible to friends",
+  "/recipes":       "Your saved recipes are visible to friends",
+  "/movies":        "Your movies and shows list is visible to friends",
+  "/music":         "Your music collection is visible to friends",
+  "/budget":        "Your budget overview is visible to friends",
+  "/plants":        "Your plant collection is visible to friends",
+  "/housekeeping":  "Your housekeeping lists are visible to friends",
+  "/spots":         "Your saved spots are visible to friends",
+  "/kids":          "Your kids section is visible to friends",
+  "/quotes":        "Your saved quotes are visible to friends",
+  "/art":           "Your art collection is visible to friends",
+  "/hobbies":       "Your hobbies are visible to friends",
+  "/faith":         "Sacred Texts, Practices, and Teachings are visible to friends (Prayer List is always private)",
+  "/politics":      "Your political notes are visible to friends",
+};
+
+const PRIVACY_PATHS = new Set(Object.keys(TAB_SHARED_DESCRIPTIONS));
+
+function PrivacyBanner({ path }: { path: string }) {
+  const { data: settings = [] } = useQuery<{ path: string; visibility: string }[]>({
+    queryKey: ["/api/tab-privacy"],
+    queryFn: () => apiRequest("GET", "/api/tab-privacy").then(r => r.json()),
+  });
+
+  if (!PRIVACY_PATHS.has(path)) return null;
+
+  const visibility = settings.find(s => s.path === path)?.visibility ?? "private";
+  const isPublic = visibility === "friends";
+
+  return (
+    <div className={`mx-4 md:mx-6 mt-4 flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs border ${
+      isPublic
+        ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300"
+        : "bg-stone-100 dark:bg-stone-800/60 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400"
+    }`}>
+      <div className="flex items-center gap-1.5">
+        {isPublic
+          ? <Users size={12} className="shrink-0" />
+          : <Lock size={12} className="shrink-0" />}
+        <span>
+          {isPublic
+            ? TAB_SHARED_DESCRIPTIONS[path]
+            : "Private — only visible to you"}
+        </span>
+      </div>
+      <Link href="/settings">
+        <a className="flex items-center gap-1 font-medium hover:underline shrink-0 whitespace-nowrap">
+          <Settings size={11} />
+          Change in Settings
+        </a>
+      </Link>
+    </div>
+  );
+}
 
 const ALL_TABS = [
   { path: "/",              label: "Dashboard",               icon: LayoutDashboard },
@@ -565,6 +626,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Page content */}
       <main className="flex-1 min-w-0 lg:pt-0 pt-14">
+        <PrivacyBanner path={location} />
         {children}
       </main>
     </div>

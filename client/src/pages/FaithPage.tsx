@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, X, Check, Search, ChevronDown, ChevronUp,
   ExternalLink, BookOpen, Flame, Heart, Mic2, MoreHorizontal, BookMarked,
-  Tag, Calendar, User2, Lock, Users, Settings, Moon, ScrollText, Star,
+  Tag, Calendar, User2, Moon, ScrollText, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2516,40 +2516,6 @@ function BibleBrowserTab() {
   );
 }
 
-// ── Privacy Banner ─────────────────────────────────────────────────────────────
-function FaithPrivacyBanner() {
-  const { data: settings = [] } = useQuery<{ path: string; visibility: string }[]>({
-    queryKey: ["/api/tab-privacy"],
-    queryFn: () => apiRequest("GET", "/api/tab-privacy").then(r => r.json()),
-  });
-  const visibility = settings.find(s => s.path === "/faith")?.visibility ?? "private";
-  const isPublic = visibility === "friends";
-
-  return (
-    <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs border ${
-      isPublic
-        ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300"
-        : "bg-stone-100 dark:bg-stone-800/60 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400"
-    }`}>
-      <div className="flex items-center gap-1.5">
-        {isPublic
-          ? <Users size={12} className="shrink-0" />
-          : <Lock size={12} className="shrink-0" />}
-        <span>
-          {isPublic
-            ? "Visible to friends on your profile — Sacred Texts, Practices, and Teachings are shared (Prayer List is always private)"
-            : "Private — only visible to you"}
-        </span>
-      </div>
-      <Link href="/settings">
-        <a className="flex items-center gap-1 font-medium hover:underline shrink-0 whitespace-nowrap">
-          <Settings size={11} />
-          Change in Settings
-        </a>
-      </Link>
-    </div>
-  );
-}
 
 // ── Sacred Texts Section (with nested scripture browser sub-nav) ───────────────
 type TextsSubView = "my-texts" | "bible" | "quran" | "torah" | "lds";
@@ -2615,8 +2581,6 @@ export default function FaithPage() {
           <p className="text-xs text-muted-foreground">Personal curation of your spiritual life</p>
         </div>
       </div>
-
-      <FaithPrivacyBanner />
 
       {/* Sub-navigation */}
       <div className="flex gap-1.5 flex-wrap border-b pb-3">
