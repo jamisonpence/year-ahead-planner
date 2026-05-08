@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { SacredText, SavedPassage, FaithPractice, Sermon, PrayerItem } from "@shared/schema";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type SubView = "texts" | "practices" | "teachings" | "prayer";
+type SubView = "texts" | "practices" | "teachings" | "prayer" | "bible";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDate(s?: string | null) {
@@ -73,6 +73,56 @@ const BIBLE_BOOK_NAMES: Record<number, string> = {
   57:"Philemon",58:"Hebrews",59:"James",60:"1 Peter",61:"2 Peter",
   62:"1 John",63:"2 John",64:"3 John",65:"Jude",66:"Revelation",
 };
+
+const BROWSE_TRANSLATIONS = [
+  { value: "KJV",  label: "KJV",  full: "King James Version" },
+  { value: "NKJV", label: "NKJV", full: "New King James Version" },
+  { value: "NIV",  label: "NIV",  full: "New International Version" },
+  { value: "ESV",  label: "ESV",  full: "English Standard Version" },
+  { value: "NLT",  label: "NLT",  full: "New Living Translation" },
+  { value: "NASB", label: "NASB", full: "New American Standard" },
+  { value: "ASV",  label: "ASV",  full: "American Standard Version" },
+  { value: "WEB",  label: "WEB",  full: "World English Bible" },
+  { value: "YLT",  label: "YLT",  full: "Young's Literal Translation" },
+];
+
+interface BibleBook { num: number; name: string; abbr: string; chapters: number; testament: "OT" | "NT"; }
+const ALL_BIBLE_BOOKS: BibleBook[] = [
+  {num:1,name:"Genesis",abbr:"Gen",chapters:50,testament:"OT"},{num:2,name:"Exodus",abbr:"Exo",chapters:40,testament:"OT"},
+  {num:3,name:"Leviticus",abbr:"Lev",chapters:27,testament:"OT"},{num:4,name:"Numbers",abbr:"Num",chapters:36,testament:"OT"},
+  {num:5,name:"Deuteronomy",abbr:"Deu",chapters:34,testament:"OT"},{num:6,name:"Joshua",abbr:"Jos",chapters:24,testament:"OT"},
+  {num:7,name:"Judges",abbr:"Jdg",chapters:21,testament:"OT"},{num:8,name:"Ruth",abbr:"Rut",chapters:4,testament:"OT"},
+  {num:9,name:"1 Samuel",abbr:"1Sa",chapters:31,testament:"OT"},{num:10,name:"2 Samuel",abbr:"2Sa",chapters:24,testament:"OT"},
+  {num:11,name:"1 Kings",abbr:"1Ki",chapters:22,testament:"OT"},{num:12,name:"2 Kings",abbr:"2Ki",chapters:25,testament:"OT"},
+  {num:13,name:"1 Chronicles",abbr:"1Ch",chapters:29,testament:"OT"},{num:14,name:"2 Chronicles",abbr:"2Ch",chapters:36,testament:"OT"},
+  {num:15,name:"Ezra",abbr:"Ezr",chapters:10,testament:"OT"},{num:16,name:"Nehemiah",abbr:"Neh",chapters:13,testament:"OT"},
+  {num:17,name:"Esther",abbr:"Est",chapters:10,testament:"OT"},{num:18,name:"Job",abbr:"Job",chapters:42,testament:"OT"},
+  {num:19,name:"Psalms",abbr:"Psa",chapters:150,testament:"OT"},{num:20,name:"Proverbs",abbr:"Pro",chapters:31,testament:"OT"},
+  {num:21,name:"Ecclesiastes",abbr:"Ecc",chapters:12,testament:"OT"},{num:22,name:"Song of Solomon",abbr:"Son",chapters:8,testament:"OT"},
+  {num:23,name:"Isaiah",abbr:"Isa",chapters:66,testament:"OT"},{num:24,name:"Jeremiah",abbr:"Jer",chapters:52,testament:"OT"},
+  {num:25,name:"Lamentations",abbr:"Lam",chapters:5,testament:"OT"},{num:26,name:"Ezekiel",abbr:"Eze",chapters:48,testament:"OT"},
+  {num:27,name:"Daniel",abbr:"Dan",chapters:12,testament:"OT"},{num:28,name:"Hosea",abbr:"Hos",chapters:14,testament:"OT"},
+  {num:29,name:"Joel",abbr:"Joe",chapters:3,testament:"OT"},{num:30,name:"Amos",abbr:"Amo",chapters:9,testament:"OT"},
+  {num:31,name:"Obadiah",abbr:"Oba",chapters:1,testament:"OT"},{num:32,name:"Jonah",abbr:"Jon",chapters:4,testament:"OT"},
+  {num:33,name:"Micah",abbr:"Mic",chapters:7,testament:"OT"},{num:34,name:"Nahum",abbr:"Nah",chapters:3,testament:"OT"},
+  {num:35,name:"Habakkuk",abbr:"Hab",chapters:3,testament:"OT"},{num:36,name:"Zephaniah",abbr:"Zep",chapters:3,testament:"OT"},
+  {num:37,name:"Haggai",abbr:"Hag",chapters:2,testament:"OT"},{num:38,name:"Zechariah",abbr:"Zec",chapters:14,testament:"OT"},
+  {num:39,name:"Malachi",abbr:"Mal",chapters:4,testament:"OT"},
+  {num:40,name:"Matthew",abbr:"Mat",chapters:28,testament:"NT"},{num:41,name:"Mark",abbr:"Mar",chapters:16,testament:"NT"},
+  {num:42,name:"Luke",abbr:"Luk",chapters:24,testament:"NT"},{num:43,name:"John",abbr:"Joh",chapters:21,testament:"NT"},
+  {num:44,name:"Acts",abbr:"Act",chapters:28,testament:"NT"},{num:45,name:"Romans",abbr:"Rom",chapters:16,testament:"NT"},
+  {num:46,name:"1 Corinthians",abbr:"1Co",chapters:16,testament:"NT"},{num:47,name:"2 Corinthians",abbr:"2Co",chapters:13,testament:"NT"},
+  {num:48,name:"Galatians",abbr:"Gal",chapters:6,testament:"NT"},{num:49,name:"Ephesians",abbr:"Eph",chapters:6,testament:"NT"},
+  {num:50,name:"Philippians",abbr:"Phi",chapters:4,testament:"NT"},{num:51,name:"Colossians",abbr:"Col",chapters:4,testament:"NT"},
+  {num:52,name:"1 Thessalonians",abbr:"1Th",chapters:5,testament:"NT"},{num:53,name:"2 Thessalonians",abbr:"2Th",chapters:3,testament:"NT"},
+  {num:54,name:"1 Timothy",abbr:"1Ti",chapters:6,testament:"NT"},{num:55,name:"2 Timothy",abbr:"2Ti",chapters:4,testament:"NT"},
+  {num:56,name:"Titus",abbr:"Tit",chapters:3,testament:"NT"},{num:57,name:"Philemon",abbr:"Phm",chapters:1,testament:"NT"},
+  {num:58,name:"Hebrews",abbr:"Heb",chapters:13,testament:"NT"},{num:59,name:"James",abbr:"Jam",chapters:5,testament:"NT"},
+  {num:60,name:"1 Peter",abbr:"1Pe",chapters:5,testament:"NT"},{num:61,name:"2 Peter",abbr:"2Pe",chapters:3,testament:"NT"},
+  {num:62,name:"1 John",abbr:"1Jo",chapters:5,testament:"NT"},{num:63,name:"2 John",abbr:"2Jo",chapters:1,testament:"NT"},
+  {num:64,name:"3 John",abbr:"3Jo",chapters:1,testament:"NT"},{num:65,name:"Jude",abbr:"Jud",chapters:1,testament:"NT"},
+  {num:66,name:"Revelation",abbr:"Rev",chapters:22,testament:"NT"},
+];
 
 const STATUS_COLORS: Record<string, string> = {
   "Active": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
@@ -1391,6 +1441,349 @@ function PrayerTab() {
   );
 }
 
+// ── Bible: Save-to-Text mini-modal ────────────────────────────────────────────
+function BibleSavePassageModal({ text, reference, onClose }: {
+  text: string; reference: string; onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const { data: texts = [] } = useQuery<SacredText[]>({
+    queryKey: ["/api/sacred-texts"],
+    queryFn: () => apiRequest("GET", "/api/sacred-texts").then(r => r.json()),
+  });
+  const [notes, setNotes] = useState("");
+  const [targetId, setTargetId] = useState<number | "new" | "">("");
+  const [newTitle, setNewTitle] = useState("The Holy Bible");
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, passages }: { id: number; passages: SavedPassage[] }) =>
+      apiRequest("PATCH", `/api/sacred-texts/${id}`, { savedPassages: JSON.stringify(passages) }).then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/sacred-texts"] }); toast({ title: "Passage saved!" }); onClose(); },
+  });
+  const createMut = useMutation({
+    mutationFn: (data: Partial<SacredText>) => apiRequest("POST", "/api/sacred-texts", data).then(r => r.json()),
+    onSuccess: (newText: SacredText) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sacred-texts"] });
+      updateMut.mutate({ id: newText.id, passages: [{ passage: text, reference, notes }] });
+    },
+  });
+
+  function handleSave() {
+    const p: SavedPassage = { passage: text, reference, notes };
+    if (targetId === "new") {
+      createMut.mutate({ title: newTitle || "The Holy Bible", tradition: "Christian", status: "Reading", savedPassages: JSON.stringify([p]) });
+    } else if (typeof targetId === "number") {
+      const tgt = texts.find(t => t.id === targetId);
+      if (!tgt) return;
+      updateMut.mutate({ id: targetId, passages: [...parsePassages(tgt.savedPassages), p] });
+    }
+  }
+
+  const busy = updateMut.isPending || createMut.isPending;
+  const canSave = (targetId === "new" && newTitle.trim()) || typeof targetId === "number";
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Save Passage</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3">
+            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1">{reference}</p>
+            <p className="text-sm leading-relaxed italic">"{text}"</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Save to Sacred Text</Label>
+            <select value={targetId === "" ? "" : targetId === "new" ? "new" : String(targetId)}
+              onChange={e => { const v = e.target.value; setTargetId(v === "" ? "" : v === "new" ? "new" : Number(v)); }}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+              <option value="">— Select a text —</option>
+              {texts.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              <option value="new">+ Create new text…</option>
+            </select>
+          </div>
+          {targetId === "new" && (
+            <div className="space-y-1.5">
+              <Label>New text title</Label>
+              <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="The Holy Bible" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="What this verse means to you…" />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={!canSave || busy}>{busy ? "Saving…" : "Save Passage"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Bible Browser Tab ─────────────────────────────────────────────────────────
+function BibleBrowserTab() {
+  const [mode, setMode] = useState<"browse" | "search">("browse");
+  const [translation, setTranslation] = useState("KJV");
+
+  // Browse
+  const [bookNum, setBookNum] = useState(43); // John
+  const [chapter, setChapter] = useState(3);
+  const [verses, setVerses] = useState<Array<{ verse: number; text: string }>>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ book: number; chapter: number; verse: number; text: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Save
+  const [saveModal, setSaveModal] = useState<{ text: string; ref: string } | null>(null);
+
+  const currentBook = ALL_BIBLE_BOOKS.find(b => b.num === bookNum)!;
+  const otBooks = ALL_BIBLE_BOOKS.filter(b => b.testament === "OT");
+  const ntBooks = ALL_BIBLE_BOOKS.filter(b => b.testament === "NT");
+
+  async function fetchChapter(bNum: number, ch: number, trans = translation) {
+    setBrowseLoading(true); setBrowseError(""); setSelectedVerses(new Set());
+    try {
+      const r = await fetch(`https://bolls.life/get-text/${trans}/${bNum}/${ch}/`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any[];
+      if (!Array.isArray(data) || data.length === 0) throw new Error("empty");
+      setVerses(data.map((v: any) => ({ verse: v.verse, text: v.text })));
+      setHasFetched(true);
+    } catch {
+      setBrowseError("Could not load this chapter. Try a different translation.");
+      setVerses([]);
+    }
+    setBrowseLoading(false);
+  }
+
+  async function searchBible() {
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true); setSearchError(""); setSearchResults([]);
+    try {
+      const r = await fetch(`https://bolls.life/search/${translation}/${encodeURIComponent(searchQuery)}/`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any[];
+      if (!Array.isArray(data)) throw new Error();
+      setSearchResults(data.slice(0, 40));
+      setHasSearched(true);
+      if (data.length === 0) setSearchError("No results found. Try different keywords.");
+    } catch {
+      setSearchError("Search failed. Please try again.");
+    }
+    setSearchLoading(false);
+  }
+
+  function toggleVerse(v: number) {
+    setSelectedVerses(prev => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v); else next.add(v);
+      return next;
+    });
+  }
+
+  function getSelectedPassage() {
+    const sorted = Array.from(selectedVerses).sort((a, b) => a - b);
+    const text = sorted.map(n => verses.find(v => v.verse === n)?.text ?? "").filter(Boolean).join(" ");
+    const first = sorted[0], last = sorted[sorted.length - 1];
+    const ref = first === last
+      ? `${currentBook.name} ${chapter}:${first} (${translation})`
+      : `${currentBook.name} ${chapter}:${first}-${last} (${translation})`;
+    return { text, ref };
+  }
+
+  function goTo(bNum: number, ch: number) { setBookNum(bNum); setChapter(ch); fetchChapter(bNum, ch); }
+  function prevChapter() {
+    if (chapter > 1) goTo(bookNum, chapter - 1);
+    else if (bookNum > 1) { const prev = ALL_BIBLE_BOOKS.find(b => b.num === bookNum - 1)!; goTo(prev.num, prev.chapters); }
+  }
+  function nextChapter() {
+    if (chapter < currentBook.chapters) goTo(bookNum, chapter + 1);
+    else if (bookNum < 66) goTo(bookNum + 1, 1);
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Top controls row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+          <button onClick={() => setMode("browse")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+              ${mode === "browse" ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+            <BookOpen size={12} /> Browse
+          </button>
+          <button onClick={() => setMode("search")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+              ${mode === "search" ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+            <Search size={12} /> Search
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-muted-foreground">Translation</span>
+          <select value={translation}
+            onChange={e => { const t = e.target.value; setTranslation(t); if (hasFetched && mode === "browse") fetchChapter(bookNum, chapter, t); }}
+            className="h-8 rounded-lg border bg-background px-2 text-xs">
+            {BROWSE_TRANSLATIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* ── Browse Mode ──────────────────────────────────────────────────── */}
+      {mode === "browse" && (
+        <div className="space-y-4">
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-1 flex-1 min-w-40">
+              <Label className="text-xs">Book</Label>
+              <select value={bookNum} onChange={e => { setBookNum(Number(e.target.value)); setChapter(1); }}
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                <optgroup label="── Old Testament ──">
+                  {otBooks.map(b => <option key={b.num} value={b.num}>{b.name}</option>)}
+                </optgroup>
+                <optgroup label="── New Testament ──">
+                  {ntBooks.map(b => <option key={b.num} value={b.num}>{b.name}</option>)}
+                </optgroup>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Chapter</Label>
+              <select value={chapter} onChange={e => setChapter(Number(e.target.value))}
+                className="h-9 rounded-md border bg-background px-3 text-sm">
+                {Array.from({ length: currentBook.chapters }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={() => fetchChapter(bookNum, chapter)} disabled={browseLoading} className="h-9 gap-1.5">
+              {browseLoading ? "Loading…" : <><BookOpen size={13} /> Read</>}
+            </Button>
+          </div>
+
+          {browseError && <p className="text-sm text-destructive">{browseError}</p>}
+
+          {!hasFetched && !browseLoading && (
+            <div className="text-center py-14 text-muted-foreground border rounded-xl">
+              <BookOpen size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Select a book and chapter, then tap Read</p>
+              <p className="text-xs mt-1.5 opacity-70">Tap any verse to select it · Save selections as passages</p>
+            </div>
+          )}
+
+          {verses.length > 0 && (
+            <div className="space-y-3">
+              {/* Chapter heading + save selected button */}
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-base">
+                  {currentBook.name} {chapter}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">{translation} · {verses.length} verses</span>
+                </h3>
+                {selectedVerses.size > 0 && (
+                  <Button size="sm" onClick={() => setSaveModal(getSelectedPassage())} className="gap-1.5 h-7 text-xs animate-in fade-in">
+                    <BookMarked size={12} /> Save {selectedVerses.size} verse{selectedVerses.size !== 1 ? "s" : ""}
+                  </Button>
+                )}
+              </div>
+
+              {/* Verse list */}
+              <div className="rounded-xl border bg-card overflow-hidden divide-y">
+                {verses.map(v => {
+                  const sel = selectedVerses.has(v.verse);
+                  return (
+                    <div key={v.verse} onClick={() => toggleVerse(v.verse)}
+                      className={`flex gap-3 px-4 py-3 cursor-pointer transition-colors select-none
+                        ${sel ? "bg-amber-50 dark:bg-amber-950/20" : "hover:bg-secondary/40"}`}>
+                      <span className={`text-xs font-bold w-5 shrink-0 pt-0.5 ${sel ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>{v.verse}</span>
+                      <p className="text-sm leading-relaxed flex-1">{v.text}</p>
+                      {sel && <Check size={13} className="shrink-0 mt-0.5 text-amber-500" />}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Prev / Next nav */}
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={prevChapter} disabled={bookNum === 1 && chapter === 1}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  ←{" "}{chapter > 1 ? `${currentBook.abbr} ${chapter - 1}` : (ALL_BIBLE_BOOKS.find(b => b.num === bookNum - 1)?.abbr ?? "")}
+                </button>
+                <span className="text-xs text-muted-foreground">{chapter} / {currentBook.chapters}</span>
+                <button onClick={nextChapter} disabled={bookNum === 66 && chapter === currentBook.chapters}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  {chapter < currentBook.chapters ? `${currentBook.abbr} ${chapter + 1}` : (ALL_BIBLE_BOOKS.find(b => b.num === bookNum + 1)?.abbr ?? "")}{" "}→
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Search Mode ──────────────────────────────────────────────────── */}
+      {mode === "search" && (
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && searchBible()}
+              placeholder="Search words or phrases across the Bible…"
+              className="flex-1" />
+            <Button onClick={searchBible} disabled={searchLoading || !searchQuery.trim()} className="gap-1.5 shrink-0">
+              <Search size={13} /> {searchLoading ? "…" : "Search"}
+            </Button>
+          </div>
+
+          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+
+          {!hasSearched && !searchLoading && (
+            <div className="text-center py-14 text-muted-foreground border rounded-xl">
+              <Search size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Search the full Bible text</p>
+              <p className="text-xs mt-1.5 opacity-70">Try "love one another", "do not fear", "I am the way"</p>
+            </div>
+          )}
+
+          {searchResults.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}{searchResults.length === 40 ? " — showing top 40" : ""}</p>
+              {searchResults.map((r, i) => {
+                const bookName = BIBLE_BOOK_NAMES[r.book] ?? `Book ${r.book}`;
+                const ref = `${bookName} ${r.chapter}:${r.verse} (${translation})`;
+                return (
+                  <div key={i} className="rounded-xl border bg-card p-4 group">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1.5">{ref}</p>
+                        <p className="text-sm leading-relaxed">{r.text}</p>
+                      </div>
+                      <button onClick={() => setSaveModal({ text: r.text, ref })}
+                        className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground opacity-0 group-hover:opacity-100 transition-all"
+                        title="Save as passage">
+                        <BookMarked size={14} />
+                      </button>
+                    </div>
+                    <button onClick={() => goTo(r.book, r.chapter) || setMode("browse")}
+                      className="mt-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                      <BookOpen size={10} /> Read full chapter →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {saveModal && (
+        <BibleSavePassageModal text={saveModal.text} reference={saveModal.ref} onClose={() => setSaveModal(null)} />
+      )}
+    </div>
+  );
+}
+
 // ── Privacy Banner ─────────────────────────────────────────────────────────────
 function FaithPrivacyBanner() {
   const { data: settings = [] } = useQuery<{ path: string; visibility: string }[]>({
@@ -1431,6 +1824,7 @@ export default function FaithPage() {
   const [subView, setSubView] = useState<SubView>("texts");
 
   const TABS: { id: SubView; label: string; icon: React.ReactNode }[] = [
+    { id: "bible",     label: "Bible",               icon: <BookMarked size={14} /> },
     { id: "texts",     label: "Sacred Texts",        icon: <BookOpen size={14} /> },
     { id: "practices", label: "Practices",           icon: <Flame size={14} /> },
     { id: "teachings", label: "Teachings",           icon: <Mic2 size={14} /> },
@@ -1467,6 +1861,7 @@ export default function FaithPage() {
       </div>
 
       {/* Content */}
+      {subView === "bible"     && <BibleBrowserTab />}
       {subView === "texts"     && <TextsTab />}
       {subView === "practices" && <PracticesTab />}
       {subView === "teachings" && <TeachingsTab />}
