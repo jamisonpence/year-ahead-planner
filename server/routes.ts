@@ -4226,7 +4226,7 @@ Your job: identify the most likely candidates who would appear on each ballot. U
 
 IMPORTANT: Always return candidates for every election listed. Never return an empty array. If the exact candidates are unknown, make your best educated suggestions based on the state, party, and office type.
 
-Return ONLY a valid JSON array — no markdown fences, no explanation, no other text:
+Return ONLY a raw JSON array starting with [ — absolutely no preamble, no markdown fences, no explanation:
 [
   {
     "name": "Candidate Full Name",
@@ -4253,13 +4253,10 @@ Rules:
       const claudeData = await claudeWithRetry(apiKey, {
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
-        messages: [
-          { role: "user", content: prompt },
-          { role: "assistant", content: "[" },
-        ],
+        messages: [{ role: "user", content: prompt }],
       });
 
-      const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
+      const raw: string = claudeData?.content?.[0]?.text ?? "[]";
       const candidates = extractJsonArray(raw);
       res.json({ candidates, note: candidates.length === 0 ? "no_candidates_found" : undefined });
     } catch (e: any) {
@@ -4333,7 +4330,7 @@ ${identitySummary}
 CANDIDATES
 ${candidateList}
 
-Output ONLY a JSON array — no preamble, no markdown. For each candidate:
+Output ONLY a raw JSON array starting with [ — no preamble, no markdown fences, no explanation. For each candidate:
 {
   "name": "Exact name from list",
   "matchScore": 0-100,
@@ -4358,14 +4355,10 @@ Rules:
       const claudeData = await claudeWithRetry(apiKey, {
         model: "claude-sonnet-4-6",
         max_tokens: 6000,
-        messages: [
-          { role: "user", content: prompt },
-          { role: "assistant", content: "[" }, // prefill forces JSON array, no preamble
-        ],
+        messages: [{ role: "user", content: prompt }],
       });
 
-      // Prepend the "[" we used as prefill since the response is the continuation
-      const raw: string = "[" + (claudeData?.content?.[0]?.text ?? "");
+      const raw: string = claudeData?.content?.[0]?.text ?? "";
       const matches = extractJsonArray(raw);
       res.json({ matches });
     } catch (e: any) {
