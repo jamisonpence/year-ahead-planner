@@ -1401,6 +1401,25 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── LDS scriptures proxy (bcbooks/scriptures-json) ───────────────────────────
+  const LDS_SERVER_CACHE: Record<string, any[]> = {};
+  const LDS_VALID_VOLUMES = new Set(["book-of-mormon", "doctrine-and-covenants", "pearl-of-great-price"]);
+
+  app.get("/api/lds/:volume", requireAuth, async (req, res) => {
+    try {
+      const vol = req.params.volume;
+      if (!LDS_VALID_VOLUMES.has(vol)) return res.status(400).json({ error: "Unknown volume" });
+      if (LDS_SERVER_CACHE[vol]) return res.json({ books: LDS_SERVER_CACHE[vol] });
+      const r = await fetch(`https://raw.githubusercontent.com/bcbooks/scriptures-json/master/${vol}.json`);
+      if (!r.ok) throw new Error(`GitHub returned ${r.status}`);
+      const data = await r.json() as any;
+      const books: any[] = data.books ?? [];
+      if (books.length === 0) throw new Error("Unexpected JSON structure — no books array");
+      LDS_SERVER_CACHE[vol] = books;
+      res.json({ books });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Add exercise to a workout template ────────────────────────────────────────
   app.post("/api/workout-templates/:id/add-exercise", requireAuth, async (req, res) => {
     try {

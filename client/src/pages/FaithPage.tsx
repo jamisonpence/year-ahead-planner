@@ -1936,16 +1936,32 @@ function LDSBrowserTab() {
   const book = books[bookIdx];
 
   async function loadVolume(key: string) {
-    if (LDS_CACHE[key]) { setBooks(LDS_CACHE[key]); setBookIdx(0); setChapter(1); setVerses([]); setHasFetched(false); return; }
+    if (LDS_CACHE[key]) {
+      const cached = LDS_CACHE[key];
+      setBooks(cached); setBookIdx(0); setChapter(1);
+      const first = cached[0];
+      if (first?.chapters?.length) {
+        setVerses(first.chapters[0].verses.map((v: LdsVerse) => ({ verse: v.verse, text: v.text })));
+        setHasFetched(true);
+      } else { setVerses([]); setHasFetched(false); }
+      return;
+    }
     setVolumeLoading(true); setBrowseError(""); setVerses([]); setHasFetched(false);
     try {
-      const r = await fetch(`https://raw.githubusercontent.com/bcbooks/scriptures-json/master/${key}.json`);
-      if (!r.ok) throw new Error();
+      const r = await fetch(`/api/lds/${key}`);
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
       const data = await r.json() as any;
       const bks: LdsBook[] = data.books ?? [];
+      if (bks.length === 0) throw new Error("No content returned");
       LDS_CACHE[key] = bks;
       setBooks(bks); setBookIdx(0); setChapter(1);
-    } catch { setBrowseError("Could not load scriptures. Please check your connection."); }
+      // Auto-load first chapter so user sees content immediately
+      const firstChap = bks[0]?.chapters?.[0];
+      if (firstChap) {
+        setVerses(firstChap.verses.map((v: LdsVerse) => ({ verse: v.verse, text: v.text })));
+        setHasFetched(true);
+      }
+    } catch (err: any) { setBrowseError(`Could not load scriptures: ${err?.message ?? "unknown error"}`); }
     setVolumeLoading(false);
   }
 
