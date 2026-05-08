@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, X, Check, Search, ChevronDown, ChevronUp,
   ExternalLink, BookOpen, Flame, Heart, Mic2, MoreHorizontal, BookMarked,
-  Tag, Calendar, User2, Lock, Users, Settings,
+  Tag, Calendar, User2, Lock, Users, Settings, Moon, ScrollText, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { SacredText, SavedPassage, FaithPractice, Sermon, PrayerItem } from "@shared/schema";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type SubView = "texts" | "practices" | "teachings" | "prayer" | "bible";
+type SubView = "texts" | "practices" | "teachings" | "prayer" | "bible" | "quran" | "torah" | "lds";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDate(s?: string | null) {
@@ -122,6 +122,95 @@ const ALL_BIBLE_BOOKS: BibleBook[] = [
   {num:62,name:"1 John",abbr:"1Jo",chapters:5,testament:"NT"},{num:63,name:"2 John",abbr:"2Jo",chapters:1,testament:"NT"},
   {num:64,name:"3 John",abbr:"3Jo",chapters:1,testament:"NT"},{num:65,name:"Jude",abbr:"Jud",chapters:1,testament:"NT"},
   {num:66,name:"Revelation",abbr:"Rev",chapters:22,testament:"NT"},
+];
+
+// ── Quran data ─────────────────────────────────────────────────────────────────
+const QURAN_TRANSLATIONS = [
+  { value: "131", label: "Saheeh International" },
+  { value: "203", label: "The Clear Quran" },
+  { value: "85",  label: "Yusuf Ali" },
+  { value: "20",  label: "Pickthall" },
+];
+
+const QURAN_SURAHS = [
+  {id:1,name:"Al-Fatihah",english:"The Opening",verses:7},{id:2,name:"Al-Baqarah",english:"The Cow",verses:286},
+  {id:3,name:"Ali 'Imran",english:"Family of Imran",verses:200},{id:4,name:"An-Nisa",english:"The Women",verses:176},
+  {id:5,name:"Al-Ma'idah",english:"The Table Spread",verses:120},{id:6,name:"Al-An'am",english:"The Cattle",verses:165},
+  {id:7,name:"Al-A'raf",english:"The Heights",verses:206},{id:8,name:"Al-Anfal",english:"The Spoils of War",verses:75},
+  {id:9,name:"At-Tawbah",english:"The Repentance",verses:129},{id:10,name:"Yunus",english:"Jonah",verses:109},
+  {id:11,name:"Hud",english:"Hud",verses:123},{id:12,name:"Yusuf",english:"Joseph",verses:111},
+  {id:13,name:"Ar-Ra'd",english:"The Thunder",verses:43},{id:14,name:"Ibrahim",english:"Abraham",verses:52},
+  {id:15,name:"Al-Hijr",english:"The Rocky Tract",verses:99},{id:16,name:"An-Nahl",english:"The Bee",verses:128},
+  {id:17,name:"Al-Isra",english:"The Night Journey",verses:111},{id:18,name:"Al-Kahf",english:"The Cave",verses:110},
+  {id:19,name:"Maryam",english:"Mary",verses:98},{id:20,name:"Ta-Ha",english:"Ta-Ha",verses:135},
+  {id:21,name:"Al-Anbiya",english:"The Prophets",verses:112},{id:22,name:"Al-Hajj",english:"The Pilgrimage",verses:78},
+  {id:23,name:"Al-Mu'minun",english:"The Believers",verses:118},{id:24,name:"An-Nur",english:"The Light",verses:64},
+  {id:25,name:"Al-Furqan",english:"The Criterion",verses:77},{id:26,name:"Ash-Shu'ara",english:"The Poets",verses:227},
+  {id:27,name:"An-Naml",english:"The Ant",verses:93},{id:28,name:"Al-Qasas",english:"The Stories",verses:88},
+  {id:29,name:"Al-'Ankabut",english:"The Spider",verses:69},{id:30,name:"Ar-Rum",english:"The Romans",verses:60},
+  {id:31,name:"Luqman",english:"Luqman",verses:34},{id:32,name:"As-Sajdah",english:"The Prostration",verses:30},
+  {id:33,name:"Al-Ahzab",english:"The Combined Forces",verses:73},{id:34,name:"Saba",english:"Sheba",verses:54},
+  {id:35,name:"Fatir",english:"Originator",verses:45},{id:36,name:"Ya-Sin",english:"Ya-Sin",verses:83},
+  {id:37,name:"As-Saffat",english:"Those Ranged in Ranks",verses:182},{id:38,name:"Sad",english:"Sad",verses:88},
+  {id:39,name:"Az-Zumar",english:"The Troops",verses:75},{id:40,name:"Ghafir",english:"The Forgiver",verses:85},
+  {id:41,name:"Fussilat",english:"Explained in Detail",verses:54},{id:42,name:"Ash-Shura",english:"The Consultation",verses:53},
+  {id:43,name:"Az-Zukhruf",english:"The Gold Adornments",verses:89},{id:44,name:"Ad-Dukhan",english:"The Smoke",verses:59},
+  {id:45,name:"Al-Jathiyah",english:"The Crouching",verses:37},{id:46,name:"Al-Ahqaf",english:"The Wind-Curved Sandhills",verses:35},
+  {id:47,name:"Muhammad",english:"Muhammad",verses:38},{id:48,name:"Al-Fath",english:"The Victory",verses:29},
+  {id:49,name:"Al-Hujurat",english:"The Rooms",verses:18},{id:50,name:"Qaf",english:"Qaf",verses:45},
+  {id:51,name:"Adh-Dhariyat",english:"The Winnowing Winds",verses:60},{id:52,name:"At-Tur",english:"The Mount",verses:49},
+  {id:53,name:"An-Najm",english:"The Star",verses:62},{id:54,name:"Al-Qamar",english:"The Moon",verses:55},
+  {id:55,name:"Ar-Rahman",english:"The Beneficent",verses:78},{id:56,name:"Al-Waqi'ah",english:"The Inevitable",verses:96},
+  {id:57,name:"Al-Hadid",english:"The Iron",verses:29},{id:58,name:"Al-Mujadila",english:"The Pleading Woman",verses:22},
+  {id:59,name:"Al-Hashr",english:"The Exile",verses:24},{id:60,name:"Al-Mumtahanah",english:"She That is to be Examined",verses:13},
+  {id:61,name:"As-Saf",english:"The Ranks",verses:14},{id:62,name:"Al-Jumu'ah",english:"The Congregation",verses:11},
+  {id:63,name:"Al-Munafiqun",english:"The Hypocrites",verses:11},{id:64,name:"At-Taghabun",english:"The Mutual Disillusion",verses:18},
+  {id:65,name:"At-Talaq",english:"The Divorce",verses:12},{id:66,name:"At-Tahrim",english:"The Prohibition",verses:12},
+  {id:67,name:"Al-Mulk",english:"The Sovereignty",verses:30},{id:68,name:"Al-Qalam",english:"The Pen",verses:52},
+  {id:69,name:"Al-Haqqah",english:"The Reality",verses:52},{id:70,name:"Al-Ma'arij",english:"The Ascending Stairways",verses:44},
+  {id:71,name:"Nuh",english:"Noah",verses:28},{id:72,name:"Al-Jinn",english:"The Jinn",verses:28},
+  {id:73,name:"Al-Muzzammil",english:"The Enshrouded One",verses:20},{id:74,name:"Al-Muddaththir",english:"The Cloaked One",verses:56},
+  {id:75,name:"Al-Qiyamah",english:"The Resurrection",verses:40},{id:76,name:"Al-Insan",english:"The Human",verses:31},
+  {id:77,name:"Al-Mursalat",english:"The Emissaries",verses:50},{id:78,name:"An-Naba",english:"The Announcement",verses:40},
+  {id:79,name:"An-Nazi'at",english:"Those Who Drag Forth",verses:46},{id:80,name:"'Abasa",english:"He Frowned",verses:42},
+  {id:81,name:"At-Takwir",english:"The Overthrowing",verses:29},{id:82,name:"Al-Infitar",english:"The Cleaving",verses:19},
+  {id:83,name:"Al-Mutaffifin",english:"The Defrauding",verses:36},{id:84,name:"Al-Inshiqaq",english:"The Splitting Open",verses:25},
+  {id:85,name:"Al-Buruj",english:"The Mansions of Stars",verses:22},{id:86,name:"At-Tariq",english:"The Morning Star",verses:17},
+  {id:87,name:"Al-A'la",english:"The Most High",verses:19},{id:88,name:"Al-Ghashiyah",english:"The Overwhelming",verses:26},
+  {id:89,name:"Al-Fajr",english:"The Dawn",verses:30},{id:90,name:"Al-Balad",english:"The City",verses:20},
+  {id:91,name:"Ash-Shams",english:"The Sun",verses:15},{id:92,name:"Al-Layl",english:"The Night",verses:21},
+  {id:93,name:"Ad-Duhah",english:"The Morning Hours",verses:11},{id:94,name:"Ash-Sharh",english:"The Relief",verses:8},
+  {id:95,name:"At-Tin",english:"The Fig",verses:8},{id:96,name:"Al-'Alaq",english:"The Clot",verses:19},
+  {id:97,name:"Al-Qadr",english:"The Power",verses:5},{id:98,name:"Al-Bayyinah",english:"The Clear Proof",verses:8},
+  {id:99,name:"Az-Zalzalah",english:"The Earthquake",verses:8},{id:100,name:"Al-'Adiyat",english:"The Courser",verses:11},
+  {id:101,name:"Al-Qari'ah",english:"The Calamity",verses:11},{id:102,name:"At-Takathur",english:"Rivalry in World Increase",verses:8},
+  {id:103,name:"Al-'Asr",english:"The Declining Day",verses:3},{id:104,name:"Al-Humazah",english:"The Traducer",verses:9},
+  {id:105,name:"Al-Fil",english:"The Elephant",verses:5},{id:106,name:"Quraysh",english:"Quraysh",verses:4},
+  {id:107,name:"Al-Ma'un",english:"The Small Kindnesses",verses:7},{id:108,name:"Al-Kawthar",english:"The Abundance",verses:3},
+  {id:109,name:"Al-Kafirun",english:"The Disbelievers",verses:6},{id:110,name:"An-Nasr",english:"The Divine Support",verses:3},
+  {id:111,name:"Al-Masad",english:"The Palm Fiber",verses:5},{id:112,name:"Al-Ikhlas",english:"The Sincerity",verses:4},
+  {id:113,name:"Al-Falaq",english:"The Daybreak",verses:5},{id:114,name:"An-Nas",english:"Mankind",verses:6},
+];
+
+// ── Torah (Sefaria) data ───────────────────────────────────────────────────────
+const TORAH_BOOKS = [
+  { name: "Genesis",     sefaria: "Genesis",     chapters: 50 },
+  { name: "Exodus",      sefaria: "Exodus",      chapters: 40 },
+  { name: "Leviticus",   sefaria: "Leviticus",   chapters: 27 },
+  { name: "Numbers",     sefaria: "Numbers",     chapters: 36 },
+  { name: "Deuteronomy", sefaria: "Deuteronomy", chapters: 34 },
+];
+
+// ── LDS scripture data (module-level cache) ────────────────────────────────────
+type LdsVerse = { verse: number; text: string };
+type LdsChapter = { chapter: number; verses: LdsVerse[] };
+type LdsBook = { book: string; chapters: LdsChapter[] };
+const LDS_CACHE: Record<string, LdsBook[]> = {};
+
+const LDS_VOLUMES = [
+  { key: "book-of-mormon",        label: "Book of Mormon" },
+  { key: "doctrine-and-covenants", label: "Doctrine & Covenants" },
+  { key: "pearl-of-great-price",  label: "Pearl of Great Price" },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -1441,6 +1530,633 @@ function PrayerTab() {
   );
 }
 
+// ── Quran Browser Tab ─────────────────────────────────────────────────────────
+function QuranBrowserTab() {
+  const [mode, setMode] = useState<"browse" | "search">("browse");
+  const [translation, setTranslation] = useState("131");
+  const [surahId, setSurahId] = useState(1);
+  const [verses, setVerses] = useState<Array<{ verse: number; text: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ verse_key: string; text: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [saveModal, setSaveModal] = useState<{ text: string; ref: string } | null>(null);
+
+  const surah = QURAN_SURAHS.find(s => s.id === surahId)!;
+
+  async function fetchSurah(id: number, trans = translation) {
+    setLoading(true); setError(""); setSelected(new Set());
+    try {
+      const r = await fetch(`https://api.quran.com/api/v4/verses/by_chapter/${id}?language=en&translations=${trans}&words=false&per_page=300&page=1`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      const vs: Array<{ verse: number; text: string }> = (data.verses ?? []).map((v: any) => ({
+        verse: v.verse_number,
+        text: (v.translations?.[0]?.text ?? "").replace(/<[^>]+>/g, "").replace(/\d+$/, "").trim(),
+      }));
+      setVerses(vs); setHasFetched(true);
+    } catch { setError("Could not load this surah. Please try again."); setVerses([]); }
+    setLoading(false);
+  }
+
+  async function searchQuran() {
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true); setSearchError(""); setSearchResults([]);
+    try {
+      const r = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(searchQuery)}&language=en&size=20&page=1`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      const results = (data.search?.results ?? []).map((v: any) => ({
+        verse_key: v.verse_key ?? "",
+        text: (v.translations?.[0]?.text ?? v.text ?? "").replace(/<[^>]+>/g, "").trim(),
+      }));
+      setSearchResults(results); setHasSearched(true);
+      if (results.length === 0) setSearchError("No results. Try different keywords.");
+    } catch { setSearchError("Search failed. Please try again."); }
+    setSearchLoading(false);
+  }
+
+  function toggle(v: number) { setSelected(p => { const n = new Set(p); n.has(v) ? n.delete(v) : n.add(v); return n; }); }
+  function getPassage() {
+    const sorted = Array.from(selected).sort((a, b) => a - b);
+    const text = sorted.map(n => verses.find(v => v.verse === n)?.text ?? "").join(" ");
+    const ref = sorted.length === 1 ? `${surah.name} ${surahId}:${sorted[0]}` : `${surah.name} ${surahId}:${sorted[0]}-${sorted[sorted.length-1]}`;
+    return { text, ref };
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+          {(["browse","search"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === m ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {m === "browse" ? <BookOpen size={12} /> : <Search size={12} />} {m === "browse" ? "Browse" : "Search"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-muted-foreground">Translation</span>
+          <select value={translation} onChange={e => { setTranslation(e.target.value); if (hasFetched && mode === "browse") fetchSurah(surahId, e.target.value); }}
+            className="h-8 rounded-lg border bg-background px-2 text-xs">
+            {QURAN_TRANSLATIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {mode === "browse" && (
+        <div className="space-y-4">
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-1 flex-1 min-w-48">
+              <Label className="text-xs">Surah</Label>
+              <select value={surahId} onChange={e => setSurahId(Number(e.target.value))}
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                {QURAN_SURAHS.map(s => <option key={s.id} value={s.id}>{s.id}. {s.name} — {s.english}</option>)}
+              </select>
+            </div>
+            <Button onClick={() => fetchSurah(surahId)} disabled={loading} className="h-9 gap-1.5">
+              {loading ? "Loading…" : <><BookOpen size={13} /> Read</>}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {!hasFetched && !loading && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <Moon size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Select a Surah and tap Read</p>
+              <p className="text-xs mt-1.5 opacity-70">Tap any verse to select it · Save selections as passages</p>
+            </div>
+          )}
+          {verses.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-base">{surah.name} <span className="text-sm font-normal text-muted-foreground">({surah.english}) · {verses.length} verses</span></h3>
+                {selected.size > 0 && (
+                  <Button size="sm" onClick={() => setSaveModal(getPassage())} className="gap-1.5 h-7 text-xs">
+                    <BookMarked size={12} /> Save {selected.size} verse{selected.size !== 1 ? "s" : ""}
+                  </Button>
+                )}
+              </div>
+              <div className="rounded-xl border bg-card overflow-hidden divide-y">
+                {verses.map(v => {
+                  const sel = selected.has(v.verse);
+                  return (
+                    <div key={v.verse} onClick={() => toggle(v.verse)}
+                      className={`flex gap-3 px-4 py-3 cursor-pointer transition-colors select-none ${sel ? "bg-amber-50 dark:bg-amber-950/20" : "hover:bg-secondary/40"}`}>
+                      <span className={`text-xs font-bold w-5 shrink-0 pt-0.5 ${sel ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>{v.verse}</span>
+                      <p className="text-sm leading-relaxed flex-1">{v.text}</p>
+                      {sel && <Check size={13} className="shrink-0 mt-0.5 text-amber-500" />}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={() => { const prev = surahId - 1; if (prev >= 1) { setSurahId(prev); fetchSurah(prev); } }}
+                  disabled={surahId === 1}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  ← {surahId > 1 ? `${surahId - 1}. ${QURAN_SURAHS[surahId-2]?.name}` : ""}
+                </button>
+                <span className="text-xs text-muted-foreground">{surahId} / 114</span>
+                <button onClick={() => { const next = surahId + 1; if (next <= 114) { setSurahId(next); fetchSurah(next); } }}
+                  disabled={surahId === 114}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  {surahId < 114 ? `${surahId + 1}. ${QURAN_SURAHS[surahId]?.name}` : ""} →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "search" && (
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && searchQuran()}
+              placeholder="Search the Quran… e.g. mercy, paradise, the straight path"
+              className="flex-1" />
+            <Button onClick={searchQuran} disabled={searchLoading || !searchQuery.trim()} className="gap-1.5 shrink-0">
+              <Search size={13} /> {searchLoading ? "…" : "Search"}
+            </Button>
+          </div>
+          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+          {!hasSearched && !searchLoading && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <Search size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Search all 114 Surahs</p>
+              <p className="text-xs mt-1.5 opacity-70">Try "mercy", "gratitude", "patience"</p>
+            </div>
+          )}
+          {searchResults.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</p>
+              {searchResults.map((r, i) => (
+                <div key={i} className="rounded-xl border bg-card p-4 group">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1.5">{r.verse_key}</p>
+                      <p className="text-sm leading-relaxed">{r.text}</p>
+                    </div>
+                    <button onClick={() => setSaveModal({ text: r.text, ref: r.verse_key })}
+                      className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground opacity-0 group-hover:opacity-100 transition-all">
+                      <BookMarked size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {saveModal && <BibleSavePassageModal text={saveModal.text} reference={saveModal.ref} onClose={() => setSaveModal(null)} />}
+    </div>
+  );
+}
+
+// ── Torah Browser Tab (Sefaria) ───────────────────────────────────────────────
+function TorahBrowserTab() {
+  const [mode, setMode] = useState<"browse" | "search">("browse");
+  const [lang, setLang] = useState<"en" | "he">("en");
+  const [bookIdx, setBookIdx] = useState(0);
+  const [chapter, setChapter] = useState(1);
+  const [verses, setVerses] = useState<Array<{ verse: number; text: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ ref: string; text: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [saveModal, setSaveModal] = useState<{ text: string; ref: string } | null>(null);
+
+  const book = TORAH_BOOKS[bookIdx];
+
+  async function fetchChapter(bIdx: number, ch: number, lg = lang) {
+    setLoading(true); setError(""); setSelected(new Set());
+    const b = TORAH_BOOKS[bIdx];
+    try {
+      const r = await fetch(`https://www.sefaria.org/api/texts/${b.sefaria}.${ch}?context=0&lang=${lg}`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      const raw: string[] = Array.isArray(data.text) ? data.text.flat() : [];
+      setVerses(raw.map((t, i) => ({ verse: i + 1, text: t.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() })).filter(v => v.text));
+      setHasFetched(true);
+    } catch { setError("Could not load this chapter from Sefaria."); setVerses([]); }
+    setLoading(false);
+  }
+
+  async function searchTorah() {
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true); setSearchError(""); setSearchResults([]);
+    try {
+      const filters = TORAH_BOOKS.map(b => `filters[]=${b.sefaria}`).join("&");
+      const r = await fetch(`https://www.sefaria.org/api/search-wrapper?query=${encodeURIComponent(searchQuery)}&type=text&slop=0&sort_type=relevance&exact=false&${filters}&size=20&page=0`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      const hits = data.hits?.hits ?? [];
+      setSearchResults(hits.map((h: any) => ({
+        ref: h._source?.ref ?? h._id ?? "",
+        text: (h._source?.exact ?? h._source?.naive_lemmatizer ?? "").replace(/<[^>]+>/g, "").trim(),
+      })).filter((h: any) => h.text));
+      setHasSearched(true);
+      if (hits.length === 0) setSearchError("No results. Try different search terms.");
+    } catch { setSearchError("Search failed. Please try again."); }
+    setSearchLoading(false);
+  }
+
+  function toggle(v: number) { setSelected(p => { const n = new Set(p); n.has(v) ? n.delete(v) : n.add(v); return n; }); }
+  function getPassage() {
+    const sorted = Array.from(selected).sort((a, b) => a - b);
+    const text = sorted.map(n => verses.find(v => v.verse === n)?.text ?? "").join(" ");
+    const ref = sorted.length === 1 ? `${book.name} ${chapter}:${sorted[0]}` : `${book.name} ${chapter}:${sorted[0]}-${sorted[sorted.length-1]}`;
+    return { text, ref };
+  }
+  function prevChap() { if (chapter > 1) { setChapter(chapter - 1); fetchChapter(bookIdx, chapter - 1); } else if (bookIdx > 0) { const pi = bookIdx - 1; setBookIdx(pi); const pc = TORAH_BOOKS[pi].chapters; setChapter(pc); fetchChapter(pi, pc); } }
+  function nextChap() { if (chapter < book.chapters) { setChapter(chapter + 1); fetchChapter(bookIdx, chapter + 1); } else if (bookIdx < TORAH_BOOKS.length - 1) { setBookIdx(bookIdx + 1); setChapter(1); fetchChapter(bookIdx + 1, 1); } }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+          {(["browse","search"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === m ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {m === "browse" ? <BookOpen size={12} /> : <Search size={12} />} {m === "browse" ? "Browse" : "Search"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-muted-foreground">Language</span>
+          <select value={lang} onChange={e => { setLang(e.target.value as "en"|"he"); if (hasFetched) fetchChapter(bookIdx, chapter, e.target.value as "en"|"he"); }}
+            className="h-8 rounded-lg border bg-background px-2 text-xs">
+            <option value="en">English</option>
+            <option value="he">Hebrew</option>
+          </select>
+        </div>
+      </div>
+
+      {mode === "browse" && (
+        <div className="space-y-4">
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-1">
+              <Label className="text-xs">Book</Label>
+              <select value={bookIdx} onChange={e => { setBookIdx(Number(e.target.value)); setChapter(1); }}
+                className="h-9 rounded-md border bg-background px-3 text-sm">
+                {TORAH_BOOKS.map((b, i) => <option key={b.name} value={i}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Chapter</Label>
+              <select value={chapter} onChange={e => setChapter(Number(e.target.value))}
+                className="h-9 rounded-md border bg-background px-3 text-sm">
+                {Array.from({ length: book.chapters }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <Button onClick={() => fetchChapter(bookIdx, chapter)} disabled={loading} className="h-9 gap-1.5">
+              {loading ? "Loading…" : <><BookOpen size={13} /> Read</>}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {!hasFetched && !loading && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <ScrollText size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Select a book and chapter, then tap Read</p>
+              <p className="text-xs mt-1.5 opacity-70">Powered by Sefaria · Tap verses to select and save</p>
+            </div>
+          )}
+          {verses.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-base">{book.name} {chapter} <span className="text-xs font-normal text-muted-foreground">· Sefaria · {verses.length} verses</span></h3>
+                {selected.size > 0 && (
+                  <Button size="sm" onClick={() => setSaveModal(getPassage())} className="gap-1.5 h-7 text-xs">
+                    <BookMarked size={12} /> Save {selected.size} verse{selected.size !== 1 ? "s" : ""}
+                  </Button>
+                )}
+              </div>
+              <div className={`rounded-xl border bg-card overflow-hidden divide-y ${lang === "he" ? "direction-rtl" : ""}`}>
+                {verses.map(v => {
+                  const sel = selected.has(v.verse);
+                  return (
+                    <div key={v.verse} onClick={() => toggle(v.verse)}
+                      className={`flex gap-3 px-4 py-3 cursor-pointer transition-colors select-none ${sel ? "bg-amber-50 dark:bg-amber-950/20" : "hover:bg-secondary/40"}`}>
+                      <span className={`text-xs font-bold w-5 shrink-0 pt-0.5 ${sel ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>{v.verse}</span>
+                      <p className={`text-sm leading-relaxed flex-1 ${lang === "he" ? "text-right font-serif" : ""}`}>{v.text}</p>
+                      {sel && <Check size={13} className="shrink-0 mt-0.5 text-amber-500" />}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={prevChap} disabled={bookIdx === 0 && chapter === 1}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  ← {chapter > 1 ? `${book.name} ${chapter - 1}` : (bookIdx > 0 ? TORAH_BOOKS[bookIdx-1].name : "")}
+                </button>
+                <span className="text-xs text-muted-foreground">{chapter} / {book.chapters}</span>
+                <button onClick={nextChap} disabled={bookIdx === TORAH_BOOKS.length - 1 && chapter === book.chapters}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  {chapter < book.chapters ? `${book.name} ${chapter + 1}` : (bookIdx < TORAH_BOOKS.length - 1 ? TORAH_BOOKS[bookIdx+1].name : "")} →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "search" && (
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && searchTorah()}
+              placeholder="Search the Torah… e.g. love your neighbor, honor your father" className="flex-1" />
+            <Button onClick={searchTorah} disabled={searchLoading || !searchQuery.trim()} className="gap-1.5 shrink-0">
+              <Search size={13} /> {searchLoading ? "…" : "Search"}
+            </Button>
+          </div>
+          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+          {!hasSearched && !searchLoading && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <Search size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Search across the Five Books of Moses</p>
+            </div>
+          )}
+          {searchResults.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</p>
+              {searchResults.map((r, i) => (
+                <div key={i} className="rounded-xl border bg-card p-4 group">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1.5">{r.ref}</p>
+                      <p className="text-sm leading-relaxed">{r.text}</p>
+                    </div>
+                    <button onClick={() => setSaveModal({ text: r.text, ref: r.ref })}
+                      className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground opacity-0 group-hover:opacity-100 transition-all">
+                      <BookMarked size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {saveModal && <BibleSavePassageModal text={saveModal.text} reference={saveModal.ref} onClose={() => setSaveModal(null)} />}
+    </div>
+  );
+}
+
+// ── LDS Scripture Browser Tab ─────────────────────────────────────────────────
+function LDSBrowserTab() {
+  const [mode, setMode] = useState<"browse" | "search">("browse");
+  const [volumeKey, setVolumeKey] = useState("book-of-mormon");
+  const [books, setBooks] = useState<LdsBook[]>([]);
+  const [bookIdx, setBookIdx] = useState(0);
+  const [chapter, setChapter] = useState(1);
+  const [verses, setVerses] = useState<Array<{ verse: number; text: string }>>([]);
+  const [volumeLoading, setVolumeLoading] = useState(false);
+  const [browseError, setBrowseError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ ref: string; text: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [saveModal, setSaveModal] = useState<{ text: string; ref: string } | null>(null);
+
+  const book = books[bookIdx];
+
+  async function loadVolume(key: string) {
+    if (LDS_CACHE[key]) { setBooks(LDS_CACHE[key]); setBookIdx(0); setChapter(1); setVerses([]); setHasFetched(false); return; }
+    setVolumeLoading(true); setBrowseError(""); setVerses([]); setHasFetched(false);
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/bcbooks/scriptures-json/master/${key}.json`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      const bks: LdsBook[] = data.books ?? [];
+      LDS_CACHE[key] = bks;
+      setBooks(bks); setBookIdx(0); setChapter(1);
+    } catch { setBrowseError("Could not load scriptures. Please check your connection."); }
+    setVolumeLoading(false);
+  }
+
+  function showChapter(bIdx: number, ch: number) {
+    const b = books[bIdx];
+    if (!b) return;
+    const chData = b.chapters.find(c => c.chapter === ch);
+    if (!chData) return;
+    setVerses(chData.verses.map(v => ({ verse: v.verse, text: v.text })));
+    setSelected(new Set()); setHasFetched(true);
+  }
+
+  function toggle(v: number) { setSelected(p => { const n = new Set(p); n.has(v) ? n.delete(v) : n.add(v); return n; }); }
+  function getPassage() {
+    const sorted = Array.from(selected).sort((a, b) => a - b);
+    const text = sorted.map(n => verses.find(v => v.verse === n)?.text ?? "").join(" ");
+    const ref = `${book?.book ?? ""} ${chapter}:${sorted[0]}${sorted.length > 1 ? `-${sorted[sorted.length-1]}` : ""}`;
+    return { text, ref };
+  }
+
+  const totalChapters = book?.chapters.length ?? 0;
+
+  function prevChap() {
+    if (chapter > 1) { const nc = chapter - 1; setChapter(nc); showChapter(bookIdx, nc); }
+    else if (bookIdx > 0) { const pi = bookIdx - 1; const pc = books[pi].chapters.length; setBookIdx(pi); setChapter(pc); showChapter(pi, pc); }
+  }
+  function nextChap() {
+    if (chapter < totalChapters) { const nc = chapter + 1; setChapter(nc); showChapter(bookIdx, nc); }
+    else if (bookIdx < books.length - 1) { setBookIdx(bookIdx + 1); setChapter(1); showChapter(bookIdx + 1, 1); }
+  }
+
+  function searchLDS() {
+    if (!searchQuery.trim() || books.length === 0) { setSearchError(books.length === 0 ? "Load a volume first to search." : ""); return; }
+    setSearchLoading(true); setSearchResults([]); setSearchError("");
+    const q = searchQuery.toLowerCase();
+    const results: Array<{ ref: string; text: string }> = [];
+    for (const b of books) {
+      for (const ch of b.chapters) {
+        for (const v of ch.verses) {
+          if (v.text.toLowerCase().includes(q)) {
+            results.push({ ref: `${b.book} ${ch.chapter}:${v.verse}`, text: v.text });
+            if (results.length >= 40) break;
+          }
+        }
+        if (results.length >= 40) break;
+      }
+      if (results.length >= 40) break;
+    }
+    setSearchResults(results); setHasSearched(true);
+    if (results.length === 0) setSearchError("No results in the loaded volume.");
+    setSearchLoading(false);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+          {(["browse","search"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === m ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {m === "browse" ? <BookOpen size={12} /> : <Search size={12} />} {m === "browse" ? "Browse" : "Search"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-xs text-muted-foreground">Volume</span>
+          <select value={volumeKey} onChange={e => { setVolumeKey(e.target.value); loadVolume(e.target.value); }}
+            className="h-8 rounded-lg border bg-background px-2 text-xs">
+            {LDS_VOLUMES.map(v => <option key={v.key} value={v.key}>{v.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {mode === "browse" && (
+        <div className="space-y-4">
+          {books.length === 0 && !volumeLoading && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <Star size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Select a volume and tap Load to begin</p>
+              <Button size="sm" className="mt-3 gap-1.5" onClick={() => loadVolume(volumeKey)}>
+                <BookOpen size={13} /> Load {LDS_VOLUMES.find(v => v.key === volumeKey)?.label}
+              </Button>
+            </div>
+          )}
+          {volumeLoading && (
+            <div className="text-center py-10 text-muted-foreground">
+              <p className="text-sm">Loading scriptures…</p>
+              <p className="text-xs mt-1 opacity-60">Downloading volume data, one moment</p>
+            </div>
+          )}
+          {browseError && <p className="text-sm text-destructive">{browseError}</p>}
+          {books.length > 0 && (
+            <>
+              <div className="flex gap-2 items-end flex-wrap">
+                <div className="space-y-1 flex-1 min-w-40">
+                  <Label className="text-xs">Book</Label>
+                  <select value={bookIdx} onChange={e => { setBookIdx(Number(e.target.value)); setChapter(1); }}
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                    {books.map((b, i) => <option key={b.book} value={i}>{b.book}</option>)}
+                  </select>
+                </div>
+                {totalChapters > 1 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Chapter</Label>
+                    <select value={chapter} onChange={e => setChapter(Number(e.target.value))}
+                      className="h-9 rounded-md border bg-background px-3 text-sm">
+                      {Array.from({ length: totalChapters }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+                <Button onClick={() => showChapter(bookIdx, chapter)} className="h-9 gap-1.5">
+                  <BookOpen size={13} /> Read
+                </Button>
+              </div>
+              {verses.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-base">{book?.book} {totalChapters > 1 ? chapter : ""} <span className="text-xs font-normal text-muted-foreground">· {verses.length} verses</span></h3>
+                    {selected.size > 0 && (
+                      <Button size="sm" onClick={() => setSaveModal(getPassage())} className="gap-1.5 h-7 text-xs">
+                        <BookMarked size={12} /> Save {selected.size} verse{selected.size !== 1 ? "s" : ""}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="rounded-xl border bg-card overflow-hidden divide-y">
+                    {verses.map(v => {
+                      const sel = selected.has(v.verse);
+                      return (
+                        <div key={v.verse} onClick={() => toggle(v.verse)}
+                          className={`flex gap-3 px-4 py-3 cursor-pointer transition-colors select-none ${sel ? "bg-amber-50 dark:bg-amber-950/20" : "hover:bg-secondary/40"}`}>
+                          <span className={`text-xs font-bold w-5 shrink-0 pt-0.5 ${sel ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>{v.verse}</span>
+                          <p className="text-sm leading-relaxed flex-1">{v.text}</p>
+                          {sel && <Check size={13} className="shrink-0 mt-0.5 text-amber-500" />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {totalChapters > 1 && (
+                    <div className="flex items-center justify-between pt-1">
+                      <button onClick={prevChap} disabled={bookIdx === 0 && chapter === 1}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                        ← {chapter > 1 ? `${book?.book} ${chapter - 1}` : (books[bookIdx-1]?.book ?? "")}
+                      </button>
+                      <span className="text-xs text-muted-foreground">{chapter} / {totalChapters}</span>
+                      <button onClick={nextChap} disabled={bookIdx === books.length - 1 && chapter === totalChapters}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                        {chapter < totalChapters ? `${book?.book} ${chapter + 1}` : (books[bookIdx+1]?.book ?? "")} →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {!hasFetched && (
+                <div className="text-center py-10 text-muted-foreground">
+                  <p className="text-sm">Select a book and chapter, then tap Read</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === "search" && (
+        <div className="space-y-4">
+          {books.length === 0 && (
+            <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-700 dark:text-amber-400">
+              Load a volume first (Browse tab → select volume) to enable search.
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && searchLDS()}
+              placeholder={`Search the ${LDS_VOLUMES.find(v => v.key === volumeKey)?.label ?? "scriptures"}…`} className="flex-1" />
+            <Button onClick={searchLDS} disabled={searchLoading || !searchQuery.trim()} className="gap-1.5 shrink-0">
+              <Search size={13} /> {searchLoading ? "…" : "Search"}
+            </Button>
+          </div>
+          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+          {!hasSearched && books.length > 0 && (
+            <div className="text-center py-14 border rounded-xl text-muted-foreground">
+              <Search size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">Search across the loaded volume</p>
+            </div>
+          )}
+          {searchResults.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}{searchResults.length === 40 ? " — showing top 40" : ""}</p>
+              {searchResults.map((r, i) => (
+                <div key={i} className="rounded-xl border bg-card p-4 group">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1.5">{r.ref}</p>
+                      <p className="text-sm leading-relaxed">{r.text}</p>
+                    </div>
+                    <button onClick={() => setSaveModal({ text: r.text, ref: r.ref })}
+                      className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground opacity-0 group-hover:opacity-100 transition-all">
+                      <BookMarked size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {saveModal && <BibleSavePassageModal text={saveModal.text} reference={saveModal.ref} onClose={() => setSaveModal(null)} />}
+    </div>
+  );
+}
+
 // ── Bible: Save-to-Text mini-modal ────────────────────────────────────────────
 function BibleSavePassageModal({ text, reference, onClose }: {
   text: string; reference: string; onClose: () => void;
@@ -1825,6 +2541,9 @@ export default function FaithPage() {
 
   const TABS: { id: SubView; label: string; icon: React.ReactNode }[] = [
     { id: "bible",     label: "Bible",               icon: <BookMarked size={14} /> },
+    { id: "quran",     label: "Quran",               icon: <Moon size={14} /> },
+    { id: "torah",     label: "Torah",               icon: <ScrollText size={14} /> },
+    { id: "lds",       label: "LDS Scriptures",      icon: <Star size={14} /> },
     { id: "texts",     label: "Sacred Texts",        icon: <BookOpen size={14} /> },
     { id: "practices", label: "Practices",           icon: <Flame size={14} /> },
     { id: "teachings", label: "Teachings",           icon: <Mic2 size={14} /> },
@@ -1862,6 +2581,9 @@ export default function FaithPage() {
 
       {/* Content */}
       {subView === "bible"     && <BibleBrowserTab />}
+      {subView === "quran"     && <QuranBrowserTab />}
+      {subView === "torah"     && <TorahBrowserTab />}
+      {subView === "lds"       && <LDSBrowserTab />}
       {subView === "texts"     && <TextsTab />}
       {subView === "practices" && <PracticesTab />}
       {subView === "teachings" && <TeachingsTab />}
