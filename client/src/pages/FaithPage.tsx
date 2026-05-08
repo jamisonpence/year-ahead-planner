@@ -40,6 +40,40 @@ const PRACTICE_SUGGESTIONS = [
   "Pilgrimage", "Breathwork", "Journaling", "Worship", "Serving",
 ];
 
+// ── Bible API helpers ──────────────────────────────────────────────────────────
+const REF_TRANSLATIONS = [
+  { value: "kjv",  label: "KJV — King James" },
+  { value: "web",  label: "WEB — World English" },
+  { value: "asv",  label: "ASV — American Standard" },
+  { value: "bbe",  label: "BBE — Basic English" },
+  { value: "ylt",  label: "YLT — Young's Literal" },
+];
+
+const SEARCH_TRANSLATIONS = [
+  { value: "KJV",  label: "KJV" },
+  { value: "ESV",  label: "ESV" },
+  { value: "NKJV", label: "NKJV" },
+  { value: "NLT",  label: "NLT" },
+  { value: "NIV",  label: "NIV" },
+];
+
+const BIBLE_BOOK_NAMES: Record<number, string> = {
+  1:"Genesis",2:"Exodus",3:"Leviticus",4:"Numbers",5:"Deuteronomy",
+  6:"Joshua",7:"Judges",8:"Ruth",9:"1 Samuel",10:"2 Samuel",
+  11:"1 Kings",12:"2 Kings",13:"1 Chronicles",14:"2 Chronicles",
+  15:"Ezra",16:"Nehemiah",17:"Esther",18:"Job",19:"Psalms",20:"Proverbs",
+  21:"Ecclesiastes",22:"Song of Solomon",23:"Isaiah",24:"Jeremiah",
+  25:"Lamentations",26:"Ezekiel",27:"Daniel",28:"Hosea",29:"Joel",
+  30:"Amos",31:"Obadiah",32:"Jonah",33:"Micah",34:"Nahum",
+  35:"Habakkuk",36:"Zephaniah",37:"Haggai",38:"Zechariah",39:"Malachi",
+  40:"Matthew",41:"Mark",42:"Luke",43:"John",44:"Acts",
+  45:"Romans",46:"1 Corinthians",47:"2 Corinthians",48:"Galatians",
+  49:"Ephesians",50:"Philippians",51:"Colossians",52:"1 Thessalonians",
+  53:"2 Thessalonians",54:"1 Timothy",55:"2 Timothy",56:"Titus",
+  57:"Philemon",58:"Hebrews",59:"James",60:"1 Peter",61:"2 Peter",
+  62:"1 John",63:"2 John",64:"3 John",65:"Jude",66:"Revelation",
+};
+
 const STATUS_COLORS: Record<string, string> = {
   "Active": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   "Exploring": "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
@@ -208,35 +242,228 @@ function TextSearchModal({ onClose, onSelect }: {
   );
 }
 
-// ── Passage Modal ──────────────────────────────────────────────────────────────
+// ── Passage Modal (with Bible API search) ─────────────────────────────────────
 function PassageModal({ onClose, onSave }: {
   onClose: () => void;
   onSave: (p: SavedPassage) => void;
 }) {
+  const [mode, setMode] = useState<"bible" | "manual">("bible");
+  const [searchMode, setSearchMode] = useState<"reference" | "keyword">("reference");
+
+  // Reference lookup (bible-api.com)
+  const [refInput, setRefInput] = useState("");
+  const [refTranslation, setRefTranslation] = useState("kjv");
+  const [fetchedText, setFetchedText] = useState("");
+  const [fetchedRef, setFetchedRef] = useState("");
+  const [refLoading, setRefLoading] = useState(false);
+  const [refError, setRefError] = useState("");
+
+  // Keyword search (bolls.life)
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keywordTranslation, setKeywordTranslation] = useState("KJV");
+  const [searchResults, setSearchResults] = useState<Array<{ book: number; chapter: number; verse: number; text: string }>>([]);
+  const [selectedResult, setSelectedResult] = useState<{ book: number; chapter: number; verse: number; text: string } | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  // Manual / shared notes
   const [passage, setPassage] = useState("");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
 
+  async function lookupReference() {
+    if (!refInput.trim()) return;
+    setRefLoading(true); setRefError(""); setFetchedText(""); setFetchedRef("");
+    try {
+      const r = await fetch(`https://bible-api.com/${encodeURIComponent(refInput)}?translation=${refTranslation}`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      if (data.error) throw new Error(data.error);
+      setFetchedText(data.text?.trim() ?? "");
+      setFetchedRef(data.reference ?? refInput);
+    } catch {
+      setRefError("Passage not found. Try a different reference or translation.");
+    }
+    setRefLoading(false);
+  }
+
+  async function searchKeyword() {
+    if (!keywordInput.trim()) return;
+    setSearchLoading(true); setSearchError(""); setSearchResults([]); setSelectedResult(null);
+    try {
+      const r = await fetch(`https://bolls.life/search/${keywordTranslation}/${encodeURIComponent(keywordInput)}/`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any[];
+      if (!Array.isArray(data) || data.length === 0) throw new Error("none");
+      setSearchResults(data.slice(0, 20));
+    } catch (e: any) {
+      setSearchError(e?.message === "none" ? "No results found. Try different search terms." : "Search failed. Please try again.");
+    }
+    setSearchLoading(false);
+  }
+
+  function handleSave() {
+    let finalPassage = passage;
+    let finalReference = reference;
+    if (mode === "bible") {
+      if (searchMode === "reference") {
+        finalPassage = fetchedText;
+        finalReference = fetchedRef || refInput;
+      } else if (selectedResult) {
+        const bookName = BIBLE_BOOK_NAMES[selectedResult.book] ?? `Book ${selectedResult.book}`;
+        finalPassage = selectedResult.text;
+        finalReference = `${bookName} ${selectedResult.chapter}:${selectedResult.verse} (${keywordTranslation})`;
+      }
+    }
+    if (!finalPassage.trim()) return;
+    onSave({ passage: finalPassage, reference: finalReference, notes });
+    onClose();
+  }
+
+  const canSave = mode === "bible"
+    ? (searchMode === "reference" ? !!fetchedText : !!selectedResult)
+    : !!passage.trim();
+
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Save a Passage</DialogTitle></DialogHeader>
         <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
-            <Label>Reference</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="e.g. John 3:16, Quran 2:255, Dhammapada 1:1" />
+
+          {/* Mode toggle */}
+          <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+            <button onClick={() => setMode("bible")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === "bible" ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <BookOpen size={12} /> Search Bible
+            </button>
+            <button onClick={() => setMode("manual")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === "manual" ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Pencil size={12} /> Enter Manually
+            </button>
           </div>
-          <div className="space-y-1.5">
-            <Label>Passage text</Label>
-            <Textarea value={passage} onChange={e => setPassage(e.target.value)} rows={4} placeholder="Enter the passage…" />
-          </div>
+
+          {mode === "bible" && (
+            <>
+              {/* Search sub-mode pills */}
+              <div className="flex gap-2">
+                {(["reference", "keyword"] as const).map(m => (
+                  <button key={m} onClick={() => setSearchMode(m)}
+                    className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors
+                      ${searchMode === m
+                        ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 border-transparent"
+                        : "text-muted-foreground border-stone-200 dark:border-stone-700 hover:border-stone-400"}`}>
+                    {m === "reference" ? "By Reference" : "By Keyword"}
+                  </button>
+                ))}
+              </div>
+
+              {searchMode === "reference" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1.5">
+                      <Label>Reference</Label>
+                      <Input value={refInput} onChange={e => setRefInput(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && lookupReference()}
+                        placeholder="e.g. John 3:16, Psalm 23, Romans 8:28-30" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Translation</Label>
+                      <select value={refTranslation} onChange={e => setRefTranslation(e.target.value)}
+                        className="h-9 rounded-md border bg-background px-2 text-sm">
+                        {REF_TRANSLATIONS.map(t => <option key={t.value} value={t.value}>{t.label.split(" ")[0]}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={lookupReference} disabled={refLoading || !refInput.trim()} className="w-full gap-1.5">
+                    <Search size={13} /> {refLoading ? "Looking up…" : "Look Up Passage"}
+                  </Button>
+                  {refError && <p className="text-xs text-destructive">{refError}</p>}
+                  {fetchedText && (
+                    <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-4 space-y-1.5">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">{fetchedRef}</p>
+                      <p className="text-sm leading-relaxed text-foreground italic">"{fetchedText}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {searchMode === "keyword" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1.5">
+                      <Label>Search words or phrase</Label>
+                      <Input value={keywordInput} onChange={e => setKeywordInput(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && searchKeyword()}
+                        placeholder="e.g. love one another, fear not, I am the" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Translation</Label>
+                      <select value={keywordTranslation} onChange={e => setKeywordTranslation(e.target.value)}
+                        className="h-9 rounded-md border bg-background px-2 text-sm">
+                        {SEARCH_TRANSLATIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={searchKeyword} disabled={searchLoading || !keywordInput.trim()} className="w-full gap-1.5">
+                    <Search size={13} /> {searchLoading ? "Searching…" : "Search"}
+                  </Button>
+                  {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+                  {searchResults.length > 0 && (
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto rounded-lg border p-1">
+                      <p className="text-[10px] text-muted-foreground px-2 pt-1">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""} — tap one to select</p>
+                      {searchResults.map((r, i) => {
+                        const bookName = BIBLE_BOOK_NAMES[r.book] ?? `Book ${r.book}`;
+                        const ref = `${bookName} ${r.chapter}:${r.verse}`;
+                        const isSel = selectedResult === r;
+                        return (
+                          <button key={i} onClick={() => setSelectedResult(isSel ? null : r)}
+                            className={`w-full text-left p-3 rounded-lg border transition-colors text-sm
+                              ${isSel
+                                ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700"
+                                : "border-transparent hover:bg-secondary/60 hover:border-border"}`}>
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">{ref}</p>
+                            <p className="leading-relaxed line-clamp-3 text-xs">{r.text}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedResult && (
+                    <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3">
+                      <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1">
+                        {BIBLE_BOOK_NAMES[selectedResult.book]} {selectedResult.chapter}:{selectedResult.verse} ({keywordTranslation})
+                      </p>
+                      <p className="text-sm leading-relaxed italic">"{selectedResult.text}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {mode === "manual" && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Reference</Label>
+                <Input value={reference} onChange={e => setReference(e.target.value)}
+                  placeholder="e.g. John 3:16, Quran 2:255, Dhammapada 1:1" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Passage text</Label>
+                <Textarea value={passage} onChange={e => setPassage(e.target.value)} rows={4} placeholder="Enter the passage…" />
+              </div>
+            </>
+          )}
+
           <div className="space-y-1.5">
             <Label>Your notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="What this means to you…" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={() => { if (passage.trim()) { onSave({ passage, reference, notes }); onClose(); } }} disabled={!passage.trim()}>Save Passage</Button>
+            <Button onClick={handleSave} disabled={!canSave}>Save Passage</Button>
           </div>
         </div>
       </DialogContent>
@@ -688,15 +915,57 @@ function TeachingsTab() {
   const [notes, setNotes] = useState("");
   const [tags, setTags] = useState<string[]>([]);
 
+  // Scripture reference lookup within the teaching modal
+  const [scriptureRef, setScriptureRef] = useState("");
+  const [scriptureTrans, setScriptureTrans] = useState("kjv");
+  const [scriptureText, setScriptureText] = useState("");
+  const [scriptureLoading, setScriptureLoading] = useState(false);
+  const [scriptureError, setScriptureError] = useState("");
+
+  async function lookupScripture() {
+    if (!scriptureRef.trim()) return;
+    setScriptureLoading(true); setScriptureError(""); setScriptureText("");
+    try {
+      const r = await fetch(`https://bible-api.com/${encodeURIComponent(scriptureRef)}?translation=${scriptureTrans}`);
+      if (!r.ok) throw new Error();
+      const data = await r.json() as any;
+      if (data.error) throw new Error(data.error);
+      setScriptureText(data.text?.trim() ?? "");
+    } catch {
+      setScriptureError("Passage not found.");
+    }
+    setScriptureLoading(false);
+  }
+
+  function addScriptureToNotes() {
+    if (!scriptureText) return;
+    const line = `${scriptureRef.trim()}: "${scriptureText}"`;
+    setNotes(prev => prev ? `${prev}\n\n${line}` : line);
+    setScriptureRef(""); setScriptureText(""); setScriptureError("");
+    toast({ title: "Scripture added to notes" });
+  }
+
+  function addScriptureToTakeaways() {
+    if (!scriptureText) return;
+    const line = `${scriptureRef.trim()}: "${scriptureText}"`;
+    setTakeaways(prev => prev ? `${prev}\n${line}` : line);
+    setScriptureRef(""); setScriptureText(""); setScriptureError("");
+    toast({ title: "Scripture added to takeaways" });
+  }
+
+  function resetScripture() {
+    setScriptureRef(""); setScriptureText(""); setScriptureError(""); setScriptureLoading(false);
+  }
   function openNew() {
     setEditItem(null); setTitle(""); setSpeaker(""); setSource(""); setSourceUrl("");
-    setDate(""); setTopic(""); setTakeaways(""); setNotes(""); setTags([]); setTagInput(""); setModal(true);
+    setDate(""); setTopic(""); setTakeaways(""); setNotes(""); setTags([]); setTagInput("");
+    resetScripture(); setModal(true);
   }
   function openEdit(s: Sermon) {
     setEditItem(s); setTitle(s.title); setSpeaker(s.speaker ?? ""); setSource(s.source ?? "");
     setSourceUrl(s.sourceUrl ?? ""); setDate(s.date ?? ""); setTopic(s.topic ?? "");
     setTakeaways(s.keyTakeaways ?? ""); setNotes(s.personalNotes ?? "");
-    setTags(parseTags(s.tags)); setTagInput(""); setModal(true);
+    setTags(parseTags(s.tags)); setTagInput(""); resetScripture(); setModal(true);
   }
 
   const createMut = useMutation({
@@ -860,6 +1129,50 @@ function TeachingsTab() {
               <Label>Source URL</Label>
               <Input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://…" />
             </div>
+
+            {/* ── Scripture Bible Lookup ─────────────────────────────────────── */}
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/10 p-3 space-y-3">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <BookOpen size={12} /> Bible Scripture Lookup
+              </p>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs">Reference</Label>
+                  <Input value={scriptureRef} onChange={e => setScriptureRef(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && lookupScripture()}
+                    placeholder="e.g. Romans 8:28, Isaiah 40:31" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Translation</Label>
+                  <select value={scriptureTrans} onChange={e => setScriptureTrans(e.target.value)}
+                    className="h-8 rounded-md border bg-background px-2 text-xs">
+                    {REF_TRANSLATIONS.map(t => <option key={t.value} value={t.value}>{t.label.split(" ")[0]}</option>)}
+                  </select>
+                </div>
+                <Button size="sm" variant="outline" onClick={lookupScripture}
+                  disabled={scriptureLoading || !scriptureRef.trim()} className="h-8 px-2.5">
+                  <Search size={13} />
+                </Button>
+              </div>
+              {scriptureError && <p className="text-xs text-destructive">{scriptureError}</p>}
+              {scriptureText && (
+                <div className="space-y-2">
+                  <p className="text-xs leading-relaxed italic text-foreground">
+                    <span className="font-semibold not-italic text-amber-700 dark:text-amber-400">{scriptureRef} — </span>
+                    "{scriptureText}"
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={addScriptureToTakeaways} className="text-xs h-7 px-2.5 gap-1">
+                      <Plus size={11} /> Add to Takeaways
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={addScriptureToNotes} className="text-xs h-7 px-2.5 gap-1">
+                      <Plus size={11} /> Add to Notes
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label>Key takeaways</Label>
               <Textarea value={takeaways} onChange={e => setTakeaways(e.target.value)} rows={4}
