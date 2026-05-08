@@ -4243,13 +4243,6 @@ Rules:
 - If you're not certain, still include your best guesses — the user can edit them
 - Do NOT return an empty array`;
 
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
       const claudeData = await claudeWithRetry(apiKey, {
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
