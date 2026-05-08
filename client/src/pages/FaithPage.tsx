@@ -1555,7 +1555,7 @@ function BibleBrowserTab() {
       if (!r.ok) throw new Error();
       const data = await r.json() as any[];
       if (!Array.isArray(data) || data.length === 0) throw new Error("empty");
-      setVerses(data.map((v: any) => ({ verse: v.verse, text: v.text })));
+      setVerses(data.map((v: any) => ({ verse: v.verse, text: v.text.replace(/<[^>]+>/g, "").trim() })));
       setHasFetched(true);
     } catch {
       setBrowseError("Could not load this chapter. Try a different translation.");
@@ -1572,7 +1572,7 @@ function BibleBrowserTab() {
       if (!r.ok) throw new Error();
       const data = await r.json() as any[];
       if (!Array.isArray(data)) throw new Error();
-      setSearchResults(data.slice(0, 40));
+      setSearchResults(data.slice(0, 40).map((v: any) => ({ ...v, text: v.text.replace(/<[^>]+>/g, "").trim() })));
       setHasSearched(true);
       if (data.length === 0) setSearchError("No results found. Try different keywords.");
     } catch {
