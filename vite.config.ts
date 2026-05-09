@@ -74,34 +74,31 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache the app shell (HTML, JS, CSS)
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
-        // Network-first for API calls — always try to get fresh data
+        // Only precache static assets — NOT HTML pages.
+        // HTML is server-rendered with auth state so it must always come from the network.
+        globPatterns: ["**/*.{js,css,ico,png,svg,woff,woff2}"],
+        // Never serve a cached fallback for navigation requests — the server decides
+        // what HTML to show based on the user's session.
+        navigateFallback: null,
         runtimeCaching: [
+          // API calls: network-first, fall back to cache when offline
           {
             urlPattern: /^\/api\//,
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
               networkTimeoutSeconds: 10,
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Cache Google Fonts
+          // Google Fonts: cache indefinitely
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
             handler: "CacheFirst",
             options: {
               cacheName: "google-fonts",
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],
