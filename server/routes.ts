@@ -121,6 +121,17 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     }
   });
 
+  // ── Digital Asset Links (required for TWA Android packaging) ─────────────
+  // PWABuilder generates the SHA-256 fingerprint; store it in assetlinks.json at the project root.
+  app.get("/.well-known/assetlinks.json", (req, res) => {
+    const assetLinksPath = path.resolve(process.cwd(), "assetlinks.json");
+    if (fs.existsSync(assetLinksPath)) {
+      res.setHeader("Content-Type", "application/json");
+      return res.sendFile(assetLinksPath);
+    }
+    res.status(404).json([]);
+  });
+
   // ── Public config (client-safe values only) ───────────────────────────────
   app.get("/api/config", (_req, res) => {
     res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || "" });
