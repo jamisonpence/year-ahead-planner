@@ -12,6 +12,11 @@ export const users = pgTable("users", {
   createdAt: text("created_at").notNull(),
   anthropicApiKeyEnc: text("anthropic_api_key_enc"), // AES-256-GCM encrypted, never returned to client
   onboarded: boolean("onboarded").notNull().default(false),
+  // Google Calendar integration
+  gcalAccessToken: text("gcal_access_token"),
+  gcalRefreshToken: text("gcal_refresh_token"),
+  gcalTokenExpiry: text("gcal_token_expiry"),
+  gcalLastSync: text("gcal_last_sync"),
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -27,6 +32,7 @@ export const events = pgTable("events", {
   recurring: text("recurring").notNull().default("none"),
   description: text("description"),
   color: text("color"),
+  gcalEventId: text("gcal_event_id"),
 });
 
 // ── TASKS (existing, unchanged) ────────────────────────────────────────────────

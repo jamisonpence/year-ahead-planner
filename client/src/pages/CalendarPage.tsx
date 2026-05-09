@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -8,7 +8,7 @@ import {
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar, BookOpen,
   Dumbbell, Target, RefreshCw, List, LayoutGrid, AlertTriangle,
-  Pencil, Trash2, MoreHorizontal,
+  Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -17,17 +17,18 @@ import { MONTHS, nextOccurrence, daysUntil } from "@/lib/plannerUtils";
 import EventFormModal from "@/components/modals/EventFormModal";
 import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects } from "@shared/schema";
 
-type ModuleFilter = "all" | "events" | "reading" | "workouts" | "goals";
+type ModuleFilter = "all" | "events" | "gcal" | "reading" | "workouts" | "goals";
 
 interface UnifiedItem {
   id: string;
   title: string;
   date: string;
-  type: "event" | "reading" | "workout_done" | "goal";
+  type: "event" | "gcal" | "reading" | "workout_done" | "goal";
   category?: string;
   completed?: boolean;
   recurring?: string;
   sourceId: number;
+  gcalEventId?: string;
 }
 
 function useAllData() {
@@ -48,9 +49,15 @@ function buildItems(
   const items: UnifiedItem[] = [];
 
   if (filter === "all" || filter === "events") {
-    events.forEach((e) => {
+    events.filter(e => e.category !== "gcal").forEach((e) => {
       const date = e.recurring !== "none" ? nextOccurrence(e.date, e.recurring) : e.date;
       items.push({ id: `e:${e.id}`, title: e.title, date, type: "event", category: e.category, recurring: e.recurring, sourceId: e.id });
+    });
+  }
+
+  if (filter === "all" || filter === "gcal") {
+    events.filter(e => e.category === "gcal").forEach((e) => {
+      items.push({ id: `gc:${e.id}`, title: e.title, date: e.date, type: "gcal", sourceId: e.id, gcalEventId: (e as any).gcalEventId });
     });
   }
 
@@ -82,6 +89,7 @@ function buildItems(
 }
 
 function itemStyle(item: UnifiedItem): string {
+  if (item.type === "gcal") return "cat-gcal";
   if (item.type === "event" && item.category) return `cat-${item.category}`;
   if (item.type === "reading") return "cat-reading";
   if (item.type === "workout_done") return "cat-workout";
@@ -90,6 +98,7 @@ function itemStyle(item: UnifiedItem): string {
 }
 
 function itemIcon(type: string) {
+  if (type === "gcal") return <Calendar size={9} className="shrink-0" />;
   if (type === "reading") return <BookOpen size={9} className="shrink-0" />;
   if (type.startsWith("workout")) return <Dumbbell size={9} className="shrink-0" />;
   if (type === "goal") return <Target size={9} className="shrink-0" />;
@@ -140,7 +149,14 @@ function EventActionRow({
       )}
       {item.completed && <span className="text-xs text-emerald-600 dark:text-emerald-400 shrink-0">Done</span>}
 
-      {/* Edit/Delete — only for event items */}
+      {/* Google Calendar badge */}
+      {item.type === "gcal" && (
+        <span className="text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+          GCal
+        </span>
+      )}
+
+      {/* Edit/Delete — only for non-gcal event items */}
       {item.type === "event" && event && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -175,6 +191,47 @@ export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
 
   const { events, books, wLogs, goals } = useAllData();
+
+  // ── Google Calendar ──────────────────────────────────────────────────────────
+  const { data: gcalStatus, refetch: refetchGcalStatus } = useQuery<{ connected: boolean; lastSync: string | null }>({
+    queryKey: ["/api/gcal/status"],
+    queryFn: () => apiRequest("GET", "/api/gcal/status").then(r => r.json()),
+  });
+
+  const syncMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/gcal/sync"),
+    onSuccess: async (r) => {
+      const d = await r.json();
+      toast({ title: `Synced ${d.synced} event${d.synced !== 1 ? "s" : ""} from Google Calendar` });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      refetchGcalStatus();
+    },
+    onError: () => toast({ title: "Sync failed", variant: "destructive" }),
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/gcal/disconnect"),
+    onSuccess: () => {
+      toast({ title: "Google Calendar disconnected" });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      refetchGcalStatus();
+    },
+    onError: () => toast({ title: "Failed to disconnect", variant: "destructive" }),
+  });
+
+  // Handle ?gcal= redirect from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcal = params.get("gcal");
+    if (gcal === "connected") {
+      toast({ title: "Google Calendar connected!", description: "Click Sync to import your events." });
+      refetchGcalStatus();
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (gcal === "error") {
+      toast({ title: "Google Calendar connection failed", description: "Please try again.", variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const items = useMemo(
     () => buildItems(filter, events, books, wLogs, goals),
@@ -240,12 +297,13 @@ export default function CalendarPage() {
     return Object.entries(m).sort(([a], [b]) => a.localeCompare(b));
   }, [items]);
 
-  const FILTERS: { value: ModuleFilter; label: string; icon: React.ReactNode }[] = [
-    { value: "all",      label: "All",      icon: <LayoutGrid size={13} /> },
-    { value: "events",   label: "Events",   icon: <Calendar size={13} />   },
-    { value: "reading",  label: "Reading",  icon: <BookOpen size={13} />   },
-    { value: "workouts", label: "Workouts", icon: <Dumbbell size={13} />   },
-    { value: "goals",    label: "Goals",    icon: <Target size={13} />     },
+  const FILTERS: { value: ModuleFilter; label: string; icon: React.ReactNode; hidden?: boolean }[] = [
+    { value: "all",      label: "All",            icon: <LayoutGrid size={13} /> },
+    { value: "events",   label: "Events",         icon: <Calendar size={13} />   },
+    { value: "gcal",     label: "Google Calendar",icon: <Calendar size={13} />, hidden: !gcalStatus?.connected },
+    { value: "reading",  label: "Reading",        icon: <BookOpen size={13} />   },
+    { value: "workouts", label: "Workouts",       icon: <Dumbbell size={13} />   },
+    { value: "goals",    label: "Goals",          icon: <Target size={13} />     },
   ];
 
   return (
@@ -253,7 +311,7 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Calendar</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center bg-secondary rounded-lg p-0.5">
             <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${view === "calendar" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
               <LayoutGrid size={13} />Calendar
@@ -265,6 +323,56 @@ export default function CalendarPage() {
           <Button size="sm" onClick={handleAdd} className="gap-1.5"><Plus size={13} />Event</Button>
         </div>
       </div>
+
+      {/* Google Calendar connection banner */}
+      {gcalStatus && !gcalStatus.connected && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-700 flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+                <rect x="3" y="4" width="18" height="18" rx="2" stroke="#4285F4" strokeWidth="1.5"/>
+                <path d="M3 9h18" stroke="#4285F4" strokeWidth="1.5"/>
+                <rect x="8" y="2" width="1.5" height="5" rx=".75" fill="#4285F4"/>
+                <rect x="14.5" y="2" width="1.5" height="5" rx=".75" fill="#4285F4"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Connect Google Calendar</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">Sync your Google Calendar events directly into this view</p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 border-blue-300 text-blue-700 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 gap-1.5"
+            onClick={() => { window.location.href = "/api/gcal/connect"; }}>
+            <Link2 size={13} /> Connect
+          </Button>
+        </div>
+      )}
+
+      {/* Google Calendar sync bar (when connected) */}
+      {gcalStatus?.connected && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
+          <div className="flex items-center gap-2">
+            <Check size={14} className="text-green-600 dark:text-green-400 shrink-0" />
+            <span className="text-sm font-medium text-green-800 dark:text-green-200">Google Calendar connected</span>
+            {gcalStatus.lastSync && (
+              <span className="text-xs text-green-700 dark:text-green-400 hidden sm:block">
+                · Last synced {format(parseISO(gcalStatus.lastSync), "MMM d 'at' h:mm a")}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-100 dark:text-green-300 dark:border-green-700"
+              onClick={() => syncMut.mutate()} disabled={syncMut.isPending}>
+              {syncMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+              Sync
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground hover:text-destructive"
+              onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}>
+              <Link2Off size={11} /> Disconnect
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 21-day alert */}
       {upcoming21.length > 0 && (
@@ -291,9 +399,15 @@ export default function CalendarPage() {
 
       {/* Module filters */}
       <div className="flex gap-1.5 flex-wrap">
-        {FILTERS.map((f) => (
+        {FILTERS.filter(f => !f.hidden).map((f) => (
           <button key={f.value} onClick={() => setFilter(f.value)}
-            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${filter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+              filter === f.value
+                ? f.value === "gcal"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-primary text-primary-foreground border-primary"
+                : "border-border hover:bg-secondary"
+            }`}>
             {f.icon}{f.label}
           </button>
         ))}

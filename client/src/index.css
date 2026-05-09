@@ -147,8 +147,10 @@
 /* Module colors */
 .cat-reading   { background-color: hsl(25 85% 52% / 0.12); color: hsl(25 85% 52%); border-color: hsl(25 85% 52% / 0.3); }
 .cat-workout   { background-color: hsl(210 80% 48% / 0.12); color: hsl(210 80% 48%); border-color: hsl(210 80% 48% / 0.3); }
+.cat-gcal      { background-color: hsl(217 91% 60% / 0.12); color: hsl(217 91% 60%); border-color: hsl(217 91% 60% / 0.3); }
 .dot-reading   { background-color: hsl(25 85% 52%); }
 .dot-workout   { background-color: hsl(210 80% 48%); }
+.dot-gcal      { background-color: hsl(217 91% 60%); }
 
 .dark .cat-reading  { background-color: hsl(25 85% 62% / 0.15); color: hsl(25 85% 62%); border-color: hsl(25 85% 62% / 0.3); }
 .dark .cat-workout  { background-color: hsl(210 80% 62% / 0.15); color: hsl(210 80% 62%); border-color: hsl(210 80% 62% / 0.3); }

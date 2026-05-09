@@ -106,6 +106,151 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     res.json({ ...user, anthropicApiKeyEnc: undefined, hasAnthropicKey: !!enc });
   });
 
+  // ── Google Calendar Integration ───────────────────────────────────────────────
+
+  const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+
+  // Helper: get a valid (possibly refreshed) access token
+  async function getValidGcalToken(userId: number): Promise<string | null> {
+    const tokens = await storage.getGcalTokens(userId);
+    if (!tokens) return null;
+    // If expiry is more than 60 seconds away, token is still valid
+    if (tokens.expiry && new Date(tokens.expiry) > new Date(Date.now() + 60_000)) {
+      return tokens.accessToken;
+    }
+    // Refresh the token
+    if (!tokens.refreshToken) return null;
+    try {
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: tokens.refreshToken,
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        }),
+      });
+      if (!r.ok) { await storage.clearGcalTokens(userId); return null; }
+      const d = await r.json() as any;
+      const expiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
+      await storage.saveGcalTokens(userId, d.access_token, tokens.refreshToken, expiry);
+      return d.access_token;
+    } catch { return null; }
+  }
+
+  // GET /api/gcal/status
+  app.get("/api/gcal/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const tokens = await storage.getGcalTokens(userId);
+      const u = await storage.getUserById(userId);
+      res.json({ connected: !!tokens, lastSync: u?.gcalLastSync ?? null });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/gcal/connect — redirect to Google OAuth with calendar scope
+  app.get("/api/gcal/connect", requireAuth, (req, res) => {
+    const userId = (req.user as User).id;
+    (req.session as any).gcalUserId = userId;
+    const callbackUrl = process.env.GCAL_CALLBACK_URL ??
+      `${req.protocol}://${req.get("host")}/api/gcal/callback`;
+    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!);
+    url.searchParams.set("redirect_uri", callbackUrl);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", GCAL_SCOPE);
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent");
+    res.redirect(url.toString());
+  });
+
+  // GET /api/gcal/callback — exchange code for tokens
+  app.get("/api/gcal/callback", async (req, res) => {
+    try {
+      const { code, error } = req.query as Record<string, string>;
+      const userId: number | undefined = (req.session as any).gcalUserId;
+      if (error || !code || !userId) return res.redirect("/#/calendar?gcal=error");
+      const callbackUrl = process.env.GCAL_CALLBACK_URL ??
+        `${req.protocol}://${req.get("host")}/api/gcal/callback`;
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: callbackUrl,
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        }),
+      });
+      if (!r.ok) return res.redirect("/#/calendar?gcal=error");
+      const d = await r.json() as any;
+      const expiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
+      await storage.saveGcalTokens(userId, d.access_token, d.refresh_token ?? null, expiry);
+      delete (req.session as any).gcalUserId;
+      res.redirect("/#/calendar?gcal=connected");
+    } catch (e) { res.redirect("/#/calendar?gcal=error"); }
+  });
+
+  // POST /api/gcal/sync — fetch and upsert Google Calendar events
+  app.post("/api/gcal/sync", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const accessToken = await getValidGcalToken(userId);
+      if (!accessToken) return res.status(401).json({ error: "Not connected to Google Calendar" });
+
+      const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
+      const timeMax = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year ahead
+      const apiUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&` +
+        `maxResults=500&singleEvents=true&orderBy=startTime`;
+
+      const gcalRes = await fetch(apiUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!gcalRes.ok) {
+        if (gcalRes.status === 401) await storage.clearGcalTokens(userId);
+        return res.status(gcalRes.status).json({ error: "Google Calendar API error" });
+      }
+      const data = await gcalRes.json() as any;
+      const gcalItems = (data.items ?? []).filter((e: any) => e.status !== "cancelled");
+
+      const syncedIds: string[] = [];
+      let synced = 0;
+      for (const e of gcalItems) {
+        const startDate = e.start?.date ?? e.start?.dateTime?.slice(0, 10);
+        const endDate = (e.end?.date ?? e.end?.dateTime?.slice(0, 10)) ?? startDate;
+        if (!startDate || !e.id) continue;
+        await storage.upsertGcalEvent({
+          userId,
+          title: e.summary || "(No title)",
+          date: startDate,
+          endDate,
+          description: e.description ?? null,
+          gcalEventId: e.id,
+        });
+        syncedIds.push(e.id);
+        synced++;
+      }
+      // Remove events that no longer exist in Google Calendar
+      await storage.deleteStaleGcalEvents(userId, syncedIds);
+      await storage.updateGcalLastSync(userId, new Date().toISOString());
+
+      res.json({ synced });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/gcal/disconnect — remove tokens and all synced events
+  app.delete("/api/gcal/disconnect", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      await storage.deleteGcalEvents(userId);
+      await storage.clearGcalTokens(userId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Delete account ────────────────────────────────────────────────────────────
 
   app.delete("/api/me", requireAuth, async (req, res) => {

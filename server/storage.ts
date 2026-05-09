@@ -556,6 +556,16 @@ export async function initializeStorage() {
   // Onboarding flag — false until user completes welcome flow
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false`);
 
+  // Google Calendar integration tokens
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_access_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_refresh_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expiry TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_last_sync TEXT`);
+
+  // Google Calendar event ID on events table
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS gcal_event_id TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS events_gcal_event_id_idx ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS children (
       id SERIAL PRIMARY KEY,
@@ -1250,6 +1260,14 @@ export interface IStorage {
   getUserById(id: number): Promise<User | undefined>;
   completeOnboarding(userId: number): Promise<void>;
   deleteAccount(userId: number): Promise<void>;
+  // Google Calendar tokens
+  saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string): Promise<void>;
+  getGcalTokens(userId: number): Promise<{ accessToken: string; refreshToken: string | null; expiry: string } | null>;
+  clearGcalTokens(userId: number): Promise<void>;
+  updateGcalLastSync(userId: number, ts: string): Promise<void>;
+  upsertGcalEvent(data: { userId: number; title: string; date: string; endDate: string | null; description: string | null; gcalEventId: string }): Promise<void>;
+  deleteGcalEvents(userId: number): Promise<void>;
+  deleteStaleGcalEvents(userId: number, currentIds: string[]): Promise<void>;
   // Plants
   getAllPlants(userId: number): Promise<Plant[]>;
   createPlant(data: InsertPlant, userId: number): Promise<Plant>;
@@ -2200,6 +2218,41 @@ export const storage: IStorage = {
   },
   async completeOnboarding(userId: number) {
     await db.update(users).set({ onboarded: true }).where(eq(users.id, userId));
+  },
+  async saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string) {
+    await db.update(users).set({ gcalAccessToken: accessToken, gcalRefreshToken: refreshToken, gcalTokenExpiry: expiry }).where(eq(users.id, userId));
+  },
+  async getGcalTokens(userId: number) {
+    const result = await db.select({ a: users.gcalAccessToken, r: users.gcalRefreshToken, e: users.gcalTokenExpiry }).from(users).where(eq(users.id, userId)).limit(1);
+    const row = result[0];
+    if (!row?.a) return null;
+    return { accessToken: row.a, refreshToken: row.r ?? null, expiry: row.e ?? new Date().toISOString() };
+  },
+  async clearGcalTokens(userId: number) {
+    await db.update(users).set({ gcalAccessToken: null, gcalRefreshToken: null, gcalTokenExpiry: null, gcalLastSync: null }).where(eq(users.id, userId));
+  },
+  async updateGcalLastSync(userId: number, ts: string) {
+    await db.update(users).set({ gcalLastSync: ts }).where(eq(users.id, userId));
+  },
+  async upsertGcalEvent({ userId, title, date, endDate, description, gcalEventId }) {
+    await pool.query(
+      `INSERT INTO events (user_id, title, date, end_date, description, category, recurring, gcal_event_id)
+       VALUES ($1, $2, $3, $4, $5, 'gcal', 'none', $6)
+       ON CONFLICT (gcal_event_id) WHERE gcal_event_id IS NOT NULL
+       DO UPDATE SET title = EXCLUDED.title, date = EXCLUDED.date, end_date = EXCLUDED.end_date, description = EXCLUDED.description`,
+      [userId, title, date, endDate, description, gcalEventId]
+    );
+  },
+  async deleteGcalEvents(userId: number) {
+    await pool.query(`DELETE FROM events WHERE user_id = $1 AND gcal_event_id IS NOT NULL`, [userId]);
+  },
+  async deleteStaleGcalEvents(userId: number, currentIds: string[]) {
+    if (currentIds.length === 0) {
+      await pool.query(`DELETE FROM events WHERE user_id = $1 AND gcal_event_id IS NOT NULL`, [userId]);
+    } else {
+      const placeholders = currentIds.map((_, i) => `$${i + 2}`).join(",");
+      await pool.query(`DELETE FROM events WHERE user_id = $1 AND gcal_event_id IS NOT NULL AND gcal_event_id NOT IN (${placeholders})`, [userId, ...currentIds]);
+    }
   },
   async deleteAccount(userId: number) {
     const uid = userId;
