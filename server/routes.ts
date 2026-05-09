@@ -1443,6 +1443,81 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Bhagavad Gita proxy (vedicscriptures.github.io) ──────────────────────────
+  const GITA_BASE = "https://vedicscriptures.github.io";
+  const GITA_CHAPTER_CACHE: Record<number, any[]> = {};   // chapter → verses[]
+  let GITA_CHAPTERS_META: any[] | null = null;
+
+  const GITA_CHAPTER_SIZES: Record<number, number> = {
+    1:47,2:72,3:43,4:42,5:29,6:47,7:30,8:28,9:34,10:42,
+    11:55,12:20,13:34,14:27,15:20,16:24,17:28,18:78,
+  };
+
+  app.get("/api/gita/chapters", requireAuth, async (_req, res) => {
+    try {
+      if (GITA_CHAPTERS_META) return res.json(GITA_CHAPTERS_META);
+      const r = await fetch(`${GITA_BASE}/chapters`);
+      if (!r.ok) throw new Error(`VedicScriptures returned ${r.status}`);
+      GITA_CHAPTERS_META = await r.json() as any[];
+      res.json(GITA_CHAPTERS_META);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/gita/chapter/:ch", requireAuth, async (req, res) => {
+    try {
+      const ch = parseInt(req.params.ch);
+      if (isNaN(ch) || ch < 1 || ch > 18) return res.status(400).json({ error: "Chapter must be 1–18" });
+      if (GITA_CHAPTER_CACHE[ch]) return res.json({ verses: GITA_CHAPTER_CACHE[ch] });
+
+      const count = GITA_CHAPTER_SIZES[ch];
+      const verseNums = Array.from({ length: count }, (_, i) => i + 1);
+      const results = await Promise.all(
+        verseNums.map(sl =>
+          fetch(`${GITA_BASE}/slok/${ch}/${sl}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        )
+      );
+      const verses = results.filter(Boolean);
+      GITA_CHAPTER_CACHE[ch] = verses;
+      res.json({ verses });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/gita/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim().toLowerCase();
+      if (!q) return res.json({ results: [] });
+
+      // Search across all cached chapters; load any uncached ones on demand
+      const allResults: any[] = [];
+      for (let ch = 1; ch <= 18; ch++) {
+        if (!GITA_CHAPTER_CACHE[ch]) {
+          const count = GITA_CHAPTER_SIZES[ch];
+          const verseNums = Array.from({ length: count }, (_, i) => i + 1);
+          const results = await Promise.all(
+            verseNums.map(sl =>
+              fetch(`${GITA_BASE}/slok/${ch}/${sl}`)
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null)
+            )
+          );
+          GITA_CHAPTER_CACHE[ch] = results.filter(Boolean);
+        }
+        for (const v of GITA_CHAPTER_CACHE[ch]) {
+          const englishText = (v.siva?.et ?? v.purohit?.et ?? v.gambir?.et ?? "").toLowerCase();
+          const slokText = (v.slok ?? "").toLowerCase();
+          if (englishText.includes(q) || slokText.includes(q)) {
+            allResults.push(v);
+            if (allResults.length >= 30) break;
+          }
+        }
+        if (allResults.length >= 30) break;
+      }
+      res.json({ results: allResults });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Add exercise to a workout template ────────────────────────────────────────
   app.post("/api/workout-templates/:id/add-exercise", requireAuth, async (req, res) => {
     try {

@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Pencil, Trash2, X, Check, Search, ChevronDown, ChevronUp,
   ExternalLink, BookOpen, Flame, Heart, Mic2, MoreHorizontal, BookMarked,
-  Tag, Calendar, User2, Moon, ScrollText, Star,
+  Tag, Calendar, User2, Moon, ScrollText, Star, Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2517,8 +2517,258 @@ function BibleBrowserTab() {
 }
 
 
+// ── Bhagavad Gita Browser Tab ─────────────────────────────────────────────────
+const GITA_CHAPTERS_META = [
+  { chapter: 1,  name: "Arjuna Vishada Yoga",            verses: 47 },
+  { chapter: 2,  name: "Sankhya Yoga",                   verses: 72 },
+  { chapter: 3,  name: "Karma Yoga",                     verses: 43 },
+  { chapter: 4,  name: "Jnana Karma Sanyasa Yoga",       verses: 42 },
+  { chapter: 5,  name: "Karma Sanyasa Yoga",             verses: 29 },
+  { chapter: 6,  name: "Atma Samyama Yoga",              verses: 47 },
+  { chapter: 7,  name: "Jnana Vijnana Yoga",             verses: 30 },
+  { chapter: 8,  name: "Aksara Brahma Yoga",             verses: 28 },
+  { chapter: 9,  name: "Raja Vidya Raja Guhya Yoga",     verses: 34 },
+  { chapter: 10, name: "Vibhuti Yoga",                   verses: 42 },
+  { chapter: 11, name: "Visvarupa Darsana Yoga",         verses: 55 },
+  { chapter: 12, name: "Bhakti Yoga",                    verses: 20 },
+  { chapter: 13, name: "Ksetra Ksetrajna Vibhaga Yoga",  verses: 34 },
+  { chapter: 14, name: "Gunatraya Vibhaga Yoga",         verses: 27 },
+  { chapter: 15, name: "Purushottama Yoga",              verses: 20 },
+  { chapter: 16, name: "Daivasura Sampad Vibhaga Yoga",  verses: 24 },
+  { chapter: 17, name: "Sraddhatraya Vibhaga Yoga",      verses: 28 },
+  { chapter: 18, name: "Moksha Sanyasa Yoga",            verses: 78 },
+];
+
+const GITA_TRANSLATORS = [
+  { key: "siva",    label: "Swami Sivananda" },
+  { key: "purohit", label: "Shri Purohit Swami" },
+  { key: "gambir",  label: "Swami Gambirananda" },
+  { key: "adi",     label: "Swami Adidevananda" },
+  { key: "rams",    label: "Swami Ramsukhdas (Hindi)" },
+  { key: "tej",     label: "Swami Tejomayananda (Hindi)" },
+];
+
+function GitaBrowserTab() {
+  const [mode, setMode] = useState<"browse" | "search">("browse");
+  const [chapter, setChapter] = useState(1);
+  const [translator, setTranslator] = useState("siva");
+  const [showSanskrit, setShowSanskrit] = useState(false);
+  const [verses, setVerses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [saveModal, setSaveModal] = useState<{ text: string; ref: string } | null>(null);
+
+  async function loadChapter(ch: number) {
+    setLoading(true); setError(""); setHasFetched(false); setSelected(new Set());
+    try {
+      const r = await fetch(`/api/gita/chapter/${ch}`);
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      const data = await r.json();
+      setVerses(data.verses ?? []);
+      setHasFetched(true);
+    } catch (e: any) { setError(`Could not load chapter: ${e?.message ?? "unknown error"}`); }
+    setLoading(false);
+  }
+
+  async function searchGita() {
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true); setSearchResults([]); setSearchError(""); setHasSearched(false);
+    try {
+      const r = await fetch(`/api/gita/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      const data = await r.json();
+      setSearchResults(data.results ?? []);
+      setHasSearched(true);
+      if ((data.results ?? []).length === 0) setSearchError("No results found.");
+    } catch (e: any) { setSearchError(`Search failed: ${e?.message}`); }
+    setSearchLoading(false);
+  }
+
+  function getVerseText(v: any) {
+    const t = GITA_TRANSLATORS.find(x => x.key === translator);
+    const trans = v[translator];
+    if (!trans) return v.siva?.et ?? v.purohit?.et ?? "";
+    return trans.et ?? trans.ht ?? trans.ec ?? "";
+  }
+
+  function toggle(verse: number) { setSelected(p => { const n = new Set(p); n.has(verse) ? n.delete(verse) : n.add(verse); return n; }); }
+
+  function getPassage() {
+    const sorted = Array.from(selected).sort((a, b) => a - b);
+    const chMeta = GITA_CHAPTERS_META.find(c => c.chapter === chapter);
+    const text = sorted.map(vn => {
+      const v = verses.find((x: any) => x.verse === vn);
+      return v ? getVerseText(v) : "";
+    }).filter(Boolean).join(" ");
+    const ref = `Bhagavad Gita ${chapter}.${sorted[0]}${sorted.length > 1 ? `–${sorted[sorted.length-1]}` : ""}`;
+    return { text, ref };
+  }
+
+  const chMeta = GITA_CHAPTERS_META.find(c => c.chapter === chapter);
+
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg p-1">
+          {(["browse","search"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${mode === m ? "bg-white dark:bg-stone-900 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {m === "browse" ? <BookOpen size={12} /> : <Search size={12} />} {m === "browse" ? "Browse" : "Search"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "browse" && (
+          <>
+            <select value={chapter} onChange={e => setChapter(Number(e.target.value))}
+              className="h-8 rounded-lg border bg-background px-2 text-xs flex-1 min-w-40">
+              {GITA_CHAPTERS_META.map(c => (
+                <option key={c.chapter} value={c.chapter}>Ch. {c.chapter} — {c.name}</option>
+              ))}
+            </select>
+            <select value={translator} onChange={e => setTranslator(e.target.value)}
+              className="h-8 rounded-lg border bg-background px-2 text-xs">
+              {GITA_TRANSLATORS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <button onClick={() => setShowSanskrit(p => !p)}
+              className={`h-8 px-3 rounded-lg border text-xs font-medium transition-colors ${showSanskrit ? "bg-amber-100 dark:bg-amber-900/30 border-amber-300 text-amber-700 dark:text-amber-400" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+              ॐ Sanskrit
+            </button>
+            <Button size="sm" className="h-8 gap-1" onClick={() => loadChapter(chapter)}>
+              <BookOpen size={12} /> Read
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* Browse mode */}
+      {mode === "browse" && (
+        <div className="space-y-4">
+          {!hasFetched && !loading && (
+            <div className="text-center py-12 border rounded-xl text-muted-foreground">
+              <p className="text-sm font-medium">Select a chapter and tap Read</p>
+              <p className="text-xs mt-1 opacity-60">{chMeta ? `${chMeta.name} · ${chMeta.verses} verses` : ""}</p>
+            </div>
+          )}
+          {loading && <div className="text-center py-10 text-muted-foreground text-sm">Loading chapter…</div>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {hasFetched && verses.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-base">Chapter {chapter} — {chMeta?.name}</h3>
+                  <p className="text-xs text-muted-foreground">{verses.length} verses · {GITA_TRANSLATORS.find(t => t.key === translator)?.label}</p>
+                </div>
+                {selected.size > 0 && (
+                  <Button size="sm" onClick={() => setSaveModal(getPassage())} className="gap-1.5 h-7 text-xs">
+                    <BookMarked size={12} /> Save {selected.size} verse{selected.size !== 1 ? "s" : ""}
+                  </Button>
+                )}
+              </div>
+              <div className="rounded-xl border bg-card overflow-hidden divide-y">
+                {verses.map((v: any) => {
+                  const sel = selected.has(v.verse);
+                  const eng = getVerseText(v);
+                  return (
+                    <div key={v.verse} onClick={() => toggle(v.verse)}
+                      className={`px-4 py-3 cursor-pointer transition-colors select-none ${sel ? "bg-amber-50 dark:bg-amber-950/20" : "hover:bg-secondary/40"}`}>
+                      <div className="flex gap-3">
+                        <span className={`text-xs font-bold w-7 shrink-0 pt-0.5 ${sel ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>{chapter}.{v.verse}</span>
+                        <div className="flex-1 min-w-0">
+                          {showSanskrit && (
+                            <p className="text-sm leading-relaxed font-serif text-stone-600 dark:text-stone-300 mb-1.5 whitespace-pre-line">{v.slok}</p>
+                          )}
+                          {eng && <p className="text-sm leading-relaxed">{eng}</p>}
+                        </div>
+                        {sel && <Check size={13} className="shrink-0 mt-0.5 text-amber-500" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Prev / Next chapter */}
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={() => { const nc = chapter - 1; setChapter(nc); loadChapter(nc); }}
+                  disabled={chapter === 1}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  ← Ch. {chapter - 1} {chapter > 1 ? GITA_CHAPTERS_META[chapter - 2]?.name : ""}
+                </button>
+                <span className="text-xs text-muted-foreground">{chapter} / 18</span>
+                <button onClick={() => { const nc = chapter + 1; setChapter(nc); loadChapter(nc); }}
+                  disabled={chapter === 18}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary">
+                  Ch. {chapter + 1} {chapter < 18 ? GITA_CHAPTERS_META[chapter]?.name : ""} →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search mode */}
+      {mode === "search" && (
+        <div className="space-y-4">
+          <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            Search loads chapters on demand — first search may take a moment.
+          </div>
+          <div className="flex gap-2">
+            <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && searchGita()}
+              placeholder="Search the Bhagavad Gita…" className="flex-1" />
+            <Button onClick={searchGita} disabled={searchLoading || !searchQuery.trim()} className="gap-1.5 shrink-0">
+              <Search size={13} /> {searchLoading ? "…" : "Search"}
+            </Button>
+          </div>
+          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+          {hasSearched && searchResults.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</p>
+              <div className="rounded-xl border bg-card overflow-hidden divide-y">
+                {searchResults.map((v: any) => {
+                  const eng = v.siva?.et ?? v.purohit?.et ?? v.gambir?.et ?? "";
+                  const ref = `BG ${v.chapter}.${v.verse}`;
+                  return (
+                    <div key={`${v.chapter}.${v.verse}`} className="px-4 py-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{ref}</span>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs gap-1 shrink-0"
+                          onClick={() => setSaveModal({ text: eng, ref: `Bhagavad Gita ${v.chapter}.${v.verse}` })}>
+                          <BookMarked size={11} /> Save
+                        </Button>
+                      </div>
+                      <p className="text-sm leading-relaxed">{eng}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {!hasSearched && !searchLoading && (
+            <div className="text-center py-10 text-muted-foreground">
+              <p className="text-sm">Enter a keyword to search across all 700 verses</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {saveModal && (
+        <BibleSavePassageModal text={saveModal.text} reference={saveModal.ref} onClose={() => setSaveModal(null)} />
+      )}
+    </div>
+  );
+}
+
 // ── Sacred Texts Section (with nested scripture browser sub-nav) ───────────────
-type TextsSubView = "my-texts" | "bible" | "quran" | "torah" | "lds";
+type TextsSubView = "my-texts" | "bible" | "quran" | "torah" | "lds" | "gita";
 
 function SacredTextsSection() {
   const [sub, setSub] = useState<TextsSubView>("my-texts");
@@ -2528,7 +2778,8 @@ function SacredTextsSection() {
     { id: "bible",    label: "Bible",          icon: <BookMarked size={13} /> },
     { id: "quran",    label: "Quran",          icon: <Moon size={13} /> },
     { id: "torah",    label: "Torah",          icon: <ScrollText size={13} /> },
-    { id: "lds",      label: "LDS Scriptures", icon: <Star size={13} /> },
+    { id: "gita",     label: "Bhagavad Gita",  icon: <Star size={13} /> },
+    { id: "lds",      label: "LDS Scriptures", icon: <Library size={13} /> },
   ];
 
   return (
@@ -2551,6 +2802,7 @@ function SacredTextsSection() {
       {sub === "bible"    && <BibleBrowserTab />}
       {sub === "quran"    && <QuranBrowserTab />}
       {sub === "torah"    && <TorahBrowserTab />}
+      {sub === "gita"     && <GitaBrowserTab />}
       {sub === "lds"      && <LDSBrowserTab />}
     </div>
   );
