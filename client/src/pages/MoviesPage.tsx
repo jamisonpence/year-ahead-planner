@@ -14,7 +14,7 @@ import { format, parseISO } from "date-fns";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
   Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle, Clapperboard,
-  Send, Inbox, CornerUpRight,
+  Send, Inbox, CornerUpRight, Youtube,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -460,58 +460,7 @@ export default function MoviesPage() {
   const emptyIcon = isShowView ? <Tv2 size={40} className="mx-auto mb-3 opacity-20" /> : <Film size={40} className="mx-auto mb-3 opacity-20" />;
   const singularLabel = isShowView ? "show" : "movie";
 
-  function VideoCard({ movie }: { movie: Movie }) {
-    const vUrl = (movie as any).videoUrl as string | null | undefined;
-    return (
-      <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
-        <div className="h-1.5 w-full" style={{ background: movie.posterColor ?? "hsl(270 60% 50%)" }} />
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm">{movie.title}</h3>
-              {movie.streamingOn && (
-                <p className="text-xs text-muted-foreground mt-0.5">{movie.streamingOn}</p>
-              )}
-              {vUrl && (
-                <a
-                  href={vUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                >
-                  <ExternalLink size={11} /> Open link
-                </a>
-              )}
-              {movie.status === "watched" ? (
-                <Badge className="mt-2 text-xs py-0 px-1.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-0">Watched</Badge>
-              ) : (
-                <Badge className="mt-2 text-xs py-0 px-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0">Want to watch</Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => setShareMovie(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
-                <Send size={13} className="text-muted-foreground" />
-              </button>
-              <button onClick={() => open_edit(movie)} className="p-1.5 rounded hover:bg-secondary transition-colors">
-                <Pencil size={13} className="text-muted-foreground" />
-              </button>
-              <button onClick={() => deleteMut.mutate(movie.id)} className="p-1.5 rounded hover:bg-secondary transition-colors">
-                <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
-              </button>
-            </div>
-          </div>
-          {movie.status !== "watched" && (
-            <button
-              onClick={() => markStatus.mutate({ id: movie.id, status: "watched" })}
-              className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
-            >
-              <Check size={13} /> Mark watched
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // (VideoCard replaced by ClipCard + ClipsSection below)
 
   // Stats for header
   const movieCount = allItems.filter((m) => (m.mediaType ?? "movie") === "movie").length;
@@ -527,7 +476,7 @@ export default function MoviesPage() {
             <Film size={22} /> Movies & Shows
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""} · {videoCount} video{videoCount !== 1 ? "s" : ""}
+            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""} · {videoCount} clip{videoCount !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex gap-2">
@@ -537,7 +486,7 @@ export default function MoviesPage() {
             </Button>
           )}
           <Button onClick={open_add} size="sm" className="gap-1.5">
-            <Plus size={15} /> Add {isVideoView ? "Video" : isShowView ? "Show" : "Movie"}
+            <Plus size={15} /> Add {isVideoView ? "Clip" : isShowView ? "Show" : "Movie"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
             <Upload size={13} /> Upload CSV
@@ -576,53 +525,17 @@ export default function MoviesPage() {
             mediaTypeView === "video" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Video size={15} /> Videos
+          <Video size={15} /> Clips
         </button>
       </div>
 
-      {/* Video view */}
+      {/* Clips view */}
       {isVideoView && (
-        <div>
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="backlog" className="gap-1.5">
-                <Clock size={14} /> All Videos <span className="ml-1 text-xs opacity-60">{filtered.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="shared" className="gap-1.5">
-                <Inbox size={14} /> Shared
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="backlog">
-              <div className="flex flex-wrap gap-2 mb-4">
-                <div className="relative flex-1 min-w-48">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search videos…"
-                    className="pl-8 h-8 text-sm" />
-                </div>
-                {search && (
-                  <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => setSearch("")}>
-                    <X size={13} /> Clear
-                  </Button>
-                )}
-              </div>
-              {filtered.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground">
-                  <Video size={40} className="mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">No videos yet.</p>
-                  <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add Video</Button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filtered.map((m) => <VideoCard key={m.id} movie={m} />)}
-                </div>
-              )}
-            </TabsContent>
-            <TabsContent value="shared">
-              <SharedMoviesTab />
-            </TabsContent>
-          </Tabs>
-        </div>
+        <ClipsSection
+          clips={items}
+          mediaForSearch={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
+          onDelete={(id) => deleteMut.mutate(id)}
+        />
       )}
 
       {/* Search + filters + tabs (Movies / Shows only) */}
@@ -752,8 +665,8 @@ export default function MoviesPage() {
           <DialogHeader>
             <DialogTitle>
               {editing
-                ? `Edit ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`
-                : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`}
+                ? `Edit ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Clip" : "Movie"}`
+                : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Clip" : "Movie"}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -786,7 +699,7 @@ export default function MoviesPage() {
                     form.mediaType === "video" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Video size={13} /> Video
+                  <Video size={13} /> Clip
                 </button>
               </div>
             )}
@@ -949,7 +862,7 @@ export default function MoviesPage() {
 
             <div className="flex gap-2 pt-2">
               <Button onClick={save} disabled={createMut.isPending || updateMut.isPending} className="flex-1">
-                {editing ? "Save Changes" : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Video" : "Movie"}`}
+                {editing ? "Save Changes" : `Add ${form.mediaType === "show" ? "Show" : form.mediaType === "video" ? "Clip" : "Movie"}`}
               </Button>
               <Button variant="outline" onClick={close_modal}>Cancel</Button>
             </div>
@@ -1000,6 +913,272 @@ export default function MoviesPage() {
       {/* Movie Share Modal */}
       {shareMovie && (
         <MovieShareModal movie={shareMovie} onClose={() => setShareMovie(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── YouTube clip types ────────────────────────────────────────────────────────
+interface YTResult {
+  videoId: string;
+  title: string;
+  channel: string;
+  thumbnail: string;
+}
+
+// ── ClipCard ──────────────────────────────────────────────────────────────────
+function ClipCard({ clip, onDelete }: { clip: Movie; onDelete: (id: number) => void }) {
+  const vUrl = (clip as any).videoUrl as string | null;
+  const thumb = (clip as any).posterUrl as string | null;
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
+      {thumb ? (
+        <div className="relative h-36 bg-muted overflow-hidden group">
+          <img src={thumb} alt={clip.title} className="w-full h-full object-cover" />
+          {vUrl && (
+            <a
+              href={vUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <PlayCircle size={36} className="text-white drop-shadow" />
+            </a>
+          )}
+        </div>
+      ) : (
+        <div className="h-1.5 w-full" style={{ background: clip.posterColor ?? "hsl(270 60% 50%)" }} />
+      )}
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-xs line-clamp-2 leading-tight">{clip.title}</h3>
+            {clip.streamingOn && (
+              <p className="text-xs text-muted-foreground mt-0.5">{clip.streamingOn}</p>
+            )}
+            {vUrl && !thumb && (
+              <a href={vUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                <ExternalLink size={11} /> Watch on YouTube
+              </a>
+            )}
+          </div>
+          <button onClick={() => onDelete(clip.id)} className="p-1.5 rounded hover:bg-secondary transition-colors shrink-0">
+            <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ClipsSection ──────────────────────────────────────────────────────────────
+function ClipsSection({
+  clips,
+  mediaForSearch,
+  onDelete,
+}: {
+  clips: Movie[];
+  mediaForSearch: Movie[];
+  onDelete: (id: number) => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [clipView, setClipView] = useState<"my-clips" | "search">("my-clips");
+  const [ytQuery, setYtQuery] = useState("");
+  const [ytResults, setYtResults] = useState<YTResult[]>([]);
+  const [ytLoading, setYtLoading] = useState(false);
+
+  const savedVideoIds = useMemo(() => new Set(
+    clips.map((c) => {
+      const url = (c as any).videoUrl as string | null;
+      if (!url) return null;
+      const m = url.match(/[?&]v=([^&]+)/);
+      return m ? m[1] : null;
+    }).filter(Boolean) as string[]
+  ), [clips]);
+
+  const saveMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/movies", d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movies"] }),
+    onError: () => toast({ title: "Error saving clip", variant: "destructive" }),
+  });
+
+  async function doYtSearch(q: string) {
+    if (!q.trim()) return;
+    setYtLoading(true);
+    try {
+      const res = await apiRequest("GET", `/api/youtube/search?q=${encodeURIComponent(q.trim())}&maxResults=12`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setYtResults(Array.isArray(data) ? data : []);
+    } catch (e) {
+      toast({ title: "Search failed", description: e instanceof Error ? e.message : "Could not search YouTube", variant: "destructive" });
+    } finally {
+      setYtLoading(false);
+    }
+  }
+
+  function saveClip(yt: YTResult) {
+    saveMut.mutate({
+      mediaType: "video",
+      title: yt.title,
+      videoUrl: `https://www.youtube.com/watch?v=${yt.videoId}`,
+      posterUrl: yt.thumbnail,
+      streamingOn: yt.channel,
+      status: "backlog",
+      listsJson: "[]",
+      isFavorite: false,
+      posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+    });
+  }
+
+  const quickSearchTitles = useMemo(() => {
+    const seen = new Set<string>();
+    const titles: string[] = [];
+    mediaForSearch.forEach((m) => {
+      if (!seen.has(m.title)) { seen.add(m.title); titles.push(m.title); }
+    });
+    return titles.slice(0, 16);
+  }, [mediaForSearch]);
+
+  return (
+    <div>
+      {/* Sub-view toggle */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-5">
+        <button
+          onClick={() => setClipView("my-clips")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            clipView === "my-clips" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <PlayCircle size={14} /> My Clips
+          {clips.length > 0 && <span className="text-xs opacity-60 ml-1">{clips.length}</span>}
+        </button>
+        <button
+          onClick={() => setClipView("search")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+            clipView === "search" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Youtube size={14} /> Search YouTube
+        </button>
+      </div>
+
+      {/* My Clips */}
+      {clipView === "my-clips" && (
+        clips.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Youtube size={40} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No clips saved yet.</p>
+            <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => setClipView("search")}>
+              <Search size={14} /> Search YouTube
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {clips.map((clip) => <ClipCard key={clip.id} clip={clip} onDelete={onDelete} />)}
+          </div>
+        )
+      )}
+
+      {/* Search YouTube */}
+      {clipView === "search" && (
+        <div>
+          {/* Quick-search from saved media */}
+          {quickSearchTitles.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground mb-2 font-medium">Search from your saved movies & shows:</p>
+              <div className="flex flex-wrap gap-2">
+                {quickSearchTitles.map((title) => (
+                  <button
+                    key={title}
+                    onClick={() => { setYtQuery(title); doYtSearch(title); }}
+                    className="px-2.5 py-1 text-xs rounded-full border hover:bg-secondary transition-colors truncate max-w-[180px]"
+                    title={title}
+                  >
+                    {title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Free-text search */}
+          <div className="flex gap-2 mb-5">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={ytQuery}
+                onChange={(e) => setYtQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") doYtSearch(ytQuery); }}
+                placeholder="Search YouTube for a clip…"
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+            <Button size="sm" onClick={() => doYtSearch(ytQuery)} disabled={ytLoading || !ytQuery.trim()} className="h-9">
+              {ytLoading ? <Clock size={14} className="animate-spin" /> : "Search"}
+            </Button>
+          </div>
+
+          {/* Loading skeletons */}
+          {ytLoading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-xl border bg-muted animate-pulse h-52" />
+              ))}
+            </div>
+          )}
+
+          {/* Results */}
+          {!ytLoading && ytResults.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {ytResults.map((yt) => {
+                const alreadySaved = savedVideoIds.has(yt.videoId);
+                return (
+                  <div key={yt.videoId} className="rounded-xl border bg-card overflow-hidden">
+                    <div className="relative group">
+                      <img src={yt.thumbnail} alt={yt.title} className="w-full h-40 object-cover" />
+                      <a
+                        href={`https://www.youtube.com/watch?v=${yt.videoId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <PlayCircle size={40} className="text-white drop-shadow" />
+                      </a>
+                    </div>
+                    <div className="p-3">
+                      <p className="text-xs font-semibold line-clamp-2 leading-tight">{yt.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{yt.channel}</p>
+                      <button
+                        onClick={() => !alreadySaved && saveClip(yt)}
+                        disabled={alreadySaved || saveMut.isPending}
+                        className={`mt-2 w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md border transition-colors ${
+                          alreadySaved
+                            ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                            : "hover:bg-secondary"
+                        }`}
+                      >
+                        {alreadySaved ? <><Check size={12} /> Saved</> : <><Plus size={12} /> Save Clip</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!ytLoading && ytResults.length === 0 && ytQuery && (
+            <div className="text-center py-10 text-muted-foreground text-sm">No results found.</div>
+          )}
+          {!ytLoading && ytResults.length === 0 && !ytQuery && (
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              <Youtube size={36} className="mx-auto mb-2 opacity-20" />
+              <p>Search YouTube, or click a title above to find clips for that movie or show.</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

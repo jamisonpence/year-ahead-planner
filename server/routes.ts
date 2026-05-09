@@ -2421,7 +2421,8 @@ Rules:
       if (!apiKey) return res.status(503).json({ error: "YOUTUBE_API_KEY not configured" });
       const q = String(req.query.q ?? "").trim();
       if (!q) return res.json([]);
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&videoCategoryId=10&maxResults=8&key=${apiKey}`;
+      const maxResults = Math.min(20, parseInt(String(req.query.maxResults ?? "12")) || 12);
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(q)}&type=video&maxResults=${maxResults}&key=${apiKey}`;
       const r = await fetch(url);
       if (!r.ok) return res.status(r.status).json({ error: "YouTube API error" });
       const d = await r.json() as any;
