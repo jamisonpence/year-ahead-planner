@@ -93,11 +93,24 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       return res.redirect("/?gcal=error#/calendar");
     }
   }, passport.authenticate("google", { failureRedirect: "/" }),
-  (_req, res) => { res.redirect("/"); });
+  (_req, res) => {
+    // Redirect to "/" not "/dashboard" — the SPA is served from root so
+    // Vite's base:"/" asset paths always resolve correctly.
+    res.redirect("/");
+  });
 
-    // ── Landing page — inject GOOGLE_CLIENT_ID so GIS works without a fetch round-trip ──
+    // ── Landing / app root ─────────────────────────────────────────────────────
   app.get("/", (req, res) => {
-    if (req.isAuthenticated()) return res.redirect("/dashboard");
+    if (req.isAuthenticated()) {
+      // Serve the SPA from "/" so relative asset paths (base: "/") always resolve correctly.
+      // Redirecting to "/dashboard" was breaking PWA login because assets at
+      // "./assets/…" resolved to "/dashboard/assets/…" which don't exist.
+      const spaIndex = path.resolve(process.cwd(), "dist/public/index.html");
+      if (fs.existsSync(spaIndex)) return res.sendFile(spaIndex);
+      // Dev fallback
+      return res.redirect("/#/");
+    }
+    // Unauthenticated — serve landing page with Google client ID injected
     try {
       const html = fs.readFileSync(path.resolve(process.cwd(), "landing.html"), "utf-8");
       const clientId = process.env.GOOGLE_CLIENT_ID || "";
@@ -164,7 +177,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         req.login(user!, (err) => (err ? reject(err) : resolve()));
       });
 
-      res.json({ redirect: "/dashboard" });
+      res.json({ redirect: "/" });
     } catch (e) {
       res.status(500).json({ error: String(e) });
     }
