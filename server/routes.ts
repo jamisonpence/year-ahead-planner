@@ -95,10 +95,17 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   }, passport.authenticate("google", { failureRedirect: "/" }),
   (_req, res) => { res.redirect("/"); });
 
-    // ── Landing page ───────────────────────────────────────────────────────────
+    // ── Landing page — inject GOOGLE_CLIENT_ID so GIS works without a fetch round-trip ──
   app.get("/", (req, res) => {
     if (req.isAuthenticated()) return res.redirect("/dashboard");
-    res.sendFile(path.resolve(process.cwd(), "landing.html"));
+    try {
+      const html = fs.readFileSync(path.resolve(process.cwd(), "landing.html"), "utf-8");
+      const clientId = process.env.GOOGLE_CLIENT_ID || "";
+      res.setHeader("Content-Type", "text/html");
+      res.send(html.replace(/__GOOGLE_CLIENT_ID__/g, clientId));
+    } catch {
+      res.sendFile(path.resolve(process.cwd(), "landing.html"));
+    }
   });
 
   // ── Public config (client-safe values only) ───────────────────────────────

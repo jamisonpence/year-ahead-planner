@@ -817,41 +817,69 @@
   </div>
 </footer>
 </div><!-- end content-layer -->
-<script src="https://accounts.google.com/gsi/client" async></script>
+<!--
+  GIS is loaded with onload="gisLoaded()" so we know exactly when it's ready.
+  The client ID is injected server-side (no async fetch needed).
+-->
+<script src="https://accounts.google.com/gsi/client" async onload="gisLoaded()"></script>
 <script>
-  // ── Google Identity Services sign-in ───────────────────────────────────────
-  // Uses GIS credential flow so sign-in works in PWA standalone mode on iOS/Android
-  // without navigating away from the page (which causes a blank screen in standalone PWAs).
+  // Client ID injected by the server — available immediately, no race condition
+  var GOOGLE_CLIENT_ID = '__GOOGLE_CLIENT_ID__';
 
-  let googleClientId = '';
+  var _gisReady = false;
+  var _pendingSignIn = false;
 
-  // Load client ID from server then initialise GIS
-  fetch('/api/config')
-    .then(r => r.json())
-    .then(data => {
-      googleClientId = data.googleClientId;
-      if (!googleClientId) return;
-      window.addEventListener('load', () => {
-        if (typeof google === 'undefined') return;
-        google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGISCredential,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        });
-      });
+  // Called as soon as the GIS script finishes loading
+  function gisLoaded() {
+    if (!GOOGLE_CLIENT_ID) return;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGISCredential,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+      use_fedcm_for_prompt: true,
     });
+    _gisReady = true;
+    // If the user already tapped Sign In before GIS finished loading, trigger now
+    if (_pendingSignIn) { _pendingSignIn = false; triggerGIS(); }
+  }
 
-  // Called by GIS after the user picks an account
+  function signInWithGoogle() {
+    if (_gisReady) {
+      triggerGIS();
+    } else if (GOOGLE_CLIENT_ID) {
+      // GIS still loading — flag it and show a spinner so the user knows something is happening
+      _pendingSignIn = true;
+      showSigningIn('Loading…');
+    } else {
+      // No client ID configured — fall back to redirect
+      window.location.href = '/auth/google';
+    }
+  }
+
+  function triggerGIS() {
+    google.accounts.id.prompt(function(notification) {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        // One Tap suppressed — show sign-in button overlay instead
+        var overlay = document.getElementById('gis-overlay');
+        overlay.style.display = 'flex';
+        google.accounts.id.renderButton(
+          document.getElementById('gis-button-target'),
+          { theme: 'outline', size: 'large', width: 280, text: 'signin_with' }
+        );
+      }
+    });
+  }
+
   async function handleGISCredential(response) {
     try {
-      showSigningIn();
-      const res = await fetch('/auth/google', {
+      showSigningIn('Signing you in…');
+      var res = await fetch('/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: response.credential }),
       });
-      const data = await res.json();
+      var data = await res.json();
       if (data.redirect) {
         window.location.href = data.redirect;
       } else {
@@ -864,67 +892,50 @@
     }
   }
 
-  // Trigger the GIS popup / One Tap
-  function signInWithGoogle() {
-    if (googleClientId && typeof google !== 'undefined') {
-      google.accounts.id.prompt(notification => {
-        // If One Tap is suppressed (e.g. user dismissed it before), use popup button
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // Render a standard sign-in button in a small overlay
-          const overlay = document.getElementById('gis-overlay');
-          overlay.style.display = 'flex';
-          google.accounts.id.renderButton(
-            document.getElementById('gis-button-target'),
-            { theme: 'outline', size: 'large', width: 280, text: 'signin_with' }
-          );
-        }
-      });
-    } else {
-      // Fallback: standard redirect flow (desktop browsers without GIS loaded)
-      window.location.href = '/auth/google';
-    }
-  }
-
-  function showSigningIn() {
-    const el = document.getElementById('signing-in-msg');
-    if (el) el.style.display = 'block';
+  function showSigningIn(msg) {
+    var el = document.getElementById('signing-in-msg');
+    var txt = document.getElementById('signing-in-txt');
+    if (txt) txt.textContent = msg || 'Signing you in…';
+    if (el) el.style.display = 'flex';
   }
   function hideSigningIn() {
-    const el = document.getElementById('signing-in-msg');
+    var el = document.getElementById('signing-in-msg');
     if (el) el.style.display = 'none';
   }
 
   // ── Return-to-app detection ────────────────────────────────────────────────
-  // If the user ended up in Safari for the OAuth flow and switched back to the
-  // PWA, detect that and redirect them to the dashboard.
-  document.addEventListener('visibilitychange', async () => {
+  // If auth happened in an external browser and the user switches back to the PWA,
+  // detect that and redirect to the dashboard automatically.
+  document.addEventListener('visibilitychange', async function() {
     if (!document.hidden) {
       try {
-        const res = await fetch('/api/me', { credentials: 'same-origin' });
+        var res = await fetch('/api/me', { credentials: 'same-origin' });
         if (res.ok) window.location.href = '/dashboard';
-      } catch {}
+      } catch(e) {}
     }
   });
 
   // ── Smooth scroll ──────────────────────────────────────────────────────────
-  document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', e => {
-      const target = document.querySelector(a.getAttribute('href'));
+  document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      var target = document.querySelector(a.getAttribute('href'));
       if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
     });
   });
 </script>
 
-<!-- GIS fallback overlay (shown if One Tap is suppressed) -->
-<div id="gis-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:12px;" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:#fff;border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;min-width:300px;">
+<!-- Sign-in button overlay (shown when One Tap is suppressed) -->
+<div id="gis-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;min-width:300px;max-width:90vw;">
     <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">Sign in to Year Ahead</p>
     <div id="gis-button-target"></div>
-    <button onclick="document.getElementById('gis-overlay').style.display='none'" style="font-size:13px;color:#666;background:none;border:none;cursor:pointer;">Cancel</button>
+    <button onclick="document.getElementById('gis-overlay').style.display='none'" style="font-size:13px;color:#888;background:none;border:none;cursor:pointer;padding:4px 8px;">Cancel</button>
   </div>
 </div>
-<div id="signing-in-msg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:12px;padding:20px 28px;font-size:14px;color:#1a1a2e;font-weight:500;">Signing you in…</div>
+
+<!-- "Signing in" loading overlay -->
+<div id="signing-in-msg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px 32px;font-size:14px;color:#1a1a2e;font-weight:500;" id="signing-in-txt">Signing you in…</div>
 </div>
 </body>
 </html>
