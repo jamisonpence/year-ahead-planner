@@ -32,6 +32,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 import OnboardingModal from "@/components/OnboardingModal";
+import InstallPrompt from "@/components/InstallPrompt";
 
 function AuthenticatedApp() {
   const { user } = useAuth();
@@ -64,6 +65,7 @@ function AuthenticatedApp() {
         <Route component={NotFound} />
       </Switch>
       {user && !user.onboarded && <OnboardingModal userName={user.name} />}
+      <InstallPrompt />
     </AppShell>
   );
 }
