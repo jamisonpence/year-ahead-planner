@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
   Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
+  Smartphone, Download,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
@@ -521,6 +522,97 @@ function DeleteAccountSection() {
   );
 }
 
+// ── Install App Section ───────────────────────────────────────────────────────
+
+function InstallAppSection() {
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches
+      || (navigator as any).standalone === true;
+    setIsStandalone(standalone);
+    if (standalone) return;
+
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
+    const android = /android/i.test(navigator.userAgent);
+
+    if (ios) { setIsIOS(true); setIsInstallable(true); return; }
+    if (android) { setIsInstallable(true); }
+
+    // Pick up deferred prompt if available
+    const handler = () => {};
+    window.addEventListener("pwaInstallReady", handler);
+    return () => window.removeEventListener("pwaInstallReady", handler);
+  }, []);
+
+  async function handleInstall() {
+    const prompt = (window as any).__pwaInstallPrompt as any;
+    if (prompt) {
+      await prompt.prompt();
+      const { outcome } = await prompt.userChoice;
+      if (outcome === "accepted") setInstalled(true);
+      (window as any).__pwaInstallPrompt = null;
+    } else {
+      setShowFallback(true);
+    }
+  }
+
+  // Don't show section if already running as installed PWA
+  if (isStandalone || !isInstallable) return null;
+
+  return (
+    <section className="rounded-xl border bg-card p-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <Smartphone size={18} className="text-sky-500" />
+        <h2 className="font-semibold text-base">Install App</h2>
+      </div>
+
+      {installed ? (
+        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+          <CheckCircle2 size={15} /> App installed successfully!
+        </div>
+      ) : isIOS ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Install Year Ahead on your iPhone for quick home screen access.
+          </p>
+          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1">
+            <p className="font-medium">To install:</p>
+            <p>1. Tap the <strong>Share</strong> button in Safari's toolbar</p>
+            <p>2. Tap <strong>"Add to Home Screen"</strong></p>
+            <p>3. Tap <strong>Add</strong></p>
+          </div>
+        </div>
+      ) : showFallback ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Install Year Ahead on your Android home screen.
+          </p>
+          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1">
+            <p className="font-medium">To install:</p>
+            <p>1. Tap the <strong>⋮ menu</strong> in Chrome</p>
+            <p>2. Tap <strong>"Add to Home Screen"</strong></p>
+            <p>3. Tap <strong>Add</strong></p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Install Year Ahead on your home screen for quick access — works offline too.
+          </p>
+          <Button size="sm" className="gap-1.5" onClick={handleInstall}>
+            <Download size={13} /> Install App
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Settings Page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -578,6 +670,9 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your account preferences and integrations.</p>
       </div>
+
+      {/* Install App */}
+      <InstallAppSection />
 
       {/* Tab Privacy */}
       <TabPrivacySection />
