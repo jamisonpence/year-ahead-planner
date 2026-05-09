@@ -101,26 +101,56 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     res.sendFile(path.resolve(process.cwd(), "landing.html"));
   });
 
+  // ── Public config (client-safe values only) ───────────────────────────────
+  app.get("/api/config", (_req, res) => {
+    res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || "" });
+  });
+
   // ── Token-based Google sign-in ─────────────────────────────────────────────
+  // Accepts either:
+  //   { access_token }  – legacy OAuth access token
+  //   { credential }    – GIS JWT credential (id_token) — works in PWA / no redirect needed
   app.post("/auth/google", async (req, res) => {
     try {
-      const { access_token } = req.body;
-      if (!access_token) return res.status(400).json({ error: "access_token required" });
+      const { access_token, credential } = req.body;
+      let googleId: string, email: string, name: string, picture: string | undefined;
 
-      const googleRes = await fetch(
-        `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${access_token}`
-      );
-      if (!googleRes.ok) return res.status(401).json({ error: "Invalid Google token" });
-      const profile = await googleRes.json() as { id: string; email: string; name: string; picture?: string };
+      if (credential) {
+        // Validate GIS JWT via Google's tokeninfo endpoint
+        const tokenRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`
+        );
+        if (!tokenRes.ok) return res.status(401).json({ error: "Invalid credential" });
+        const td = await tokenRes.json() as any;
+        // Verify audience matches our client ID
+        if (td.aud !== process.env.GOOGLE_CLIENT_ID) {
+          return res.status(401).json({ error: "Token audience mismatch" });
+        }
+        googleId = td.sub;
+        email = td.email;
+        name = td.name ?? td.email;
+        picture = td.picture;
+      } else if (access_token) {
+        const googleRes = await fetch(
+          `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${access_token}`
+        );
+        if (!googleRes.ok) return res.status(401).json({ error: "Invalid Google token" });
+        const profile = await googleRes.json() as any;
+        googleId = profile.id;
+        email = profile.email;
+        name = profile.name ?? profile.email;
+        picture = profile.picture;
+      } else {
+        return res.status(400).json({ error: "access_token or credential required" });
+      }
 
-      const { id: googleId, email, name } = profile;
       if (!email) return res.status(401).json({ error: "No email returned from Google" });
 
       const user = await storage.upsertUser({
         googleId,
         email,
-        name: name ?? email,
-        avatarUrl: profile.picture ?? null,
+        name,
+        avatarUrl: picture ?? null,
       });
 
       await new Promise<void>((resolve, reject) => {
