@@ -11,18 +11,19 @@ export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     // Don't show if already dismissed this session
     if (sessionStorage.getItem("pwa-install-dismissed")) return;
 
-    // Detect iOS (Safari doesn't fire beforeinstallprompt)
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
     const isInStandalone = window.matchMedia("(display-mode: standalone)").matches
       || (navigator as any).standalone === true;
+    if (isInStandalone) return; // Already installed as PWA
 
-    if (isInStandalone) return; // Already installed
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
+    const android = /android/i.test(navigator.userAgent);
 
     if (ios) {
       setIsIOS(true);
@@ -30,33 +31,38 @@ export default function InstallPrompt() {
       return;
     }
 
-    // Check if the event was already captured before React mounted
-    if ((window as any).__pwaInstallPrompt) {
-      setDeferredPrompt((window as any).__pwaInstallPrompt);
+    if (android) {
+      // Show banner regardless — Chrome may have already fired (and we caught it in main.tsx),
+      // or may fire later, or may not fire at all (suppressed). We handle all cases.
       setTimeout(() => setShowBanner(true), 3000);
-      return;
     }
 
-    // Otherwise wait for it (fires only once, so we use a custom relay event)
+    // Pick up prompt if already captured before React mounted
+    if ((window as any).__pwaInstallPrompt) {
+      setDeferredPrompt((window as any).__pwaInstallPrompt);
+    }
+
+    // Also listen for it firing later
     const handler = () => {
       if ((window as any).__pwaInstallPrompt) {
         setDeferredPrompt((window as any).__pwaInstallPrompt);
-        setTimeout(() => setShowBanner(true), 3000);
       }
     };
-
     window.addEventListener("pwaInstallReady", handler);
     return () => window.removeEventListener("pwaInstallReady", handler);
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setShowBanner(false);
+    if (deferredPrompt) {
+      // Native install prompt available — use it
+      await deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") setShowBanner(false);
+      setDeferredPrompt(null);
+    } else {
+      // Prompt not available — show manual instructions
+      setShowFallback(true);
     }
-    setDeferredPrompt(null);
   };
 
   const handleDismiss = () => {
@@ -82,6 +88,10 @@ export default function InstallPrompt() {
             {isIOS ? (
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                 Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install Year Ahead.
+              </p>
+            ) : showFallback ? (
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                Tap the <strong>⋮ menu</strong> in Chrome, then tap <strong>"Add to Home Screen"</strong>.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
