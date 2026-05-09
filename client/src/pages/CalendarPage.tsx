@@ -8,10 +8,9 @@ import {
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar, BookOpen,
   Dumbbell, Target, RefreshCw, List, LayoutGrid, AlertTriangle,
-  Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check, Copy,
+  Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { MONTHS, nextOccurrence, daysUntil } from "@/lib/plannerUtils";
@@ -190,8 +189,6 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [gcalSetupOpen, setGcalSetupOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const { events, books, wLogs, goals } = useAllData();
 
@@ -347,62 +344,11 @@ export default function CalendarPage() {
             </div>
           </div>
           <Button size="sm" variant="outline" className="shrink-0 border-blue-300 text-blue-700 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 gap-1.5"
-            onClick={() => setGcalSetupOpen(true)}>
+            onClick={() => { window.location.href = "/api/gcal/connect"; }}>
             <Link2 size={13} /> Connect
           </Button>
         </div>
       )}
-
-      {/* Google Calendar setup dialog */}
-      <Dialog open={gcalSetupOpen} onOpenChange={setGcalSetupOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" className="shrink-0">
-                <rect x="3" y="4" width="18" height="18" rx="2" stroke="#4285F4" strokeWidth="1.5"/>
-                <path d="M3 9h18" stroke="#4285F4" strokeWidth="1.5"/>
-                <rect x="8" y="2" width="1.5" height="5" rx=".75" fill="#4285F4"/>
-                <rect x="14.5" y="2" width="1.5" height="5" rx=".75" fill="#4285F4"/>
-              </svg>
-              Connect Google Calendar
-            </DialogTitle>
-            <DialogDescription className="text-left pt-1">
-              One quick setup step is needed before connecting.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-1">
-            <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
-              <p className="text-sm font-medium">Step 1 — Add this URL to Google Cloud Console</p>
-              <p className="text-xs text-muted-foreground">In your Google Cloud project, go to <strong>APIs &amp; Services → Credentials → OAuth 2.0 Client → Authorized redirect URIs</strong> and add:</p>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 text-xs bg-background border rounded px-2 py-1.5 font-mono break-all select-all">
-                  {gcalStatus?.callbackUrl ?? `${window.location.origin}/api/gcal/callback`}
-                </code>
-                <Button size="sm" variant="outline" className="shrink-0 h-7 px-2 gap-1 text-xs"
-                  onClick={() => {
-                    navigator.clipboard.writeText(gcalStatus?.callbackUrl ?? `${window.location.origin}/api/gcal/callback`);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}>
-                  {copied ? <Check size={11} className="text-green-600" /> : <Copy size={11} />}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-              </div>
-            </div>
-            <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5">
-              <p className="text-sm font-medium">Step 2 — Enable the Google Calendar API</p>
-              <p className="text-xs text-muted-foreground">In <strong>APIs &amp; Services → Library</strong>, search for "Google Calendar API" and make sure it's enabled for your project.</p>
-            </div>
-            <p className="text-xs text-muted-foreground">Once both steps are done, click Connect below. You'll be taken to Google to grant calendar access.</p>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={() => setGcalSetupOpen(false)}>Cancel</Button>
-            <Button size="sm" className="gap-1.5" onClick={() => { setGcalSetupOpen(false); window.location.href = "/api/gcal/connect"; }}>
-              <Link2 size={13} /> Connect to Google
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Google Calendar sync bar (when connected) */}
       {gcalStatus?.connected && (

@@ -54,11 +54,46 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
-  app.get(
-    "/auth/google/callback",
-    passport.authenticate("google", { failureRedirect: "/" }),
-    (_req, res) => { res.redirect("/"); }
-  );
+  // /auth/google/callback handles BOTH regular login AND Google Calendar OAuth.
+  // When req.session.gcalConnecting is set, it's a calendar auth — exchange the
+  // code for calendar tokens and redirect back into the app.  Otherwise hand off
+  // to Passport for the normal login flow.
+  app.get("/auth/google/callback", async (req, res, next) => {
+    const isGcalConnect = !!(req.session as any).gcalConnecting;
+    if (!isGcalConnect) return next();
+
+    // --- Calendar auth branch ---
+    delete (req.session as any).gcalConnecting;
+    const { code, error } = req.query as Record<string, string>;
+    const userId: number | undefined = (req.session as any).gcalUserId;
+    if (error || !code || !userId) return res.redirect("/?gcal=error#/calendar");
+
+    try {
+      const callbackUrl = process.env.GOOGLE_CALLBACK_URL ||
+        `${req.get("x-forwarded-proto") ?? req.protocol}://${req.get("host")}/auth/google/callback`;
+
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: callbackUrl,
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        }),
+      });
+      if (!r.ok) return res.redirect("/?gcal=error#/calendar");
+      const d = await r.json() as any;
+      const expiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
+      await storage.saveGcalTokens(userId, d.access_token, d.refresh_token ?? null, expiry);
+      delete (req.session as any).gcalUserId;
+      return res.redirect("/?gcal=connected#/calendar");
+    } catch {
+      return res.redirect("/?gcal=error#/calendar");
+    }
+  }, passport.authenticate("google", { failureRedirect: "/" }),
+  (_req, res) => { res.redirect("/"); });
 
     // ── Landing page ───────────────────────────────────────────────────────────
   app.get("/", (req, res) => {
@@ -162,10 +197,17 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   });
 
   // GET /api/gcal/connect — redirect to Google OAuth with calendar scope
+  // Reuses /auth/google/callback (already registered in Google Cloud Console)
+  // and sets a session flag so the callback knows it's a calendar auth.
   app.get("/api/gcal/connect", requireAuth, (req, res) => {
     const userId = (req.user as User).id;
     (req.session as any).gcalUserId = userId;
-    const callbackUrl = gcalCallbackUrl(req);
+    (req.session as any).gcalConnecting = true;
+
+    // Use the same registered callback URL as the normal login flow
+    const callbackUrl = process.env.GOOGLE_CALLBACK_URL ||
+      `${req.get("x-forwarded-proto") ?? req.protocol}://${req.get("host")}/auth/google/callback`;
+
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!);
     url.searchParams.set("redirect_uri", callbackUrl);
@@ -174,36 +216,6 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
     res.redirect(url.toString());
-  });
-
-  // GET /api/gcal/callback — exchange code for tokens
-  app.get("/api/gcal/callback", async (req, res) => {
-    try {
-      const { code, error } = req.query as Record<string, string>;
-      const userId: number | undefined = (req.session as any).gcalUserId;
-      if (error || !code || !userId) {
-        // Redirect with status in hash query so hash-router can read it
-        return res.redirect(`/?gcal=error#/calendar`);
-      }
-      const callbackUrl = gcalCallbackUrl(req);
-      const r = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: callbackUrl,
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        }),
-      });
-      if (!r.ok) return res.redirect(`/?gcal=error#/calendar`);
-      const d = await r.json() as any;
-      const expiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
-      await storage.saveGcalTokens(userId, d.access_token, d.refresh_token ?? null, expiry);
-      delete (req.session as any).gcalUserId;
-      res.redirect(`/?gcal=connected#/calendar`);
-    } catch (e) { res.redirect(`/?gcal=error#/calendar`); }
   });
 
   // POST /api/gcal/sync — fetch and upsert Google Calendar events
