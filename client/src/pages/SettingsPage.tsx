@@ -578,26 +578,34 @@ function InstallAppSection() {
       ) : isIOS ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Install Year Ahead on your iPhone for quick home screen access.
+            Add Year Ahead to your iPhone home screen for quick access.
           </p>
-          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1">
-            <p className="font-medium">To install:</p>
-            <p>1. Tap the <strong>Share</strong> button in Safari's toolbar</p>
-            <p>2. Tap <strong>"Add to Home Screen"</strong></p>
-            <p>3. Tap <strong>Add</strong></p>
+          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1.5">
+            <p className="font-semibold">How to install on iPhone:</p>
+            <p>1. Tap the <strong>Share</strong> button (box with arrow) at the bottom of Safari</p>
+            <p>2. Scroll down and tap <strong>"Add to Home Screen"</strong></p>
+            <p>3. Tap <strong>Add</strong> in the top right</p>
           </div>
         </div>
       ) : showFallback ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Install Year Ahead on your Android home screen.
+            Add Year Ahead to your Android home screen for quick access.
           </p>
-          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1">
-            <p className="font-medium">To install:</p>
+          <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1.5">
+            <p className="font-semibold">How to install on Android:</p>
+            <p>1. Look for a <strong>download icon</strong> (⊕) in Chrome's address bar — tap it</p>
+            <p className="text-sky-600 dark:text-sky-400">— or —</p>
             <p>1. Tap the <strong>⋮ menu</strong> in Chrome</p>
-            <p>2. Tap <strong>"Add to Home Screen"</strong></p>
-            <p>3. Tap <strong>Add</strong></p>
+            <p>2. Tap <strong>"Install app"</strong> or <strong>"Add to Home Screen"</strong></p>
+            <p>3. Tap <strong>Install</strong></p>
+            <p className="text-xs text-sky-600 dark:text-sky-500 pt-1">
+              Note: the install option only appears after you've browsed the app for a moment. Try refreshing the page and checking again.
+            </p>
           </div>
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setShowFallback(false)}>
+            Try automatic install again
+          </Button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -607,6 +615,9 @@ function InstallAppSection() {
           <Button size="sm" className="gap-1.5" onClick={handleInstall}>
             <Download size={13} /> Install App
           </Button>
+          <p className="text-xs text-muted-foreground">
+            If the button doesn't work, tap <strong>⋮</strong> in Chrome and look for <strong>"Install app"</strong>.
+          </p>
         </div>
       )}
     </section>
