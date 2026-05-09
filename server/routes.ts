@@ -139,13 +139,25 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch { return null; }
   }
 
+  // Helper: build the gcal callback URL consistently
+  function gcalCallbackUrl(req: Request): string {
+    if (process.env.GCAL_CALLBACK_URL) return process.env.GCAL_CALLBACK_URL;
+    // On Railway (trust proxy 1) req.protocol is 'https'; fall back to https explicitly
+    const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+    return `${proto}://${req.get("host")}/api/gcal/callback`;
+  }
+
   // GET /api/gcal/status
   app.get("/api/gcal/status", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as User).id;
       const tokens = await storage.getGcalTokens(userId);
       const u = await storage.getUserById(userId);
-      res.json({ connected: !!tokens, lastSync: u?.gcalLastSync ?? null });
+      res.json({
+        connected: !!tokens,
+        lastSync: u?.gcalLastSync ?? null,
+        callbackUrl: gcalCallbackUrl(req),
+      });
     } catch (e) { handleError(res, e); }
   });
 
@@ -153,8 +165,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   app.get("/api/gcal/connect", requireAuth, (req, res) => {
     const userId = (req.user as User).id;
     (req.session as any).gcalUserId = userId;
-    const callbackUrl = process.env.GCAL_CALLBACK_URL ??
-      `${req.protocol}://${req.get("host")}/api/gcal/callback`;
+    const callbackUrl = gcalCallbackUrl(req);
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!);
     url.searchParams.set("redirect_uri", callbackUrl);
@@ -170,9 +181,11 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     try {
       const { code, error } = req.query as Record<string, string>;
       const userId: number | undefined = (req.session as any).gcalUserId;
-      if (error || !code || !userId) return res.redirect("/#/calendar?gcal=error");
-      const callbackUrl = process.env.GCAL_CALLBACK_URL ??
-        `${req.protocol}://${req.get("host")}/api/gcal/callback`;
+      if (error || !code || !userId) {
+        // Redirect with status in hash query so hash-router can read it
+        return res.redirect(`/?gcal=error#/calendar`);
+      }
+      const callbackUrl = gcalCallbackUrl(req);
       const r = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -184,13 +197,13 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
           client_secret: process.env.GOOGLE_CLIENT_SECRET!,
         }),
       });
-      if (!r.ok) return res.redirect("/#/calendar?gcal=error");
+      if (!r.ok) return res.redirect(`/?gcal=error#/calendar`);
       const d = await r.json() as any;
       const expiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
       await storage.saveGcalTokens(userId, d.access_token, d.refresh_token ?? null, expiry);
       delete (req.session as any).gcalUserId;
-      res.redirect("/#/calendar?gcal=connected");
-    } catch (e) { res.redirect("/#/calendar?gcal=error"); }
+      res.redirect(`/?gcal=connected#/calendar`);
+    } catch (e) { res.redirect(`/?gcal=error#/calendar`); }
   });
 
   // POST /api/gcal/sync — fetch and upsert Google Calendar events
