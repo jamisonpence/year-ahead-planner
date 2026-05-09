@@ -106,6 +106,15 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     res.json({ ...user, anthropicApiKeyEnc: undefined, hasAnthropicKey: !!enc });
   });
 
+  // ── Onboarding ────────────────────────────────────────────────────────────────
+
+  app.post("/api/me/complete-onboarding", requireAuth, async (req, res) => {
+    try {
+      await storage.completeOnboarding((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Anthropic API Key Management ─────────────────────────────────────────────
 
   /** GET /api/user/api-key/status — returns { hasKey, encryptionConfigured } */

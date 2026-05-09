@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   createdAt: text("created_at").notNull(),
   anthropicApiKeyEnc: text("anthropic_api_key_enc"), // AES-256-GCM encrypted, never returned to client
+  onboarded: boolean("onboarded").notNull().default(false),
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

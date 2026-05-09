@@ -31,8 +31,10 @@ import SettingsPage from "@/pages/SettingsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
+import OnboardingModal from "@/components/OnboardingModal";
 
 function AuthenticatedApp() {
+  const { user } = useAuth();
   return (
     <AppShell>
       <Switch>
@@ -61,6 +63,7 @@ function AuthenticatedApp() {
         <Route path="/profile/:userId" component={ProfilePage} />
         <Route component={NotFound} />
       </Switch>
+      {user && !user.onboarded && <OnboardingModal userName={user.name} />}
     </AppShell>
   );
 }

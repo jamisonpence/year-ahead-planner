@@ -553,6 +553,9 @@ export async function initializeStorage() {
   // Encrypted Anthropic API key on users
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT`);
 
+  // Onboarding flag — false until user completes welcome flow
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS children (
       id SERIAL PRIMARY KEY,
@@ -1245,6 +1248,7 @@ export interface IStorage {
   // Users
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
+  completeOnboarding(userId: number): Promise<void>;
   // Plants
   getAllPlants(userId: number): Promise<Plant[]>;
   createPlant(data: InsertPlant, userId: number): Promise<Plant>;
@@ -2192,6 +2196,9 @@ export const storage: IStorage = {
   async getUserById(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
+  },
+  async completeOnboarding(userId: number) {
+    await db.update(users).set({ onboarded: true }).where(eq(users.id, userId));
   },
   async saveAnthropicApiKey(userId: number, encryptedKey: string) {
     await db.update(users).set({ anthropicApiKeyEnc: encryptedKey }).where(eq(users.id, userId));
