@@ -26,20 +26,27 @@ export default function InstallPrompt() {
 
     if (ios) {
       setIsIOS(true);
-      // Show iOS instructions after a brief delay
       setTimeout(() => setShowBanner(true), 3000);
       return;
     }
 
-    // Chrome/Android install prompt
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    // Check if the event was already captured before React mounted
+    if ((window as any).__pwaInstallPrompt) {
+      setDeferredPrompt((window as any).__pwaInstallPrompt);
       setTimeout(() => setShowBanner(true), 3000);
+      return;
+    }
+
+    // Otherwise wait for it (fires only once, so we use a custom relay event)
+    const handler = () => {
+      if ((window as any).__pwaInstallPrompt) {
+        setDeferredPrompt((window as any).__pwaInstallPrompt);
+        setTimeout(() => setShowBanner(true), 3000);
+      }
     };
 
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    window.addEventListener("pwaInstallReady", handler);
+    return () => window.removeEventListener("pwaInstallReady", handler);
   }, []);
 
   const handleInstall = async () => {
