@@ -106,6 +106,20 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     res.json({ ...user, anthropicApiKeyEnc: undefined, hasAnthropicKey: !!enc });
   });
 
+  // ── Delete account ────────────────────────────────────────────────────────────
+
+  app.delete("/api/me", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      await new Promise<void>((resolve, reject) => {
+        req.logout((err) => (err ? reject(err) : resolve()));
+      });
+      req.session.destroy(() => {});
+      await storage.deleteAccount(userId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Onboarding ────────────────────────────────────────────────────────────────
 
   app.post("/api/me/complete-onboarding", requireAuth, async (req, res) => {

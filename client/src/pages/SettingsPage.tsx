@@ -8,8 +8,9 @@ import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
-  Link2, Check, X, UserCheck, Send, Flame, Landmark,
+  Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -425,6 +426,101 @@ function CollaborationSection() {
   );
 }
 
+// ── Delete Account Section ────────────────────────────────────────────────────
+
+function DeleteAccountSection() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+
+  const deleteMut = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/me"),
+    onSuccess: () => {
+      qc.clear();
+      // Hard redirect to landing — session is gone
+      window.location.href = "/";
+    },
+    onError: () => toast({ title: "Failed to delete account", variant: "destructive" }),
+  });
+
+  function handleOpen() {
+    setConfirmText("");
+    setDialogOpen(true);
+  }
+
+  const confirmed = confirmText.trim().toUpperCase() === "DELETE";
+
+  return (
+    <>
+      <section className="rounded-xl border border-destructive/30 bg-card p-6 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={18} className="text-destructive" />
+          <h2 className="font-semibold text-base text-destructive">Danger Zone</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground gap-1.5"
+          onClick={handleOpen}
+        >
+          <Trash2 size={13} /> Delete my account
+        </Button>
+      </section>
+
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setDialogOpen(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle size={16} /> Delete account
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3 text-sm text-destructive space-y-1">
+              <p className="font-medium">This will permanently delete:</p>
+              <ul className="text-xs space-y-0.5 list-disc list-inside text-destructive/80">
+                <li>All your entries across every tab</li>
+                <li>Your friends list and shared items</li>
+                <li>Your account and login credentials</li>
+              </ul>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Type <span className="font-mono font-bold text-foreground">DELETE</span> to confirm
+              </label>
+              <Input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="DELETE"
+                className="font-mono"
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="destructive"
+                className="flex-1 gap-1.5"
+                disabled={!confirmed || deleteMut.isPending}
+                onClick={() => deleteMut.mutate()}
+              >
+                {deleteMut.isPending
+                  ? <><Loader2 size={13} className="animate-spin" /> Deleting…</>
+                  : <><Trash2 size={13} /> Delete forever</>}
+              </Button>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={deleteMut.isPending}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ── Settings Page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -489,7 +585,7 @@ export default function SettingsPage() {
       {/* Tab Collaboration */}
       <CollaborationSection />
 
-      {/* Anthropic API Key */}
+      {/* AI / Anthropic API Key */}
       <section className="rounded-xl border bg-card p-6 space-y-4">
         <div className="flex items-center gap-2">
           <KeyRound size={18} className="text-violet-500" />
@@ -578,6 +674,9 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* Danger Zone */}
+      <DeleteAccountSection />
     </div>
   );
 }

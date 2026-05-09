@@ -1249,6 +1249,7 @@ export interface IStorage {
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): Promise<User>;
   getUserById(id: number): Promise<User | undefined>;
   completeOnboarding(userId: number): Promise<void>;
+  deleteAccount(userId: number): Promise<void>;
   // Plants
   getAllPlants(userId: number): Promise<Plant[]>;
   createPlant(data: InsertPlant, userId: number): Promise<Plant>;
@@ -2199,6 +2200,81 @@ export const storage: IStorage = {
   },
   async completeOnboarding(userId: number) {
     await db.update(users).set({ onboarded: true }).where(eq(users.id, userId));
+  },
+  async deleteAccount(userId: number) {
+    const uid = userId;
+    // Delete in dependency order — children before parents, social tables included
+    await pool.query(`DELETE FROM political_debate_upvotes WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_debate_members WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_debate_posts WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_debates WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM civic_actions WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_news_sources WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_elections WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_issues WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM political_officials WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM prayer_items WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM sermons WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM faith_practices WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM sacred_texts WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM care_providers WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM sleep_logs WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM health_metrics WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM medications WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM child_prep_items WHERE child_id IN (SELECT id FROM children WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM child_memories WHERE child_id IN (SELECT id FROM children WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM child_milestones WHERE child_id IN (SELECT id FROM children WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM children WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM appliances WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM house_project_tasks WHERE project_id IN (SELECT id FROM house_projects WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM house_projects WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM chores WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM spots WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM art_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM art_pieces WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM quote_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM quotes WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM journal_entries WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM hobbies WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM music_collection_items WHERE collection_id IN (SELECT id FROM music_collections WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM music_collections WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM music_recommendations WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM music_songs WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM music_artists WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM plants WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM subscriptions WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM transactions WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM budget_categories WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM movie_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM movies WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM spot_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM recipe_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM grocery_checks WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM week_plan WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM meal_bundles WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM recipes WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM workout_shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM workout_logs WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM workout_templates WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM workout_plans WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM equipment WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM book_recommendations WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM reading_sessions WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM books WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM goal_tasks WHERE goal_id IN (SELECT id FROM goals WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM goals WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM project_tasks WHERE project_id IN (SELECT id FROM projects WHERE user_id = $1)`, [uid]);
+    await pool.query(`DELETE FROM projects WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM general_tasks WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM tasks WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM people WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM relationship_groups WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM events WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM tab_collaborations WHERE owner_user_id = $1 OR collaborator_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM friend_requests WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM tab_privacy WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM nav_prefs WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [uid]);
   },
   async saveAnthropicApiKey(userId: number, encryptedKey: string) {
     await db.update(users).set({ anthropicApiKeyEnc: encryptedKey }).where(eq(users.id, userId));
