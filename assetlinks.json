@@ -1,12 +1,8 @@
-[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "REPLACE_WITH_PACKAGE_NAME",
-      "sha256_cert_fingerprints": [
-        "REPLACE_WITH_SHA256_FINGERPRINT"
-      ]
-    }
-  }
-]
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.mylifos",
+        "sha256_cert_fingerprints": ["89:79:94:5F:FF:E5:04:AF:AE:1F:71:F7:8F:40:11:97:DF:4E:87:B5:E2:5D:4A:68:BA:F7:F5:32:D4:DA:E1:A7"]
+      }
+    }]
