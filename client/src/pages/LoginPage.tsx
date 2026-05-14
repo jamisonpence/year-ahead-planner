@@ -21,7 +21,7 @@ export default function LoginPage() {
         {/* Logo / Title */}
         <div className="text-center space-y-2">
           <div className="text-5xl mb-2">📅</div>
-          <h1 className="text-3xl font-bold tracking-tight">Year Ahead Planner</h1>
+          <h1 className="text-3xl font-bold tracking-tight">MyLifos</h1>
           <p className="text-muted-foreground text-sm">Sign in to access your planner</p>
         </div>
 

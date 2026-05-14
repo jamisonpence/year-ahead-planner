@@ -1450,7 +1450,7 @@ Return exactly this structure:
       url.searchParams.set("extratags", "1");   // website, opening_hours, phone
       const r = await fetch(url.toString(), {
         headers: {
-          "User-Agent": "YearAheadPlanner/1.0 (personal life planner app)",
+          "User-Agent": "MyLifos/1.0 (personal life planner app)",
           "Accept": "application/json",
           "Accept-Language": "en",
         },
@@ -1539,7 +1539,7 @@ Return exactly this structure:
       if (!q && !artworkType) return res.json([]);
 
       const AIC_FIELDS = "id,title,artist_display,date_display,medium_display,style_title,department_title,image_id,artwork_type_title,place_of_origin";
-      const headers = { "Accept": "application/json", "AIC-User-Agent": "YearAheadPlanner/1.0 (personal life planner app)" };
+      const headers = { "Accept": "application/json", "AIC-User-Agent": "MyLifos/1.0 (personal life planner app)" };
 
       let data: any[] = [];
 
@@ -2562,7 +2562,7 @@ Rules:
         const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20&fields=${fields}`;
         const olRes = await fetch(url, {
           signal: controller.signal,
-          headers: { "User-Agent": "YearAheadPlanner/1.0 (contact@yearaheadplanner.com)" },
+          headers: { "User-Agent": "MyLifos/1.0 (contact@mylifos.app)" },
         });
         clearTimeout(timer);
         if (!olRes.ok) throw new Error(`Open Library returned ${olRes.status}`);
@@ -2590,7 +2590,7 @@ Rules:
 
       // Fallback: unauthenticated Google Books (free tier, ~100 req/day from a single IP)
       const gbUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=20&printType=books`;
-      const gbRes = await fetch(gbUrl, { headers: { "User-Agent": "YearAheadPlanner/1.0" } });
+      const gbRes = await fetch(gbUrl, { headers: { "User-Agent": "MyLifos/1.0" } });
       if (!gbRes.ok) {
         console.error(`[gbooks/search] Google Books fallback also failed: ${gbRes.status}`);
         return res.status(503).json({ error: "Book search temporarily unavailable" });

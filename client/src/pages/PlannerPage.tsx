@@ -724,7 +724,7 @@ export default function PlannerPage() {
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 shrink-0">
-            <svg aria-label="Year Ahead" viewBox="0 0 32 32" width="28" height="28" fill="none">
+            <svg aria-label="MyLifos" viewBox="0 0 32 32" width="28" height="28" fill="none">
               <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
               <path d="M2 12h28" stroke="currentColor" strokeWidth="2" />
               <rect x="8" y="2" width="2" height="6" rx="1" fill="currentColor" />
@@ -733,7 +733,7 @@ export default function PlannerPage() {
               <circle cx="16" cy="20" r="1.5" fill="hsl(var(--cat-goal))" />
               <circle cx="22" cy="20" r="1.5" fill="hsl(var(--cat-travel))" />
             </svg>
-            <span className="font-bold text-base tracking-tight">Year Ahead</span>
+            <span className="font-bold text-base tracking-tight">MyLifos</span>
             {upcomingCount > 0 && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{upcomingCount}</span>
             )}

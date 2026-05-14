@@ -309,7 +309,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <circle cx="16" cy="21" r="2" fill="hsl(25 85% 52%)" />
               <circle cx="22" cy="21" r="2" fill="hsl(210 80% 48%)" />
             </svg>
-            <span className="font-bold text-sm tracking-tight">Year Ahead</span>
+            <span className="font-bold text-sm tracking-tight">MyLifos</span>
           </div>
         </div>
 
@@ -485,7 +485,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
             <path d="M2 12h28" stroke="currentColor" strokeWidth="2" />
           </svg>
-          <span className="font-bold text-sm">Year Ahead</span>
+          <span className="font-bold text-sm">MyLifos</span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={toggle} className="p-2 rounded-lg hover:bg-secondary transition-colors">

@@ -578,7 +578,7 @@ function InstallAppSection() {
       ) : isIOS ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Add Year Ahead to your iPhone home screen for quick access.
+            Add MyLifos to your iPhone home screen for quick access.
           </p>
           <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1.5">
             <p className="font-semibold">How to install on iPhone:</p>
@@ -590,7 +590,7 @@ function InstallAppSection() {
       ) : showFallback ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Add Year Ahead to your Android home screen for quick access.
+            Add MyLifos to your Android home screen for quick access.
           </p>
           <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900 p-3 text-sm text-sky-800 dark:text-sky-300 space-y-1.5">
             <p className="font-semibold">How to install on Android:</p>
@@ -610,7 +610,7 @@ function InstallAppSection() {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Install Year Ahead on your home screen for quick access — works offline too.
+            Install MyLifos on your home screen for quick access — works offline too.
           </p>
           <Button size="sm" className="gap-1.5" onClick={handleInstall}>
             <Download size={13} /> Install App

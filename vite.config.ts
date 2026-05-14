@@ -14,9 +14,9 @@ export default defineConfig({
         "icons/icon-512x512.png",
       ],
       manifest: {
-        name: "Year Ahead",
-        short_name: "Year Ahead",
-        description: "Your personal year-ahead planner — track birthdays, travel, goals, and more.",
+        name: "MyLifos",
+        short_name: "MyLifos",
+        description: "Your personal life planner — track birthdays, travel, goals, and more.",
         theme_color: "#1e2d4d",
         background_color: "#1e2d4d",
         display: "standalone",

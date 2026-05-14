@@ -80,14 +80,14 @@ export default function InstallPrompt() {
           {/* App icon */}
           <img
             src="/icons/icon-192x192.png"
-            alt="Year Ahead"
+            alt="MyLifos"
             className="w-12 h-12 rounded-xl shrink-0"
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold leading-tight">Add to Home Screen</p>
             {isIOS ? (
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install Year Ahead.
+                Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install MyLifos.
               </p>
             ) : showFallback ? (
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
@@ -95,7 +95,7 @@ export default function InstallPrompt() {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                Install Year Ahead for quick access — works offline too.
+                Install MyLifos for quick access — works offline too.
               </p>
             )}
           </div>

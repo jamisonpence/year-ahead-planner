@@ -152,7 +152,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               <div className="text-3xl mb-2">👋</div>
               <h1 className="text-2xl font-bold">Welcome, {firstName}!</h1>
               <p className="text-muted-foreground mt-1 text-sm">
-                Year Ahead has sections for every part of life. Pick the ones that matter to you — you can always change this later in Settings.
+                MyLifos has sections for every part of life. Pick the ones that matter to you — you can always change this later in Settings.
               </p>
             </div>
 
@@ -212,7 +212,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               <div className="text-3xl mb-2">👥</div>
               <h1 className="text-2xl font-bold">Find friends</h1>
               <p className="text-muted-foreground mt-1 text-sm">
-                Search by name or email to connect with people you know on Year Ahead.
+                Search by name or email to connect with people you know on MyLifos.
               </p>
             </div>
 
