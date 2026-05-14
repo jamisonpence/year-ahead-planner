@@ -596,7 +596,7 @@ export default function ReadingPage() {
   const isRecsTab = tab === "recommendations";
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -621,7 +621,7 @@ export default function ReadingPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
+      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
         {STATUS_TABS.map((t) => (
           <button key={t.value} onClick={() => setTab(t.value)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === t.value ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
@@ -652,7 +652,7 @@ export default function ReadingPage() {
           <p className="text-sm mt-1">Use <strong>Find Books</strong> to search Google Books, or add one manually</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((book) => {
             const pct = bookProgress(book);
             const daysLeft = book.targetFinishDate ? daysUntil(book.targetFinishDate) : null;

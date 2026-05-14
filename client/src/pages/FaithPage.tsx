@@ -257,7 +257,7 @@ function TextModal({ text, onClose, onSave }: {
             <Label>Title *</Label>
             <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. The Bhagavad Gita" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Author / Compiler</Label>
               <Input value={author} onChange={e => setAuthor(e.target.value)} placeholder="e.g. Vyasa" />
@@ -267,7 +267,7 @@ function TextModal({ text, onClose, onSave }: {
               <Input value={tradition} onChange={e => setTradition(e.target.value)} placeholder="e.g. Hindu, Sufi, Christian…" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Translation / Version</Label>
               <Input value={translation} onChange={e => setTranslation(e.target.value)} placeholder="e.g. ESV, Sahih International…" />
@@ -995,7 +995,7 @@ function PracticesTab() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Frequency</Label>
                 <select value={frequency} onChange={e => setFrequency(e.target.value)}
@@ -1244,7 +1244,7 @@ function TeachingsTab() {
               <Label>Title *</Label>
               <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. The Beatitudes, On Forgiveness…" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Teacher / Speaker</Label>
                 <Input value={speaker} onChange={e => setSpeaker(e.target.value)} placeholder="Name" />
@@ -1254,7 +1254,7 @@ function TeachingsTab() {
                 <Input value={source} onChange={e => setSource(e.target.value)} placeholder="Church, Podcast, YouTube…" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Date</Label>
                 <Input type="date" value={date} onChange={e => setDate(e.target.value)} />

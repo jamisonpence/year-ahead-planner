@@ -675,7 +675,7 @@ export default function SpotsPage() {
   const displaySpots = tabSpots[activeTab] ?? [];
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <MapPin size={22} className="text-primary" />
@@ -791,7 +791,7 @@ export default function SpotsPage() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
               <Input placeholder="e.g. The Golden Road" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Type</label>
                 <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
@@ -811,7 +811,7 @@ export default function SpotsPage() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
               <Input placeholder="123 Main St" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Neighborhood</label>
                 <Input placeholder="e.g. East Side" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} />
@@ -821,7 +821,7 @@ export default function SpotsPage() {
                 <Input placeholder="e.g. Austin" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Price Range</label>
                 <Select value={form.priceRange !== "" ? String(form.priceRange) : "_none"} onValueChange={(v) => setForm({ ...form, priceRange: v === "_none" ? "" : Number(v) })}>

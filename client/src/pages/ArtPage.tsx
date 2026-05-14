@@ -626,7 +626,7 @@ export default function ArtPage() {
   }), [allPieces]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
@@ -767,7 +767,7 @@ export default function ArtPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Artist Name</label>
                 <Input value={form.artistName} onChange={(e) => setForm((f) => ({ ...f, artistName: e.target.value }))} placeholder="Artist name" />
@@ -778,7 +778,7 @@ export default function ArtPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Medium</label>
                 <Select value={form.medium} onValueChange={(v) => setForm((f) => ({ ...f, medium: v }))}>
@@ -799,7 +799,7 @@ export default function ArtPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Where Viewed</label>
                 <Input value={form.whereViewed} onChange={(e) => setForm((f) => ({ ...f, whereViewed: e.target.value }))} placeholder="e.g. MoMA" />

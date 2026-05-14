@@ -291,7 +291,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Emoji</Label>
               <Input value={emoji} onChange={e => setEmoji(e.target.value)} placeholder="🍽️" maxLength={4} />
@@ -319,7 +319,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
           <div className="space-y-2">
             <Label>Ingredients</Label>
             {ingredients.map((ing, i) => (
-              <div key={i} className="flex gap-2 items-center">
+              <div key={i} className="flex gap-2 items-center flex-wrap">
                 <Input value={ing.name} onChange={e => updateIng(i, "name", e.target.value)} placeholder="Ingredient" className="flex-[2]" />
                 <Input value={ing.qty} onChange={e => updateIng(i, "qty", e.target.value)} placeholder="Qty" className="flex-1" />
                 <button type="button" onClick={() => removeIngRow(i)} className="text-muted-foreground hover:text-destructive p-1 shrink-0"><X size={14} /></button>
@@ -401,7 +401,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
           <DialogTitle>{editBundle ? "Edit Bundle" : "Create Meal Bundle"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Emoji</Label>
               <Input value={emoji} onChange={e => setEmoji(e.target.value)} placeholder="🍽️" maxLength={4} />
@@ -894,7 +894,7 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
         </div>
         <div className="space-y-4 px-6 pb-6">
           {(recipe.prepTime != null || recipe.cookTime != null) && (
-            <div className="grid grid-cols-3 gap-3 p-3 bg-secondary/40 rounded-xl text-center">
+            <div className="flex flex-wrap gap-3 p-3 bg-secondary/40 rounded-xl justify-around">
               {recipe.prepTime != null && <div><p className="text-lg font-bold">{recipe.prepTime}m</p><p className="text-xs text-muted-foreground">Prep</p></div>}
               {recipe.cookTime != null && <div><p className="text-lg font-bold">{recipe.cookTime}m</p><p className="text-xs text-muted-foreground">Cook</p></div>}
               {totalTime > 0 && <div><p className="text-lg font-bold">{totalTime}m</p><p className="text-xs text-muted-foreground">Total</p></div>}
@@ -1177,7 +1177,7 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {/* Browse: category grid */}
           {mode === "browse" && !browseCategory && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {categories.map(cat => (
                 <button
                   key={cat.strCategory}
@@ -1593,7 +1593,7 @@ export default function RecipesPage() {
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Recipes</h1>
@@ -1724,7 +1724,7 @@ export default function RecipesPage() {
                                     <span className="text-xs text-muted-foreground/60 ml-1">{bRecipes.length}</span>
                                   </button>
                                   {!isCollapsed && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                                       {bRecipes.map(recipe => (
                                         <RecipeCard key={recipe.id} recipe={recipe}
                                           isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
@@ -1742,7 +1742,7 @@ export default function RecipesPage() {
                             })}
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                             {group.map(recipe => (
                               <RecipeCard key={recipe.id} recipe={recipe}
                                 isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
@@ -1775,7 +1775,7 @@ export default function RecipesPage() {
                     </button>
                     {!isSectionCollapsed && (
                       <div className="px-4 pb-4 pt-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                           {recipesByType["unclassified"].map(recipe => (
                             <RecipeCard key={recipe.id} recipe={recipe}
                               isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
@@ -1814,7 +1814,7 @@ export default function RecipesPage() {
                 const hasBuckets = buckets.some(b => b.category !== null);
                 if (!hasBuckets) {
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                       {filteredRecipes.map(recipe => (
                         <RecipeCard key={recipe.id} recipe={recipe}
                           isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
@@ -1845,7 +1845,7 @@ export default function RecipesPage() {
                           </button>
                           {!isCollapsed && (
                             <div className="px-4 pb-4 pt-1">
-                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                                 {bRecipes.map(recipe => (
                                   <RecipeCard key={recipe.id} recipe={recipe}
                                     isOnWeek={weekPlan.some(p => p.recipeId === recipe.id)}
@@ -1880,7 +1880,7 @@ export default function RecipesPage() {
               <p className="text-sm mt-1">Create a bundle to save full-meal combinations like "Steak Night" or "Taco Tuesday"</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {bundles.map(bundle => {
                 const ids: number[] = JSON.parse(bundle.recipeIdsJson);
                 const bundleRecipes = ids.map(id => recipes.find(r => r.id === id)).filter(Boolean) as Recipe[];

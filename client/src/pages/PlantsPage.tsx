@@ -507,9 +507,9 @@ export default function PlantsPage() {
   }).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Leaf className="text-green-600" size={24} />
           <h1 className="text-2xl font-bold">Plants</h1>
           {overdueCount > 0 && (
@@ -518,14 +518,14 @@ export default function PlantsPage() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search plants..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 w-52 h-9"
+              className="pl-8 w-full sm:w-52 h-9"
             />
           </div>
           <Button size="sm" variant="outline" onClick={() => setPerenualOpen(true)} className="gap-1.5">

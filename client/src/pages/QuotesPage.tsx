@@ -593,7 +593,7 @@ export default function QuotesPage() {
   const favoriteCount = allQuotes.filter((q) => q.isFavorite).length;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>

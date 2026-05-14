@@ -2152,7 +2152,7 @@ export default function MusicPage() {
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
             <Music2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
@@ -2185,7 +2185,7 @@ export default function MusicPage() {
       </div>
 
       {/* Search + Genre filter */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input

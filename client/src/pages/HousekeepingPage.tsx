@@ -245,7 +245,7 @@ function ChoresTab() {
         <div className="flex gap-2 flex-wrap">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input className="pl-8 h-9 w-48" placeholder="Search chores…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-8 h-9 w-full sm:w-48" placeholder="Search chores…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={filterCat} onValueChange={setFilterCat}>
             <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
@@ -341,7 +341,7 @@ function ChoresTab() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label>
               <Input placeholder="e.g. Vacuum living room" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
                 <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
@@ -357,7 +357,7 @@ function ChoresTab() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Frequency</label>
                 <Select value={form.frequency} onValueChange={(v) => setForm({ ...form, frequency: v })}>
@@ -372,7 +372,7 @@ function ChoresTab() {
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Next Due</label>
                 <Input type="date" value={form.nextDue} onChange={(e) => setForm({ ...form, nextDue: e.target.value })} />
@@ -525,7 +525,7 @@ function ProjectsTab() {
         <div className="flex gap-2 flex-wrap">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input className="pl-8 h-9 w-48" placeholder="Search projects…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-8 h-9 w-full sm:w-48" placeholder="Search projects…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
@@ -646,7 +646,7 @@ function ProjectsTab() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label>
               <Input placeholder="e.g. Fix garage door" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
                 <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
@@ -662,7 +662,7 @@ function ProjectsTab() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Priority</label>
                 <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
@@ -675,7 +675,7 @@ function ProjectsTab() {
                 <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Est. Cost ($)</label>
                 <Input type="number" min={0} placeholder="0" value={form.estimatedCost} onChange={(e) => setForm({ ...form, estimatedCost: e.target.value })} />
@@ -810,7 +810,7 @@ function AppliancesTab() {
         <div className="flex gap-2 flex-wrap">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input className="pl-8 h-9 w-48" placeholder="Search appliances…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-8 h-9 w-full sm:w-48" placeholder="Search appliances…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={filterLoc} onValueChange={setFilterLoc}>
             <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
@@ -883,7 +883,7 @@ function AppliancesTab() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
               <Input placeholder="e.g. Refrigerator" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Brand</label>
                 <Input placeholder="e.g. Samsung" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
@@ -893,7 +893,7 @@ function AppliancesTab() {
                 <Input placeholder="e.g. RF28R7351SG" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Location</label>
                 <Select value={form.location || "_none"} onValueChange={(v) => setForm({ ...form, location: v === "_none" ? "" : v })}>
@@ -909,7 +909,7 @@ function AppliancesTab() {
                 <Input type="number" min={0} value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Purchase Date</label>
                 <Input type="date" value={form.purchaseDate} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
@@ -919,7 +919,7 @@ function AppliancesTab() {
                 <Input type="date" value={form.warrantyExpiry} onChange={(e) => setForm({ ...form, warrantyExpiry: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Last Serviced</label>
                 <Input type="date" value={form.lastServiced} onChange={(e) => setForm({ ...form, lastServiced: e.target.value })} />
@@ -976,7 +976,7 @@ export default function HousekeepingPage() {
   }).length;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Home size={22} className="text-primary" />
         <div>

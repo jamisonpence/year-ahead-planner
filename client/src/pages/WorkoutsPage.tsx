@@ -209,7 +209,7 @@ function ExerciseSearchModal({ open, onClose, templates }: {
         {/* Two-panel results */}
         <div className="flex flex-1 min-h-0">
           {/* Results list */}
-          <div className="w-64 shrink-0 border-r overflow-y-auto">
+          <div className="w-40 sm:w-64 shrink-0 border-r overflow-y-auto">
             {loading && (
               <div className="flex items-center justify-center h-20 text-muted-foreground"><Loader2 size={18} className="animate-spin" /></div>
             )}
@@ -497,7 +497,7 @@ function GenerateWorkoutPlanModal({ open, onClose, userEquipment, goals }: {
             )}
 
             {/* Preferences */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Days / Week</label>
                 <Select value={daysPerWeek} onValueChange={setDaysPerWeek}>
@@ -1053,7 +1053,7 @@ export default function WorkoutsPage() {
   }, [equipmentList]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">

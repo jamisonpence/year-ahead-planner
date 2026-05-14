@@ -168,7 +168,7 @@ function MedicationsTab() {
           <Field label="Name *">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Lisinopril, Vitamin D" autoFocus />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Type">
               <Select value={form.type} onChange={v => setForm(f => ({ ...f, type: v }))}>
                 {MED_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
@@ -178,7 +178,7 @@ function MedicationsTab() {
               <Input value={form.dosage} onChange={e => setForm(f => ({ ...f, dosage: e.target.value }))} placeholder="e.g. 10mg" />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Frequency">
               <Select value={form.frequency} onChange={v => setForm(f => ({ ...f, frequency: v }))}>
                 <option value="">Select…</option>
@@ -192,7 +192,7 @@ function MedicationsTab() {
               </Select>
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Start date">
               <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
             </Field>
@@ -393,7 +393,7 @@ function MetricsTab() {
               <Input value={form.customName} onChange={e => setForm(f => ({ ...f, customName: e.target.value }))} placeholder="e.g. Waist circumference" autoFocus />
             </Field>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Value *">
               <Input value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder={form.name === "Blood Pressure" ? "e.g. 120/80" : "Enter value"} />
             </Field>
@@ -549,7 +549,7 @@ function SleepTab() {
 
       {showModal && (
         <Modal title={editing ? "Edit Sleep Log" : "Log Sleep"} onClose={() => setShowModal(false)}>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date *">
               <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
             </Field>
@@ -571,7 +571,7 @@ function SleepTab() {
               ))}
             </div>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Bedtime">
               <Input value={form.bedtime} onChange={e => setForm(f => ({ ...f, bedtime: e.target.value }))} placeholder="e.g. 11:00 PM" />
             </Field>
@@ -805,7 +805,7 @@ function CareTeamTab() {
           <Field label="Name *">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Dr. Sarah Kim" autoFocus />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Specialty">
               <Select value={form.specialty} onChange={v => setForm(f => ({ ...f, specialty: v }))}>
                 <option value="">Select…</option>
@@ -816,7 +816,7 @@ function CareTeamTab() {
               <Input value={form.practice} onChange={e => setForm(f => ({ ...f, practice: e.target.value }))} placeholder="Clinic name" />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Last appointment">
               <Input type="date" value={form.lastAppointment} onChange={e => setForm(f => ({ ...f, lastAppointment: e.target.value }))} />
             </Field>
@@ -824,7 +824,7 @@ function CareTeamTab() {
               <Input type="date" value={form.nextAppointment} onChange={e => setForm(f => ({ ...f, nextAppointment: e.target.value }))} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Phone">
               <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" />
             </Field>
@@ -860,7 +860,7 @@ export default function HealthPage() {
   const [activeTab, setActiveTab] = useState("medications");
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center shrink-0">

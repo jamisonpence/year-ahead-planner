@@ -1242,7 +1242,7 @@ export default function RelationshipsPage() {
             placeholder="Search people & friends…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm w-52"
+            className="pl-8 h-8 text-sm w-full sm:w-52"
           />
         </div>
 
@@ -1334,7 +1334,7 @@ export default function RelationshipsPage() {
                         <h2 className="font-bold text-base">{g.name}</h2>
                         <span className="text-xs text-muted-foreground">{members.length}</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                         {members.map((p) => (
                           <PersonTile key={p.id} person={p} allPeople={allPeople}
                             onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
@@ -1354,7 +1354,7 @@ export default function RelationshipsPage() {
                       <h2 className="font-bold text-base">No Group</h2>
                       <span className="text-xs text-muted-foreground">{ungroupedLinked.length}</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                       {ungroupedLinked.map((p) => (
                         <PersonTile key={p.id} person={p} allPeople={allPeople}
                           onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
@@ -1376,7 +1376,7 @@ export default function RelationshipsPage() {
                       <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
                       <span className="text-xs text-muted-foreground">· click Edit to add to a group</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                       {filteredUnlinkedFriends.map((f) => (
                         <FriendCard key={f.id} friend={f} groups={groups}
                           onUnfriend={(id) => unfriendMut.mutate(id)}
@@ -1408,7 +1408,7 @@ export default function RelationshipsPage() {
               filteredPeople.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">No people in this group</p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   {filteredPeople.map((p) => (
                     <PersonTile key={p.id} person={p} allPeople={allPeople}
                       onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
@@ -1432,7 +1432,7 @@ export default function RelationshipsPage() {
                         <h2 className="font-bold text-base">{g.name}</h2>
                         <span className="text-xs text-muted-foreground">{members.length}</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                         {members.map((p) => (
                           <PersonTile key={p.id} person={p} allPeople={allPeople}
                             onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
@@ -1457,7 +1457,7 @@ export default function RelationshipsPage() {
                         <h2 className="font-bold text-base">Other</h2>
                         <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                         {ungrouped.map((p) => (
                           <PersonTile key={p.id} person={p} allPeople={allPeople}
                             onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
@@ -1484,7 +1484,7 @@ export default function RelationshipsPage() {
             <h2 className="font-bold text-base">Connected — No Profile Yet</h2>
             <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredUnlinkedFriends.map((f) => (
               <FriendCard key={f.id} friend={f} groups={groups}
                 onUnfriend={(id) => unfriendMut.mutate(id)}

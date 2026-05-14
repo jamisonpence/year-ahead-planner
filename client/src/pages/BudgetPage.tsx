@@ -357,14 +357,14 @@ export default function BudgetPage() {
   const monthLabel = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet size={22} /> Budget</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{monthLabel}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={openAddSub}><CreditCard size={14} /> + Subscription</Button>
           <Button size="sm" className="gap-1.5" onClick={openAddTx}><Plus size={15} /> + Transaction</Button>
         </div>
@@ -410,7 +410,7 @@ export default function BudgetPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap h-auto gap-y-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="subscriptions" className="gap-1.5">
@@ -491,7 +491,7 @@ export default function BudgetPage() {
           ) : (
             <div className="space-y-1">
               {transactions.map((t) => (
-                <div key={t.id} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 hover:bg-secondary/50 transition-colors group">
+                <div key={t.id} className="flex items-center gap-3 rounded-lg border bg-card px-2 sm:px-4 py-3 hover:bg-secondary/50 transition-colors group">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
                     style={{ background: t.categoryId ? catColor(t.categoryId) + "30" : "hsl(var(--secondary))" }}>
                     {t.categoryId ? catIcon(t.categoryId) : (t.type === "income" ? "💵" : "💸")}

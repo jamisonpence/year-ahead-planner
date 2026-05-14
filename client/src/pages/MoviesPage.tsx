@@ -468,7 +468,7 @@ export default function MoviesPage() {
   const videoCount = allItems.filter((m) => m.mediaType === "video").length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
@@ -541,7 +541,7 @@ export default function MoviesPage() {
       {/* Search + filters + tabs (Movies / Shows only) */}
       {!isVideoView && <>
       <div className="flex flex-wrap gap-2 mb-4">
-        <div className="relative flex-1 min-w-48">
+        <div className="relative flex-1 min-w-[100px]">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search by title or ${isShowView ? "creator" : "director"}…`}
@@ -704,7 +704,7 @@ export default function MoviesPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Title *</label>
                 <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -717,7 +717,7 @@ export default function MoviesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">
                   {form.mediaType === "show" ? "Creator" : "Director"}
@@ -739,7 +739,7 @@ export default function MoviesPage() {
 
             {/* Show-specific season fields */}
             {form.mediaType === "show" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Total Seasons</label>
                   <Input value={form.totalSeasons} onChange={(e) => setForm((f) => ({ ...f, totalSeasons: e.target.value }))}
