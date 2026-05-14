@@ -2210,18 +2210,19 @@ export default function MusicPage() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-4 h-8 text-xs">
+        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+        <TabsList className="mb-4 h-8 text-xs w-max sm:w-auto flex-nowrap">
           <TabsTrigger value="artists" className="text-xs">
             Artists ({filteredArtists.length})
           </TabsTrigger>
           <TabsTrigger value="want" className="text-xs">
-            Want to Listen ({wantToListen.length})
+            <span className="hidden sm:inline">Want to Listen</span><span className="sm:hidden">Want</span> ({wantToListen.length})
           </TabsTrigger>
           <TabsTrigger value="favorites" className="text-xs">
             Favorites ({favoriteArtists.length})
           </TabsTrigger>
           <TabsTrigger value="recommendations" className="text-xs">
-            Recommendations
+            <span className="hidden sm:inline">Recommendations</span><span className="sm:hidden">Recs</span>
           </TabsTrigger>
           <TabsTrigger value="spotify" className="text-xs flex items-center gap-1">
             <Radio size={11} />
@@ -2229,9 +2230,10 @@ export default function MusicPage() {
           </TabsTrigger>
           <TabsTrigger value="collections" className="text-xs flex items-center gap-1">
             <ListMusic size={11} />
-            Collections
+            <span className="hidden sm:inline">Collections</span><span className="sm:hidden">Lists</span>
           </TabsTrigger>
         </TabsList>
+        </div>
 
         {/* Artists tab */}
         <TabsContent value="artists">

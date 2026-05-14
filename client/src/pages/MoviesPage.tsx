@@ -502,7 +502,8 @@ export default function MoviesPage() {
       </div>
 
       {/* Type toggle */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-5">
+      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-5">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-max sm:w-fit">
         <button
           onClick={() => switchView("movie")}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -528,6 +529,7 @@ export default function MoviesPage() {
           <Video size={15} /> Clips
         </button>
       </div>
+      </div>
 
       {/* Clips view */}
       {isVideoView && (
@@ -548,7 +550,7 @@ export default function MoviesPage() {
             className="pl-8 h-8 text-sm" />
         </div>
         <Select value={genreFilter ?? "__none__"} onValueChange={(v) => setGenreFilter(v === "__none__" ? null : v)}>
-          <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Genre" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="Genre" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__none__">All genres</SelectItem>
             {GENRES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
@@ -556,7 +558,7 @@ export default function MoviesPage() {
         </Select>
         {allCustomLists.length > 0 && (
           <Select value={listFilter ?? "__none__"} onValueChange={(v) => setListFilter(v === "__none__" ? null : v)}>
-            <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="List" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="List" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">All lists</SelectItem>
               {allCustomLists.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
@@ -571,7 +573,8 @@ export default function MoviesPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-4">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <TabsList className="mb-4 w-max sm:w-auto flex-nowrap">
           <TabsTrigger value="backlog" className="gap-1.5">
             <Clock size={14} /> Backlog <span className="ml-1 text-xs opacity-60">{backlog.length}</span>
           </TabsTrigger>
@@ -590,6 +593,7 @@ export default function MoviesPage() {
             <Inbox size={14} /> Shared
           </TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="backlog">
           {backlog.length === 0 ? (

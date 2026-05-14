@@ -676,7 +676,7 @@ export default function SpotsPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <MapPin size={22} className="text-primary" />
           <div>
@@ -706,23 +706,25 @@ export default function SpotsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-        <TabsList>
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <TabsList className="w-max sm:w-auto flex-nowrap">
           <TabsTrigger value="all">All <span className="ml-1 text-xs text-muted-foreground">({spots.length})</span></TabsTrigger>
           <TabsTrigger value="want_to_visit">Want to Visit <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "want_to_visit").length})</span></TabsTrigger>
           <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
           <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
           <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
         </TabsList>
+        </div>
       </Tabs>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input className="pl-8 h-9 w-52" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="pl-8 h-9 w-full sm:w-52" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
             {SPOT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
@@ -730,7 +732,7 @@ export default function SpotsPage() {
         </Select>
         {allCities.length > 0 && (
           <Select value={filterCity} onValueChange={setFilterCity}>
-            <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All cities</SelectItem>
               {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -739,7 +741,7 @@ export default function SpotsPage() {
         )}
         {allTags.length > 0 && (
           <Select value={filterTag} onValueChange={setFilterTag}>
-            <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All tags</SelectItem>
               {allTags.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
