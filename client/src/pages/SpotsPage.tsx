@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Spot, SpotShareWithUser, PublicUser } from "@shared/schema";
+import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ import { format, parseISO } from "date-fns";
 import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
   Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle, Loader2,
-  Send, Inbox, CornerUpRight, Check, X,
+  Send, Inbox, CornerUpRight, Check, X, Plane, Calendar, ChevronLeft,
+  CheckCircle2, Circle, StickyNote, Sunrise,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -713,12 +714,13 @@ export default function SpotsPage() {
           <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
           <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
           <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
+          <TabsTrigger value="trips" className="gap-1.5"><Plane size={13} /> Trips</TabsTrigger>
         </TabsList>
         </div>
       </Tabs>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {activeTab !== "trips" && <div className="flex flex-wrap gap-2 mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
           <Input className="pl-8 h-9 w-full sm:w-52" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -748,11 +750,13 @@ export default function SpotsPage() {
             </SelectContent>
           </Select>
         )}
-      </div>
+      </div>}
 
       {/* Results */}
       {activeTab === "shared" ? (
         <SharedSpotsTab />
+      ) : activeTab === "trips" ? (
+        <TripsTab spots={spots} />
       ) : displaySpots.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <MapPin size={36} className="mx-auto mb-3 opacity-30" />
@@ -1200,6 +1204,470 @@ function SharedSpotsTab() {
           </div>
         )
       )}
+    </div>
+  );
+}
+
+// ── TripsTab ──────────────────────────────────────────────────────────────────
+
+const TRIP_ITEM_TYPES = [
+  { value: "restaurant", label: "Restaurant", emoji: "🍽️" },
+  { value: "bar",        label: "Bar / Nightlife", emoji: "🍺" },
+  { value: "cafe",       label: "Café",        emoji: "☕" },
+  { value: "hotel",      label: "Hotel / Stay", emoji: "🏨" },
+  { value: "attraction", label: "Attraction",  emoji: "🎡" },
+  { value: "park",       label: "Park / Nature", emoji: "🌳" },
+  { value: "shop",       label: "Shopping",    emoji: "🛍️" },
+  { value: "transport",  label: "Transport",   emoji: "🚌" },
+  { value: "other",      label: "Other",       emoji: "📍" },
+];
+
+const COVER_COLORS = [
+  "#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444",
+  "#8b5cf6", "#14b8a6", "#f97316", "#84cc16",
+];
+
+const EMPTY_TRIP = { name: "", destination: "", startDate: "", endDate: "", emoji: "✈️", notes: "", coverColor: "#6366f1" };
+const EMPTY_ITEM = { name: "", address: "", date: "", time: "", duration: "", notes: "", type: "other", confirmed: false, spotId: null as number | null };
+
+function TripsTab({ spots }: { spots: Spot[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  // Trips state
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [tripModal, setTripModal] = useState(false);
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [tripForm, setTripForm] = useState({ ...EMPTY_TRIP });
+
+  // Trip items state
+  const [itemModal, setItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<TripItem | null>(null);
+  const [itemForm, setItemForm] = useState({ ...EMPTY_ITEM });
+
+  // Queries
+  const { data: trips = [], isLoading } = useQuery<Trip[]>({
+    queryKey: ["/api/trips"],
+    queryFn: () => apiRequest("GET", "/api/trips").then((r) => r.json()),
+  });
+
+  const { data: tripItems = [] } = useQuery<TripItem[]>({
+    queryKey: ["/api/trips", selectedTrip?.id, "items"],
+    queryFn: () => apiRequest("GET", `/api/trips/${selectedTrip!.id}/items`).then((r) => r.json()),
+    enabled: !!selectedTrip,
+  });
+
+  // Mutations
+  const createTrip = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/trips", data).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips"] }); setTripModal(false); toast({ title: "Trip created!" }); },
+    onError: () => toast({ title: "Failed to create trip", variant: "destructive" }),
+  });
+  const updateTrip = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/trips/${id}`, data).then((r) => r.json()),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["/api/trips"] });
+      if (selectedTrip?.id === updated.id) setSelectedTrip(updated);
+      setTripModal(false);
+      toast({ title: "Trip updated!" });
+    },
+    onError: () => toast({ title: "Failed to update trip", variant: "destructive" }),
+  });
+  const deleteTrip = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/trips/${id}`).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips"] }); setSelectedTrip(null); toast({ title: "Trip deleted" }); },
+    onError: () => toast({ title: "Failed to delete trip", variant: "destructive" }),
+  });
+
+  const createItem = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/trips/${selectedTrip!.id}/items`, data).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "items"] }); setItemModal(false); toast({ title: "Stop added!" }); },
+    onError: () => toast({ title: "Failed to add stop", variant: "destructive" }),
+  });
+  const updateItem = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/trip-items/${id}`, data).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "items"] }); setItemModal(false); toast({ title: "Stop updated!" }); },
+    onError: () => toast({ title: "Failed to update stop", variant: "destructive" }),
+  });
+  const deleteItem = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/trip-items/${id}`).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "items"] }); },
+    onError: () => toast({ title: "Failed to delete stop", variant: "destructive" }),
+  });
+  const toggleConfirmed = useMutation({
+    mutationFn: ({ id, confirmed }: { id: number; confirmed: boolean }) => apiRequest("PATCH", `/api/trip-items/${id}`, { confirmed }).then((r) => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "items"] }); },
+  });
+
+  function openNewTrip() { setEditingTrip(null); setTripForm({ ...EMPTY_TRIP }); setTripModal(true); }
+  function openEditTrip(t: Trip) { setEditingTrip(t); setTripForm({ name: t.name, destination: t.destination ?? "", startDate: t.startDate ?? "", endDate: t.endDate ?? "", emoji: t.emoji, notes: t.notes ?? "", coverColor: t.coverColor ?? "#6366f1" }); setTripModal(true); }
+  function saveTripForm() {
+    const payload = { ...tripForm, destination: tripForm.destination || null, startDate: tripForm.startDate || null, endDate: tripForm.endDate || null, notes: tripForm.notes || null };
+    if (editingTrip) updateTrip.mutate({ id: editingTrip.id, data: payload });
+    else createTrip.mutate(payload);
+  }
+
+  function openNewItem() { setEditingItem(null); setItemForm({ ...EMPTY_ITEM, date: selectedTrip?.startDate ?? "" }); setItemModal(true); }
+  function openEditItem(item: TripItem) {
+    setEditingItem(item);
+    setItemForm({ name: item.name, address: item.address ?? "", date: item.date ?? "", time: item.time ?? "", duration: item.duration ?? "", notes: item.notes ?? "", type: item.type ?? "other", confirmed: item.confirmed, spotId: item.spotId });
+    setItemModal(true);
+  }
+  function saveItemForm() {
+    const payload = { ...itemForm, address: itemForm.address || null, date: itemForm.date || null, time: itemForm.time || null, duration: itemForm.duration || null, notes: itemForm.notes || null, spotId: itemForm.spotId || null };
+    if (editingItem) updateItem.mutate({ id: editingItem.id, data: payload });
+    else createItem.mutate(payload);
+  }
+
+  // Group trip items by date
+  const itemsByDay = useMemo(() => {
+    const map = new Map<string, TripItem[]>();
+    for (const item of tripItems) {
+      const key = item.date ?? "__unscheduled";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(item);
+    }
+    // Sort keys: dates first (chronologically), then unscheduled
+    const keys = Array.from(map.keys()).sort((a, b) => {
+      if (a === "__unscheduled") return 1;
+      if (b === "__unscheduled") return -1;
+      return a.localeCompare(b);
+    });
+    return keys.map((k) => ({ date: k, items: map.get(k)! }));
+  }, [tripItems]);
+
+  // Generate day labels for the trip
+  function getDayLabel(dateStr: string) {
+    if (dateStr === "__unscheduled") return "Unscheduled";
+    try {
+      const d = parseISO(dateStr);
+      const label = format(d, "EEEE, MMM d");
+      if (selectedTrip?.startDate) {
+        const start = parseISO(selectedTrip.startDate);
+        const diff = Math.round((d.getTime() - start.getTime()) / 86400000);
+        if (diff >= 0) return `Day ${diff + 1} · ${label}`;
+      }
+      return label;
+    } catch { return dateStr; }
+  }
+
+  // Build date options for "which day" select
+  function buildDateOptions() {
+    if (!selectedTrip?.startDate) return [];
+    const opts: { value: string; label: string }[] = [];
+    const start = parseISO(selectedTrip.startDate);
+    const end = selectedTrip.endDate ? parseISO(selectedTrip.endDate) : start;
+    const days = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 30);
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const val = format(d, "yyyy-MM-dd");
+      opts.push({ value: val, label: `Day ${i + 1} · ${format(d, "EEE MMM d")}` });
+    }
+    return opts;
+  }
+
+  if (isLoading) return <div className="flex justify-center py-20"><Loader2 size={24} className="animate-spin text-muted-foreground" /></div>;
+
+  // ─── Trip Detail View ──────────────────────────────────────────────────────
+  if (selectedTrip) {
+    const tripData = trips.find((t) => t.id === selectedTrip.id) ?? selectedTrip;
+    const confirmedCount = tripItems.filter((i) => i.confirmed).length;
+    return (
+      <div>
+        {/* Back + header */}
+        <div className="flex items-start gap-3 mb-5">
+          <button onClick={() => setSelectedTrip(null)} className="mt-0.5 p-1.5 rounded hover:bg-secondary transition-colors">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-2xl">{tripData.emoji}</span>
+              <h2 className="text-lg font-bold">{tripData.name}</h2>
+              {tripData.destination && <span className="text-sm text-muted-foreground">· {tripData.destination}</span>}
+            </div>
+            {(tripData.startDate || tripData.endDate) && (
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                <Calendar size={11} />
+                {tripData.startDate && format(parseISO(tripData.startDate), "MMM d")}
+                {tripData.startDate && tripData.endDate && " – "}
+                {tripData.endDate && format(parseISO(tripData.endDate), "MMM d, yyyy")}
+                {tripItems.length > 0 && <span className="ml-2">· {confirmedCount}/{tripItems.length} confirmed</span>}
+              </p>
+            )}
+            {tripData.notes && <p className="text-xs text-muted-foreground mt-1 italic">{tripData.notes}</p>}
+          </div>
+          <div className="flex gap-1.5 shrink-0">
+            <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => openEditTrip(tripData)}>
+              <Pencil size={12} /> Edit
+            </Button>
+            <Button size="sm" onClick={openNewItem} className="gap-1.5 h-8 text-xs">
+              <Plus size={12} /> Add Stop
+            </Button>
+          </div>
+        </div>
+
+        {/* Itinerary */}
+        {itemsByDay.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Plane size={36} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm font-medium">No stops yet</p>
+            <p className="text-xs mt-1">Add restaurants, hotels, attractions, and more to plan your itinerary.</p>
+            <Button size="sm" className="mt-4 gap-1.5" onClick={openNewItem}><Plus size={13} /> Add First Stop</Button>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {itemsByDay.map(({ date, items }) => (
+              <div key={date}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {date === "__unscheduled" ? <StickyNote size={12} /> : <Sunrise size={12} />}
+                    {getDayLabel(date)}
+                  </div>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="space-y-2">
+                  {items.map((item) => {
+                    const typeInfo = TRIP_ITEM_TYPES.find((t) => t.value === item.type) ?? TRIP_ITEM_TYPES[TRIP_ITEM_TYPES.length - 1];
+                    return (
+                      <div key={item.id} className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${item.confirmed ? "bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-card"}`}>
+                        <button
+                          onClick={() => toggleConfirmed.mutate({ id: item.id, confirmed: !item.confirmed })}
+                          className="mt-0.5 shrink-0 text-muted-foreground hover:text-green-600 transition-colors"
+                          title={item.confirmed ? "Mark unconfirmed" : "Mark confirmed"}
+                        >
+                          {item.confirmed ? <CheckCircle2 size={18} className="text-green-600" /> : <Circle size={18} />}
+                        </button>
+                        <span className="text-lg shrink-0">{typeInfo.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${item.confirmed ? "text-green-800 dark:text-green-300" : ""}`}>{item.name}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                            {item.time && <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock size={10} />{item.time}</span>}
+                            {item.duration && <span className="text-xs text-muted-foreground">{item.duration}</span>}
+                            {item.address && <span className="text-xs text-muted-foreground flex items-center gap-1"><MapPin size={10} />{item.address}</span>}
+                          </div>
+                          {item.notes && <p className="text-xs text-muted-foreground mt-1 italic">{item.notes}</p>}
+                        </div>
+                        <div className="flex gap-0.5 shrink-0">
+                          <button onClick={() => openEditItem(item)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                            <Pencil size={13} className="text-muted-foreground" />
+                          </button>
+                          <button onClick={() => deleteItem.mutate(item.id)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                            <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Delete trip button */}
+        <div className="mt-8 pt-4 border-t">
+          <button
+            onClick={() => { if (confirm("Delete this trip and all its stops?")) deleteTrip.mutate(tripData.id); }}
+            className="text-xs text-destructive hover:underline"
+          >
+            Delete this trip
+          </button>
+        </div>
+
+        {/* Add/Edit Stop Modal */}
+        <Dialog open={itemModal} onOpenChange={setItemModal}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{editingItem ? "Edit Stop" : "Add Stop"}</DialogTitle></DialogHeader>
+            <div className="space-y-3 pt-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
+                <Input placeholder="e.g. Eiffel Tower" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} />
+              </div>
+              {/* Or pick from existing spots */}
+              {spots.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Or pick from your Spots</label>
+                  <Select value={itemForm.spotId ? String(itemForm.spotId) : "_none"}
+                    onValueChange={(v) => {
+                      if (v === "_none") { setItemForm({ ...itemForm, spotId: null }); return; }
+                      const spot = spots.find((s) => s.id === Number(v));
+                      if (spot) setItemForm({ ...itemForm, spotId: spot.id, name: spot.name, address: spot.address ?? "", type: spot.type ?? "other" });
+                    }}>
+                    <SelectTrigger><SelectValue placeholder="Select a saved spot…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">— none —</SelectItem>
+                      {spots.map((s) => {
+                        const emoji = SPOT_TYPES.find((t) => t.value === s.type)?.emoji ?? "📍";
+                        return <SelectItem key={s.id} value={String(s.id)}>{emoji} {s.name}{s.city ? ` (${s.city})` : ""}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Type</label>
+                  <Select value={itemForm.type} onValueChange={(v) => setItemForm({ ...itemForm, type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{TRIP_ITEM_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Day</label>
+                  {buildDateOptions().length > 0 ? (
+                    <Select value={itemForm.date || "_none"} onValueChange={(v) => setItemForm({ ...itemForm, date: v === "_none" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Pick a day" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Unscheduled</SelectItem>
+                        {buildDateOptions().map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input type="date" value={itemForm.date} onChange={(e) => setItemForm({ ...itemForm, date: e.target.value })} />
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Time</label>
+                  <Input placeholder="e.g. 9:00 AM" value={itemForm.time} onChange={(e) => setItemForm({ ...itemForm, time: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration</label>
+                  <Input placeholder="e.g. 2 hours" value={itemForm.duration} onChange={(e) => setItemForm({ ...itemForm, duration: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
+                <Input placeholder="Optional" value={itemForm.address} onChange={(e) => setItemForm({ ...itemForm, address: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+                <Textarea placeholder="Reservation info, tips, etc." rows={2} value={itemForm.notes} onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })} />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={itemForm.confirmed} onChange={(e) => setItemForm({ ...itemForm, confirmed: e.target.checked })} className="w-4 h-4 rounded" />
+                <span className="text-sm">Confirmed / Booked</span>
+              </label>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => setItemModal(false)}>Cancel</Button>
+                <Button className="flex-1" onClick={saveItemForm} disabled={!itemForm.name.trim() || createItem.isPending || updateItem.isPending}>
+                  {editingItem ? "Save Changes" : "Add Stop"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // ─── Trips List View ───────────────────────────────────────────────────────
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold flex items-center gap-2"><Plane size={16} className="text-primary" /> Trip Planning</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Plan itineraries with day-by-day stops</p>
+        </div>
+        <Button size="sm" onClick={openNewTrip} className="gap-1.5">
+          <Plus size={13} /> New Trip
+        </Button>
+      </div>
+
+      {trips.length === 0 ? (
+        <div className="text-center py-20 text-muted-foreground">
+          <Plane size={40} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-medium">No trips yet</p>
+          <p className="text-xs mt-1">Create your first trip to start planning your itinerary.</p>
+          <Button size="sm" className="mt-4 gap-1.5" onClick={openNewTrip}><Plus size={13} /> Create Trip</Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {trips.map((trip) => (
+            <button
+              key={trip.id}
+              onClick={() => setSelectedTrip(trip)}
+              className="text-left rounded-xl border p-4 hover:shadow-md transition-all group relative overflow-hidden"
+              style={{ borderLeftWidth: 4, borderLeftColor: trip.coverColor ?? "#6366f1" }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">{trip.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm group-hover:text-primary transition-colors">{trip.name}</p>
+                  {trip.destination && <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><Navigation size={10} />{trip.destination}</p>}
+                  {(trip.startDate || trip.endDate) && (
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Calendar size={10} />
+                      {trip.startDate && format(parseISO(trip.startDate), "MMM d")}
+                      {trip.startDate && trip.endDate && " – "}
+                      {trip.endDate && format(parseISO(trip.endDate), "MMM d, yyyy")}
+                    </p>
+                  )}
+                  {trip.notes && <p className="text-xs text-muted-foreground mt-1 italic line-clamp-2">{trip.notes}</p>}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Create/Edit Trip Modal */}
+      <Dialog open={tripModal} onOpenChange={setTripModal}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingTrip ? "Edit Trip" : "New Trip"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="grid grid-cols-[60px_1fr] gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Emoji</label>
+                <Input value={tripForm.emoji} onChange={(e) => setTripForm({ ...tripForm, emoji: e.target.value })} className="text-center text-xl" maxLength={2} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Trip Name *</label>
+                <Input placeholder="e.g. Paris Summer 2026" value={tripForm.name} onChange={(e) => setTripForm({ ...tripForm, name: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Destination</label>
+              <Input placeholder="e.g. Paris, France" value={tripForm.destination} onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Start Date</label>
+                <Input type="date" value={tripForm.startDate} onChange={(e) => setTripForm({ ...tripForm, startDate: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">End Date</label>
+                <Input type="date" value={tripForm.endDate} onChange={(e) => setTripForm({ ...tripForm, endDate: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Color</label>
+              <div className="flex gap-2 flex-wrap">
+                {COVER_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setTripForm({ ...tripForm, coverColor: c })}
+                    className={`w-7 h-7 rounded-full transition-transform ${tripForm.coverColor === c ? "ring-2 ring-offset-2 ring-foreground scale-110" : ""}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+              <Textarea placeholder="Budget, packing list, hotel info…" rows={3} value={tripForm.notes} onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })} />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setTripModal(false)}>Cancel</Button>
+              <Button className="flex-1" onClick={saveTripForm} disabled={!tripForm.name.trim() || createTrip.isPending || updateTrip.isPending}>
+                {editingTrip ? "Save Changes" : "Create Trip"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

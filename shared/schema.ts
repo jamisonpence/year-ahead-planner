@@ -695,6 +695,43 @@ export const insertSpotSchema = createInsertSchema(spots).omit({ id: true });
 export type InsertSpot = z.infer<typeof insertSpotSchema>;
 export type Spot = typeof spots.$inferSelect;
 
+// ── TRIPS ─────────────────────────────────────────────────────────────────────
+export const trips = pgTable("trips", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  destination: text("destination"),
+  startDate: text("start_date"),   // YYYY-MM-DD
+  endDate: text("end_date"),       // YYYY-MM-DD
+  emoji: text("emoji").notNull().default("✈️"),
+  notes: text("notes"),
+  coverColor: text("cover_color"),
+});
+
+export const tripItems = pgTable("trip_items", {
+  id: serial("id").primaryKey(),
+  tripId: integer("trip_id").notNull(),
+  userId: integer("user_id"),
+  spotId: integer("spot_id"),       // optional link to an existing Spot
+  name: text("name").notNull(),
+  address: text("address"),
+  date: text("date"),               // YYYY-MM-DD — which day of the trip
+  time: text("time"),               // freeform e.g. "9:00 AM", "Morning"
+  duration: text("duration"),       // freeform e.g. "2 hours"
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  type: text("type").default("other"),
+  confirmed: boolean("confirmed").notNull().default(false),
+});
+
+export const insertTripSchema = createInsertSchema(trips).omit({ id: true });
+export type InsertTrip = z.infer<typeof insertTripSchema>;
+export type Trip = typeof trips.$inferSelect;
+
+export const insertTripItemSchema = createInsertSchema(tripItems).omit({ id: true });
+export type InsertTripItem = z.infer<typeof insertTripItemSchema>;
+export type TripItem = typeof tripItems.$inferSelect;
+
 // ── SPOT SHARES ────────────────────────────────────────────────────────────────
 export const spotShares = pgTable("spot_shares", {
   id: serial("id").primaryKey(),

@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
-  InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem,
+  InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
   InsertBook, Book, BookWithSessions,
   InsertReadingSession, ReadingSession,
   InsertWorkoutTemplate, WorkoutTemplate,
@@ -797,6 +797,38 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS trips (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      destination TEXT,
+      start_date TEXT,
+      end_date TEXT,
+      emoji TEXT NOT NULL DEFAULT '✈️',
+      notes TEXT,
+      cover_color TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trip_items (
+      id SERIAL PRIMARY KEY,
+      trip_id INTEGER NOT NULL,
+      user_id INTEGER,
+      spot_id INTEGER,
+      name TEXT NOT NULL,
+      address TEXT,
+      date TEXT,
+      time TEXT,
+      duration TEXT,
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      type TEXT DEFAULT 'other',
+      confirmed BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_shares (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -1323,6 +1355,15 @@ export interface IStorage {
   createSpot(data: InsertSpot, userId: number): Promise<Spot>;
   updateSpot(id: number, data: Partial<InsertSpot>): Promise<Spot | undefined>;
   deleteSpot(id: number): Promise<boolean>;
+  // Trips
+  getAllTrips(userId: number): Promise<Trip[]>;
+  createTrip(data: InsertTrip, userId: number): Promise<Trip>;
+  updateTrip(id: number, data: Partial<InsertTrip>): Promise<Trip | undefined>;
+  deleteTrip(id: number): Promise<boolean>;
+  getTripItems(tripId: number): Promise<TripItem[]>;
+  createTripItem(data: InsertTripItem, userId: number): Promise<TripItem>;
+  updateTripItem(id: number, data: Partial<InsertTripItem>): Promise<TripItem | undefined>;
+  deleteTripItem(id: number): Promise<boolean>;
   // Children
   getAllChildrenWithDetails(userId: number): Promise<ChildWithDetails[]>;
   createChild(data: InsertChild, userId: number): Promise<Child>;
@@ -3771,6 +3812,43 @@ export const storage: IStorage = {
       await db.update(politicalDebatePosts).set({ upvoteCount: existing.length + 1 }).where(eq(politicalDebatePosts.id, postId));
       return true; // added
     }
+  },
+
+  // ── Trips ──────────────────────────────────────────────────────────────────
+  async getAllTrips(userId: number) {
+    return db.select().from(trips).where(eq(trips.userId, userId)).orderBy(asc(trips.startDate));
+  },
+  async createTrip(data: InsertTrip, userId: number) {
+    const result = await db.insert(trips).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateTrip(id: number, data: Partial<InsertTrip>) {
+    const existing = await db.select().from(trips).where(eq(trips.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(trips).set(data).where(eq(trips.id, id)).returning();
+    return result[0];
+  },
+  async deleteTrip(id: number) {
+    await db.delete(tripItems).where(eq(tripItems.tripId, id));
+    const result = await db.delete(trips).where(eq(trips.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getTripItems(tripId: number) {
+    return db.select().from(tripItems).where(eq(tripItems.tripId, tripId)).orderBy(asc(tripItems.date), asc(tripItems.sortOrder));
+  },
+  async createTripItem(data: InsertTripItem, userId: number) {
+    const result = await db.insert(tripItems).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateTripItem(id: number, data: Partial<InsertTripItem>) {
+    const existing = await db.select().from(tripItems).where(eq(tripItems.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(tripItems).set(data).where(eq(tripItems.id, id)).returning();
+    return result[0];
+  },
+  async deleteTripItem(id: number) {
+    const result = await db.delete(tripItems).where(eq(tripItems.id, id));
+    return (result.rowCount ?? 0) > 0;
   },
 };
 

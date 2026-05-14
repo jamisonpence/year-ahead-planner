@@ -5250,4 +5250,42 @@ Rules:
       (await storage.deletePoliticalNewsSource(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Trips ────────────────────────────────────────────────────────────────
+  app.get("/api/trips", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllTrips((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/trips", requireAuth, async (req, res) => {
+    try { res.json(await storage.createTrip(req.body, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/trips/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateTrip(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/trips/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteTrip(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Trip Items
+  app.get("/api/trips/:tripId/items", requireAuth, async (req, res) => {
+    try { res.json(await storage.getTripItems(+req.params.tripId)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/trips/:tripId/items", requireAuth, async (req, res) => {
+    try { res.json(await storage.createTripItem({ ...req.body, tripId: +req.params.tripId }, (req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/trip-items/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateTripItem(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/trip-items/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteTripItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
 }
