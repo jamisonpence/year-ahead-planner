@@ -1559,6 +1559,62 @@ function TripsTab({ spots }: { spots: Spot[] }) {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Edit Trip Modal (accessible from detail view) */}
+        <Dialog open={tripModal} onOpenChange={setTripModal}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Edit Trip</DialogTitle></DialogHeader>
+            <div className="space-y-3 pt-2">
+              <div className="grid grid-cols-[60px_1fr] gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Emoji</label>
+                  <Input value={tripForm.emoji} onChange={(e) => setTripForm({ ...tripForm, emoji: e.target.value })} className="text-center text-xl" maxLength={2} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Trip Name *</label>
+                  <Input placeholder="e.g. Paris Summer 2026" value={tripForm.name} onChange={(e) => setTripForm({ ...tripForm, name: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Destination</label>
+                <Input placeholder="e.g. Paris, France" value={tripForm.destination} onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Start Date</label>
+                  <Input type="date" value={tripForm.startDate} onChange={(e) => setTripForm({ ...tripForm, startDate: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">End Date</label>
+                  <Input type="date" value={tripForm.endDate} onChange={(e) => setTripForm({ ...tripForm, endDate: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Color</label>
+                <div className="flex gap-2 flex-wrap">
+                  {COVER_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setTripForm({ ...tripForm, coverColor: c })}
+                      className={`w-7 h-7 rounded-full transition-transform ${tripForm.coverColor === c ? "ring-2 ring-offset-2 ring-foreground scale-110" : ""}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+                <Textarea placeholder="Budget, packing list, hotel info…" rows={3} value={tripForm.notes} onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => setTripModal(false)}>Cancel</Button>
+                <Button className="flex-1" onClick={saveTripForm} disabled={!tripForm.name.trim() || updateTrip.isPending}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
