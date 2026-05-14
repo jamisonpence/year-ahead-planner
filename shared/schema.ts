@@ -222,6 +222,20 @@ export const insertGroceryCheckSchema = createInsertSchema(groceryChecks).omit({
 export type InsertGroceryCheck = z.infer<typeof insertGroceryCheckSchema>;
 export type GroceryCheck = typeof groceryChecks.$inferSelect;
 
+export const customGroceryItems = pgTable("custom_grocery_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  weekStart: text("week_start").notNull(),
+  name: text("name").notNull(),
+  qty: text("qty"),
+  category: text("category"),
+  checked: boolean("checked").notNull().default(false),
+});
+
+export const insertCustomGroceryItemSchema = createInsertSchema(customGroceryItems).omit({ id: true });
+export type InsertCustomGroceryItem = z.infer<typeof insertCustomGroceryItemSchema>;
+export type CustomGroceryItem = typeof customGroceryItems.$inferSelect;
+
 export type RecipeIngredient = { name: string; qty: string };
 export type ComponentType = "main" | "vegetable" | "side" | "sauce" | "dessert" | "baking";
 

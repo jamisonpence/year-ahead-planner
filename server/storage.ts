@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
-  InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck,
+  InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem,
   InsertBook, Book, BookWithSessions,
   InsertReadingSession, ReadingSession,
   InsertWorkoutTemplate, WorkoutTemplate,
@@ -240,6 +240,18 @@ export async function initializeStorage() {
       user_id INTEGER,
       week_start TEXT NOT NULL,
       item_key TEXT NOT NULL,
+      checked BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS custom_grocery_items (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      week_start TEXT NOT NULL,
+      name TEXT NOT NULL,
+      qty TEXT,
+      category TEXT,
       checked BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
@@ -1210,6 +1222,11 @@ export interface IStorage {
   // Grocery Checks
   getGroceryChecks(weekStart: string, userId: number): Promise<GroceryCheck[]>;
   upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean, userId: number): Promise<GroceryCheck>;
+  // Custom Grocery Items
+  getCustomGroceryItems(weekStart: string, userId: number): Promise<CustomGroceryItem[]>;
+  addCustomGroceryItem(data: InsertCustomGroceryItem, userId: number): Promise<CustomGroceryItem>;
+  updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>): Promise<CustomGroceryItem | undefined>;
+  deleteCustomGroceryItem(id: number): Promise<boolean>;
   // Relationship Groups
   getAllGroups(userId: number): Promise<RelationshipGroup[]>;
   createGroup(data: InsertRelationshipGroup, userId: number): Promise<RelationshipGroup>;
@@ -1784,6 +1801,25 @@ export const storage: IStorage = {
     }
     const result = await db.insert(groceryChecks).values({ weekStart, itemKey, checked, userId }).returning();
     return result[0];
+  },
+
+  // ── Custom Grocery Items ─────────────────────────────────────────────────────
+  async getCustomGroceryItems(weekStart: string, userId: number) {
+    return db.select().from(customGroceryItems)
+      .where(eq(customGroceryItems.weekStart, weekStart))
+      .where(eq(customGroceryItems.userId, userId));
+  },
+  async addCustomGroceryItem(data: InsertCustomGroceryItem, userId: number) {
+    const result = await db.insert(customGroceryItems).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>) {
+    const result = await db.update(customGroceryItems).set(data).where(eq(customGroceryItems.id, id)).returning();
+    return result[0];
+  },
+  async deleteCustomGroceryItem(id: number) {
+    const result = await db.delete(customGroceryItems).where(eq(customGroceryItems.id, id));
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Relationship Groups ───────────────────────────────────────────────────────

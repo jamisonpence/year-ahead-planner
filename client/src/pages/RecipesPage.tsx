@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType, RecipeShareWithUser, PublicUser } from "@shared/schema";
+import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType, RecipeShareWithUser, PublicUser, CustomGroceryItem } from "@shared/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -1520,6 +1520,13 @@ export default function RecipesPage() {
     queryKey: ["/api/grocery-checks", weekStart],
     queryFn: async () => { const r = await apiRequest("GET", `/api/grocery-checks/${weekStart}`); return r.json(); },
   });
+  const { data: customItems = [] } = useQuery<CustomGroceryItem[]>({
+    queryKey: ["/api/custom-grocery-items", weekStart],
+    queryFn: async () => { const r = await apiRequest("GET", `/api/custom-grocery-items/${weekStart}`); return r.json(); },
+  });
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemQty, setNewItemQty] = useState("");
 
   const deleteRecipeMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/recipes/${id}`),
@@ -1537,6 +1544,23 @@ export default function RecipesPage() {
     mutationFn: ({ itemKey, checked }: { itemKey: string; checked: boolean }) =>
       apiRequest("PATCH", "/api/grocery-checks", { weekStart, itemKey, checked }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/grocery-checks", weekStart] }),
+  });
+  const addCustomItemMut = useMutation({
+    mutationFn: (data: { name: string; qty?: string; weekStart: string }) =>
+      apiRequest("POST", "/api/custom-grocery-items", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-grocery-items", weekStart] });
+      setNewItemName(""); setNewItemQty(""); setShowAddItem(false);
+    },
+  });
+  const toggleCustomItemMut = useMutation({
+    mutationFn: ({ id, checked }: { id: number; checked: boolean }) =>
+      apiRequest("PATCH", `/api/custom-grocery-items/${id}`, { checked }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/custom-grocery-items", weekStart] }),
+  });
+  const deleteCustomItemMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/custom-grocery-items/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/custom-grocery-items", weekStart] }),
   });
 
   // Filtered recipes for library view
@@ -1570,9 +1594,10 @@ export default function RecipesPage() {
 
   const groupedGrocery = useMemo(() => groupIngredients(weekRecipes), [weekRecipes]);
   const checkedKeys = new Set(groceryChecks.filter(g => g.checked).map(g => g.itemKey));
-  const totalGrocery = Object.values(groupedGrocery).reduce((sum, items) => sum + items.length, 0);
+  const totalGrocery = Object.values(groupedGrocery).reduce((sum, items) => sum + items.length, 0) + customItems.length;
   const checkedGrocery = Object.values(groupedGrocery).reduce((sum, items) =>
-    sum + items.filter(item => checkedKeys.has(item.name.toLowerCase())).length, 0);
+    sum + items.filter(item => checkedKeys.has(item.name.toLowerCase())).length, 0) +
+    customItems.filter(i => i.checked).length;
 
   // Group recipes by component type for the library section view
   const recipesByType = useMemo(() => {
@@ -1629,18 +1654,25 @@ export default function RecipesPage() {
             </div>
           )}
           {subView === "grocery" && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" onClick={() => setShowAddItem(v => !v)} className="gap-1.5">
+                <Plus size={13} /> Add Item
+              </Button>
               <Button size="sm" variant="outline" onClick={() => {
-                const text = Object.entries(groupedGrocery).map(([cat, items]) =>
+                const recipeText = Object.entries(groupedGrocery).map(([cat, items]) =>
                   `${cat}:\n${items.map(i => `  • ${i.name}${i.qty ? ` — ${i.qty}` : ""}`).join("\n")}`
                 ).join("\n\n");
-                navigator.clipboard.writeText(text).then(() => toast({ title: "Copied to clipboard" }));
+                const customText = customItems.length > 0
+                  ? `\nExtra Items:\n${customItems.map(i => `  • ${i.name}${i.qty ? ` — ${i.qty}` : ""}`).join("\n")}`
+                  : "";
+                navigator.clipboard.writeText(recipeText + customText).then(() => toast({ title: "Copied to clipboard" }));
               }} className="gap-1.5"><Printer size={13} /> Copy List</Button>
               <Button size="sm" variant="ghost" onClick={() => {
                 Object.values(groupedGrocery).flatMap(items => items).forEach(item => {
                   if (checkedKeys.has(item.name.toLowerCase()))
                     toggleCheckMut.mutate({ itemKey: item.name.toLowerCase(), checked: false });
                 });
+                customItems.filter(i => i.checked).forEach(i => toggleCustomItemMut.mutate({ id: i.id, checked: false }));
               }} className="gap-1.5"><RefreshCw size={13} /> Uncheck All</Button>
             </div>
           )}
@@ -1648,22 +1680,25 @@ export default function RecipesPage() {
       </div>
 
       {/* Sub-navigation */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
-        {subNavItems.map(item => (
-          <button key={item.id} onClick={() => setSubView(item.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${subView === item.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-            {item.icon} {item.label}
-            {item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
-          </button>
-        ))}
+      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-max sm:w-fit min-w-full sm:min-w-0">
+          {subNavItems.map(item => (
+            <button key={item.id} onClick={() => setSubView(item.id)}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${subView === item.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+              {item.icon} {item.label}
+              {item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── LIBRARY ── */}
       {subView === "library" && (
         <div className="space-y-6">
           {/* Component type filter + collapse/expand controls */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center justify-between gap-2">
+            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 flex-1">
+            <div className="flex gap-2 w-max sm:flex-wrap sm:w-auto">
               {([{ value: "all", label: "All", icon: <Layers size={13} /> },
                  ...COMPONENT_TYPES.map(ct => ({ value: ct.value, label: ct.label, icon: ct.icon })),
                  { value: "unclassified", label: "Unclassified", icon: <ChefHat size={13} /> }
@@ -1680,9 +1715,10 @@ export default function RecipesPage() {
                 </button>
               ))}
             </div>
+            </div>
             <div className="flex gap-1.5 shrink-0">
-              <button onClick={collapseAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground">Collapse All</button>
-              <button onClick={expandAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground">Expand All</button>
+              <button onClick={collapseAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Collapse</button>
+              <button onClick={expandAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Expand</button>
             </div>
           </div>
 
@@ -1957,7 +1993,7 @@ export default function RecipesPage() {
       {subView === "week" && (
         <div className="space-y-6">
           {/* 7-day grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
             {DAYS.map((day, i) => {
               const assignment = weekPlan.find(p => p.dayIndex === i);
               const recipe = assignment?.recipeId ? recipes.find(r => r.id === assignment.recipeId) : null;
@@ -2080,11 +2116,52 @@ export default function RecipesPage() {
           {totalGrocery > 0 && totalGrocery > checkedGrocery && (
             <Progress value={Math.round((checkedGrocery / totalGrocery) * 100)} className="h-2" />
           )}
-          {Object.keys(groupedGrocery).length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
+
+          {/* Add Item form */}
+          {showAddItem && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newItemName.trim()) return;
+                addCustomItemMut.mutate({ name: newItemName.trim(), qty: newItemQty.trim() || undefined, weekStart });
+              }}
+              className="flex gap-2 flex-wrap items-end p-3 bg-secondary/30 border rounded-xl"
+            >
+              <div className="flex-1 min-w-[140px]">
+                <Label className="text-xs mb-1 block">Item name</Label>
+                <Input
+                  autoFocus
+                  value={newItemName}
+                  onChange={e => setNewItemName(e.target.value)}
+                  placeholder="e.g. Milk, Bread…"
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs mb-1 block">Qty (optional)</Label>
+                <Input
+                  value={newItemQty}
+                  onChange={e => setNewItemQty(e.target.value)}
+                  placeholder="e.g. 2 lbs"
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={!newItemName.trim()} className="h-9 gap-1.5">
+                  <Plus size={13} /> Add
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="h-9" onClick={() => { setShowAddItem(false); setNewItemName(""); setNewItemQty(""); }}>
+                  <X size={13} />
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {Object.keys(groupedGrocery).length === 0 && customItems.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
               <ShoppingCart size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium">No ingredients yet</p>
-              <p className="text-sm mt-1">Assign recipes or bundles to this week to generate your list</p>
+              <p className="font-medium">No items yet</p>
+              <p className="text-sm mt-1">Assign recipes to this week, or tap <strong>Add Item</strong> to add items manually</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -2111,6 +2188,30 @@ export default function RecipesPage() {
                   </div>
                 </div>
               ))}
+
+              {/* Custom / extra items */}
+              {customItems.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2 pb-2 border-b-2 border-primary/20">Extra Items</p>
+                  <div className="space-y-2">
+                    {customItems.map(item => (
+                      <div key={item.id} className={`flex items-center gap-3 p-3 bg-card border rounded-xl transition-colors hover:bg-secondary/30 ${item.checked ? "opacity-60" : ""}`}>
+                        <input type="checkbox" checked={item.checked}
+                          onChange={() => toggleCustomItemMut.mutate({ id: item.id, checked: !item.checked })}
+                          className="w-4 h-4 accent-primary shrink-0 cursor-pointer" />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${item.checked ? "line-through text-muted-foreground" : ""}`}>{item.name}</p>
+                        </div>
+                        {item.qty && <span className="text-xs text-muted-foreground shrink-0">{item.qty}</span>}
+                        <button onClick={() => deleteCustomItemMut.mutate(item.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0 p-1">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

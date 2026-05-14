@@ -1015,6 +1015,33 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Custom Grocery Items ──────────────────────────────────────────────────────
+  app.get("/api/custom-grocery-items/:weekStart", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getCustomGroceryItems(req.params.weekStart, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/custom-grocery-items", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.addCustomGroceryItem(req.body, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/custom-grocery-items/:id", async (req, res) => {
+    try {
+      const result = await storage.updateCustomGroceryItem(parseInt(req.params.id), req.body);
+      if (!result) return res.status(404).json({ error: "Not found" });
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/custom-grocery-items/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteCustomGroceryItem(parseInt(req.params.id));
+      res.json({ success: ok });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Movies ────────────────────────────────────────────────────────────────────
   app.get("/api/movies", async (req, res) => {
     try {
