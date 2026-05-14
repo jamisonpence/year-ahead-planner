@@ -121,6 +121,11 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     }
   });
 
+  // ── Privacy Policy ────────────────────────────────────────────────────────
+  app.get("/privacy", (req, res) => {
+    res.sendFile(path.resolve(process.cwd(), "privacy.html"));
+  });
+
   // ── Digital Asset Links (required for TWA Android packaging) ─────────────
   // PWABuilder generates the SHA-256 fingerprint; store it in assetlinks.json at the project root.
   app.get("/.well-known/assetlinks.json", (req, res) => {
