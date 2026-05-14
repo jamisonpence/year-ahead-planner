@@ -4,11 +4,12 @@ import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-f
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog, CareProvider } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -859,6 +860,12 @@ const TABS = [
 export default function HealthPage() {
   const [activeTab, setActiveTab] = useState("medications");
 
+  const { data: collabs = [] } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+  const healthCollab = collabs.find(c => c.tabName === "health" && c.status === "accepted");
+
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -871,6 +878,22 @@ export default function HealthPage() {
           <p className="text-sm text-muted-foreground">Track medications, metrics, sleep, and your care team</p>
         </div>
       </div>
+
+      {/* Collaboration banner */}
+      {healthCollab ? (
+        <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
+          <Users size={14} className="shrink-0" />
+          <span>
+            Collaborating with <strong>{healthCollab.otherUser.name}</strong>
+            {healthCollab.role === "collaborator" ? " — viewing their health data" : " — they can see your health data"}
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-lg bg-secondary/50 border text-xs text-muted-foreground">
+          <Activity size={12} className="shrink-0" />
+          <span>Private — only you can see this tab. Share it with a friend via Settings → Collaboration.</span>
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <div className="flex gap-1.5 flex-wrap border-b pb-3 mb-6">

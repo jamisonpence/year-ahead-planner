@@ -157,6 +157,7 @@ const COLLAB_TABS = [
   { name: "kids",         label: "Kids",          icon: Baby     },
   { name: "housekeeping", label: "Housekeeping",  icon: Home     },
   { name: "politics",     label: "Politics",      icon: Landmark },
+  { name: "health",       label: "Health",        icon: Flame    },
 ];
 
 function CollaborationSection() {
