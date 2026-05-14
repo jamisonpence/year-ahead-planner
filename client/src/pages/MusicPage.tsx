@@ -2171,14 +2171,14 @@ export default function MusicPage() {
           <Button size="sm" onClick={openAddArtist} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add Artist
           </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
             <Upload className="h-4 w-4" /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
             <Download className="h-4 w-4" /> Template
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
             <HelpCircle className="h-4 w-4" /> CSV Format
           </Button>
         </div>

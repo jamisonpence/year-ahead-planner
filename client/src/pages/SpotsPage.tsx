@@ -691,13 +691,13 @@ export default function SpotsPage() {
           <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
             <Plus size={14} /> Add Spot
           </Button>
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
             <Download size={13} /> Template
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
             <HelpCircle size={13} /> CSV Format
           </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
             <Upload size={13} /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
