@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
@@ -108,6 +108,7 @@ export default function GoalsPage() {
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
   // selectedGoalId = null (nothing), a real goalId, or STANDALONE_ID (-1)
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
+  const [mobileTab, setMobileTab] = useState<"goals" | "projects" | "tasks">("goals");
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
@@ -297,11 +298,28 @@ export default function GoalsPage() {
         </div>
       </div>
 
+      {/* Mobile tab bar — only visible on small screens */}
+      <div className="md:hidden flex border-b shrink-0">
+        {(["goals", "projects", "tasks"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setMobileTab(tab)}
+            className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
+              mobileTab === tab
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
       {/* 3-column layout */}
       <div className="flex flex-1 min-h-0 divide-x">
 
         {/* ── Column 1: Goals ───────────────────────────────────────────── */}
-        <div className="w-72 shrink-0 flex flex-col min-h-0">
+        <div className={`shrink-0 flex flex-col min-h-0 w-full md:w-72 ${mobileTab !== "goals" ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Goals</span>
             <span className="text-xs text-muted-foreground">{goals.length}</span>
@@ -319,7 +337,7 @@ export default function GoalsPage() {
               const d = g.targetDate ? daysUntil(g.targetDate) : null;
               return (
                 <div key={g.id}
-                  onClick={() => { setSelectedGoalId(isSelected ? null : g.id); setSelectedProjectId(null); }}
+                  onClick={() => { setSelectedGoalId(isSelected ? null : g.id); setSelectedProjectId(null); if (!isSelected) setMobileTab("projects"); }}
                   className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm ${isSelected ? "border-primary bg-primary/5" : "bg-card hover:border-primary/30"}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -450,7 +468,7 @@ export default function GoalsPage() {
         </div>
 
         {/* ── Column 2: Projects ─────────────────────────────────────────── */}
-        <div className="w-72 shrink-0 flex flex-col min-h-0">
+        <div className={`shrink-0 flex flex-col min-h-0 w-full md:w-72 ${mobileTab !== "projects" ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               {isAllTasksSelected ? "Overview" : isPlantsSelected ? "Overview" : isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
@@ -635,7 +653,7 @@ export default function GoalsPage() {
         </div>
 
         {/* ── Column 3: Tasks ────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${mobileTab !== "tasks" ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               {(() => {
