@@ -1221,16 +1221,41 @@ type ChatMessage    = { role: "user" | "assistant"; content: string };
 function AITripPlanner({ trip }: { trip: Trip }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [plan, setPlan]             = useState<TripAIPlan | null>(null);
+
+  // localStorage keys for this specific trip
+  const PLAN_KEY = `ai_trip_plan_${trip.id}`;
+  const CHAT_KEY = `ai_trip_chat_${trip.id}`;
+
+  // Restore persisted plan and chat on mount
+  const [plan, setPlanState]        = useState<TripAIPlan | null>(() => {
+    try { const s = localStorage.getItem(PLAN_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [chatMessages, setChatMessagesState] = useState<ChatMessage[]>(() => {
+    try { const s = localStorage.getItem(CHAT_KEY); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+
+  // Wrappers that keep localStorage in sync
+  const setPlan = (p: TripAIPlan | null) => {
+    setPlanState(p);
+    if (p) localStorage.setItem(PLAN_KEY, JSON.stringify(p));
+    else   localStorage.removeItem(PLAN_KEY);
+  };
+  const setChatMessages = (fn: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    setChatMessagesState(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      try { localStorage.setItem(CHAT_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [preferences, setPreferences] = useState("");
-  const [showPrefInput, setShowPrefInput] = useState(false);
+  const [showPrefInput, setShowPrefInput] = useState(!plan);
 
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput]       = useState("");
-  const [chatLoading, setChatLoading]   = useState(false);
+  // Chat input state
+  const [chatInput, setChatInput]   = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Collapsed sections
@@ -1366,7 +1391,7 @@ function AITripPlanner({ trip }: { trip: Trip }) {
             </button>
           )}
           {plan && (
-            <Button size="sm" variant="outline" onClick={() => { setPlan(null); setShowPrefInput(true); }} className="gap-1.5 h-7 text-xs px-2.5">
+            <Button size="sm" variant="outline" onClick={() => { setPlan(null); setChatMessages([]); setSavedToSpots({}); setSavedToItinerary({}); setShowPrefInput(true); }} className="gap-1.5 h-7 text-xs px-2.5">
               <RefreshCw size={11} /> Redo
             </Button>
           )}
