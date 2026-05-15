@@ -4460,11 +4460,30 @@ function ElectionsTab() {
 
 // ── Debates Tab ───────────────────────────────────────────────────────────────
 
-const SIDE_META = {
-  for:     { label: "For",     color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", bar: "bg-emerald-500" },
-  against: { label: "Against", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",               bar: "bg-red-500" },
-  neutral: { label: "Neutral", color: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",           bar: "bg-stone-400" },
-} as const;
+// ── Dynamic side colors — assigned by index so any label gets a distinct color ──
+const SIDE_PALETTE = [
+  { color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", bar: "bg-emerald-500", border: "border-emerald-200 dark:border-emerald-800", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", emoji: "✅" },
+  { color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",               bar: "bg-red-400",     border: "border-red-200 dark:border-red-900",         dot: "bg-red-400",     text: "text-red-500 dark:text-red-400",         emoji: "❌" },
+  { color: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",           bar: "bg-stone-400",   border: "border-stone-200 dark:border-stone-700",     dot: "bg-stone-400",   text: "text-stone-500 dark:text-stone-400",     emoji: "⚖️" },
+  { color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",            bar: "bg-blue-500",    border: "border-blue-200 dark:border-blue-800",       dot: "bg-blue-500",    text: "text-blue-600 dark:text-blue-400",       emoji: "💬" },
+  { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",        bar: "bg-amber-400",   border: "border-amber-200 dark:border-amber-800",     dot: "bg-amber-400",   text: "text-amber-600 dark:text-amber-400",     emoji: "🔶" },
+  { color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",    bar: "bg-violet-500",  border: "border-violet-200 dark:border-violet-800",   dot: "bg-violet-500",  text: "text-violet-600 dark:text-violet-400",   emoji: "💜" },
+];
+
+const DEFAULT_SIDES = ["For", "Against", "Neutral"];
+
+/** Parse the sides JSON stored on a debate, falling back to defaults */
+function parseSides(sidesJson?: string | null): string[] {
+  if (!sidesJson) return DEFAULT_SIDES;
+  try { const arr = JSON.parse(sidesJson); return Array.isArray(arr) && arr.length >= 2 ? arr : DEFAULT_SIDES; }
+  catch { return DEFAULT_SIDES; }
+}
+
+/** Get color palette entry for a given side label within a sides array */
+function sideStyle(sides: string[], label: string) {
+  const idx = sides.findIndex(s => s.toLowerCase() === label?.toLowerCase());
+  return SIDE_PALETTE[idx >= 0 ? idx % SIDE_PALETTE.length : 2];
+}
 
 /** Renders a single citation card */
 function CitationCard({ url, title }: { url: string; title?: string | null }) {
@@ -4491,7 +4510,7 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
   const qc = useQueryClient();
   const { toast } = useToast();
   const [content, setContent]         = useState("");
-  const [side, setSide]               = useState<"for" | "against" | "neutral">("neutral");
+  const [side, setSide]               = useState("");   // set to first side once debate loads
   const [citationUrl, setCitationUrl] = useState("");
   const [citationTitle, setCitationTitle] = useState("");
   const [showCitation, setShowCitation]   = useState(false);
@@ -4510,14 +4529,17 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
   const myUpvotes: number[] = data?.myUpvotes ?? [];
   const debate              = data?.debate;
 
-  const forPosts     = posts.filter(p => p.side === "for");
-  const againstPosts = posts.filter(p => p.side === "against");
-  const neutralPosts = posts.filter(p => p.side === "neutral");
-  const forCount     = forPosts.length;
-  const againstCount = againstPosts.length;
-  const total        = posts.length || 1;
-  const forPct       = Math.round((forCount / total) * 100);
-  const againstPct   = Math.round((againstCount / total) * 100);
+  // Dynamic sides from the debate definition
+  const sides = parseSides(debate?.sides);
+
+  // Initialize side selection to first side once debate loads
+  React.useEffect(() => {
+    if (sides.length > 0 && !side) setSide(sides[0]);
+  }, [debate?.sides]);
+
+  // Group posts by side label (case-insensitive match)
+  const postsBySide = (label: string) => posts.filter(p => p.side?.toLowerCase() === label.toLowerCase());
+  const total = posts.length || 1;
 
   async function submitPost() {
     if (!content.trim()) return;
@@ -4553,44 +4575,38 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
   }
 
   function PostCard({ p }: { p: any }) {
-    const sideMeta = SIDE_META[p.side as keyof typeof SIDE_META] ?? SIDE_META.neutral;
+    const style  = sideStyle(sides, p.side);
     const isUpvoted = myUpvotes.includes(p.id);
     const isOwn = p.userId === currentUserId;
     return (
-      <div className={`rounded-xl border bg-card p-3 space-y-2 ${
-        p.side === "for" ? "border-emerald-200 dark:border-emerald-800" :
-        p.side === "against" ? "border-red-200 dark:border-red-900" : ""
-      }`}>
+      <div className={`rounded-xl border bg-card p-3 space-y-2 ${style.border}`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${sideMeta.color}`}>
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${style.color}`}>
             {(p.displayName ?? "A").charAt(0).toUpperCase()}
           </div>
           <span className="text-xs font-semibold">{p.displayName ?? "Anonymous"}</span>
+          {p.side && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${style.color}`}>{p.side}</span>
+          )}
           <span className="text-[10px] text-muted-foreground ml-auto">
             {p.createdAt ? format(new Date(p.createdAt), "MMM d, h:mm a") : ""}
           </span>
         </div>
         <p className="text-sm leading-relaxed">{p.content}</p>
-        {/* Citation card */}
         {p.citationUrl && <CitationCard url={p.citationUrl} title={p.citationTitle} />}
         <div className="flex items-center gap-2 pt-0.5">
           <button
             onClick={() => handleUpvote(p.id)}
             disabled={upvoting === p.id}
             className={`flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border transition-all ${
-              isUpvoted
-                ? "bg-violet-500/20 border-violet-400/40 text-violet-500"
-                : "border-secondary text-muted-foreground hover:border-violet-400/40 hover:text-violet-500"
+              isUpvoted ? "bg-violet-500/20 border-violet-400/40 text-violet-500" : "border-secondary text-muted-foreground hover:border-violet-400/40 hover:text-violet-500"
             }`}
           >
             {upvoting === p.id ? <Loader2 size={10} className="animate-spin" /> : <ThumbsUp size={10} />}
             {p.upvoteCount ?? 0}
           </button>
           {isOwn && (
-            <button
-              onClick={() => deletePost(p.id)}
-              className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
-            >
+            <button onClick={() => deletePost(p.id)} className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1">
               <Trash2 size={9} />Delete
             </button>
           )}
@@ -4601,94 +4617,97 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
 
   if (isLoading) return <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />Loading discussion…</div>;
 
+  // For split layout: first 2 sides get columns, remaining go in an overflow row
+  const splitSides  = sides.slice(0, 2);
+  const overflowSides = sides.slice(2);
+
   return (
     <div className="space-y-4">
 
       {/* ── Scoreboard ── */}
       <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="grid grid-cols-3 divide-x">
-          <div className="p-3 text-center">
-            <p className="text-lg font-bold text-emerald-500">{forCount}</p>
-            <p className="text-[10px] text-muted-foreground font-medium">FOR</p>
-          </div>
-          <div className="p-3 text-center">
-            <p className="text-xs text-muted-foreground font-medium mt-1">{posts.length} argument{posts.length !== 1 ? "s" : ""}</p>
-            <p className="text-[10px] text-muted-foreground">{data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
-          </div>
-          <div className="p-3 text-center">
-            <p className="text-lg font-bold text-red-400">{againstCount}</p>
-            <p className="text-[10px] text-muted-foreground font-medium">AGAINST</p>
-          </div>
+        <div className={`grid divide-x`} style={{ gridTemplateColumns: `repeat(${Math.min(sides.length, 4)}, 1fr)` }}>
+          {sides.slice(0, 4).map((s, i) => {
+            const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
+            const count = postsBySide(s).length;
+            return (
+              <div key={s} className="p-3 text-center">
+                <p className={`text-lg font-bold ${st.text}`}>{count}</p>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide truncate px-1">{s}</p>
+              </div>
+            );
+          })}
         </div>
         {posts.length > 0 && (
           <div className="h-1.5 flex">
-            <div className="bg-emerald-500 transition-all" style={{ width: `${forPct}%` }} />
-            <div className="bg-stone-300 dark:bg-stone-600 transition-all" style={{ width: `${Math.round((neutralPosts.length / total) * 100)}%` }} />
-            <div className="bg-red-400 transition-all" style={{ width: `${againstPct}%` }} />
+            {sides.map((s, i) => {
+              const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
+              const pct = Math.round((postsBySide(s).length / total) * 100);
+              return <div key={s} className={`${st.bar} transition-all`} style={{ width: `${pct}%` }} />;
+            })}
           </div>
         )}
+        <div className="px-3 py-1.5 text-center border-t">
+          <p className="text-[10px] text-muted-foreground">{posts.length} argument{posts.length !== 1 ? "s" : ""} · {data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
+        </div>
       </div>
 
       {/* ── Layout toggle ── */}
       {posts.length > 0 && (
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-muted-foreground">View:</span>
-          <button onClick={() => setLayout("split")}
-            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "split" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+          <button onClick={() => setLayout("split")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "split" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
             Side by Side
           </button>
-          <button onClick={() => setLayout("unified")}
-            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "unified" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+          <button onClick={() => setLayout("unified")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "unified" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
             Chronological
           </button>
         </div>
       )}
 
-      {/* ── Split (side-by-side) layout ── */}
+      {/* ── Split layout — first 2 sides in columns ── */}
       {layout === "split" && posts.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* FOR column */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 pb-1 border-b border-emerald-200 dark:border-emerald-800">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">For · {forCount}</span>
-            </div>
-            {forPosts.length === 0
-              ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
-              : forPosts.map(p => <PostCard key={p.id} p={p} />)
-            }
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {splitSides.map((s, i) => {
+              const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
+              const sidePosts = postsBySide(s);
+              return (
+                <div key={s} className="space-y-2">
+                  <div className={`flex items-center gap-2 pb-1 border-b ${st.border}`}>
+                    <div className={`w-2 h-2 rounded-full ${st.dot}`} />
+                    <span className={`text-xs font-bold ${st.text}`}>{s} · {sidePosts.length}</span>
+                  </div>
+                  {sidePosts.length === 0
+                    ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
+                    : sidePosts.map(p => <PostCard key={p.id} p={p} />)
+                  }
+                </div>
+              );
+            })}
           </div>
-          {/* AGAINST column */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 pb-1 border-b border-red-200 dark:border-red-900">
-              <div className="w-2 h-2 rounded-full bg-red-400" />
-              <span className="text-xs font-bold text-red-500 dark:text-red-400">Against · {againstCount}</span>
-            </div>
-            {againstPosts.length === 0
-              ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
-              : againstPosts.map(p => <PostCard key={p.id} p={p} />)
-            }
-          </div>
-        </div>
-      )}
-
-      {/* Neutral posts shown below split columns */}
-      {layout === "split" && neutralPosts.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 pb-1 border-b">
-            <div className="w-2 h-2 rounded-full bg-stone-400" />
-            <span className="text-xs font-bold text-muted-foreground">Neutral · {neutralPosts.length}</span>
-          </div>
-          {neutralPosts.map(p => <PostCard key={p.id} p={p} />)}
-        </div>
+          {/* Additional sides (3+) shown below */}
+          {overflowSides.map((s, i) => {
+            const st = SIDE_PALETTE[(i + 2) % SIDE_PALETTE.length];
+            const sidePosts = postsBySide(s);
+            if (sidePosts.length === 0) return null;
+            return (
+              <div key={s} className="space-y-2">
+                <div className={`flex items-center gap-2 pb-1 border-b ${st.border}`}>
+                  <div className={`w-2 h-2 rounded-full ${st.dot}`} />
+                  <span className={`text-xs font-bold ${st.text}`}>{s} · {sidePosts.length}</span>
+                </div>
+                {sidePosts.map(p => <PostCard key={p.id} p={p} />)}
+              </div>
+            );
+          })}
+        </>
       )}
 
       {/* ── Chronological layout ── */}
       {layout === "unified" && (
         <div className="space-y-2">
-          {posts.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-4">No arguments yet — be the first to share your view.</p>
-          )}
+          {posts.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No arguments yet — be the first to share your view.</p>}
           {posts.map((p: any) => <PostCard key={p.id} p={p} />)}
         </div>
       )}
@@ -4698,38 +4717,38 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
         <div className="border rounded-xl p-3 bg-secondary/20 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground">Add Your Argument</p>
 
-          {/* Side selector */}
-          <div className="grid grid-cols-3 gap-1.5">
-            {(["for", "against", "neutral"] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setSide(s)}
-                className={`text-xs py-2 rounded-lg border font-semibold transition-all flex flex-col items-center gap-0.5 ${
-                  side === s ? `${SIDE_META[s].color} border-transparent` : "border-secondary text-muted-foreground hover:border-primary/30"
-                }`}
-              >
-                <span>{s === "for" ? "✅" : s === "against" ? "❌" : "⚖️"}</span>
-                <span className="capitalize">{SIDE_META[s].label}</span>
-              </button>
-            ))}
+          {/* Dynamic side selector */}
+          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${Math.min(sides.length, 3)}, 1fr)` }}>
+            {sides.map((s, i) => {
+              const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
+              const active = side === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setSide(s)}
+                  className={`text-xs py-2 px-1 rounded-lg border font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                    active ? `${st.color} border-transparent` : "border-secondary text-muted-foreground hover:border-primary/30"
+                  }`}
+                >
+                  <span>{st.emoji}</span>
+                  <span className="truncate max-w-full">{s}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Argument text */}
           <Textarea
             value={content}
             onChange={e => setContent(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitPost(); }}
-            placeholder={`Make your ${side === "for" ? "case for" : side === "against" ? "case against" : "neutral observation on"} this topic… (⌘↵ to post)`}
+            placeholder={`Share your perspective as "${side}"… (⌘↵ to post)`}
             rows={3}
             className="text-sm resize-none"
           />
 
           {/* Citation toggle */}
           <div>
-            <button
-              onClick={() => setShowCitation(p => !p)}
-              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button onClick={() => setShowCitation(p => !p)} className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
               <Link size={11} />
               {showCitation ? "Remove citation" : "Cite an article or source"}
               {showCitation ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
@@ -4737,19 +4756,10 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
             {showCitation && (
               <div className="mt-2 space-y-1.5 p-2.5 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">📎 Article / Source</p>
-                <input
-                  value={citationUrl}
-                  onChange={e => setCitationUrl(e.target.value)}
-                  placeholder="https://example.com/article"
-                  type="url"
-                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400"
-                />
-                <input
-                  value={citationTitle}
-                  onChange={e => setCitationTitle(e.target.value)}
-                  placeholder="Article title (optional)"
-                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400"
-                />
+                <input value={citationUrl} onChange={e => setCitationUrl(e.target.value)} placeholder="https://example.com/article" type="url"
+                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                <input value={citationTitle} onChange={e => setCitationTitle(e.target.value)} placeholder="Article title (optional)"
+                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 {citationUrl && (
                   <div className="pt-1">
                     <p className="text-[10px] text-muted-foreground mb-1">Preview:</p>
@@ -4761,7 +4771,7 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
           </div>
 
           <div className="flex justify-end">
-            <Button size="sm" onClick={submitPost} disabled={posting || !content.trim()} className="gap-1.5">
+            <Button size="sm" onClick={submitPost} disabled={posting || !content.trim() || !side} className="gap-1.5">
               {posting ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
               Post Argument
             </Button>
@@ -4870,6 +4880,8 @@ function DebatesTab() {
   const [newDesc, setNewDesc]               = useState("");
   const [newIssue, setNewIssue]             = useState("");
   const [joinCode, setJoinCode]             = useState("");
+  const [newSides, setNewSides]             = useState<string[]>(["For", "Against", "Neutral"]);
+  const [showCustomSides, setShowCustomSides] = useState(false);
   const [joining, setJoining]               = useState(false);
   const [creating, setCreating]             = useState(false);
   const [copiedCode, setCopiedCode]         = useState<string | null>(null);
@@ -4889,11 +4901,12 @@ function DebatesTab() {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      const r = await apiRequest("POST", "/api/politics/debates", { title: newTitle.trim(), description: newDesc.trim() || undefined, issueRef: newIssue.trim() || undefined });
+      const validSides = newSides.map(s => s.trim()).filter(Boolean);
+      const r = await apiRequest("POST", "/api/politics/debates", { title: newTitle.trim(), description: newDesc.trim() || undefined, issueRef: newIssue.trim() || undefined, sides: validSides.length >= 2 ? validSides : ["For", "Against", "Neutral"] });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? "Failed");
       qc.invalidateQueries({ queryKey: ["debates-list"] });
-      setShowCreate(false); setNewTitle(""); setNewDesc(""); setNewIssue("");
+      setShowCreate(false); setNewTitle(""); setNewDesc(""); setNewIssue(""); setNewSides(["For", "Against", "Neutral"]); setShowCustomSides(false);
       setActiveDebateId(d.id);
       toast({ title: "Debate created", description: `Share code: ${d.shareCode}` });
     } catch (e: any) {
@@ -5031,11 +5044,66 @@ function DebatesTab() {
               className="text-sm resize-none"
             />
           </div>
+
+          {/* Sides customizer */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowCustomSides(p => !p)}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Tag size={11} />
+              Customize debate sides
+              {showCustomSides ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+            {showCustomSides && (
+              <div className="mt-2 space-y-2 p-3 border rounded-lg bg-secondary/30">
+                <p className="text-[10px] text-muted-foreground">Name the positions participants can argue (2–4 sides).</p>
+                {newSides.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0"
+                      style={{ background: [
+                        "rgb(16,185,129,0.2)","rgb(239,68,68,0.2)","rgb(156,163,175,0.2)","rgb(168,85,247,0.2)"
+                      ][i % 4] }}
+                    >
+                      {["✓","✗","·","◆"][i % 4]}
+                    </span>
+                    <input
+                      value={s}
+                      onChange={e => setNewSides(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                      placeholder={`Side ${i + 1}`}
+                      className="flex-1 border rounded-lg px-2.5 py-1 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
+                    />
+                    {newSides.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewSides(prev => prev.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {newSides.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setNewSides(prev => [...prev, ""])}
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    <Plus size={11} />Add a side
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2">
             <Button size="sm" onClick={createDebate} disabled={creating || !newTitle.trim()} className="gap-1.5">
               {creating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Create
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)}><X size={13} /></Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowCreate(false); setNewSides(["For", "Against", "Neutral"]); setShowCustomSides(false); }}><X size={13} /></Button>
           </div>
         </div>
       )}
