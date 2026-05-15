@@ -3,32 +3,37 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval,
-  getDay, isToday,
+  getDay, isToday, addDays,
 } from "date-fns";
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar, BookOpen,
   Dumbbell, Target, RefreshCw, List, LayoutGrid, AlertTriangle,
-  Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check,
+  Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check, Plane,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { MONTHS, nextOccurrence, daysUntil } from "@/lib/plannerUtils";
 import EventFormModal from "@/components/modals/EventFormModal";
-import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects } from "@shared/schema";
+import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects, Trip } from "@shared/schema";
 
-type ModuleFilter = "all" | "events" | "gcal" | "reading" | "workouts" | "goals";
+type ModuleFilter = "all" | "events" | "gcal" | "reading" | "workouts" | "goals" | "trips";
 
 interface UnifiedItem {
   id: string;
   title: string;
   date: string;
-  type: "event" | "gcal" | "reading" | "workout_done" | "goal";
+  type: "event" | "gcal" | "reading" | "workout_done" | "goal" | "trip";
   category?: string;
   completed?: boolean;
   recurring?: string;
   sourceId: number;
   gcalEventId?: string;
+  // trip-specific
+  tripDay?: number;
+  tripTotalDays?: number;
+  tripDestination?: string;
+  tripEndDate?: string;
 }
 
 function useAllData() {
@@ -36,7 +41,11 @@ function useAllData() {
   const { data: books = [] }  = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
   const { data: wLogs = [] }  = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
   const { data: goals = [] }  = useQuery<GoalWithTasks[]>({ queryKey: ["/api/goals"] });
-  return { events, books, wLogs, goals };
+  const { data: trips = [] }  = useQuery<Trip[]>({
+    queryKey: ["/api/trips"],
+    queryFn: () => apiRequest("GET", "/api/trips").then(r => r.json()),
+  });
+  return { events, books, wLogs, goals, trips };
 }
 
 function buildItems(
@@ -45,6 +54,8 @@ function buildItems(
   books: BookWithSessions[],
   wLogs: WorkoutLog[],
   goals: GoalWithTasks[],
+  trips: Trip[],
+  listView = false,
 ): UnifiedItem[] {
   const items: UnifiedItem[] = [];
 
@@ -85,11 +96,37 @@ function buildItems(
     });
   }
 
+  if (filter === "all" || filter === "trips") {
+    trips.forEach((trip) => {
+      if (!trip.startDate) return;
+      const start = parseISO(trip.startDate);
+      const end   = trip.endDate ? parseISO(trip.endDate) : start;
+      const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+      // In list view show only day 1; in calendar view show each day so the trip spans the grid
+      const daysToShow = listView ? 1 : totalDays;
+      for (let i = 0; i < daysToShow; i++) {
+        const d = addDays(start, i);
+        items.push({
+          id: `trip:${trip.id}:${i}`,
+          title: trip.name,
+          date: format(d, "yyyy-MM-dd"),
+          type: "trip",
+          sourceId: trip.id,
+          tripDay: i + 1,
+          tripTotalDays: totalDays,
+          tripDestination: trip.destination ?? undefined,
+          tripEndDate: trip.endDate ?? undefined,
+        });
+      }
+    });
+  }
+
   return items;
 }
 
 function itemStyle(item: UnifiedItem): string {
   if (item.type === "gcal") return "cat-gcal";
+  if (item.type === "trip") return "cat-trip";
   if (item.type === "event" && item.category) return `cat-${item.category}`;
   if (item.type === "reading") return "cat-reading";
   if (item.type === "workout_done") return "cat-workout";
@@ -99,6 +136,7 @@ function itemStyle(item: UnifiedItem): string {
 
 function itemIcon(type: string) {
   if (type === "gcal") return <Calendar size={9} className="shrink-0" />;
+  if (type === "trip") return <Plane size={9} className="shrink-0" />;
   if (type === "reading") return <BookOpen size={9} className="shrink-0" />;
   if (type.startsWith("workout")) return <Dumbbell size={9} className="shrink-0" />;
   if (type === "goal") return <Target size={9} className="shrink-0" />;
@@ -127,6 +165,11 @@ function EventActionRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>{item.title}</p>
+          {item.type === "trip" && item.tripTotalDays && item.tripTotalDays > 1 && (
+            <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">
+              {item.tripTotalDays} days
+            </span>
+          )}
           {item.recurring && item.recurring !== "none" && (
             <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">
               <RefreshCw size={9} />{item.recurring === "yearly" ? "Yearly" : item.recurring === "monthly" ? "Monthly" : "Weekly"}
@@ -134,9 +177,19 @@ function EventActionRow({
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {format(parseISO(item.date), "MMM d, yyyy")}
-          {event?.endDate && event.endDate !== event.date && ` — ${format(parseISO(event.endDate), "MMM d, yyyy")}`}
-          {" · "}<span className="capitalize">{item.type.replace("_", " ")}</span>
+          {item.type === "trip"
+            ? <>
+                {item.tripDestination && <span>{item.tripDestination} · </span>}
+                {format(parseISO(item.date), "MMM d")}
+                {item.tripEndDate && item.tripEndDate !== item.date && ` — ${format(parseISO(item.tripEndDate), "MMM d, yyyy")}`}
+                {!item.tripEndDate && format(parseISO(item.date), ", yyyy")}
+              </>
+            : <>
+                {format(parseISO(item.date), "MMM d, yyyy")}
+                {event?.endDate && event.endDate !== event.date && ` — ${format(parseISO(event.endDate), "MMM d, yyyy")}`}
+                {" · "}<span className="capitalize">{item.type.replace("_", " ")}</span>
+              </>
+          }
         </p>
         {event?.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{event.description}</p>}
       </div>
@@ -190,7 +243,7 @@ export default function CalendarPage() {
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
 
-  const { events, books, wLogs, goals } = useAllData();
+  const { events, books, wLogs, goals, trips } = useAllData();
 
   // ── Google Calendar ──────────────────────────────────────────────────────────
   const { data: gcalStatus, refetch: refetchGcalStatus } = useQuery<{ connected: boolean; lastSync: string | null; callbackUrl?: string }>({
@@ -235,9 +288,14 @@ export default function CalendarPage() {
     }
   }, []);
 
+  // Calendar view: trips span every day; list view: trips appear once on start date
   const items = useMemo(
-    () => buildItems(filter, events, books, wLogs, goals),
-    [filter, events, books, wLogs, goals]
+    () => buildItems(filter, events, books, wLogs, goals, trips, false),
+    [filter, events, books, wLogs, goals, trips]
+  );
+  const listItems = useMemo(
+    () => buildItems(filter, events, books, wLogs, goals, trips, true),
+    [filter, events, books, wLogs, goals, trips]
   );
 
   // Quick lookup: sourceId → full Event object
@@ -266,11 +324,11 @@ export default function CalendarPage() {
     setEventModalOpen(true);
   };
 
-  // ── Upcoming alert ───────────────────────────────────────────────────────
+  // ── Upcoming alert — use listItems so trips appear once ─────────────────
   const upcoming21 = useMemo(() =>
-    items.filter((i) => { const d = daysUntil(i.date); return d >= 0 && d <= 21; })
+    listItems.filter((i) => { const d = daysUntil(i.date); return d >= 0 && d <= 21; })
       .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
-    [items]
+    [listItems]
   );
 
   // ── Calendar grid ────────────────────────────────────────────────────────
@@ -291,25 +349,26 @@ export default function CalendarPage() {
   // ── List view ────────────────────────────────────────────────────────────
   const listGrouped = useMemo(() => {
     const m: Record<string, UnifiedItem[]> = {};
-    [...items].sort((a, b) => a.date.localeCompare(b.date)).forEach((i) => {
+    [...listItems].sort((a, b) => a.date.localeCompare(b.date)).forEach((i) => {
       const k = i.date.slice(0, 7);
       if (!m[k]) m[k] = [];
       m[k].push(i);
     });
     return Object.entries(m).sort(([a], [b]) => a.localeCompare(b));
-  }, [items]);
+  }, [listItems]);
 
   const FILTERS: { value: ModuleFilter; label: string; icon: React.ReactNode; hidden?: boolean }[] = [
     { value: "all",      label: "All",            icon: <LayoutGrid size={13} /> },
     { value: "events",   label: "Events",         icon: <Calendar size={13} />   },
     { value: "gcal",     label: "Google Calendar",icon: <Calendar size={13} />, hidden: !gcalStatus?.connected },
+    { value: "trips",    label: "Trips",          icon: <Plane size={13} />, hidden: trips.length === 0 },
     { value: "reading",  label: "Reading",        icon: <BookOpen size={13} />   },
     { value: "workouts", label: "Workouts",       icon: <Dumbbell size={13} />   },
     { value: "goals",    label: "Goals",          icon: <Target size={13} />     },
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Calendar</h1>
@@ -431,7 +490,7 @@ export default function CalendarPage() {
               ))}
             </div>
             <div className="grid grid-cols-7">
-              {Array(startPad).fill(null).map((_, i) => <div key={`p${i}`} className="min-h-[80px] border-b border-r bg-secondary/20" />)}
+              {Array(startPad).fill(null).map((_, i) => <div key={`p${i}`} className="min-h-[56px] sm:min-h-[80px] border-b border-r bg-secondary/20" />)}
               {days.map((day, idx) => {
                 const key = format(day, "yyyy-MM-dd");
                 const dayItems = dayMap[key] ?? [];
@@ -439,7 +498,7 @@ export default function CalendarPage() {
                 const col = (startPad + idx) % 7;
                 return (
                   <div key={key} onClick={() => setSelectedDay((p) => p === key ? null : key)}
-                    className={["min-h-[80px] border-b p-1.5 cursor-pointer transition-colors", col < 6 ? "border-r" : "", isSel ? "bg-primary/5" : "hover:bg-secondary/50"].join(" ")}>
+                    className={["min-h-[56px] sm:min-h-[80px] border-b p-1.5 cursor-pointer transition-colors", col < 6 ? "border-r" : "", isSel ? "bg-primary/5" : "hover:bg-secondary/50"].join(" ")}>
                     <span className={["text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-1", isToday(day) ? "bg-primary text-primary-foreground font-bold" : ""].join(" ")}>
                       {day.getDate()}
                     </span>
