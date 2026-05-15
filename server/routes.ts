@@ -5177,7 +5177,7 @@ Rules:
       const enriched = await Promise.all(debates.map(async d => {
         const posts = await storage.getDebatePosts(d.id);
         const members = await storage.getDebateMembers(d.id);
-        return { ...d, postCount: posts.length, memberCount: members.length };
+        return { ...d, postCount: posts.length, memberCount: members.length, isOwn: d.userId === uid };
       }));
       res.json(enriched);
     } catch (e) { handleError(res, e); }
@@ -5188,16 +5188,19 @@ Rules:
     try {
       const user = req.user as User;
       const uid = await storage.getTabUserId(user.id, "politics");
-      const { title, description, issueRef } = req.body;
+      const { title, description, issueRef, sides } = req.body;
       if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+      // Validate and serialize sides (must be array of 2–6 non-empty strings)
+      const sidesArr: string[] = Array.isArray(sides) && sides.length >= 2
+        ? sides.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 6)
+        : ["For", "Against", "Neutral"];
       let shareCode = makeShareCode();
-      // Ensure uniqueness
       for (let i = 0; i < 5; i++) {
         const existing = await storage.getDebateByShareCode(shareCode);
         if (!existing) break;
         shareCode = makeShareCode();
       }
-      const debate = await storage.createDebate({ title: title.trim(), description, issueRef, shareCode, status: "open" }, uid);
+      const debate = await storage.createDebate({ title: title.trim(), description, issueRef, shareCode, status: "open", sides: JSON.stringify(sidesArr) }, uid);
       res.json(debate);
     } catch (e) { handleError(res, e); }
   });
@@ -5214,7 +5217,8 @@ Rules:
       const members = await storage.getDebateMembers(id);
       // My upvoted post IDs
       const myUpvotes = upvotes.filter(u => u.userId === (req.user as User).id).map(u => u.postId);
-      res.json({ debate, posts, myUpvotes, memberCount: members.length });
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      res.json({ debate: { ...debate, isOwn: debate.userId === uid }, posts, myUpvotes, memberCount: members.length });
     } catch (e) { handleError(res, e); }
   });
 

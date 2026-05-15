@@ -5015,17 +5015,17 @@ function DebatesTab() {
               {activeDebate.shareCode}
             </button>
             {/* Edit / Close / Delete for owner */}
-            {activeDebate.userId === currentUserId && (
+            {activeDebate.isOwn && (
               <button onClick={() => openEditDebate(activeDebate)} className="text-[10px] text-muted-foreground hover:text-primary border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
                 <Pencil size={9} />Edit
               </button>
             )}
-            {activeDebate.userId === currentUserId && activeDebate.status === "open" && (
+            {activeDebate.isOwn && activeDebate.status === "open" && (
               <button onClick={() => closeDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-amber-500 border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
                 <Lock size={9} />Close
               </button>
             )}
-            {activeDebate.userId === currentUserId && (
+            {activeDebate.isOwn && (
               <button onClick={() => deleteDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-destructive border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
                 <Trash2 size={9} />Delete
               </button>
@@ -5264,7 +5264,7 @@ function DebatesTab() {
       {debates.length > 0 && (
         <div className="space-y-2">
           {debates.map((d: any) => {
-            const isOwn = d.userId === currentUserId;
+            const isOwn = d.isOwn;
             return (
               <div
                 key={d.id}
