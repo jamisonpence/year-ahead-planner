@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
@@ -7,9 +7,12 @@ import {
   CheckCircle2, AlertTriangle, ChevronRight,
   BookMarked, Zap, Home, RefreshCw, MapPin, Quote as QuoteIcon,
   CreditCard, TrendingUp, Heart, Settings2, X,
+  Sparkles, Clock, Star, Coffee, Sun, Sunset, Check, BookCopy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type {
   EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate,
   GoalWithProjects, Chore, Spot, Quote, Subscription,
@@ -26,23 +29,24 @@ import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "stats" | "events" | "goals" | "workouts" | "reading" | "quote" | "spots" | "due_soon";
+type SectionId = "day_planner" | "stats" | "events" | "goals" | "workouts" | "reading" | "quote" | "spots" | "due_soon";
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  stats:     "Stat Cards",
-  events:    "Upcoming Events",
-  goals:     "Active Goals",
-  workouts:  "Weekly Workouts",
-  reading:   "Currently Reading",
-  quote:     "Featured Quote",
-  spots:     "Places to Visit",
-  due_soon:  "Due Soon",
+  day_planner: "AI Day Planner",
+  stats:       "Stat Cards",
+  events:      "Upcoming Events",
+  goals:       "Active Goals",
+  workouts:    "Weekly Workouts",
+  reading:     "Currently Reading",
+  quote:       "Featured Quote",
+  spots:       "Places to Visit",
+  due_soon:    "Due Soon",
 };
 
-const SECTION_ORDER: SectionId[] = ["stats", "events", "goals", "workouts", "reading", "quote", "spots", "due_soon"];
+const SECTION_ORDER: SectionId[] = ["day_planner", "stats", "events", "goals", "workouts", "reading", "quote", "spots", "due_soon"];
 
 const ALL_ON: Record<SectionId, boolean> = {
-  stats: true, events: true, goals: true, workouts: true,
+  day_planner: true, stats: true, events: true, goals: true, workouts: true,
   reading: true, quote: true, spots: true, due_soon: true,
 };
 
@@ -60,6 +64,169 @@ function loadVisibility(): Record<SectionId, boolean> {
 
 function saveVisibility(v: Record<SectionId, boolean>) {
   try { localStorage.setItem("dashboard_sections", JSON.stringify(v)); } catch {}
+}
+
+// ── AI Day Planner Component ───────────────────────────────────────────────────
+
+type DayItem = { title: string; type: string; duration: string; priority: string; goalLink: string | null; notes: string | null };
+type DayBlock = { id: string; label: string; timeRange: string; theme: string; items: DayItem[] };
+type DayPlan  = { greeting: string; highlights: string; blocks: DayBlock[]; tips: string[] };
+
+const BLOCK_ICONS: Record<string, React.ReactNode> = {
+  morning:   <Coffee size={13} />,
+  midday:    <Sun size={13} />,
+  afternoon: <Zap size={13} />,
+  evening:   <Sunset size={13} />,
+};
+const BLOCK_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  morning:   { bg: "bg-amber-50 dark:bg-amber-950/20",   border: "border-amber-200 dark:border-amber-800",   text: "text-amber-700 dark:text-amber-300" },
+  midday:    { bg: "bg-blue-50 dark:bg-blue-950/20",     border: "border-blue-200 dark:border-blue-800",     text: "text-blue-700 dark:text-blue-300" },
+  afternoon: { bg: "bg-violet-50 dark:bg-violet-950/20", border: "border-violet-200 dark:border-violet-800", text: "text-violet-700 dark:text-violet-300" },
+  evening:   { bg: "bg-emerald-50 dark:bg-emerald-950/20", border: "border-emerald-200 dark:border-emerald-800", text: "text-emerald-700 dark:text-emerald-300" },
+};
+const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-gray-300 dark:bg-gray-600" };
+const TYPE_BADGE: Record<string, string> = {
+  task:     "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  event:    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  goal:     "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  habit:    "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  planning: "bg-secondary text-muted-foreground",
+};
+
+function AIDayPlanner() {
+  const { toast } = useToast();
+  const [plan, setPlan] = useState<DayPlan | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+
+  async function generate() {
+    setLoading(true); setError(null); setChecked(new Set());
+    try {
+      const res = await apiRequest("POST", "/api/ai/day-planner", {});
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error === "no_api_key"
+          ? "Add your Anthropic API key in Settings → API Keys to use AI features."
+          : (err.message ?? "Failed to generate. Try again."));
+        return;
+      }
+      setPlan(await res.json());
+    } catch { setError("Something went wrong. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  function toggle(blockId: string, idx: number) {
+    const key = `${blockId}-${idx}`;
+    setChecked(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+
+  const totalItems = plan?.blocks.reduce((s, b) => s + b.items.length, 0) ?? 0;
+  const doneCount  = checked.size;
+
+  return (
+    <div className="bg-card border rounded-xl p-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-amber-500" />
+          <span className="text-sm font-semibold">AI Day Planner</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {plan && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mr-1">
+              <span>{doneCount}/{totalItems}</span>
+              <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${totalItems ? (doneCount/totalItems)*100 : 0}%` }} />
+              </div>
+            </div>
+          )}
+          <Button size="sm" variant={plan ? "outline" : "default"} onClick={generate} disabled={loading} className="gap-1.5 h-7 text-xs px-2.5">
+            {loading ? <><RefreshCw size={11} className="animate-spin" /> Generating…</> : plan ? <><RefreshCw size={11} /> Regenerate</> : <><Sparkles size={11} /> Generate My Day</>}
+          </Button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+      {/* Empty state */}
+      {!plan && !loading && !error && (
+        <div className="text-center py-6 text-muted-foreground">
+          <Sparkles size={28} className="mx-auto mb-2 opacity-20" />
+          <p className="text-xs">Get a personalized schedule built from your goals, tasks, and calendar.</p>
+          <p className="text-[11px] mt-1 opacity-60">Requires Anthropic API key in Settings.</p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-6 text-muted-foreground">
+          <Sparkles size={28} className="mx-auto mb-2 text-amber-400 animate-pulse" />
+          <p className="text-xs animate-pulse">Building your day plan…</p>
+        </div>
+      )}
+
+      {/* Plan */}
+      {plan && !loading && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium">{plan.greeting}</p>
+          <p className="text-xs text-muted-foreground -mt-1">{plan.highlights}</p>
+
+          {plan.blocks.filter(b => b.items.length > 0).map(block => {
+            const col = BLOCK_COLORS[block.id] ?? BLOCK_COLORS.morning;
+            const icon = BLOCK_ICONS[block.id] ?? <Zap size={13} />;
+            return (
+              <div key={block.id} className={`rounded-lg border p-3 ${col.bg} ${col.border}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`flex items-center gap-1.5 text-xs font-semibold ${col.text}`}>
+                    {icon}{block.label}
+                    <span className="font-normal text-muted-foreground ml-1">{block.timeRange}</span>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground italic">{block.theme}</span>
+                </div>
+                <div className="space-y-1.5">
+                  {block.items.map((item, idx) => {
+                    const key = `${block.id}-${idx}`;
+                    const done = checked.has(key);
+                    return (
+                      <div key={idx} onClick={() => toggle(block.id, idx)}
+                        className={`flex items-start gap-2 p-2 rounded-lg bg-background/60 cursor-pointer hover:bg-background/90 transition-colors ${done ? "opacity-50" : ""}`}>
+                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${done ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                          {done && <Check size={8} className="text-primary-foreground" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-xs font-medium ${done ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                            <span className={`text-[10px] px-1 py-0.5 rounded ${TYPE_BADGE[item.type] ?? TYPE_BADGE.task}`}>{item.type}</span>
+                            {item.goalLink && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Star size={8}/>{item.goalLink}</span>}
+                          </div>
+                          {item.notes && !done && <p className="text-[11px] text-muted-foreground mt-0.5">{item.notes}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOT[item.priority] ?? PRIORITY_DOT.medium}`} />
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-0.5"><Clock size={9}/>{item.duration}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {plan.tips?.length > 0 && (
+            <div className="pt-1 border-t">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1"><BookCopy size={10}/>Tips</p>
+              {plan.tips.map((tip, i) => (
+                <p key={i} className="text-xs text-muted-foreground flex items-start gap-1.5 mb-0.5"><span className="text-primary shrink-0">•</span>{tip}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -186,7 +353,7 @@ export default function DashboardPage() {
   const hiddenCount = SECTION_ORDER.filter(id => !visible[id]).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -276,6 +443,9 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* AI Day Planner */}
+      {visible.day_planner && <AIDayPlanner />}
 
       {/* Stat cards */}
       {visible.stats && (
