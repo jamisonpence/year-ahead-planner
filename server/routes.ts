@@ -44,6 +44,23 @@ function handleError(res: any, e: unknown) {
   res.status(500).json({ error: String(e) });
 }
 
+/** Robustly extract a JSON object from an AI response that may include markdown fences or preamble text. */
+function extractJson(text: string): object | null {
+  // 1. Strip markdown code fences (```json ... ``` or ``` ... ```)
+  let s = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  // 2. If the result starts with {, try parsing directly
+  if (s.startsWith("{")) {
+    try { return JSON.parse(s); } catch {}
+  }
+  // 3. Extract the outermost { ... } block (handles preamble/postamble text)
+  const start = s.indexOf("{");
+  const end   = s.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(s.slice(start, end + 1)); } catch {}
+  }
+  return null;
+}
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ error: "Unauthorized" });
@@ -1880,9 +1897,8 @@ Rules:
       }
       const data = await r.json() as any;
       const text: string = data.content?.[0]?.text ?? "";
-      // Strip markdown code fences if present
-      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      const plan = JSON.parse(cleaned);
+      const plan = extractJson(text);
+      if (!plan) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
       res.json(plan);
     } catch (e) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
@@ -2007,8 +2023,8 @@ Rules: Keep items realistic for one day (8–14 items total). Spread items sensi
       }
       const data = await r.json() as any;
       const text: string = data.content?.[0]?.text ?? "";
-      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      const plan = JSON.parse(cleaned);
+      const plan = extractJson(text);
+      if (!plan) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
       res.json(plan);
     } catch (e) {
       if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
@@ -2120,10 +2136,10 @@ Rules:
       }
       const data = await r.json() as any;
       const text: string = data.content?.[0]?.text ?? "";
-      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      res.json(JSON.parse(cleaned));
+      const parsed = extractJson(text);
+      if (!parsed) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      res.json(parsed);
     } catch (e) {
-      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
       handleError(res, e);
     }
   });
