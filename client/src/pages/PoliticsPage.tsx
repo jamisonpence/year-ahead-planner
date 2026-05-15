@@ -4629,17 +4629,30 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
         <div className={`grid divide-x`} style={{ gridTemplateColumns: `repeat(${Math.min(sides.length, 4)}, 1fr)` }}>
           {sides.slice(0, 4).map((s, i) => {
             const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
-            const count = postsBySide(s).length;
+            const sidePosts = postsBySide(s);
+            const count = sidePosts.length;
+            const latest = sidePosts[sidePosts.length - 1];
             return (
-              <div key={s} className="p-3 text-center">
-                <p className={`text-lg font-bold ${st.text}`}>{count}</p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide truncate px-1">{s}</p>
+              <div key={s} className="p-3 flex flex-col gap-1.5 min-h-[80px]">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
+                  <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${st.text}`}>{s}</p>
+                  <span className={`ml-auto text-xs font-bold ${st.text}`}>{count}</span>
+                </div>
+                {latest ? (
+                  <div className="flex-1">
+                    <p className="text-[11px] text-foreground/80 leading-snug line-clamp-2 italic">"{latest.content}"</p>
+                    <p className="text-[9px] text-muted-foreground mt-1">— {latest.displayName ?? "Anonymous"}</p>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/50 italic">No arguments yet</p>
+                )}
               </div>
             );
           })}
         </div>
         {posts.length > 0 && (
-          <div className="h-1.5 flex">
+          <div className="h-1 flex">
             {sides.map((s, i) => {
               const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
               const pct = Math.round((postsBySide(s).length / total) * 100);
