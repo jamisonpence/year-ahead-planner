@@ -1337,17 +1337,24 @@ function AITripPlanner({ trip }: { trip: Trip }) {
   async function generate() {
     setLoading(true); setError(null);
     try {
-      const res = await apiRequest("POST", "/api/ai/trip-planner", { tripId: trip.id, preferences: preferences.trim() || undefined });
+      const res = await fetch("/api/ai/trip-planner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId: trip.id, preferences: preferences.trim() || undefined }),
+      });
+      const data = await res.json();
       if (!res.ok) {
-        const err = await res.json();
-        setError(err.error === "no_api_key" ? "Add your Anthropic API key in Settings → API Keys to use AI features." : (err.message ?? "Failed to generate. Try again."));
+        setError(data.error === "no_api_key"
+          ? "Add your Anthropic API key in Settings → API Keys to use AI features."
+          : (data.message ?? "Failed to generate. Try again."));
         return;
       }
-      setPlan(await res.json());
+      setPlan(data);
       setChatMessages([]);
       setShowPrefInput(false);
-    } catch { setError("Something went wrong. Please try again."); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError("Network error. Please check your connection and try again.");
+    } finally { setLoading(false); }
   }
 
   async function sendChat() {
@@ -1358,12 +1365,19 @@ function AITripPlanner({ trip }: { trip: Trip }) {
     setChatInput("");
     setChatLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/ai/trip-chat", { tripId: trip.id, messages: newMessages });
-      if (!res.ok) { setChatMessages(prev => [...prev, { role: "assistant", content: "Sorry, I couldn't respond. Please try again." }]); return; }
-      const { reply } = await res.json();
-      setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
+      const res = await fetch("/api/ai/trip-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId: trip.id, messages: newMessages }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setChatMessages(prev => [...prev, { role: "assistant", content: data.message ?? "Sorry, I couldn't respond. Please try again." }]);
+        return;
+      }
+      setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
     } catch {
-      setChatMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Network error. Please try again." }]);
     } finally { setChatLoading(false); }
   }
 
