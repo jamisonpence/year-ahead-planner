@@ -5267,9 +5267,13 @@ Rules:
       const debate = await storage.getDebateById(debateId);
       if (!debate) return res.status(404).json({ error: "Debate not found" });
       if (debate.status === "closed") return res.status(400).json({ error: "This debate is closed" });
-      const { content, side, displayName } = req.body;
+      const { content, side, displayName, citationUrl, citationTitle } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "content is required" });
-      const post = await storage.createDebatePost({ debateId, content: content.trim(), side, displayName }, user.id);
+      const post = await storage.createDebatePost({
+        debateId, content: content.trim(), side, displayName,
+        citationUrl: citationUrl?.trim() || null,
+        citationTitle: citationTitle?.trim() || null,
+      }, user.id);
       res.json(post);
     } catch (e) { handleError(res, e); }
   });

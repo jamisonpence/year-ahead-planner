@@ -1452,14 +1452,16 @@ export type InsertPoliticalDebate = z.infer<typeof insertPoliticalDebateSchema>;
 export type PoliticalDebate = typeof politicalDebates.$inferSelect;
 
 export const politicalDebatePosts = pgTable("political_debate_posts", {
-  id:          serial("id").primaryKey(),
-  debateId:    integer("debate_id").notNull(),
-  userId:      integer("user_id").notNull(),
-  displayName: text("display_name"),               // cached name of poster
-  content:     text("content").notNull(),
-  side:        text("side"),                       // "for" | "against" | "neutral"
-  upvoteCount: integer("upvote_count").default(0),
-  createdAt:   timestamp("created_at").defaultNow(),
+  id:            serial("id").primaryKey(),
+  debateId:      integer("debate_id").notNull(),
+  userId:        integer("user_id").notNull(),
+  displayName:   text("display_name"),               // cached name of poster
+  content:       text("content").notNull(),
+  side:          text("side"),                       // "for" | "against" | "neutral"
+  upvoteCount:   integer("upvote_count").default(0),
+  citationUrl:   text("citation_url"),               // optional article URL to cite
+  citationTitle: text("citation_title"),             // optional display title for the citation
+  createdAt:     timestamp("created_at").defaultNow(),
 });
 export const insertPoliticalDebatePostSchema = createInsertSchema(politicalDebatePosts).omit({ id: true, createdAt: true, upvoteCount: true });
 export type InsertPoliticalDebatePost = z.infer<typeof insertPoliticalDebatePostSchema>;

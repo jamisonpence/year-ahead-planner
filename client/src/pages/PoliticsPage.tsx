@@ -7,9 +7,11 @@ import {
   CheckCircle2, Circle, ExternalLink, Tag, Search, Loader2, PlusCircle,
   DollarSign, MapPin, Clock, Users2, TrendingDown, Compass, Sparkles,
   ChevronRight, RefreshCw, ArrowRight, MessageSquare, ThumbsUp, Share2,
-  Copy, UserPlus, Lock,
+  Copy, UserPlus, Lock, Link, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -4464,37 +4466,71 @@ const SIDE_META = {
   neutral: { label: "Neutral", color: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",           bar: "bg-stone-400" },
 } as const;
 
+/** Renders a single citation card */
+function CitationCard({ url, title }: { url: string; title?: string | null }) {
+  let domain = url;
+  try { domain = new URL(url).hostname.replace("www.", ""); } catch {}
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 mt-2 px-2.5 py-1.5 rounded-lg border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors group"
+    >
+      <FileText size={11} className="text-blue-500 shrink-0" />
+      <div className="flex-1 min-w-0">
+        {title && <p className="text-[11px] font-medium text-blue-800 dark:text-blue-200 truncate">{title}</p>}
+        <p className="text-[10px] text-blue-500 dark:text-blue-400 truncate">{domain}</p>
+      </div>
+      <ExternalLink size={10} className="text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </a>
+  );
+}
+
 function DebateThread({ debateId, currentUserId }: { debateId: number; currentUserId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [content, setContent]   = useState("");
-  const [side, setSide]         = useState<"for" | "against" | "neutral">("neutral");
-  const [posting, setPosting]   = useState(false);
-  const [upvoting, setUpvoting] = useState<number | null>(null);
+  const [content, setContent]         = useState("");
+  const [side, setSide]               = useState<"for" | "against" | "neutral">("neutral");
+  const [citationUrl, setCitationUrl] = useState("");
+  const [citationTitle, setCitationTitle] = useState("");
+  const [showCitation, setShowCitation]   = useState(false);
+  const [posting, setPosting]         = useState(false);
+  const [upvoting, setUpvoting]       = useState<number | null>(null);
+  const [layout, setLayout]           = useState<"split" | "unified">("split");
 
   const { data, isLoading, refetch } = useQuery<any>({
     queryKey: ["debate-thread", debateId],
     queryFn: () => apiRequest("GET", `/api/politics/debates/${debateId}`).then(r => r.json()),
-    refetchInterval: 15000, // poll every 15s for new posts
+    refetchInterval: 15000,
     staleTime: 5000,
   });
 
-  const posts: any[]       = data?.posts ?? [];
+  const posts: any[]        = data?.posts ?? [];
   const myUpvotes: number[] = data?.myUpvotes ?? [];
   const debate              = data?.debate;
 
-  // Tally sides
-  const forCount     = posts.filter(p => p.side === "for").length;
-  const againstCount = posts.filter(p => p.side === "against").length;
+  const forPosts     = posts.filter(p => p.side === "for");
+  const againstPosts = posts.filter(p => p.side === "against");
+  const neutralPosts = posts.filter(p => p.side === "neutral");
+  const forCount     = forPosts.length;
+  const againstCount = againstPosts.length;
   const total        = posts.length || 1;
+  const forPct       = Math.round((forCount / total) * 100);
+  const againstPct   = Math.round((againstCount / total) * 100);
 
   async function submitPost() {
     if (!content.trim()) return;
     setPosting(true);
     try {
-      const r = await apiRequest("POST", `/api/politics/debates/${debateId}/posts`, { content: content.trim(), side });
+      const r = await apiRequest("POST", `/api/politics/debates/${debateId}/posts`, {
+        content: content.trim(),
+        side,
+        citationUrl: citationUrl.trim() || undefined,
+        citationTitle: citationTitle.trim() || undefined,
+      });
       if (!r.ok) { const b = await r.json(); throw new Error(b.error ?? "Failed"); }
-      setContent("");
+      setContent(""); setCitationUrl(""); setCitationTitle(""); setShowCitation(false);
       refetch();
       qc.invalidateQueries({ queryKey: ["debates-list"] });
     } catch (e: any) {
@@ -4516,112 +4552,224 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
     qc.invalidateQueries({ queryKey: ["debates-list"] });
   }
 
+  function PostCard({ p }: { p: any }) {
+    const sideMeta = SIDE_META[p.side as keyof typeof SIDE_META] ?? SIDE_META.neutral;
+    const isUpvoted = myUpvotes.includes(p.id);
+    const isOwn = p.userId === currentUserId;
+    return (
+      <div className={`rounded-xl border bg-card p-3 space-y-2 ${
+        p.side === "for" ? "border-emerald-200 dark:border-emerald-800" :
+        p.side === "against" ? "border-red-200 dark:border-red-900" : ""
+      }`}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${sideMeta.color}`}>
+            {(p.displayName ?? "A").charAt(0).toUpperCase()}
+          </div>
+          <span className="text-xs font-semibold">{p.displayName ?? "Anonymous"}</span>
+          <span className="text-[10px] text-muted-foreground ml-auto">
+            {p.createdAt ? format(new Date(p.createdAt), "MMM d, h:mm a") : ""}
+          </span>
+        </div>
+        <p className="text-sm leading-relaxed">{p.content}</p>
+        {/* Citation card */}
+        {p.citationUrl && <CitationCard url={p.citationUrl} title={p.citationTitle} />}
+        <div className="flex items-center gap-2 pt-0.5">
+          <button
+            onClick={() => handleUpvote(p.id)}
+            disabled={upvoting === p.id}
+            className={`flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border transition-all ${
+              isUpvoted
+                ? "bg-violet-500/20 border-violet-400/40 text-violet-500"
+                : "border-secondary text-muted-foreground hover:border-violet-400/40 hover:text-violet-500"
+            }`}
+          >
+            {upvoting === p.id ? <Loader2 size={10} className="animate-spin" /> : <ThumbsUp size={10} />}
+            {p.upvoteCount ?? 0}
+          </button>
+          {isOwn && (
+            <button
+              onClick={() => deletePost(p.id)}
+              className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+            >
+              <Trash2 size={9} />Delete
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) return <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />Loading discussion…</div>;
 
   return (
     <div className="space-y-4">
-      {/* Side tally bar */}
+
+      {/* ── Scoreboard ── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="grid grid-cols-3 divide-x">
+          <div className="p-3 text-center">
+            <p className="text-lg font-bold text-emerald-500">{forCount}</p>
+            <p className="text-[10px] text-muted-foreground font-medium">FOR</p>
+          </div>
+          <div className="p-3 text-center">
+            <p className="text-xs text-muted-foreground font-medium mt-1">{posts.length} argument{posts.length !== 1 ? "s" : ""}</p>
+            <p className="text-[10px] text-muted-foreground">{data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="p-3 text-center">
+            <p className="text-lg font-bold text-red-400">{againstCount}</p>
+            <p className="text-[10px] text-muted-foreground font-medium">AGAINST</p>
+          </div>
+        </div>
+        {posts.length > 0 && (
+          <div className="h-1.5 flex">
+            <div className="bg-emerald-500 transition-all" style={{ width: `${forPct}%` }} />
+            <div className="bg-stone-300 dark:bg-stone-600 transition-all" style={{ width: `${Math.round((neutralPosts.length / total) * 100)}%` }} />
+            <div className="bg-red-400 transition-all" style={{ width: `${againstPct}%` }} />
+          </div>
+        )}
+      </div>
+
+      {/* ── Layout toggle ── */}
       {posts.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-[10px] text-muted-foreground">
-            <span className="text-emerald-500 font-semibold">{forCount} For</span>
-            <span className="text-red-400 font-semibold">{againstCount} Against</span>
-          </div>
-          <div className="h-2 rounded-full bg-secondary overflow-hidden flex">
-            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(forCount / total) * 100}%` }} />
-            <div className="h-full bg-red-400 transition-all" style={{ width: `${(againstCount / total) * 100}%` }} />
-          </div>
-          <p className="text-[10px] text-muted-foreground text-center">{posts.length} post{posts.length !== 1 ? "s" : ""} · {data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-muted-foreground">View:</span>
+          <button onClick={() => setLayout("split")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "split" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+            Side by Side
+          </button>
+          <button onClick={() => setLayout("unified")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "unified" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+            Chronological
+          </button>
         </div>
       )}
 
-      {/* Posts */}
-      <div className="space-y-2">
-        {posts.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-4">No posts yet — be the first to share your view.</p>
-        )}
-        {posts.map((p: any) => {
-          const sideMeta = SIDE_META[p.side as keyof typeof SIDE_META] ?? SIDE_META.neutral;
-          const isUpvoted = myUpvotes.includes(p.id);
-          const isOwn = p.userId === currentUserId;
-          return (
-            <div key={p.id} className="rounded-xl border bg-card p-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-xs font-semibold">{p.displayName ?? "Anonymous"}</span>
-                    {p.side && <Badge className={`text-[10px] ${sideMeta.color}`}>{sideMeta.label}</Badge>}
-                    <span className="text-[10px] text-muted-foreground ml-auto">
-                      {p.createdAt ? format(new Date(p.createdAt), "MMM d, h:mm a") : ""}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed">{p.content}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  onClick={() => handleUpvote(p.id)}
-                  disabled={upvoting === p.id}
-                  className={`flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border transition-all ${
-                    isUpvoted
-                      ? "bg-violet-500/20 border-violet-400/40 text-violet-500"
-                      : "border-secondary text-muted-foreground hover:border-violet-400/40 hover:text-violet-500"
-                  }`}
-                >
-                  {upvoting === p.id ? <Loader2 size={11} className="animate-spin" /> : <ThumbsUp size={11} />}
-                  {p.upvoteCount ?? 0}
-                </button>
-                {isOwn && (
-                  <button
-                    onClick={() => deletePost(p.id)}
-                    className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
-                  >
-                    <Trash2 size={10} />Delete
-                  </button>
-                )}
-              </div>
+      {/* ── Split (side-by-side) layout ── */}
+      {layout === "split" && posts.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* FOR column */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 pb-1 border-b border-emerald-200 dark:border-emerald-800">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">For · {forCount}</span>
             </div>
-          );
-        })}
-      </div>
+            {forPosts.length === 0
+              ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
+              : forPosts.map(p => <PostCard key={p.id} p={p} />)
+            }
+          </div>
+          {/* AGAINST column */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 pb-1 border-b border-red-200 dark:border-red-900">
+              <div className="w-2 h-2 rounded-full bg-red-400" />
+              <span className="text-xs font-bold text-red-500 dark:text-red-400">Against · {againstCount}</span>
+            </div>
+            {againstPosts.length === 0
+              ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
+              : againstPosts.map(p => <PostCard key={p.id} p={p} />)
+            }
+          </div>
+        </div>
+      )}
 
-      {/* New post composer */}
-      {debate?.status !== "closed" && (
-        <div className="border rounded-xl p-3 bg-secondary/20 space-y-2">
-          <div className="flex gap-1.5">
+      {/* Neutral posts shown below split columns */}
+      {layout === "split" && neutralPosts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 pb-1 border-b">
+            <div className="w-2 h-2 rounded-full bg-stone-400" />
+            <span className="text-xs font-bold text-muted-foreground">Neutral · {neutralPosts.length}</span>
+          </div>
+          {neutralPosts.map(p => <PostCard key={p.id} p={p} />)}
+        </div>
+      )}
+
+      {/* ── Chronological layout ── */}
+      {layout === "unified" && (
+        <div className="space-y-2">
+          {posts.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-4">No arguments yet — be the first to share your view.</p>
+          )}
+          {posts.map((p: any) => <PostCard key={p.id} p={p} />)}
+        </div>
+      )}
+
+      {/* ── New argument composer ── */}
+      {debate?.status !== "closed" ? (
+        <div className="border rounded-xl p-3 bg-secondary/20 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground">Add Your Argument</p>
+
+          {/* Side selector */}
+          <div className="grid grid-cols-3 gap-1.5">
             {(["for", "against", "neutral"] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSide(s)}
-                className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition-all capitalize ${
-                  side === s
-                    ? `${SIDE_META[s].color} border-transparent`
-                    : "border-secondary text-muted-foreground hover:border-primary/30"
+                className={`text-xs py-2 rounded-lg border font-semibold transition-all flex flex-col items-center gap-0.5 ${
+                  side === s ? `${SIDE_META[s].color} border-transparent` : "border-secondary text-muted-foreground hover:border-primary/30"
                 }`}
               >
-                {SIDE_META[s].label}
+                <span>{s === "for" ? "✅" : s === "against" ? "❌" : "⚖️"}</span>
+                <span className="capitalize">{SIDE_META[s].label}</span>
               </button>
             ))}
           </div>
+
+          {/* Argument text */}
           <Textarea
             value={content}
             onChange={e => setContent(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitPost(); }}
-            placeholder="Share your perspective… (⌘↵ to post)"
+            placeholder={`Make your ${side === "for" ? "case for" : side === "against" ? "case against" : "neutral observation on"} this topic… (⌘↵ to post)`}
             rows={3}
             className="text-sm resize-none"
           />
+
+          {/* Citation toggle */}
+          <div>
+            <button
+              onClick={() => setShowCitation(p => !p)}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Link size={11} />
+              {showCitation ? "Remove citation" : "Cite an article or source"}
+              {showCitation ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+            {showCitation && (
+              <div className="mt-2 space-y-1.5 p-2.5 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">📎 Article / Source</p>
+                <input
+                  value={citationUrl}
+                  onChange={e => setCitationUrl(e.target.value)}
+                  placeholder="https://example.com/article"
+                  type="url"
+                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <input
+                  value={citationTitle}
+                  onChange={e => setCitationTitle(e.target.value)}
+                  placeholder="Article title (optional)"
+                  className="w-full border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                {citationUrl && (
+                  <div className="pt-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">Preview:</p>
+                    <CitationCard url={citationUrl} title={citationTitle || null} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end">
             <Button size="sm" onClick={submitPost} disabled={posting || !content.trim()} className="gap-1.5">
               {posting ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
-              Post
+              Post Argument
             </Button>
           </div>
         </div>
-      )}
-      {debate?.status === "closed" && (
+      ) : (
         <p className="text-xs text-muted-foreground text-center py-2 flex items-center justify-center gap-1.5">
-          <Lock size={11} />This debate is closed to new posts.
+          <Lock size={11} />This debate is closed to new arguments.
         </p>
       )}
     </div>
