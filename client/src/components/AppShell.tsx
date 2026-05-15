@@ -7,9 +7,10 @@ import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Sun, Moon, Menu, X, Film, Wallet, Leaf, Music2, Home, MapPin,
+  Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
+  Search, User, Plus,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -201,6 +202,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [manageMode, setManageMode] = useState(false);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [myLifosOpen, setMyLifosOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const { prefs, save } = useNavPrefs();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -502,37 +506,193 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             )}
           </button>
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
-            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
+          <Link href="/settings">
+            <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
+              <Settings size={16} />
+            </button>
+          </Link>
         </div>
       </div>
 
-      {/* Mobile nav drawer */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setMobileOpen(false)}>
-          <div className="absolute left-0 top-14 bottom-0 w-56 bg-card border-r p-3 space-y-1 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            {visibleTabs.map((tab) => (
-              <NavLink
-                key={tab.path}
-                path={tab.path}
-                label={tab.label}
-                icon={tab.icon}
-                active={location === tab.path}
-                onClick={() => setMobileOpen(false)}
-                badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
-              />
-            ))}
-            <div className="border-t pt-2 mt-2 space-y-1">
-              <button onClick={() => setManageMode(!manageMode)} className={`sidebar-item w-full ${manageMode ? "active" : ""}`}>
-                <Settings size={15} /><span>{manageMode ? "Done" : "Manage tabs"}</span>
+      {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t">
+        <div className="flex items-end justify-around px-1 pt-2 pb-3">
+
+          {/* Feed */}
+          <Link href="/">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <Home size={22} className={location === "/" ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/" ? "text-violet-500" : "text-muted-foreground"}`}>Feed</span>
+            </button>
+          </Link>
+
+          {/* Discover */}
+          <button
+            onClick={() => { setDiscoverOpen(true); setMyLifosOpen(false); setQuickAddOpen(false); }}
+            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
+          >
+            <Search size={22} className={discoverOpen ? "text-violet-500" : "text-muted-foreground"} />
+            <span className={`text-[10px] font-medium ${discoverOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
+          </button>
+
+          {/* Add — elevated circle */}
+          <button
+            onClick={() => { setQuickAddOpen(true); setDiscoverOpen(false); setMyLifosOpen(false); }}
+            className="flex flex-col items-center gap-0.5 min-w-[56px] -translate-y-3"
+          >
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg flex items-center justify-center">
+              <Plus size={26} className="text-white" strokeWidth={2.5} />
+            </div>
+            <span className="text-[10px] font-medium text-muted-foreground">Add</span>
+          </button>
+
+          {/* My Lifos */}
+          <button
+            onClick={() => { setMyLifosOpen(true); setDiscoverOpen(false); setQuickAddOpen(false); }}
+            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
+          >
+            <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>My Lifos</span>
+          </button>
+
+          {/* Friends — with badge dot */}
+          <Link href="/relationships">
+            <button className="relative flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <div className="relative">
+                <Users size={22} className={location === "/relationships" ? "text-violet-500" : "text-muted-foreground"} />
+                {totalNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-card" />
+                )}
+              </div>
+              <span className={`text-[10px] font-medium ${location === "/relationships" ? "text-violet-500" : "text-muted-foreground"}`}>Friends</span>
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Discover sheet ───────────────────────────────────────────────────── */}
+      {discoverOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setDiscoverOpen(false)}>
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
+              <span className="font-bold text-base">Explore Sections</span>
+              <button onClick={() => setDiscoverOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+            </div>
+            <div className="overflow-y-auto p-4 grid grid-cols-3 gap-2">
+              {visibleTabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = location === tab.path;
+                return (
+                  <Link key={tab.path} href={tab.path}>
+                    <button
+                      onClick={() => setDiscoverOpen(false)}
+                      className={`w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors ${isActive ? "bg-violet-500/10 border-violet-400/30 text-violet-500" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}
+                    >
+                      <Icon size={20} className={isActive ? "text-violet-500" : "text-muted-foreground"} />
+                      <span className="text-[11px] font-medium text-center leading-tight">{tab.label}</span>
+                    </button>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── My Lifos sheet ───────────────────────────────────────────────────── */}
+      {myLifosOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setMyLifosOpen(false)}>
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
+              <div>
+                <span className="font-bold text-base">My Lifos</span>
+                {user && <p className="text-xs text-muted-foreground">{user.name}</p>}
+              </div>
+              <button onClick={() => setMyLifosOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+            </div>
+            {user && (
+              <div className="px-5 py-3 flex items-center gap-3 border-b bg-secondary/20">
+                {user.avatarUrl
+                  ? <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
+                  : <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center text-sm font-bold text-violet-500">{user.name.charAt(0)}</div>
+                }
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">{user.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                </div>
+                <Link href="/settings"><button onClick={() => setMyLifosOpen(false)} className="text-xs text-muted-foreground border rounded-lg px-2 py-1 hover:bg-secondary transition-colors flex items-center gap-1"><Settings size={11} />Settings</button></Link>
+              </div>
+            )}
+            <div className="overflow-y-auto p-4 grid grid-cols-3 gap-2">
+              {visibleTabs
+                .filter(t => ["/reading","/movies","/music","/recipes","/spots","/quotes","/art","/hobbies","/goals","/workouts","/calendar","/plants","/journal","/faith","/health","/politics","/budget","/housekeeping","/kids","/relationships"].includes(t.path))
+                .map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = location === tab.path;
+                  return (
+                    <Link key={tab.path} href={tab.path}>
+                      <button
+                        onClick={() => setMyLifosOpen(false)}
+                        className={`w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors ${isActive ? "bg-violet-500/10 border-violet-400/30 text-violet-500" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}
+                      >
+                        <Icon size={20} className={isActive ? "text-violet-500" : "text-muted-foreground"} />
+                        <span className="text-[11px] font-medium text-center leading-tight">{tab.label}</span>
+                      </button>
+                    </Link>
+                  );
+              })}
+            </div>
+            <div className="p-4 border-t flex gap-2">
+              <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors">
+                <LogOut size={14} />Sign out
               </button>
-              <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} onClick={() => setMobileOpen(false)} />
-              {user && (
-                <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground">
-                  <LogOut size={14} /><span>Sign out</span>
-                </button>
-              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick-add modal ──────────────────────────────────────────────────── */}
+      {quickAddOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setQuickAddOpen(false)}>
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
+              <span className="font-bold text-base">Add Something</span>
+              <button onClick={() => setQuickAddOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+            </div>
+            <div className="p-4 grid grid-cols-3 gap-3 pb-8">
+              {[
+                { label: "Book",    emoji: "📚", path: "/reading",  desc: "Reading list"  },
+                { label: "Movie",   emoji: "🎬", path: "/movies",   desc: "Watch list"    },
+                { label: "Song",    emoji: "🎵", path: "/music",    desc: "Music"         },
+                { label: "Recipe",  emoji: "🍽️", path: "/recipes",  desc: "Recipes"      },
+                { label: "Spot",    emoji: "📍", path: "/spots",    desc: "Places"        },
+                { label: "Quote",   emoji: "💬", path: "/quotes",   desc: "Quotes"        },
+                { label: "Goal",    emoji: "🎯", path: "/goals",    desc: "Goals"         },
+                { label: "Event",   emoji: "📅", path: "/calendar", desc: "Calendar"      },
+                { label: "Workout", emoji: "💪", path: "/workouts", desc: "Fitness"       },
+              ].map(item => (
+                <Link key={item.path} href={item.path}>
+                  <button
+                    onClick={() => setQuickAddOpen(false)}
+                    className="w-full flex flex-col items-center gap-2 p-4 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-colors"
+                  >
+                    <span className="text-2xl leading-none">{item.emoji}</span>
+                    <div className="text-center">
+                      <p className="text-xs font-semibold">{item.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+                    </div>
+                  </button>
+                </Link>
+              ))}
             </div>
           </div>
         </div>
@@ -625,7 +785,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Page content */}
-      <main className="flex-1 min-w-0 lg:pt-0 pt-14">
+      <main className="flex-1 min-w-0 lg:pt-0 pt-14 lg:pb-0 pb-24">
         <PrivacyBanner path={location} />
         {children}
       </main>
