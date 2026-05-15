@@ -4885,6 +4885,14 @@ function DebatesTab() {
   const [joining, setJoining]               = useState(false);
   const [creating, setCreating]             = useState(false);
   const [copiedCode, setCopiedCode]         = useState<string | null>(null);
+  // Edit debate state
+  const [editingDebateId, setEditingDebateId] = useState<number | null>(null);
+  const [editTitle, setEditTitle]           = useState("");
+  const [editDesc, setEditDesc]             = useState("");
+  const [editIssue, setEditIssue]           = useState("");
+  const [editSides, setEditSides]           = useState<string[]>(["For", "Against", "Neutral"]);
+  const [showEditSides, setShowEditSides]   = useState(false);
+  const [saving, setSaving]                 = useState(false);
 
   // Current user id (read from query cache via /api/user)
   const { data: me } = useQuery<any>({ queryKey: ["/api/user"], queryFn: () => apiRequest("GET", "/api/user").then(r => r.json()), staleTime: Infinity });
@@ -4942,6 +4950,36 @@ function DebatesTab() {
     if (activeDebateId === id) setActiveDebateId(null);
   }
 
+  function openEditDebate(d: any) {
+    setEditingDebateId(d.id);
+    setEditTitle(d.title ?? "");
+    setEditDesc(d.description ?? "");
+    setEditIssue(d.issueRef ?? "");
+    setEditSides(parseSides(d.sides));
+    setShowEditSides(false);
+  }
+
+  async function saveEditDebate() {
+    if (!editTitle.trim() || !editingDebateId) return;
+    setSaving(true);
+    try {
+      const validSides = editSides.map(s => s.trim()).filter(Boolean);
+      const r = await apiRequest("PATCH", `/api/politics/debates/${editingDebateId}`, {
+        title: editTitle.trim(),
+        description: editDesc.trim() || null,
+        issueRef: editIssue.trim() || null,
+        sides: JSON.stringify(validSides.length >= 2 ? validSides : ["For", "Against", "Neutral"]),
+      });
+      if (!r.ok) { const b = await r.json(); throw new Error(b.error ?? "Failed"); }
+      qc.invalidateQueries({ queryKey: ["debates-list"] });
+      qc.invalidateQueries({ queryKey: ["debate-thread", editingDebateId] });
+      setEditingDebateId(null);
+      toast({ title: "Debate updated" });
+    } catch (e: any) {
+      toast({ title: "Failed to save", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
   function copyCode(code: string) {
     navigator.clipboard.writeText(code).then(() => {
       setCopiedCode(code);
@@ -4976,7 +5014,12 @@ function DebatesTab() {
               {copiedCode === activeDebate.shareCode ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
               {activeDebate.shareCode}
             </button>
-            {/* Close / Delete for owner */}
+            {/* Edit / Close / Delete for owner */}
+            {activeDebate.userId === currentUserId && (
+              <button onClick={() => openEditDebate(activeDebate)} className="text-[10px] text-muted-foreground hover:text-primary border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                <Pencil size={9} />Edit
+              </button>
+            )}
             {activeDebate.userId === currentUserId && activeDebate.status === "open" && (
               <button onClick={() => closeDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-amber-500 border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
                 <Lock size={9} />Close
@@ -4989,6 +5032,80 @@ function DebatesTab() {
             )}
           </div>
         </div>
+
+        {/* Inline edit form */}
+        {editingDebateId === activeDebate.id && (
+          <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+            <h3 className="font-semibold text-sm">Edit Debate</h3>
+            <div className="space-y-2">
+              <input
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                placeholder="Debate topic"
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <input
+                value={editIssue}
+                onChange={e => setEditIssue(e.target.value)}
+                placeholder="Issue category (optional)"
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <Textarea
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                placeholder="Background or context (optional)"
+                rows={2}
+                className="text-sm resize-none"
+              />
+            </div>
+            {/* Sides editor */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowEditSides(p => !p)}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Tag size={11} />Edit sides
+                {showEditSides ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              </button>
+              {showEditSides && (
+                <div className="mt-2 space-y-2 p-3 border rounded-lg bg-secondary/30">
+                  <p className="text-[10px] text-muted-foreground">Rename or add sides (2–4).</p>
+                  {editSides.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0"
+                        style={{ background: ["rgb(16,185,129,0.2)","rgb(239,68,68,0.2)","rgb(156,163,175,0.2)","rgb(168,85,247,0.2)"][i % 4] }}>
+                        {["✓","✗","·","◆"][i % 4]}
+                      </span>
+                      <input
+                        value={s}
+                        onChange={e => setEditSides(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                        placeholder={`Side ${i + 1}`}
+                        className="flex-1 border rounded-lg px-2.5 py-1 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      />
+                      {editSides.length > 2 && (
+                        <button type="button" onClick={() => setEditSides(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {editSides.length < 4 && (
+                    <button type="button" onClick={() => setEditSides(prev => [...prev, ""])} className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                      <Plus size={11} />Add a side
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveEditDebate} disabled={saving || !editTitle.trim()} className="gap-1.5">
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditingDebateId(null)}><X size={13} /></Button>
+            </div>
+          </div>
+        )}
 
         <DebateThread debateId={activeDebateId} currentUserId={currentUserId} />
       </div>
@@ -5149,12 +5266,14 @@ function DebatesTab() {
           {debates.map((d: any) => {
             const isOwn = d.userId === currentUserId;
             return (
-              <button
+              <div
                 key={d.id}
-                onClick={() => setActiveDebateId(d.id)}
-                className="w-full text-left border rounded-xl bg-card hover:bg-secondary/30 transition-colors overflow-hidden"
+                className="w-full text-left border rounded-xl bg-card overflow-hidden"
               >
-                <div className="px-4 py-3 flex items-start gap-3">
+                <div
+                  className="px-4 py-3 flex items-start gap-3 hover:bg-secondary/30 transition-colors cursor-pointer"
+                  onClick={() => setActiveDebateId(d.id)}
+                >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="font-semibold text-sm">{d.title}</span>
@@ -5177,7 +5296,23 @@ function DebatesTab() {
                   </div>
                   <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />
                 </div>
-              </button>
+                {isOwn && (
+                  <div className="px-4 py-2 border-t flex items-center gap-2 bg-secondary/10">
+                    <button
+                      onClick={e => { e.stopPropagation(); setActiveDebateId(d.id); openEditDebate(d); }}
+                      className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                    >
+                      <Pencil size={10} />Edit
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteDebate(d.id); }}
+                      className="text-[10px] text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 size={10} />Delete
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
