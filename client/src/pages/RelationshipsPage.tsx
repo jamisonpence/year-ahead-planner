@@ -1542,8 +1542,8 @@ export default function RelationshipsPage() {
         onClose={() => { setGroupModal(false); setEditGroup(null); }}
         editGroup={editGroup}
       />
-      </div> {/* end contacts content */}
-      )} {/* end contacts tab */}
+      </div>
+      )}
     </div>
   );
 }
