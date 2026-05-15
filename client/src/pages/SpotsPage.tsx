@@ -1220,6 +1220,7 @@ type ChatMessage    = { role: "user" | "assistant"; content: string };
 
 function AITripPlanner({ trip }: { trip: Trip }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [plan, setPlan]             = useState<TripAIPlan | null>(null);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
@@ -1235,6 +1236,76 @@ function AITripPlanner({ trip }: { trip: Trip }) {
   // Collapsed sections
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }));
+
+  // Track which recs have been saved
+  const [savedToSpots, setSavedToSpots]         = useState<Record<number, boolean>>({});
+  const [savedToItinerary, setSavedToItinerary] = useState<Record<number, boolean>>({});
+  // Inline day-picker: which rec index is open + selected date
+  const [dayPickerIdx, setDayPickerIdx]         = useState<number | null>(null);
+  const [pickedDate, setPickedDate]             = useState("");
+
+  // Build trip date options (same logic as TripsTab)
+  const dateOptions = useMemo(() => {
+    if (!trip.startDate) return [];
+    const opts: { value: string; label: string }[] = [];
+    const start = parseISO(trip.startDate);
+    const end   = trip.endDate ? parseISO(trip.endDate) : start;
+    const days  = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 30);
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      opts.push({ value: d.toISOString().split("T")[0], label: `Day ${i + 1} · ${format(d, "EEE, MMM d")}` });
+    }
+    return opts;
+  }, [trip.startDate, trip.endDate]);
+
+  // Map PlaceRec type to spot/trip-item type field
+  const recTypeToSpotType = (t: string) => {
+    const map: Record<string, string> = {
+      restaurant: "restaurant", bar: "bar", cafe: "cafe", hotel: "hotel",
+      attraction: "attraction", park: "park", shop: "shop", other: "other",
+    };
+    return map[t] ?? "attraction";
+  };
+
+  const saveToSpots = useMutation({
+    mutationFn: (rec: PlaceRec) =>
+      apiRequest("POST", "/api/spots", {
+        name: rec.name,
+        type: recTypeToSpotType(rec.type),
+        address: rec.area ?? "",
+        city: trip.destination ?? "",
+        notes: [rec.description, rec.tip ? `Tip: ${rec.tip}` : ""].filter(Boolean).join("\n"),
+        status: "want_to_visit",
+      }).then(r => r.json()),
+    onSuccess: (_, rec) => {
+      const idx = plan?.recommendations.indexOf(rec) ?? -1;
+      if (idx >= 0) setSavedToSpots(p => ({ ...p, [idx]: true }));
+      qc.invalidateQueries({ queryKey: ["/api/spots"] });
+      toast({ title: `"${rec.name}" saved to Spots!` });
+    },
+    onError: () => toast({ title: "Failed to save spot", variant: "destructive" }),
+  });
+
+  const addToItinerary = useMutation({
+    mutationFn: ({ rec, date }: { rec: PlaceRec; date: string }) =>
+      apiRequest("POST", `/api/trips/${trip.id}/items`, {
+        name: rec.name,
+        type: recTypeToSpotType(rec.type),
+        address: rec.area ?? "",
+        date: date || null,
+        notes: [rec.description, rec.tip ? `Tip: ${rec.tip}` : ""].filter(Boolean).join("\n"),
+        confirmed: false,
+      }).then(r => r.json()),
+    onSuccess: (_, { rec }) => {
+      const idx = plan?.recommendations.indexOf(rec) ?? -1;
+      if (idx >= 0) setSavedToItinerary(p => ({ ...p, [idx]: true }));
+      qc.invalidateQueries({ queryKey: ["/api/trips", trip.id, "items"] });
+      setDayPickerIdx(null);
+      toast({ title: `"${rec.name}" added to itinerary!` });
+    },
+    onError: () => toast({ title: "Failed to add to itinerary", variant: "destructive" }),
+  });
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
@@ -1411,6 +1482,61 @@ function AITripPlanner({ trip }: { trip: Trip }) {
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{rec.description}</p>
                           {rec.tip && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-start gap-1"><Sparkles size={10} className="mt-0.5 shrink-0" />{rec.tip}</p>}
+
+                          {/* Action buttons */}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {/* Save to Spots */}
+                            <button
+                              onClick={() => { if (!savedToSpots[i]) saveToSpots.mutate(rec); }}
+                              disabled={savedToSpots[i] || saveToSpots.isPending}
+                              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors ${savedToSpots[i] ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" : "border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground"}`}
+                            >
+                              {savedToSpots[i] ? <><Check size={10} /> Saved to Spots</> : <><MapPin size={10} /> Save to Spots</>}
+                            </button>
+
+                            {/* Add to Itinerary */}
+                            {savedToItinerary[i] ? (
+                              <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-violet-300 bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">
+                                <Check size={10} /> On Itinerary
+                              </span>
+                            ) : dayPickerIdx === i ? (
+                              /* Inline day picker */
+                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5 w-full">
+                                {dateOptions.length > 0 ? (
+                                  <select
+                                    value={pickedDate}
+                                    onChange={e => setPickedDate(e.target.value)}
+                                    className="text-[11px] border rounded px-1.5 py-0.5 bg-background flex-1 min-w-0"
+                                  >
+                                    <option value="">No specific day</option>
+                                    {dateOptions.map(opt => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                ) : null}
+                                <button
+                                  onClick={() => addToItinerary.mutate({ rec, date: pickedDate })}
+                                  disabled={addToItinerary.isPending}
+                                  className="text-[11px] px-2 py-0.5 rounded-full border border-violet-400 bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-700 transition-colors"
+                                >
+                                  {addToItinerary.isPending ? "Adding…" : "Confirm"}
+                                </button>
+                                <button
+                                  onClick={() => setDayPickerIdx(null)}
+                                  className="text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setPickedDate(""); setDayPickerIdx(i); }}
+                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <Calendar size={10} /> Add to Itinerary
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
