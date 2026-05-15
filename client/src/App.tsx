@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import AppShell from "@/components/AppShell";
 import DashboardPage from "@/pages/DashboardPage";
 import FeedPage from "@/pages/FeedPage";
+import DiscoverPage from "@/pages/DiscoverPage";
 import CalendarPage from "@/pages/CalendarPage";
 import GoalsPage from "@/pages/GoalsPage";
 import ReadingPage from "@/pages/ReadingPage";
@@ -42,6 +43,7 @@ function AuthenticatedApp() {
       <Switch>
         <Route path="/" component={FeedPage} />
         <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/discover" component={DiscoverPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/goals" component={GoalsPage} />
         <Route path="/reading" component={ReadingPage} />

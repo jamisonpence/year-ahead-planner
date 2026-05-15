@@ -75,6 +75,8 @@ function PrivacyBanner({ path }: { path: string }) {
 }
 
 const ALL_TABS = [
+  { path: "/",              label: "Feed",                    icon: Home            },
+  { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
@@ -527,13 +529,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/* Discover */}
-          <button
-            onClick={() => { setDiscoverOpen(true); setMyLifosOpen(false); setQuickAddOpen(false); }}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
-          >
-            <Search size={22} className={discoverOpen ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${discoverOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
-          </button>
+          <Link href="/discover">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <Search size={22} className={location === "/discover" ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/discover" ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
+            </button>
+          </Link>
 
           {/* Add — elevated circle */}
           <button

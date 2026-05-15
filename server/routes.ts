@@ -5655,4 +5655,38 @@ Rules:
       res.status(201).json(comment);
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Discover ──────────────────────────────────────────────────────────────
+
+  app.get("/api/discover/taste-profile", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = await storage.getDiscoverTasteProfile(user.id);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/discover/trending", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = await storage.getDiscoverTrending(user.id);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/discover/you-might-like", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = await storage.getDiscoverYouMightLike(user.id);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/discover/shared-taste", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = await storage.getDiscoverSharedTaste(user.id);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
 }

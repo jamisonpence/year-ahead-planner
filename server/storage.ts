@@ -4022,6 +4022,167 @@ export const storage: IStorage = {
     );
     return result.rows[0];
   },
+
+  // ── Discover ──────────────────────────────────────────────────────────────
+
+  async getDiscoverTasteProfile(userId: number) {
+    const result = await pool.query(`
+      SELECT item_type, COUNT(*) AS count
+      FROM activity_feed
+      WHERE user_id = $1 AND item_type IS NOT NULL
+      GROUP BY item_type
+      ORDER BY count DESC
+    `, [userId]);
+    const rows: { item_type: string; count: string }[] = result.rows;
+    const total = rows.reduce((s, r) => s + parseInt(r.count, 10), 0);
+    return rows.map(r => ({
+      category: r.item_type,
+      count: parseInt(r.count, 10),
+      percentage: total > 0 ? Math.round((parseInt(r.count, 10) / total) * 100) : 0,
+    }));
+  },
+
+  async getDiscoverTrending(userId: number) {
+    const friendsRes = await pool.query(`
+      SELECT CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END AS fid
+      FROM friend_requests WHERE status = 'accepted' AND (from_user_id = $1 OR to_user_id = $1)
+    `, [userId]);
+    const friendIds: number[] = friendsRes.rows.map((r: any) => r.fid);
+    if (friendIds.length === 0) return [];
+    const ph = friendIds.map((_, i) => `$${i + 2}`).join(",");
+    const result = await pool.query(`
+      SELECT
+        af.item_type,
+        af.item_title,
+        MAX(af.item_image_url) AS item_image_url,
+        MAX(af.item_subtitle)  AS item_subtitle,
+        COUNT(DISTINCT af.user_id) AS friend_count
+      FROM activity_feed af
+      WHERE af.user_id IN (${ph})
+        AND af.item_title IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM activity_feed uf
+          WHERE uf.user_id = $1
+            AND uf.item_type = af.item_type
+            AND uf.item_title = af.item_title
+        )
+      GROUP BY af.item_type, af.item_title
+      HAVING COUNT(DISTINCT af.user_id) >= 2
+      ORDER BY friend_count DESC
+      LIMIT 20
+    `, [userId, ...friendIds]);
+    return result.rows.map((r: any) => ({
+      itemType: r.item_type,
+      itemTitle: r.item_title,
+      itemImageUrl: r.item_image_url,
+      itemSubtitle: r.item_subtitle,
+      friendCount: parseInt(r.friend_count, 10),
+    }));
+  },
+
+  async getDiscoverYouMightLike(userId: number) {
+    const friendsRes = await pool.query(`
+      SELECT CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END AS fid
+      FROM friend_requests WHERE status = 'accepted' AND (from_user_id = $1 OR to_user_id = $1)
+    `, [userId]);
+    const friendIds: number[] = friendsRes.rows.map((r: any) => r.fid);
+    if (friendIds.length === 0) return [];
+    // Top 3 categories for this user
+    const catsRes = await pool.query(`
+      SELECT item_type FROM activity_feed
+      WHERE user_id = $1 AND item_type IS NOT NULL
+      GROUP BY item_type ORDER BY COUNT(*) DESC LIMIT 3
+    `, [userId]);
+    const topCats: string[] = catsRes.rows.map((r: any) => r.item_type);
+    if (topCats.length === 0) {
+      // fallback: any category
+      topCats.push("book", "movie", "song");
+    }
+    const friendPh = friendIds.map((_, i) => `$${i + 2}`).join(",");
+    const catPh = topCats.map((_, i) => `$${i + 2 + friendIds.length}`).join(",");
+    const result = await pool.query(`
+      SELECT DISTINCT ON (af.item_type, af.item_title)
+        af.item_type, af.item_title, af.item_image_url, af.item_subtitle,
+        u.name AS friend_name, u.id AS friend_id
+      FROM activity_feed af
+      JOIN users u ON u.id = af.user_id
+      WHERE af.user_id IN (${friendPh})
+        AND af.item_type IN (${catPh})
+        AND af.item_title IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM activity_feed uf
+          WHERE uf.user_id = $1
+            AND uf.item_type = af.item_type
+            AND uf.item_title = af.item_title
+        )
+      ORDER BY af.item_type, af.item_title, af.created_at DESC
+      LIMIT 10
+    `, [userId, ...friendIds, ...topCats]);
+    return result.rows.map((r: any) => ({
+      itemType: r.item_type,
+      itemTitle: r.item_title,
+      itemImageUrl: r.item_image_url,
+      itemSubtitle: r.item_subtitle,
+      friendName: r.friend_name,
+      friendId: r.friend_id,
+    }));
+  },
+
+  async getDiscoverSharedTaste(userId: number) {
+    const friendsRes = await pool.query(`
+      SELECT u.id, u.name, u.avatar_url AS "avatarUrl"
+      FROM friend_requests fr
+      JOIN users u ON u.id = CASE WHEN fr.from_user_id = $1 THEN fr.to_user_id ELSE fr.from_user_id END
+      WHERE fr.status = 'accepted' AND (fr.from_user_id = $1 OR fr.to_user_id = $1)
+    `, [userId]);
+    const friends: { id: number; name: string; avatarUrl: string | null }[] = friendsRes.rows;
+    if (friends.length === 0) return [];
+
+    const myTotalRes = await pool.query(
+      `SELECT COUNT(*) AS c FROM activity_feed WHERE user_id = $1`, [userId]
+    );
+    const myTotal = parseInt(myTotalRes.rows[0].c, 10);
+
+    const results = await Promise.all(friends.map(async f => {
+      const overlapRes = await pool.query(`
+        SELECT
+          COUNT(*) AS overlap_total,
+          COUNT(*) FILTER (WHERE af1.item_type = 'book')  AS books,
+          COUNT(*) FILTER (WHERE af1.item_type = 'movie') AS movies,
+          COUNT(*) FILTER (WHERE af1.item_type = 'song')  AS songs,
+          COUNT(*) FILTER (WHERE af1.item_type = 'recipe') AS recipes
+        FROM activity_feed af1
+        JOIN activity_feed af2
+          ON af2.user_id = $2
+          AND af2.item_type = af1.item_type
+          AND af2.item_title = af1.item_title
+        WHERE af1.user_id = $1
+          AND af1.item_title IS NOT NULL
+      `, [userId, f.id]);
+      const row = overlapRes.rows[0];
+      const overlapCount = parseInt(row.overlap_total, 10);
+      const friendTotalRes = await pool.query(
+        `SELECT COUNT(*) AS c FROM activity_feed WHERE user_id = $1`, [f.id]
+      );
+      const friendTotal = parseInt(friendTotalRes.rows[0].c, 10);
+      const denom = Math.max(myTotal, friendTotal, 1);
+      return {
+        id: f.id,
+        name: f.name,
+        avatarUrl: f.avatarUrl,
+        overlapCount,
+        overlapPct: Math.round((overlapCount / denom) * 100),
+        breakdown: {
+          books: parseInt(row.books, 10),
+          movies: parseInt(row.movies, 10),
+          songs: parseInt(row.songs, 10),
+          recipes: parseInt(row.recipes, 10),
+        },
+      };
+    }));
+
+    return results.sort((a, b) => b.overlapPct - a.overlapPct);
+  },
 };
 
 export { pool };
