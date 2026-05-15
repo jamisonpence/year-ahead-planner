@@ -4617,39 +4617,25 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
 
   if (isLoading) return <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />Loading discussion…</div>;
 
-  // For split layout: first 2 sides get columns, remaining go in an overflow row
-  const splitSides  = sides.slice(0, 2);
-  const overflowSides = sides.slice(2);
+  const colCount = Math.min(sides.length, 4);
 
   return (
     <div className="space-y-4">
 
-      {/* ── Scoreboard ── */}
+      {/* ── Slim stats bar ── */}
       <div className="rounded-xl border bg-card overflow-hidden">
-        <div className={`grid divide-x`} style={{ gridTemplateColumns: `repeat(${Math.min(sides.length, 4)}, 1fr)` }}>
-          {sides.slice(0, 4).map((s, i) => {
+        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+          {sides.map((s, i) => {
             const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
-            const sidePosts = postsBySide(s);
-            const count = sidePosts.length;
-            const latest = sidePosts[sidePosts.length - 1];
             return (
-              <div key={s} className="p-3 flex flex-col gap-1.5 min-h-[80px]">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
-                  <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${st.text}`}>{s}</p>
-                  <span className={`ml-auto text-xs font-bold ${st.text}`}>{count}</span>
-                </div>
-                {latest ? (
-                  <div className="flex-1">
-                    <p className="text-[11px] text-foreground/80 leading-snug line-clamp-2 italic">"{latest.content}"</p>
-                    <p className="text-[9px] text-muted-foreground mt-1">— {latest.displayName ?? "Anonymous"}</p>
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-muted-foreground/50 italic">No arguments yet</p>
-                )}
-              </div>
+              <span key={s} className="flex items-center gap-1.5 text-[11px] font-medium">
+                <span className={`w-2 h-2 rounded-full ${st.dot}`} />
+                <span className={st.text}>{s}</span>
+                <span className="text-muted-foreground font-normal">· {postsBySide(s).length}</span>
+              </span>
             );
           })}
+          <span className="ml-auto text-[10px] text-muted-foreground">{posts.length} argument{posts.length !== 1 ? "s" : ""} · {data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</span>
         </div>
         {posts.length > 0 && (
           <div className="h-1 flex">
@@ -4660,61 +4646,39 @@ function DebateThread({ debateId, currentUserId }: { debateId: number; currentUs
             })}
           </div>
         )}
-        <div className="px-3 py-1.5 text-center border-t">
-          <p className="text-[10px] text-muted-foreground">{posts.length} argument{posts.length !== 1 ? "s" : ""} · {data?.memberCount ?? 1} participant{(data?.memberCount ?? 1) !== 1 ? "s" : ""}</p>
-        </div>
       </div>
 
       {/* ── Layout toggle ── */}
-      {posts.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground">View:</span>
-          <button onClick={() => setLayout("split")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "split" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
-            Side by Side
-          </button>
-          <button onClick={() => setLayout("unified")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "unified" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
-            Chronological
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-muted-foreground">View:</span>
+        <button onClick={() => setLayout("split")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "split" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+          Side by Side
+        </button>
+        <button onClick={() => setLayout("unified")} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${layout === "unified" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+          Chronological
+        </button>
+      </div>
 
-      {/* ── Split layout — first 2 sides in columns ── */}
-      {layout === "split" && posts.length > 0 && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {splitSides.map((s, i) => {
-              const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
-              const sidePosts = postsBySide(s);
-              return (
-                <div key={s} className="space-y-2">
-                  <div className={`flex items-center gap-2 pb-1 border-b ${st.border}`}>
-                    <div className={`w-2 h-2 rounded-full ${st.dot}`} />
-                    <span className={`text-xs font-bold ${st.text}`}>{s} · {sidePosts.length}</span>
-                  </div>
-                  {sidePosts.length === 0
-                    ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
-                    : sidePosts.map(p => <PostCard key={p.id} p={p} />)
-                  }
-                </div>
-              );
-            })}
-          </div>
-          {/* Additional sides (3+) shown below */}
-          {overflowSides.map((s, i) => {
-            const st = SIDE_PALETTE[(i + 2) % SIDE_PALETTE.length];
+      {/* ── Side-by-Side layout — all sides in columns (up to 4) ── */}
+      {layout === "split" && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
+          {sides.slice(0, 4).map((s, i) => {
+            const st = SIDE_PALETTE[i % SIDE_PALETTE.length];
             const sidePosts = postsBySide(s);
-            if (sidePosts.length === 0) return null;
             return (
-              <div key={s} className="space-y-2">
+              <div key={s} className="space-y-2 min-w-0">
                 <div className={`flex items-center gap-2 pb-1 border-b ${st.border}`}>
                   <div className={`w-2 h-2 rounded-full ${st.dot}`} />
                   <span className={`text-xs font-bold ${st.text}`}>{s} · {sidePosts.length}</span>
                 </div>
-                {sidePosts.map(p => <PostCard key={p.id} p={p} />)}
+                {sidePosts.length === 0
+                  ? <p className="text-xs text-muted-foreground text-center py-4 italic">No arguments yet</p>
+                  : sidePosts.map(p => <PostCard key={p.id} p={p} />)
+                }
               </div>
             );
           })}
-        </>
+        </div>
       )}
 
       {/* ── Chronological layout ── */}
