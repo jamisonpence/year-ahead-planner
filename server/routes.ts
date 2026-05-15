@@ -5656,6 +5656,16 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── User summary ──────────────────────────────────────────────────────────
+
+  app.get("/api/user/summary", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const summary = await storage.getUserSummary(user.id);
+      res.json(summary);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Discover ──────────────────────────────────────────────────────────────
 
   app.get("/api/discover/taste-profile", requireAuth, async (req, res) => {

@@ -4183,6 +4183,91 @@ export const storage: IStorage = {
 
     return results.sort((a, b) => b.overlapPct - a.overlapPct);
   },
+
+  // ── User summary (My Lifos profile stats + per-section item counts) ─────────
+
+  async getUserSummary(userId: number) {
+    const [
+      counts,
+      friendsRes,
+      recsRes,
+    ] = await Promise.all([
+      // Run all per-section counts in one multi-row query
+      pool.query(`
+        SELECT 'reading'      AS section, COUNT(*) AS cnt FROM books WHERE user_id = $1
+        UNION ALL
+        SELECT 'movies',                  COUNT(*)         FROM movies WHERE user_id = $1
+        UNION ALL
+        SELECT 'music',                   COUNT(*)         FROM music_songs WHERE user_id = $1
+        UNION ALL
+        SELECT 'recipes',                 COUNT(*)         FROM recipes WHERE user_id = $1
+        UNION ALL
+        SELECT 'spots',                   COUNT(*)         FROM spots WHERE user_id = $1
+        UNION ALL
+        SELECT 'quotes',                  COUNT(*)         FROM quotes WHERE user_id = $1
+        UNION ALL
+        SELECT 'art',                     COUNT(*)         FROM art_pieces WHERE user_id = $1
+        UNION ALL
+        SELECT 'hobbies',                 COUNT(*)         FROM hobbies WHERE user_id = $1
+        UNION ALL
+        SELECT 'workouts',                COUNT(*)         FROM workout_logs WHERE user_id = $1
+        UNION ALL
+        SELECT 'plants',                  COUNT(*)         FROM plants WHERE user_id = $1
+        UNION ALL
+        SELECT 'health',                  COUNT(*)         FROM health_metrics WHERE user_id = $1
+        UNION ALL
+        SELECT 'goals',                   COUNT(*)         FROM goals WHERE user_id = $1
+        UNION ALL
+        SELECT 'budget',                  COUNT(*)         FROM transactions WHERE user_id = $1
+        UNION ALL
+        SELECT 'calendar',                COUNT(*)         FROM events WHERE user_id = $1
+        UNION ALL
+        SELECT 'relationships',           COUNT(*)         FROM people WHERE user_id = $1
+        UNION ALL
+        SELECT 'housekeeping',            COUNT(*)         FROM chores WHERE user_id = $1
+        UNION ALL
+        SELECT 'kids',                    COUNT(*)         FROM children WHERE user_id = $1
+        UNION ALL
+        SELECT 'journal',                 COUNT(*)         FROM journal_entries WHERE user_id = $1
+        UNION ALL
+        SELECT 'faith',                   COUNT(*)         FROM sacred_texts WHERE user_id = $1
+        UNION ALL
+        SELECT 'politics',                COUNT(*)         FROM political_issues WHERE user_id = $1
+      `, [userId]),
+      // Friends count
+      pool.query(
+        `SELECT COUNT(*) AS c FROM friend_requests WHERE status = 'accepted' AND (from_user_id = $1 OR to_user_id = $1)`,
+        [userId]
+      ),
+      // Recommendations/shares sent
+      pool.query(`
+        SELECT
+          (SELECT COUNT(*) FROM book_recommendations     WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM music_recommendations    WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM movie_shares             WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM recipe_shares            WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM spot_shares              WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM art_shares               WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM quote_shares             WHERE from_user_id = $1) +
+          (SELECT COUNT(*) FROM workout_shares           WHERE from_user_id = $1) AS total
+      `, [userId]),
+    ]);
+
+    const sectionCounts: Record<string, number> = {};
+    let totalItems = 0;
+    for (const row of counts.rows as { section: string; cnt: string }[]) {
+      const n = parseInt(row.cnt, 10);
+      sectionCounts[row.section] = n;
+      totalItems += n;
+    }
+
+    return {
+      totalItems,
+      friendsCount: parseInt(friendsRes.rows[0].c, 10),
+      recommendationsSent: parseInt(recsRes.rows[0].total, 10),
+      counts: sectionCounts,
+    };
+  },
 };
 
 export { pool };

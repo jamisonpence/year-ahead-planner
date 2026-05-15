@@ -197,6 +197,254 @@ function ManageItem({ pref, tab, index, onDragStart, onDragOver, onDragEnd, onTo
   );
 }
 
+// ── My Lifos sheet ────────────────────────────────────────────────────────────
+
+interface UserSummary {
+  totalItems: number;
+  friendsCount: number;
+  recommendationsSent: number;
+  counts: Record<string, number>;
+}
+
+// Default visibility per path when no stored setting exists
+const PATH_DEFAULT_VISIBILITY: Record<string, "friends" | "private"> = {
+  "/reading":       "friends",
+  "/movies":        "friends",
+  "/music":         "friends",
+  "/recipes":       "friends",
+  "/spots":         "friends",
+  "/quotes":        "friends",
+  "/art":           "friends",
+  "/hobbies":       "friends",
+  "/workouts":      "friends",
+  "/plants":        "friends",
+  "/health":        "private",
+  "/goals":         "private",
+  "/calendar":      "private",
+  "/budget":        "private",
+  "/relationships": "private",
+  "/housekeeping":  "private",
+  "/kids":          "private",
+  "/journal":       "private",
+  "/faith":         "private",
+  "/politics":      "private",
+};
+
+const SECTION_KEY: Record<string, string> = {
+  "/reading":       "reading",
+  "/movies":        "movies",
+  "/music":         "music",
+  "/recipes":       "recipes",
+  "/spots":         "spots",
+  "/quotes":        "quotes",
+  "/art":           "art",
+  "/hobbies":       "hobbies",
+  "/workouts":      "workouts",
+  "/plants":        "plants",
+  "/health":        "health",
+  "/goals":         "goals",
+  "/calendar":      "calendar",
+  "/budget":        "budget",
+  "/relationships": "relationships",
+  "/housekeeping":  "housekeeping",
+  "/kids":          "kids",
+  "/journal":       "journal",
+  "/faith":         "faith",
+  "/politics":      "politics",
+};
+
+const COLLECTION_GROUPS = [
+  {
+    key: "culture",
+    label: "Culture & Taste",
+    subtitle: "Visible to friends by default",
+    tiles: [
+      { path: "/reading",  emoji: "📚", label: "Reading"       },
+      { path: "/movies",   emoji: "🎬", label: "Movies & Shows"},
+      { path: "/music",    emoji: "🎵", label: "Music"         },
+      { path: "/recipes",  emoji: "🍽️", label: "Recipes"      },
+      { path: "/spots",    emoji: "📍", label: "Spots"         },
+      { path: "/quotes",   emoji: "💬", label: "Quotes"        },
+      { path: "/art",      emoji: "🎨", label: "Art"           },
+      { path: "/hobbies",  emoji: "✨", label: "Hobbies"       },
+    ],
+  },
+  {
+    key: "wellness",
+    label: "Wellness",
+    subtitle: "You control visibility",
+    tiles: [
+      { path: "/workouts", emoji: "💪", label: "Workouts" },
+      { path: "/plants",   emoji: "🌿", label: "Plants"   },
+      { path: "/health",   emoji: "❤️", label: "Health"   },
+    ],
+  },
+  {
+    key: "life",
+    label: "Life & Planning",
+    subtitle: "Private by default",
+    tiles: [
+      { path: "/goals",         emoji: "🎯", label: "Goals"        },
+      { path: "/calendar",      emoji: "📅", label: "Calendar"     },
+      { path: "/budget",        emoji: "💰", label: "Budget"       },
+      { path: "/relationships", emoji: "👥", label: "Relationships"},
+      { path: "/housekeeping",  emoji: "🏠", label: "Housekeeping" },
+      { path: "/kids",          emoji: "👶", label: "Kids"         },
+      { path: "/journal",       emoji: "📓", label: "Journal"      },
+      { path: "/faith",         emoji: "🕊️", label: "Faith"       },
+      { path: "/politics",      emoji: "🏛️", label: "Politics"    },
+    ],
+  },
+];
+
+function MyLifosSheet({
+  user,
+  privacySettings,
+  onClose,
+  onLogout,
+  location,
+}: {
+  user: any;
+  privacySettings: { path: string; visibility: string }[];
+  onClose: () => void;
+  onLogout: () => void;
+  location: string;
+}) {
+  const { data: summary } = useQuery<UserSummary>({
+    queryKey: ["/api/user/summary"],
+    queryFn: () => apiRequest("GET", "/api/user/summary").then(r => r.json()),
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  function getVisibility(path: string): "friends" | "private" {
+    const stored = privacySettings.find(s => s.path === path)?.visibility;
+    if (stored) return stored as "friends" | "private";
+    return PATH_DEFAULT_VISIBILITY[path] ?? "private";
+  }
+
+  const handle = user?.email ? "@" + user.email.split("@")[0] : "";
+
+  return (
+    <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="absolute bottom-0 left-0 right-0 bg-card rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {/* ── Profile hero ────────────────────────────────────────────── */}
+          <div className="px-5 pt-3 pb-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                {user?.avatarUrl
+                  ? <img src={user.avatarUrl} alt={user.name} className="w-16 h-16 rounded-full ring-2 ring-violet-400/40" />
+                  : <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white">
+                      {user?.name?.charAt(0) ?? "?"}
+                    </div>
+                }
+                <div>
+                  <p className="font-bold text-base leading-tight">{user?.name}</p>
+                  <p className="text-xs text-muted-foreground">{handle}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/settings">
+                  <button onClick={onClose} className="text-xs border rounded-xl px-3 py-1.5 hover:bg-secondary transition-colors font-medium">
+                    Edit Profile
+                  </button>
+                </Link>
+                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Items Saved", value: summary?.totalItems ?? "—" },
+                { label: "Friends",     value: summary?.friendsCount ?? "—" },
+                { label: "Recs Sent",   value: summary?.recommendationsSent ?? "—" },
+              ].map(stat => (
+                <div key={stat.label} className="bg-secondary/50 rounded-2xl p-3 text-center">
+                  <p className="text-lg font-bold leading-none">{stat.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Privacy legend ───────────────────────────────────────────── */}
+          <div className="px-5 mb-4 flex items-center gap-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
+              Visible to friends
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock size={11} className="text-muted-foreground" />
+              Private
+            </div>
+          </div>
+
+          {/* ── Collection groups ────────────────────────────────────────── */}
+          <div className="px-5 space-y-6 pb-6">
+            {COLLECTION_GROUPS.map(group => (
+              <div key={group.key}>
+                <div className="mb-2">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  <p className="text-[11px] text-muted-foreground">{group.subtitle}</p>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {group.tiles.map(tile => {
+                    const vis = getVisibility(tile.path);
+                    const count = summary?.counts[SECTION_KEY[tile.path]] ?? 0;
+                    const isActive = location === tile.path;
+                    return (
+                      <Link key={tile.path} href={tile.path}>
+                        <button
+                          onClick={onClose}
+                          className={`relative w-full flex flex-col items-center gap-1 py-3 px-1 rounded-2xl border transition-colors
+                            ${isActive
+                              ? "bg-violet-500/10 border-violet-400/40"
+                              : "bg-secondary/40 border-transparent hover:bg-secondary/80"
+                            }`}
+                        >
+                          {/* Privacy indicator */}
+                          <div className="absolute top-1.5 right-1.5">
+                            {vis === "friends"
+                              ? <span className="w-2 h-2 rounded-full bg-violet-500 block" />
+                              : <Lock size={8} className="text-muted-foreground/60" />
+                            }
+                          </div>
+                          <span className="text-xl leading-none">{tile.emoji}</span>
+                          <span className="text-[10px] font-medium text-center leading-tight">{tile.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{count > 0 ? count : ""}</span>
+                        </button>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Footer ──────────────────────────────────────────────────────── */}
+        <div className="px-5 py-4 border-t flex gap-2 bg-card">
+          <button onClick={onLogout} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors">
+            <LogOut size={14} />Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main shell ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -210,6 +458,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { prefs, save } = useNavPrefs();
   const { user } = useAuth();
   const qc = useQueryClient();
+
+  // Privacy settings (used by My Lifos sheet)
+  const { data: privacySettings = [] } = useQuery<{ path: string; visibility: string }[]>({
+    queryKey: ["/api/tab-privacy"],
+    queryFn: () => apiRequest("GET", "/api/tab-privacy").then(r => r.json()),
+    enabled: !!user,
+  });
 
   // Pending friend-request badge
   const { data: friendCountData } = useQuery<{ count: number }>({
@@ -604,59 +859,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── My Lifos sheet ───────────────────────────────────────────────────── */}
-      {myLifosOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setMyLifosOpen(false)}>
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
-              <div>
-                <span className="font-bold text-base">My Lifos</span>
-                {user && <p className="text-xs text-muted-foreground">{user.name}</p>}
-              </div>
-              <button onClick={() => setMyLifosOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
-            </div>
-            {user && (
-              <div className="px-5 py-3 flex items-center gap-3 border-b bg-secondary/20">
-                {user.avatarUrl
-                  ? <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
-                  : <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center text-sm font-bold text-violet-500">{user.name.charAt(0)}</div>
-                }
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">{user.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                </div>
-                <Link href="/settings"><button onClick={() => setMyLifosOpen(false)} className="text-xs text-muted-foreground border rounded-lg px-2 py-1 hover:bg-secondary transition-colors flex items-center gap-1"><Settings size={11} />Settings</button></Link>
-              </div>
-            )}
-            <div className="overflow-y-auto p-4 grid grid-cols-3 gap-2">
-              {visibleTabs
-                .filter(t => ["/reading","/movies","/music","/recipes","/spots","/quotes","/art","/hobbies","/goals","/workouts","/calendar","/plants","/journal","/faith","/health","/politics","/budget","/housekeeping","/kids","/relationships"].includes(t.path))
-                .map(tab => {
-                  const Icon = tab.icon;
-                  const isActive = location === tab.path;
-                  return (
-                    <Link key={tab.path} href={tab.path}>
-                      <button
-                        onClick={() => setMyLifosOpen(false)}
-                        className={`w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors ${isActive ? "bg-violet-500/10 border-violet-400/30 text-violet-500" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}
-                      >
-                        <Icon size={20} className={isActive ? "text-violet-500" : "text-muted-foreground"} />
-                        <span className="text-[11px] font-medium text-center leading-tight">{tab.label}</span>
-                      </button>
-                    </Link>
-                  );
-              })}
-            </div>
-            <div className="p-4 border-t flex gap-2">
-              <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors">
-                <LogOut size={14} />Sign out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {myLifosOpen && <MyLifosSheet
+        user={user}
+        privacySettings={privacySettings}
+        onClose={() => setMyLifosOpen(false)}
+        onLogout={handleLogout}
+        location={location}
+      />}
 
       {/* ── Quick-add modal ──────────────────────────────────────────────────── */}
       {quickAddOpen && (
