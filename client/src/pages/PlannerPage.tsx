@@ -992,20 +992,20 @@ export default function PlannerPage() {
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{upcomingCount}</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center bg-secondary rounded-lg p-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="overflow-x-auto flex items-center bg-secondary rounded-lg p-0.5 max-w-[calc(100vw-160px)] sm:max-w-none">
               {navItems.map((b) => (
                 <button key={b.id} onClick={() => setView(b.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors whitespace-nowrap ${view === b.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-                  {b.icon} {b.label}
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm transition-colors whitespace-nowrap ${view === b.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+                  {b.icon} <span className="hidden xs:inline sm:inline">{b.label}</span>
                 </button>
               ))}
             </div>
-            <button onClick={toggle} className="p-2 rounded-lg hover:bg-secondary transition-colors" aria-label="Toggle theme">
+            <button onClick={toggle} className="p-2 rounded-lg hover:bg-secondary transition-colors shrink-0" aria-label="Toggle theme">
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <Button onClick={() => { setEditingEvent(null); setModalOpen(true); }} size="sm" className="gap-1.5">
-              <Plus size={15} /> Add Event
+            <Button onClick={() => { setEditingEvent(null); setModalOpen(true); }} size="sm" className="gap-1.5 shrink-0">
+              <Plus size={15} /> <span className="hidden sm:inline">Add Event</span>
             </Button>
           </div>
         </div>
