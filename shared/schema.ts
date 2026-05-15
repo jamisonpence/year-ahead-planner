@@ -1445,6 +1445,7 @@ export const politicalDebates = pgTable("political_debates", {
   issueRef:    text("issue_ref"),                  // optional issue topic reference
   shareCode:   text("share_code").notNull(),        // 8-char code for friends to join
   status:      text("status").default("open"),      // "open" | "closed"
+  sides:       text("sides"),                       // JSON array of side label strings e.g. '["For","Against","Neutral"]'
   createdAt:   timestamp("created_at").defaultNow(),
 });
 export const insertPoliticalDebateSchema = createInsertSchema(politicalDebates).omit({ id: true, createdAt: true });
@@ -1481,3 +1482,36 @@ export const politicalDebateMembers = pgTable("political_debate_members", {
   userId:    integer("user_id").notNull(),
   joinedAt:  timestamp("joined_at").defaultNow(),
 });
+
+// ── ACTIVITY FEED ─────────────────────────────────────────────────────────────
+export const activityFeed = pgTable("activity_feed", {
+  id:           serial("id").primaryKey(),
+  userId:       integer("user_id").notNull(),        // who did the action
+  activityType: text("activity_type").notNull(),     // book_added | book_finished | movie_added | song_added | recipe_added | spot_added | quote_added | recommendation_received
+  itemId:       integer("item_id"),
+  itemType:     text("item_type"),                   // book | movie | song | recipe | spot | quote
+  itemTitle:    text("item_title"),
+  itemImageUrl: text("item_image_url"),
+  itemSubtitle: text("item_subtitle"),               // author, director, artist etc.
+  itemExtra:    text("item_extra"),                  // JSON: extra metadata
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+export type ActivityFeedItem = typeof activityFeed.$inferSelect;
+
+export const activityReactions = pgTable("activity_reactions", {
+  id:         serial("id").primaryKey(),
+  feedItemId: integer("feed_item_id").notNull(),
+  userId:     integer("user_id").notNull(),
+  emoji:      text("emoji").notNull(),               // 👍 ❤️ 🔥
+  createdAt:  timestamp("created_at").defaultNow(),
+});
+export type ActivityReaction = typeof activityReactions.$inferSelect;
+
+export const activityComments = pgTable("activity_comments", {
+  id:         serial("id").primaryKey(),
+  feedItemId: integer("feed_item_id").notNull(),
+  userId:     integer("user_id").notNull(),
+  content:    text("content").notNull(),
+  createdAt:  timestamp("created_at").defaultNow(),
+});
+export type ActivityComment = typeof activityComments.$inferSelect;

@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -1177,6 +1177,33 @@ export async function initializeStorage() {
       joined_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(debate_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS activity_feed (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      activity_type TEXT NOT NULL,
+      item_id INTEGER,
+      item_type TEXT,
+      item_title TEXT,
+      item_image_url TEXT,
+      item_subtitle TEXT,
+      item_extra TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS activity_reactions (
+      id SERIAL PRIMARY KEY,
+      feed_item_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(feed_item_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS activity_comments (
+      id SERIAL PRIMARY KEY,
+      feed_item_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
   `);
 }
 
@@ -1532,6 +1559,12 @@ export interface IStorage {
   createPoliticalNewsSource(data: import("@shared/schema").InsertPoliticalNewsSource, userId: number): Promise<import("@shared/schema").PoliticalNewsSource>;
   updatePoliticalNewsSource(id: number, data: Partial<import("@shared/schema").InsertPoliticalNewsSource>): Promise<import("@shared/schema").PoliticalNewsSource | undefined>;
   deletePoliticalNewsSource(id: number): Promise<boolean>;
+  // Activity Feed
+  logActivity(userId: number, type: string, itemId: number | null, itemType: string | null, title: string | null, imageUrl: string | null, subtitle: string | null, extra?: string): Promise<void>;
+  getFeedForUser(userId: number, page: number, pageSize: number): Promise<{ items: any[]; total: number }>;
+  getMyRecentActivity(userId: number, limit?: number): Promise<any[]>;
+  toggleReaction(feedItemId: number, userId: number, emoji: string): Promise<void>;
+  addComment(feedItemId: number, userId: number, content: string): Promise<any>;
 }
 
 export const storage: IStorage = {
@@ -3849,6 +3882,145 @@ export const storage: IStorage = {
   async deleteTripItem(id: number) {
     const result = await db.delete(tripItems).where(eq(tripItems.id, id));
     return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Activity Feed ─────────────────────────────────────────────────────────────
+  async logActivity(userId, type, itemId, itemType, title, imageUrl, subtitle, extra) {
+    await db.insert(activityFeed).values({
+      userId,
+      activityType: type,
+      itemId: itemId ?? undefined,
+      itemType: itemType ?? undefined,
+      itemTitle: title ?? undefined,
+      itemImageUrl: imageUrl ?? undefined,
+      itemSubtitle: subtitle ?? undefined,
+      itemExtra: extra ?? undefined,
+    });
+  },
+
+  async getFeedForUser(userId, page, pageSize) {
+    const offset = (page - 1) * pageSize;
+    // Get friends (users where accepted friend request exists)
+    const friendsResult = await pool.query(`
+      SELECT CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END as friend_id
+      FROM friend_requests
+      WHERE status = 'accepted' AND (from_user_id = $1 OR to_user_id = $1)
+    `, [userId]);
+    const friendIds: number[] = friendsResult.rows.map((r: any) => r.friend_id);
+    // Include own activity in the feed
+    const allIds = [userId, ...friendIds];
+    if (allIds.length === 0) return { items: [], total: 0 };
+
+    const placeholders = allIds.map((_, i) => `$${i + 1}`).join(",");
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM activity_feed WHERE user_id IN (${placeholders})`,
+      allIds
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const itemsResult = await pool.query(`
+      SELECT af.*, u.name as user_name, u.avatar_url as user_avatar_url, u.id as user_id_val
+      FROM activity_feed af
+      JOIN users u ON u.id = af.user_id
+      WHERE af.user_id IN (${placeholders})
+      ORDER BY af.created_at DESC
+      LIMIT $${allIds.length + 1} OFFSET $${allIds.length + 2}
+    `, [...allIds, pageSize, offset]);
+
+    const feedItems = itemsResult.rows;
+    if (feedItems.length === 0) return { items: [], total };
+
+    const feedItemIds = feedItems.map((r: any) => r.id);
+    const idPlaceholders = feedItemIds.map((_: any, i: number) => `$${i + 1}`).join(",");
+
+    const reactionsResult = await pool.query(`
+      SELECT ar.*, u.name as user_name
+      FROM activity_reactions ar
+      JOIN users u ON u.id = ar.user_id
+      WHERE ar.feed_item_id IN (${idPlaceholders})
+    `, feedItemIds);
+
+    const commentsResult = await pool.query(`
+      SELECT ac.*, u.name as user_name
+      FROM activity_comments ac
+      JOIN users u ON u.id = ac.user_id
+      WHERE ac.feed_item_id IN (${idPlaceholders})
+      ORDER BY ac.created_at ASC
+    `, feedItemIds);
+
+    const reactionsByFeedId: Record<number, any[]> = {};
+    const commentsByFeedId: Record<number, any[]> = {};
+    for (const r of reactionsResult.rows) {
+      if (!reactionsByFeedId[r.feed_item_id]) reactionsByFeedId[r.feed_item_id] = [];
+      reactionsByFeedId[r.feed_item_id].push({ id: r.id, emoji: r.emoji, userId: r.user_id, userName: r.user_name });
+    }
+    for (const c of commentsResult.rows) {
+      if (!commentsByFeedId[c.feed_item_id]) commentsByFeedId[c.feed_item_id] = [];
+      commentsByFeedId[c.feed_item_id].push({ id: c.id, content: c.content, userId: c.user_id, userName: c.user_name, createdAt: c.created_at });
+    }
+
+    const items = feedItems.map((r: any) => ({
+      id: r.id,
+      activityType: r.activity_type,
+      itemId: r.item_id,
+      itemType: r.item_type,
+      itemTitle: r.item_title,
+      itemImageUrl: r.item_image_url,
+      itemSubtitle: r.item_subtitle,
+      itemExtra: r.item_extra,
+      createdAt: r.created_at,
+      user: { id: r.user_id, name: r.user_name, avatarUrl: r.user_avatar_url },
+      reactions: reactionsByFeedId[r.id] ?? [],
+      comments: commentsByFeedId[r.id] ?? [],
+    }));
+
+    return { items, total };
+  },
+
+  async getMyRecentActivity(userId, limit = 5) {
+    const result = await pool.query(`
+      SELECT af.*, u.name as user_name, u.avatar_url as user_avatar_url
+      FROM activity_feed af
+      JOIN users u ON u.id = af.user_id
+      WHERE af.user_id = $1
+      ORDER BY af.created_at DESC
+      LIMIT $2
+    `, [userId, limit]);
+    return result.rows.map((r: any) => ({
+      id: r.id,
+      activityType: r.activity_type,
+      itemId: r.item_id,
+      itemType: r.item_type,
+      itemTitle: r.item_title,
+      itemImageUrl: r.item_image_url,
+      itemSubtitle: r.item_subtitle,
+      itemExtra: r.item_extra,
+      createdAt: r.created_at,
+      user: { id: r.user_id, name: r.user_name, avatarUrl: r.user_avatar_url },
+    }));
+  },
+
+  async toggleReaction(feedItemId, userId, emoji) {
+    const existing = await pool.query(
+      `SELECT id FROM activity_reactions WHERE feed_item_id = $1 AND user_id = $2 AND emoji = $3`,
+      [feedItemId, userId, emoji]
+    );
+    if (existing.rows.length > 0) {
+      await pool.query(`DELETE FROM activity_reactions WHERE id = $1`, [existing.rows[0].id]);
+    } else {
+      await pool.query(
+        `INSERT INTO activity_reactions (feed_item_id, user_id, emoji) VALUES ($1, $2, $3)`,
+        [feedItemId, userId, emoji]
+      );
+    }
+  },
+
+  async addComment(feedItemId, userId, content) {
+    const result = await pool.query(
+      `INSERT INTO activity_comments (feed_item_id, user_id, content) VALUES ($1, $2, $3) RETURNING *`,
+      [feedItemId, userId, content]
+    );
+    return result.rows[0];
   },
 };
 

@@ -1,13 +1,14 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import {
   Calendar, BookOpen, Dumbbell, Target, Plus, Flame,
   CheckCircle2, AlertTriangle, ChevronRight,
   BookMarked, Zap, Home, RefreshCw, MapPin, Quote as QuoteIcon,
   CreditCard, TrendingUp, Heart, Settings2, X,
   Sparkles, Clock, Star, Coffee, Sun, Sunset, Check, BookCopy,
+  Film, Music, ChefHat, MessageCircle, Send, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -26,28 +27,32 @@ import EventFormModal from "@/components/modals/EventFormModal";
 import BookFormModal from "@/components/modals/BookFormModal";
 import ReadingSessionModal from "@/components/modals/ReadingSessionModal";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
+import { useAuth } from "@/hooks/useAuth";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "day_planner" | "stats" | "events" | "goals" | "workouts" | "reading" | "quote" | "spots" | "due_soon";
+type SectionId = "day_planner" | "stats" | "events" | "goals" | "workouts" | "reading" | "quote" | "spots" | "due_soon" | "social_feed" | "my_activity";
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  day_planner: "AI Day Planner",
-  stats:       "Stat Cards",
-  events:      "Upcoming Events",
-  goals:       "Active Goals",
-  workouts:    "Weekly Workouts",
-  reading:     "Currently Reading",
-  quote:       "Featured Quote",
-  spots:       "Places to Visit",
-  due_soon:    "Due Soon",
+  day_planner:  "AI Day Planner",
+  stats:        "Stat Cards",
+  events:       "Upcoming Events",
+  goals:        "Active Goals",
+  workouts:     "Weekly Workouts",
+  reading:      "Currently Reading",
+  quote:        "Featured Quote",
+  spots:        "Places to Visit",
+  due_soon:     "Due Soon",
+  social_feed:  "Friends' Activity",
+  my_activity:  "My Recent Activity",
 };
 
-const SECTION_ORDER: SectionId[] = ["day_planner", "stats", "events", "goals", "workouts", "reading", "quote", "spots", "due_soon"];
+const SECTION_ORDER: SectionId[] = ["social_feed", "my_activity", "day_planner", "stats", "events", "goals", "workouts", "reading", "quote", "spots", "due_soon"];
 
 const ALL_ON: Record<SectionId, boolean> = {
   day_planner: true, stats: true, events: true, goals: true, workouts: true,
   reading: true, quote: true, spots: true, due_soon: true,
+  social_feed: true, my_activity: true,
 };
 
 function loadVisibility(): Record<SectionId, boolean> {
@@ -261,6 +266,8 @@ export default function DashboardPage() {
     });
   }
 
+  const { user: authUser } = useAuth();
+
   const { data: events = [] }     = useQuery<EventWithTasks[]>({ queryKey: ["/api/events"] });
   const { data: books = [] }      = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
   const { data: wLogs = [] }      = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
@@ -443,6 +450,12 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Social Feed */}
+      {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
+
+      {/* My Recent Activity */}
+      {visible.my_activity && <MyRecentActivity />}
 
       {/* AI Day Planner */}
       {visible.day_planner && <AIDayPlanner />}
@@ -760,6 +773,324 @@ export default function DashboardPage() {
       <BookFormModal open={addBook} onClose={() => setAddBook(false)} editBook={null} />
       {addSession && <ReadingSessionModal open onClose={() => setAddSession(false)} books={books} editSession={null} />}
       {addWorkout && <WorkoutLogModal open onClose={() => setAddWorkout(false)} templates={wTemplates} editLog={null} />}
+    </div>
+  );
+}
+
+// ── Activity Feed helpers ─────────────────────────────────────────────────────
+
+function timeAgo(date: string | Date) {
+  return formatDistanceToNow(new Date(date), { addSuffix: true });
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  book_added:               "added a book",
+  book_finished:            "finished reading",
+  movie_added:              "added a movie",
+  song_added:               "added a song",
+  recipe_added:             "added a recipe",
+  spot_added:               "saved a spot",
+  quote_added:              "saved a quote",
+  recommendation_received:  "recommended something to you",
+};
+
+const ITEM_TYPE_ICONS: Record<string, React.ReactNode> = {
+  book:   <BookOpen size={14} />,
+  movie:  <Film size={14} />,
+  song:   <Music size={14} />,
+  recipe: <ChefHat size={14} />,
+  spot:   <MapPin size={14} />,
+  quote:  <QuoteIcon size={14} />,
+};
+
+// ── FeedCard ─────────────────────────────────────────────────────────────────
+
+type FeedItemUser = { id: number; name: string; avatarUrl: string | null };
+type FeedReaction = { id: number; emoji: string; userId: number; userName: string };
+type FeedComment = { id: number; content: string; userId: number; userName: string; createdAt: string };
+type FeedItem = {
+  id: number;
+  activityType: string;
+  itemId: number | null;
+  itemType: string | null;
+  itemTitle: string | null;
+  itemImageUrl: string | null;
+  itemSubtitle: string | null;
+  itemExtra: string | null;
+  createdAt: string;
+  user: FeedItemUser;
+  reactions: FeedReaction[];
+  comments: FeedComment[];
+};
+
+function UserAvatar({ user }: { user: FeedItemUser }) {
+  if (user.avatarUrl) {
+    return <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover shrink-0" />;
+  }
+  const initials = user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+      <span className="text-xs font-semibold text-primary">{initials}</span>
+    </div>
+  );
+}
+
+const REACTION_EMOJIS = ["👍", "❤️", "🔥"];
+
+function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: number }) {
+  const qc = useQueryClient();
+  const [showCommentBox, setShowCommentBox] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+
+  const reactionCounts = REACTION_EMOJIS.reduce<Record<string, number>>((acc, e) => {
+    acc[e] = item.reactions.filter((r) => r.emoji === e).length;
+    return acc;
+  }, {});
+
+  const myReactions = new Set(item.reactions.filter((r) => r.userId === currentUserId).map((r) => r.emoji));
+
+  const reactMutation = useMutation({
+    mutationFn: async (emoji: string) => {
+      await apiRequest("POST", `/api/feed/${item.id}/react`, { emoji });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/feed"] }); },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      await apiRequest("POST", `/api/feed/${item.id}/comment`, { content });
+    },
+    onSuccess: () => {
+      setCommentText("");
+      setShowCommentBox(false);
+      qc.invalidateQueries({ queryKey: ["/api/feed"] });
+    },
+  });
+
+  const visibleComments = showAllComments ? item.comments : item.comments.slice(-2);
+
+  return (
+    <div className="bg-card border rounded-xl p-3 space-y-2">
+      {/* Header */}
+      <div className="flex items-start gap-2">
+        <UserAvatar user={item.user} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-xs font-semibold">{item.user.name}</span>
+            <span className="text-xs text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType}</span>
+            {item.activityType === "recommendation_received" && (
+              <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 rounded px-1 py-0.5 font-medium">Recommended to you</span>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">{timeAgo(item.createdAt)}</p>
+        </div>
+      </div>
+
+      {/* Item info */}
+      {item.itemTitle && (
+        <div className="flex items-center gap-2 pl-10">
+          {item.itemImageUrl && (
+            <img src={item.itemImageUrl} alt={item.itemTitle} className="w-12 h-12 rounded object-cover shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              {item.itemType && <span className="text-muted-foreground">{ITEM_TYPE_ICONS[item.itemType]}</span>}
+              <p className="text-xs font-medium truncate">{item.itemTitle}</p>
+            </div>
+            {item.itemSubtitle && <p className="text-[10px] text-muted-foreground truncate">{item.itemSubtitle}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Reactions */}
+      <div className="flex items-center gap-1 pl-10">
+        {REACTION_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            onClick={() => reactMutation.mutate(emoji)}
+            className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border transition-colors ${myReactions.has(emoji) ? "bg-primary/10 border-primary/30 text-primary" : "border-border hover:bg-secondary"}`}
+          >
+            <span>{emoji}</span>
+            {reactionCounts[emoji] > 0 && <span className="font-medium">{reactionCounts[emoji]}</span>}
+          </button>
+        ))}
+        <button
+          onClick={() => setShowCommentBox((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded-full border border-border hover:bg-secondary transition-colors"
+        >
+          <MessageCircle size={11} />
+          {item.comments.length > 0 && <span>{item.comments.length}</span>}
+        </button>
+      </div>
+
+      {/* Comments */}
+      {item.comments.length > 0 && (
+        <div className="pl-10 space-y-1">
+          {item.comments.length > 2 && !showAllComments && (
+            <button onClick={() => setShowAllComments(true)} className="text-[10px] text-muted-foreground hover:text-foreground">
+              View {item.comments.length - 2} more comment{item.comments.length - 2 !== 1 ? "s" : ""}
+            </button>
+          )}
+          {visibleComments.map((c) => (
+            <div key={c.id} className="text-xs">
+              <span className="font-medium">{c.userName}</span>
+              <span className="text-muted-foreground ml-1">{c.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Comment input */}
+      {showCommentBox && (
+        <div className="flex items-center gap-1 pl-10">
+          <input
+            className="flex-1 text-xs border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="Add a comment..."
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && commentText.trim()) commentMutation.mutate(commentText.trim());
+            }}
+          />
+          <button
+            onClick={() => { if (commentText.trim()) commentMutation.mutate(commentText.trim()); }}
+            disabled={!commentText.trim() || commentMutation.isPending}
+            className="text-primary disabled:opacity-40"
+          >
+            <Send size={13} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SocialFeed component ──────────────────────────────────────────────────────
+
+function SocialFeed({ currentUserId }: { currentUserId?: number }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery<{ items: FeedItem[]; hasFriends: boolean; page: number; total: number } | { items: never[]; hasFriends: false }>({
+    queryKey: ["/api/feed", page],
+    queryFn: () => fetch(`/api/feed?page=${page}`).then((r) => r.json()),
+  });
+  const { data: mine } = useQuery<FeedItem[]>({
+    queryKey: ["/api/feed/mine"],
+    queryFn: () => fetch("/api/feed/mine").then((r) => r.json()),
+    enabled: data != null && (data as any).hasFriends === true && (data as any).items?.length === 0,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-card border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Users size={14} className="text-primary" />
+          <span className="text-sm font-semibold">Friends' Activity</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!data || !(data as any).hasFriends) {
+    return (
+      <div className="bg-card border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Users size={14} className="text-primary" />
+          <span className="text-sm font-semibold">Friends' Activity</span>
+        </div>
+        <div className="text-center py-4 text-muted-foreground">
+          <Users size={24} className="opacity-20 mx-auto mb-2" />
+          <p className="text-xs mb-2">Add friends to see their activity</p>
+          <Link href="/social"><a className="text-xs text-primary hover:underline">Go to Friends</a></Link>
+        </div>
+      </div>
+    );
+  }
+
+  const items = (data as any).items as FeedItem[];
+  const total: number = (data as any).total ?? 0;
+  const pageSize = 20;
+  const hasMore = page * pageSize < total;
+
+  if (items.length === 0) {
+    // Show own recent activity as fallback
+    return (
+      <div className="bg-card border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Users size={14} className="text-primary" />
+          <span className="text-sm font-semibold">Friends' Activity</span>
+        </div>
+        {mine && mine.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground mb-2">No friends' activity yet. Here's your recent activity:</p>
+            {mine.map((item) => (
+              <FeedCard key={item.id} item={item} currentUserId={currentUserId} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground text-center py-4">No activity yet. Start adding books, movies, and more!</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Users size={14} className="text-primary" />
+        <span className="text-sm font-semibold">Friends' Activity</span>
+      </div>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <FeedCard key={item.id} item={item} currentUserId={currentUserId} />
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          className="mt-3 w-full text-xs text-muted-foreground hover:text-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
+        >
+          Load more
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── MyRecentActivity component ────────────────────────────────────────────────
+
+function MyRecentActivity() {
+  const { data, isLoading } = useQuery<FeedItem[]>({
+    queryKey: ["/api/feed/mine"],
+    queryFn: () => fetch("/api/feed/mine").then((r) => r.json()),
+  });
+
+  return (
+    <div className="bg-card border rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Clock size={14} className="text-primary" />
+        <span className="text-sm font-semibold">My Recent Activity</span>
+      </div>
+      {isLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+      {!isLoading && (!data || data.length === 0) && (
+        <p className="text-xs text-muted-foreground text-center py-4">No recent activity. Start adding items!</p>
+      )}
+      {data && data.length > 0 && (
+        <div className="space-y-1.5">
+          {data.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 py-1">
+              <div className="text-muted-foreground shrink-0">
+                {item.itemType ? ITEM_TYPE_ICONS[item.itemType] : <Clock size={14} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{item.itemTitle ?? item.activityType}</p>
+                <p className="text-[10px] text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType} · {timeAgo(item.createdAt)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

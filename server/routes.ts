@@ -66,6 +66,20 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Unauthorized" });
 }
 
+/** Fire-and-forget activity logger — never throws or blocks the main request. */
+function logActivity(
+  userId: number,
+  type: string,
+  itemId: number | null,
+  itemType: string | null,
+  title: string | null,
+  imageUrl: string | null,
+  subtitle: string | null,
+  extra?: string
+) {
+  storage.logActivity(userId, type, itemId, itemType, title, imageUrl, subtitle, extra).catch(() => {});
+}
+
 export async function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
@@ -596,13 +610,29 @@ Return exactly this structure:
   app.post("/api/books", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(await storage.createBook(insertBookSchema.parse(req.body), uid));
+      const book = await storage.createBook(insertBookSchema.parse(req.body), uid);
+      logActivity(uid, "book_added", book.id, "book", book.title, book.coverUrl ?? null, book.author ?? null);
+      res.status(201).json(book);
     }
     catch (e) { handleError(res, e); }
   });
   app.patch("/api/books/:id", async (req, res) => {
     try {
-      const r = await storage.updateBook(+req.params.id, insertBookSchema.partial().parse(req.body));
+      const body = insertBookSchema.partial().parse(req.body);
+      // Check if we're transitioning to 'finished'
+      if (body.status === "finished") {
+        const existing = await storage.getAllBooks((req.user as User).id);
+        const book = existing.find((b) => b.id === +req.params.id);
+        if (book && book.status !== "finished") {
+          const r = await storage.updateBook(+req.params.id, body);
+          if (r) {
+            logActivity((req.user as User).id, "book_finished", r.id, "book", r.title, r.coverUrl ?? null, r.author ?? null);
+            return res.json(r);
+          }
+          return res.status(404).json({ error: "Not found" });
+        }
+      }
+      const r = await storage.updateBook(+req.params.id, body);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -962,7 +992,9 @@ Return exactly this structure:
   app.post("/api/recipes", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(await storage.createRecipe(insertRecipeSchema.parse(req.body), uid));
+      const recipe = await storage.createRecipe(insertRecipeSchema.parse(req.body), uid);
+      logActivity(uid, "recipe_added", recipe.id, "recipe", recipe.name, recipe.imageUrl ?? null, recipe.category ?? null);
+      res.status(201).json(recipe);
     }
     catch (e) { handleError(res, e); }
   });
@@ -1069,7 +1101,9 @@ Return exactly this structure:
   app.post("/api/movies", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(await storage.createMovie(insertMovieSchema.parse(req.body), uid));
+      const movie = await storage.createMovie(insertMovieSchema.parse(req.body), uid);
+      logActivity(uid, "movie_added", movie.id, "movie", movie.title, movie.posterUrl ?? null, movie.director ?? movie.genres ?? null);
+      res.status(201).json(movie);
     }
     catch (e) { handleError(res, e); }
   });
@@ -1343,8 +1377,11 @@ Return exactly this structure:
   // ── Music Songs ───────────────────────────────────────────────────────────────
   app.post("/api/music/songs", requireAuth, async (req, res) => {
     try {
-      const data = insertMusicSongSchema.parse({ ...req.body, userId: (req.user as User).id });
-      res.status(201).json(await storage.createMusicSong(data, (req.user as User).id));
+      const uid = (req.user as User).id;
+      const data = insertMusicSongSchema.parse({ ...req.body, userId: uid });
+      const song = await storage.createMusicSong(data, uid);
+      logActivity(uid, "song_added", song.id, "song", song.title, null, null);
+      res.status(201).json(song);
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/music/songs/:id", requireAuth, async (req, res) => {
@@ -1463,8 +1500,11 @@ Return exactly this structure:
   });
   app.post("/api/spots", requireAuth, async (req, res) => {
     try {
-      const data = insertSpotSchema.parse({ ...req.body, userId: (req.user as User).id });
-      res.status(201).json(await storage.createSpot(data, (req.user as User).id));
+      const uid = (req.user as User).id;
+      const data = insertSpotSchema.parse({ ...req.body, userId: uid });
+      const spot = await storage.createSpot(data, uid);
+      logActivity(uid, "spot_added", spot.id, "spot", spot.name, null, spot.address ?? spot.city ?? null);
+      res.status(201).json(spot);
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/spots/:id", requireAuth, async (req, res) => {
@@ -2763,8 +2803,11 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const data = insertQuoteSchema.parse({ ...req.body, userId: (req.user as User).id });
-      res.status(201).json(await storage.createQuote(data, (req.user as User).id));
+      const uid = (req.user as User).id;
+      const data = insertQuoteSchema.parse({ ...req.body, userId: uid });
+      const quote = await storage.createQuote(data, uid);
+      logActivity(uid, "quote_added", quote.id, "quote", quote.text.slice(0, 100), null, quote.author ?? null);
+      res.status(201).json(quote);
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/quotes/:id", requireAuth, async (req, res) => {
@@ -5542,6 +5585,50 @@ Rules:
   app.delete("/api/trip-items/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteTripItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Activity Feed ─────────────────────────────────────────────────────────────
+  app.get("/api/feed", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+      const friends = await storage.getFriends(user.id);
+      if (friends.length === 0) {
+        return res.json({ items: [], hasFriends: false });
+      }
+      const { items, total } = await storage.getFeedForUser(user.id, page, 20);
+      res.json({ items, hasFriends: true, page, total });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/feed/mine", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const items = await storage.getMyRecentActivity(user.id, 5);
+      res.json(items);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/feed/:id/react", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const feedItemId = +req.params.id;
+      const { emoji } = req.body as { emoji: string };
+      if (!emoji) return res.status(400).json({ error: "emoji is required" });
+      await storage.toggleReaction(feedItemId, user.id, emoji);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/feed/:id/comment", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const feedItemId = +req.params.id;
+      const { content } = req.body as { content: string };
+      if (!content?.trim()) return res.status(400).json({ error: "content is required" });
+      const comment = await storage.addComment(feedItemId, user.id, content.trim());
+      res.status(201).json(comment);
     } catch (e) { handleError(res, e); }
   });
 }
