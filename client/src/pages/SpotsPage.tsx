@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem } from "@shared/schema";
@@ -15,7 +15,8 @@ import {
   MapPin, Plus, Pencil, Trash2, Search, Heart,
   Globe, Clock, Tag, Navigation, Upload, Download, HelpCircle, Loader2,
   Send, Inbox, CornerUpRight, Check, X, Plane, Calendar, ChevronLeft,
-  CheckCircle2, Circle, StickyNote, Sunrise,
+  CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
+  Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1208,6 +1209,323 @@ function SharedSpotsTab() {
   );
 }
 
+// ── AI Trip Planner ───────────────────────────────────────────────────────────
+
+type PrepCategory   = { category: string; emoji: string; items: string[] };
+type PackCategory   = { category: string; emoji: string; items: string[] };
+type PlaceRec       = { name: string; type: string; emoji: string; description: string; area: string; tip: string };
+type DayHighlight   = { day: number; label: string; highlights: string[] };
+type TripAIPlan     = { overview: string; prep: PrepCategory[]; packing: PackCategory[]; recommendations: PlaceRec[]; dayByDay: DayHighlight[]; budgetTips: string[]; localTips: string[] };
+type ChatMessage    = { role: "user" | "assistant"; content: string };
+
+function AITripPlanner({ trip }: { trip: Trip }) {
+  const { toast } = useToast();
+  const [plan, setPlan]             = useState<TripAIPlan | null>(null);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [preferences, setPreferences] = useState("");
+  const [showPrefInput, setShowPrefInput] = useState(false);
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput]       = useState("");
+  const [chatLoading, setChatLoading]   = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Collapsed sections
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }));
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
+
+  async function generate() {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiRequest("POST", "/api/ai/trip-planner", { tripId: trip.id, preferences: preferences.trim() || undefined });
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error === "no_api_key" ? "Add your Anthropic API key in Settings → API Keys to use AI features." : (err.message ?? "Failed to generate. Try again."));
+        return;
+      }
+      setPlan(await res.json());
+      setChatMessages([]);
+      setShowPrefInput(false);
+    } catch { setError("Something went wrong. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function sendChat() {
+    const msg = chatInput.trim();
+    if (!msg) return;
+    const newMessages: ChatMessage[] = [...chatMessages, { role: "user", content: msg }];
+    setChatMessages(newMessages);
+    setChatInput("");
+    setChatLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/ai/trip-chat", { tripId: trip.id, messages: newMessages });
+      if (!res.ok) { setChatMessages(prev => [...prev, { role: "assistant", content: "Sorry, I couldn't respond. Please try again." }]); return; }
+      const { reply } = await res.json();
+      setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
+    } catch {
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+    } finally { setChatLoading(false); }
+  }
+
+  const SUGGESTION_PROMPTS = [
+    "What should I avoid?",
+    "Best local food to try",
+    "Budget-friendly options",
+    "Hidden gems off the beaten path",
+    "Best time of day for attractions",
+    "Transportation tips",
+  ];
+
+  return (
+    <div className="mt-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-amber-500" />
+          <h3 className="text-sm font-semibold">AI Trip Planner</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          {!plan && !loading && (
+            <button onClick={() => setShowPrefInput(p => !p)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              Preferences {showPrefInput ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+          {plan && (
+            <Button size="sm" variant="outline" onClick={() => { setPlan(null); setShowPrefInput(true); }} className="gap-1.5 h-7 text-xs px-2.5">
+              <RefreshCw size={11} /> Redo
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Preferences input */}
+      {showPrefInput && !plan && (
+        <div className="space-y-2">
+          <Textarea
+            placeholder={`Tell me about your travel style… e.g. "We love street food and walking tours, traveling with 2 kids ages 5 and 8, budget-conscious, prefer boutique hotels"`}
+            rows={3}
+            value={preferences}
+            onChange={e => setPreferences(e.target.value)}
+            className="text-sm"
+          />
+        </div>
+      )}
+
+      {/* Error */}
+      {error && <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+
+      {/* Generate button */}
+      {!plan && !loading && (
+        <Button onClick={generate} className="w-full gap-2" disabled={loading}>
+          <Sparkles size={14} /> Generate Trip Plan for {trip.destination ?? trip.name}
+        </Button>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-8 text-muted-foreground">
+          <Sparkles size={28} className="mx-auto mb-2 text-amber-400 animate-pulse" />
+          <p className="text-sm animate-pulse">Researching {trip.destination ?? trip.name}…</p>
+          <p className="text-xs mt-1 opacity-60">Building your personalized trip guide</p>
+        </div>
+      )}
+
+      {/* Plan */}
+      {plan && (
+        <div className="space-y-4">
+          {/* Overview */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800">
+            <p className="text-sm leading-relaxed">{plan.overview}</p>
+          </div>
+
+          {/* Prep checklist */}
+          {plan.prep?.length > 0 && (
+            <div className="rounded-xl border overflow-hidden">
+              <button onClick={() => toggle("prep")} className="w-full flex items-center justify-between p-3 bg-card hover:bg-secondary/50 transition-colors">
+                <span className="flex items-center gap-2 text-sm font-semibold"><ClipboardList size={14} className="text-blue-500" /> Pre-Trip Checklist</span>
+                {collapsed.prep ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+              </button>
+              {!collapsed.prep && (
+                <div className="p-3 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-card">
+                  {plan.prep.map((cat, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">{cat.emoji} {cat.category}</p>
+                      <ul className="space-y-1">
+                        {cat.items.map((item, j) => (
+                          <li key={j} className="flex items-start gap-1.5 text-xs"><span className="text-blue-500 mt-0.5 shrink-0">☐</span>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Packing list */}
+          {plan.packing?.length > 0 && (
+            <div className="rounded-xl border overflow-hidden">
+              <button onClick={() => toggle("packing")} className="w-full flex items-center justify-between p-3 bg-card hover:bg-secondary/50 transition-colors">
+                <span className="flex items-center gap-2 text-sm font-semibold"><Backpack size={14} className="text-emerald-500" /> What to Pack</span>
+                {collapsed.packing ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+              </button>
+              {!collapsed.packing && (
+                <div className="p-3 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-card">
+                  {plan.packing.map((cat, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">{cat.emoji} {cat.category}</p>
+                      <ul className="space-y-1">
+                        {cat.items.map((item, j) => (
+                          <li key={j} className="flex items-start gap-1.5 text-xs"><span className="text-emerald-500 mt-0.5 shrink-0">☐</span>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {plan.recommendations?.length > 0 && (
+            <div className="rounded-xl border overflow-hidden">
+              <button onClick={() => toggle("recs")} className="w-full flex items-center justify-between p-3 bg-card hover:bg-secondary/50 transition-colors">
+                <span className="flex items-center gap-2 text-sm font-semibold"><Star size={14} className="text-amber-500" /> Places to Visit</span>
+                {collapsed.recs ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+              </button>
+              {!collapsed.recs && (
+                <div className="p-3 pt-0 space-y-2.5 bg-card">
+                  {plan.recommendations.map((rec, i) => (
+                    <div key={i} className="p-2.5 rounded-lg border bg-secondary/20">
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg shrink-0">{rec.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-medium">{rec.name}</span>
+                            {rec.area && <span className="text-xs text-muted-foreground">· {rec.area}</span>}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground capitalize">{rec.type.replace("_", " ")}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{rec.description}</p>
+                          {rec.tip && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-start gap-1"><Sparkles size={10} className="mt-0.5 shrink-0" />{rec.tip}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Day by day */}
+          {plan.dayByDay?.length > 0 && (
+            <div className="rounded-xl border overflow-hidden">
+              <button onClick={() => toggle("days")} className="w-full flex items-center justify-between p-3 bg-card hover:bg-secondary/50 transition-colors">
+                <span className="flex items-center gap-2 text-sm font-semibold"><Calendar size={14} className="text-violet-500" /> Day-by-Day Suggestions</span>
+                {collapsed.days ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+              </button>
+              {!collapsed.days && (
+                <div className="p-3 pt-0 space-y-2 bg-card">
+                  {plan.dayByDay.map((day, i) => (
+                    <div key={i} className="border-l-2 border-violet-300 dark:border-violet-700 pl-3">
+                      <p className="text-xs font-semibold">Day {day.day} — {day.label}</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {day.highlights.map((h, j) => (
+                          <li key={j} className="text-xs text-muted-foreground flex items-start gap-1"><span className="text-violet-400 shrink-0">·</span>{h}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tips row */}
+          {((plan.budgetTips?.length > 0) || (plan.localTips?.length > 0)) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {plan.budgetTips?.length > 0 && (
+                <div className="rounded-xl border p-3 bg-card">
+                  <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">💰 Budget Tips</p>
+                  <ul className="space-y-1">
+                    {plan.budgetTips.map((t, i) => <li key={i} className="text-xs text-muted-foreground flex items-start gap-1"><span className="text-green-500 shrink-0">·</span>{t}</li>)}
+                  </ul>
+                </div>
+              )}
+              {plan.localTips?.length > 0 && (
+                <div className="rounded-xl border p-3 bg-card">
+                  <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">🗺️ Local Tips</p>
+                  <ul className="space-y-1">
+                    {plan.localTips.map((t, i) => <li key={i} className="text-xs text-muted-foreground flex items-start gap-1"><span className="text-blue-500 shrink-0">·</span>{t}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chat section */}
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="flex items-center gap-2 p-3 border-b bg-secondary/30">
+              <MessageCircle size={14} className="text-primary" />
+              <span className="text-sm font-semibold">Ask Anything</span>
+              <span className="text-xs text-muted-foreground">Tailor this trip with follow-up questions</span>
+            </div>
+
+            {/* Suggestion chips */}
+            {chatMessages.length === 0 && (
+              <div className="p-3 flex flex-wrap gap-1.5">
+                {SUGGESTION_PROMPTS.map((prompt, i) => (
+                  <button key={i} onClick={() => { setChatInput(prompt); }}
+                    className="text-xs px-2.5 py-1 rounded-full border bg-secondary/40 hover:bg-secondary transition-colors">
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Messages */}
+            {chatMessages.length > 0 && (
+              <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-secondary rounded-xl px-3 py-2 text-xs text-muted-foreground animate-pulse">Thinking…</div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+            )}
+
+            {/* Input */}
+            <div className="p-3 pt-0 flex gap-2 items-end">
+              <Textarea
+                placeholder="Ask about restaurants, activities, what to pack, local customs…"
+                rows={2}
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                className="text-xs flex-1 resize-none"
+              />
+              <Button size="sm" onClick={sendChat} disabled={!chatInput.trim() || chatLoading} className="shrink-0 gap-1.5">
+                <Send size={12} /> Send
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── TripsTab ──────────────────────────────────────────────────────────────────
 
 const TRIP_ITEM_TYPES = [
@@ -1464,6 +1782,9 @@ function TripsTab({ spots }: { spots: Spot[] }) {
             ))}
           </div>
         )}
+
+        {/* AI Trip Planner */}
+        <AITripPlanner trip={tripData} />
 
         {/* Delete trip button */}
         <div className="mt-8 pt-4 border-t">

@@ -2016,6 +2016,149 @@ Rules: Keep items realistic for one day (8–14 items total). Spread items sensi
     }
   });
 
+  // ── AI Trip Planner ───────────────────────────────────────────────────────────
+  app.post("/api/ai/trip-planner", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(userId);
+      if (!enc) return res.status(402).json({ error: "no_api_key", message: "Add your Anthropic API key in Settings to use AI features." });
+      const apiKey = decrypt(enc);
+
+      const { tripId, preferences } = req.body as { tripId: number; preferences?: string };
+
+      // Load trip + items
+      const [allTrips, tripItems] = await Promise.all([
+        storage.getAllTrips(userId),
+        storage.getTripItems(tripId),
+      ]);
+      const trip = allTrips.find(t => t.id === tripId);
+      if (!trip) return res.status(404).json({ error: "Trip not found" });
+
+      const destination = trip.destination ?? trip.name;
+      const tripName = trip.name;
+      const startDate = trip.startDate;
+      const endDate   = trip.endDate;
+      const tripNotes = trip.notes ?? "";
+
+      const durationDays = startDate && endDate
+        ? Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1)
+        : null;
+
+      const existingStops = tripItems.map(i =>
+        `- ${i.name}${i.type ? ` (${i.type})` : ""}${i.date ? ` on ${i.date}` : ""}${i.address ? `, ${i.address}` : ""}`
+      ).join("\n");
+
+      const prompt = `You are an expert travel planner. Generate a comprehensive trip planning guide for the following trip.
+
+TRIP: ${tripName}
+DESTINATION: ${destination}
+${startDate ? `DATES: ${startDate}${endDate ? ` to ${endDate}` : ""}` : ""}
+${durationDays ? `DURATION: ${durationDays} day${durationDays !== 1 ? "s" : ""}` : ""}
+${tripNotes ? `NOTES/CONTEXT: ${tripNotes}` : ""}
+${existingStops ? `ALREADY PLANNED STOPS:\n${existingStops}` : ""}
+${preferences ? `TRAVELER PREFERENCES: ${preferences}` : ""}
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "overview": "2-3 sentence engaging overview of the trip and what makes it special",
+  "prep": [
+    {
+      "category": "category name e.g. Bookings, Documents, Health, Money",
+      "emoji": "single relevant emoji",
+      "items": ["specific actionable prep item", "..."]
+    }
+  ],
+  "packing": [
+    {
+      "category": "category name e.g. Clothing, Toiletries, Tech, Documents",
+      "emoji": "single relevant emoji",
+      "items": ["specific item to pack", "..."]
+    }
+  ],
+  "recommendations": [
+    {
+      "name": "Place or experience name",
+      "type": "restaurant|cafe|attraction|neighborhood|hotel|activity|day_trip",
+      "emoji": "relevant emoji",
+      "description": "1-2 sentence description of why it's worth visiting",
+      "area": "neighborhood or area name if applicable",
+      "tip": "one practical insider tip"
+    }
+  ],
+  "dayByDay": [
+    {
+      "day": 1,
+      "label": "Arrival & First Impressions",
+      "highlights": ["suggestion 1", "suggestion 2", "suggestion 3"]
+    }
+  ],
+  "budgetTips": ["specific money-saving tip for this destination", "..."],
+  "localTips": ["cultural insight or etiquette tip", "practical local knowledge", "..."]
+}
+
+Rules:
+- Make recommendations specific and authentic (real places if you know them, clearly labeled as suggestions)
+- Tailor prep and packing to the destination's climate, culture, and activities
+- dayByDay should have one entry per day (max 7 days; if longer trip, show first 7)
+- Include 6-10 place recommendations, mixing must-sees with hidden gems
+- Keep each item concise (under 15 words)
+- If existing stops are listed, complement them (don't duplicate)`;
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 3000, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!r.ok) {
+        const err = await r.json() as any;
+        return res.status(400).json({ error: "anthropic_error", message: err.error?.message ?? "API error" });
+      }
+      const data = await r.json() as any;
+      const text: string = data.content?.[0]?.text ?? "";
+      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      res.json(JSON.parse(cleaned));
+    } catch (e) {
+      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      handleError(res, e);
+    }
+  });
+
+  // ── AI Trip Chat ───────────────────────────────────────────────────────────────
+  app.post("/api/ai/trip-chat", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(userId);
+      if (!enc) return res.status(402).json({ error: "no_api_key", message: "Add your Anthropic API key in Settings to use AI features." });
+      const apiKey = decrypt(enc);
+
+      const { tripId, messages } = req.body as { tripId: number; messages: { role: "user" | "assistant"; content: string }[] };
+
+      const allTrips = await storage.getAllTrips(userId);
+      const trip = allTrips.find(t => t.id === tripId);
+      if (!trip) return res.status(404).json({ error: "Trip not found" });
+
+      const destination = trip.destination ?? trip.name;
+      const system = `You are a knowledgeable, friendly travel planner helping plan a trip to ${destination}. Trip: "${trip.name}"${trip.startDate ? `, ${trip.startDate}${trip.endDate ? ` – ${trip.endDate}` : ""}` : ""}${trip.notes ? `. Context: ${trip.notes}` : ""}. Provide specific, actionable advice. Keep responses concise but helpful (2-4 sentences or a short list). You can suggest specific places, give packing tips, help refine the itinerary, recommend restaurants, warn about things to avoid, and more.`;
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 600,
+          system,
+          messages: messages.slice(-10), // keep last 10 messages for context
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json() as any;
+        return res.status(400).json({ error: "anthropic_error", message: err.error?.message ?? "API error" });
+      }
+      const data = await r.json() as any;
+      res.json({ reply: data.content?.[0]?.text ?? "" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Quotes proxy (DummyJSON + type.fit combined) ──────────────────────────────
 
   // Normalised quote shape used throughout
