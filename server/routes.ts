@@ -5589,6 +5589,29 @@ Rules:
   });
 
   // ── Activity Feed ─────────────────────────────────────────────────────────────
+  // GET /api/feed/stories — friends with recent-activity rings + current user
+  app.get("/api/feed/stories", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const friends = await storage.getFriends(user.id);
+      if (friends.length === 0) return res.json({ me: { id: user.id, name: user.name, avatarUrl: user.avatarUrl }, friends: [] });
+      const friendIds = friends.map(f => f.id);
+      const placeholders = friendIds.map((_: unknown, i: number) => `$${i + 1}`).join(",");
+      const recentResult = await pool.query(
+        `SELECT DISTINCT user_id FROM activity_feed
+         WHERE user_id IN (${placeholders}) AND created_at > NOW() - INTERVAL '24 hours'`,
+        friendIds
+      );
+      const activeSet = new Set(recentResult.rows.map((r: any) => r.user_id));
+      const myRecentResult = await pool.query(
+        `SELECT 1 FROM activity_feed WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
+        [user.id]
+      );
+      const stories = friends.map(f => ({ ...f, hasRecentActivity: activeSet.has(f.id) }));
+      res.json({ me: { id: user.id, name: user.name, avatarUrl: user.avatarUrl, hasRecentActivity: myRecentResult.rows.length > 0 }, friends: stories });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/feed", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
@@ -5605,7 +5628,8 @@ Rules:
   app.get("/api/feed/mine", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const items = await storage.getMyRecentActivity(user.id, 5);
+      const limit = Math.min(50, parseInt(String(req.query.limit ?? "10"), 10));
+      const items = await storage.getMyRecentActivity(user.id, limit);
       res.json(items);
     } catch (e) { handleError(res, e); }
   });

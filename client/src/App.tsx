@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AppShell from "@/components/AppShell";
 import DashboardPage from "@/pages/DashboardPage";
+import FeedPage from "@/pages/FeedPage";
 import CalendarPage from "@/pages/CalendarPage";
 import GoalsPage from "@/pages/GoalsPage";
 import ReadingPage from "@/pages/ReadingPage";
@@ -39,7 +40,8 @@ function AuthenticatedApp() {
   return (
     <AppShell>
       <Switch>
-        <Route path="/" component={DashboardPage} />
+        <Route path="/" component={FeedPage} />
+        <Route path="/dashboard" component={DashboardPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/goals" component={GoalsPage} />
         <Route path="/reading" component={ReadingPage} />

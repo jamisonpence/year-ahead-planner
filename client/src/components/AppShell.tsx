@@ -75,7 +75,7 @@ function PrivacyBanner({ path }: { path: string }) {
 }
 
 const ALL_TABS = [
-  { path: "/",              label: "Dashboard",               icon: LayoutDashboard },
+  { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
