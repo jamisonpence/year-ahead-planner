@@ -2048,7 +2048,7 @@ Rules: Keep items realistic for one day (8–14 items total). Spread items sensi
         `- ${i.name}${i.type ? ` (${i.type})` : ""}${i.date ? ` on ${i.date}` : ""}${i.address ? `, ${i.address}` : ""}`
       ).join("\n");
 
-      const prompt = `You are an expert travel planner. Generate a comprehensive trip planning guide for the following trip.
+      const prompt = `You are an expert travel planner with deep local knowledge. Generate a comprehensive, location-aware trip planning guide for the following trip.
 
 TRIP: ${tripName}
 DESTINATION: ${destination}
@@ -2081,7 +2081,8 @@ Return ONLY valid JSON (no markdown, no explanation):
       "type": "restaurant|cafe|attraction|neighborhood|hotel|activity|day_trip",
       "emoji": "relevant emoji",
       "description": "1-2 sentence description of why it's worth visiting",
-      "area": "neighborhood or area name if applicable",
+      "area": "neighborhood or district name (e.g. Le Marais, Shibuya, Downtown)",
+      "location": "specific address or well-known cross-street/landmark it is near (e.g. '23 Rue de Rivoli' or 'Near the Colosseum, Celio')",
       "tip": "one practical insider tip"
     }
   ],
@@ -2089,7 +2090,8 @@ Return ONLY valid JSON (no markdown, no explanation):
     {
       "day": 1,
       "label": "Arrival & First Impressions",
-      "highlights": ["suggestion 1", "suggestion 2", "suggestion 3"]
+      "area": "primary neighborhood or district the day is based in (e.g. Old Town, Midtown, Shibuya)",
+      "highlights": ["Morning: [activity] near [location/landmark]", "Lunch: [place] in [area]", "Afternoon: [activity] — walkable from lunch", "Evening: [place] nearby"]
     }
   ],
   "budgetTips": ["specific money-saving tip for this destination", "..."],
@@ -2097,12 +2099,15 @@ Return ONLY valid JSON (no markdown, no explanation):
 }
 
 Rules:
-- Make recommendations specific and authentic (real places if you know them, clearly labeled as suggestions)
+- Make recommendations specific and authentic (real places if you know them, clearly labeled as suggestions otherwise)
+- Always include both "area" (neighborhood/district) and "location" (specific address or nearby landmark) for every recommendation
 - Tailor prep and packing to the destination's climate, culture, and activities
+- GEOGRAPHIC ORGANIZATION: Structure each day around a specific neighborhood or area of the city to minimize travel. Group activities, meals, and sights that are physically close together into the same day. Anchor each day to its area in the "area" field.
+- In each day's highlights, note the location/area context so the traveler knows where they are (e.g. "Lunch at a trattoria in Trastevere — steps from the morning walk")
 - dayByDay should have one entry per day (max 7 days; if longer trip, show first 7)
 - Include 6-10 place recommendations, mixing must-sees with hidden gems
-- Keep each item concise (under 15 words)
-- If existing stops are listed, complement them (don't duplicate)`;
+- Keep each highlight concise but include the location context
+- If existing stops are listed, complement them, incorporate their locations into the geographic flow, and don't duplicate`;
 
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",

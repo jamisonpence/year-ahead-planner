@@ -1213,8 +1213,8 @@ function SharedSpotsTab() {
 
 type PrepCategory   = { category: string; emoji: string; items: string[] };
 type PackCategory   = { category: string; emoji: string; items: string[] };
-type PlaceRec       = { name: string; type: string; emoji: string; description: string; area: string; tip: string };
-type DayHighlight   = { day: number; label: string; highlights: string[] };
+type PlaceRec       = { name: string; type: string; emoji: string; description: string; area?: string; location?: string; tip?: string };
+type DayHighlight   = { day: number; label: string; area?: string; highlights: string[] };
 type TripAIPlan     = { overview: string; prep: PrepCategory[]; packing: PackCategory[]; recommendations: PlaceRec[]; dayByDay: DayHighlight[]; budgetTips: string[]; localTips: string[] };
 type ChatMessage    = { role: "user" | "assistant"; content: string };
 
@@ -1502,9 +1502,15 @@ function AITripPlanner({ trip }: { trip: Trip }) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-sm font-medium">{rec.name}</span>
-                            {rec.area && <span className="text-xs text-muted-foreground">· {rec.area}</span>}
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground capitalize">{rec.type.replace("_", " ")}</span>
                           </div>
+                          {(rec.location || rec.area) && (
+                            <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <MapPin size={9} className="shrink-0 text-rose-400" />
+                              {rec.location ? rec.location : rec.area}
+                              {rec.location && rec.area && <span className="opacity-60">· {rec.area}</span>}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground mt-0.5">{rec.description}</p>
                           {rec.tip && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-start gap-1"><Sparkles size={10} className="mt-0.5 shrink-0" />{rec.tip}</p>}
 
@@ -1582,7 +1588,14 @@ function AITripPlanner({ trip }: { trip: Trip }) {
                 <div className="p-3 pt-0 space-y-2 bg-card">
                   {plan.dayByDay.map((day, i) => (
                     <div key={i} className="border-l-2 border-violet-300 dark:border-violet-700 pl-3">
-                      <p className="text-xs font-semibold">Day {day.day} — {day.label}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-semibold">Day {day.day} — {day.label}</p>
+                        {day.area && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center gap-0.5">
+                            <MapPin size={8} />{day.area}
+                          </span>
+                        )}
+                      </div>
                       <ul className="mt-1 space-y-0.5">
                         {day.highlights.map((h, j) => (
                           <li key={j} className="text-xs text-muted-foreground flex items-start gap-1"><span className="text-violet-400 shrink-0">·</span>{h}</li>
