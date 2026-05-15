@@ -1890,6 +1890,132 @@ Rules:
     }
   });
 
+  // ── AI Day Planner ────────────────────────────────────────────────────────────
+  app.post("/api/ai/day-planner", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(userId);
+      if (!enc) return res.status(402).json({ error: "no_api_key", message: "Add your Anthropic API key in Settings to use AI features." });
+      const apiKey = decrypt(enc);
+
+      // Gather context data
+      const [events, goalsWithProjects, generalTasks] = await Promise.all([
+        storage.getAllEventsWithTasks(userId),
+        storage.getAllGoalsWithProjects(userId),
+        storage.getAllGeneralTasks(userId),
+      ]);
+
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const in7Days = new Date(today); in7Days.setDate(today.getDate() + 7);
+      const in7DaysStr = in7Days.toISOString().slice(0, 10);
+      const dayName = today.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+      // Filter today's events
+      const todayEvents = events.filter(e => e.date === todayStr);
+      const upcomingEvents = events.filter(e => e.date > todayStr && e.date <= in7DaysStr);
+
+      // Active goals + projects with incomplete tasks
+      const activeGoals = goalsWithProjects
+        .filter(g => g.status !== "completed")
+        .map(g => ({
+          title: g.title,
+          status: g.status,
+          projects: g.projects
+            .filter(p => p.status !== "completed")
+            .map(p => ({
+              title: p.title,
+              status: p.status,
+              tasks: p.tasks.filter(t => !t.completed).map(t => t.title),
+            }))
+            .filter(p => p.tasks.length > 0),
+        }))
+        .filter(g => g.projects.length > 0 || g.status === "in_progress");
+
+      // Uncompleted general tasks
+      const pendingTasks = generalTasks
+        .filter(t => !t.completed)
+        .map(t => ({ title: t.title, priority: t.priority ?? "medium", dueDate: t.dueDate ?? null, notes: t.notes ?? null }));
+
+      const prompt = `You are a personal productivity coach. Create a structured, motivating day plan for today: ${dayName}.
+
+TODAY'S CALENDAR EVENTS:
+${todayEvents.length > 0
+  ? todayEvents.map(e => `- ${e.title}${e.tasks.length > 0 ? ` (${e.tasks.filter(t => !t.completed).length} pending tasks)` : ""}`).join("\n")
+  : "- No scheduled events today"}
+
+UPCOMING EVENTS (next 7 days):
+${upcomingEvents.length > 0
+  ? upcomingEvents.slice(0, 5).map(e => `- ${e.date}: ${e.title}`).join("\n")
+  : "- Nothing scheduled soon"}
+
+ACTIVE GOALS & PROJECT TASKS:
+${activeGoals.length > 0
+  ? activeGoals.map(g => `Goal: ${g.title}\n${g.projects.map(p => `  Project: ${p.title}\n${p.tasks.slice(0, 3).map(t => `    - ${t}`).join("\n")}`).join("\n")}`).join("\n\n")
+  : "- No active goals yet"}
+
+PENDING GENERAL TASKS:
+${pendingTasks.length > 0
+  ? pendingTasks.slice(0, 10).map(t => `- ${t.title}${t.priority === "high" ? " [HIGH PRIORITY]" : ""}${t.dueDate ? ` (due ${t.dueDate})` : ""}`).join("\n")
+  : "- No pending tasks"}
+
+Create a practical day plan as JSON. Follow these principles:
+1. MORNING (7–11 AM): Front-load 2–4 "quick wins" — tasks completable in ≤30 min that build momentum. Good morning items: small pending tasks, admin, brief habit check-ins.
+2. MIDDAY (11 AM–2 PM): Schedule today's calendar events here if they exist. Also the best time for focused deep work on project tasks.
+3. AFTERNOON (2–5 PM): Continue project work. Schedule any remaining events. Good for collaborative or medium-effort tasks.
+4. EVENING (5–8 PM): Wind-down items only. Light planning, reviewing goals progress, and personal development.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "greeting": "A warm, personalized 1-sentence greeting for ${dayName.split(",")[0]}",
+  "highlights": "1-2 sentence summary of the day's priorities",
+  "blocks": [
+    {
+      "id": "morning",
+      "label": "Morning",
+      "timeRange": "7:00 – 11:00 AM",
+      "theme": "Quick Wins & Momentum",
+      "accent": "amber",
+      "items": [
+        {
+          "title": "task or action title",
+          "type": "task|event|goal|habit|planning",
+          "duration": "15 min",
+          "priority": "high|medium|low",
+          "goalLink": "name of related goal if applicable, else null",
+          "notes": "brief optional coaching note or tip, else null"
+        }
+      ]
+    },
+    { "id": "midday", "label": "Midday", "timeRange": "11:00 AM – 2:00 PM", "theme": "Deep Work", "accent": "blue", "items": [] },
+    { "id": "afternoon", "label": "Afternoon", "timeRange": "2:00 – 5:00 PM", "theme": "Sustained Focus", "accent": "violet", "items": [] },
+    { "id": "evening", "label": "Evening", "timeRange": "5:00 – 8:00 PM", "theme": "Wind Down & Reflect", "accent": "emerald", "items": [] }
+  ],
+  "tips": ["One short practical tip", "Another actionable tip"]
+}
+
+Rules: Keep items realistic for one day (8–14 items total). Spread items sensibly across blocks. Include today's calendar events in the most appropriate block. Reference real goal/task names from the data above. Keep duration estimates honest (15 min, 30 min, 1 hr, 2 hr).`;
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 2048, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!r.ok) {
+        const err = await r.json() as any;
+        return res.status(400).json({ error: "anthropic_error", message: err.error?.message ?? "API error" });
+      }
+      const data = await r.json() as any;
+      const text: string = data.content?.[0]?.text ?? "";
+      const cleaned = text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      const plan = JSON.parse(cleaned);
+      res.json(plan);
+    } catch (e) {
+      if (e instanceof SyntaxError) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      handleError(res, e);
+    }
+  });
+
   // ── Quotes proxy (DummyJSON + type.fit combined) ──────────────────────────────
 
   // Normalised quote shape used throughout

@@ -9,7 +9,8 @@ import {
   Plus, Sun, Moon, Calendar, List, Cake, Plane, Briefcase, Target,
   MoreHorizontal, Pencil, Trash2, ChevronLeft, ChevronRight, X,
   AlertTriangle, CheckCircle2, Circle, ChevronDown, ChevronUp,
-  LayoutGrid, Check, RefreshCw,
+  LayoutGrid, Check, RefreshCw, Sparkles, Loader2, Clock, Zap,
+  BookOpen, CalendarDays, Coffee, Sunset, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -670,9 +671,261 @@ function ListView({ events, onEdit, onDelete }: {
   );
 }
 
+// ── Day Planner ────────────────────────────────────────────────────────────────
+
+type DayPlanItem = {
+  title: string;
+  type: "task" | "event" | "goal" | "habit" | "planning";
+  duration: string;
+  priority: "high" | "medium" | "low";
+  goalLink: string | null;
+  notes: string | null;
+};
+
+type DayBlock = {
+  id: string;
+  label: string;
+  timeRange: string;
+  theme: string;
+  accent: string;
+  items: DayPlanItem[];
+};
+
+type DayPlan = {
+  greeting: string;
+  highlights: string;
+  blocks: DayBlock[];
+  tips: string[];
+};
+
+const BLOCK_STYLES: Record<string, { bg: string; border: string; label: string; icon: React.ReactNode }> = {
+  morning:   { bg: "bg-amber-50 dark:bg-amber-950/20",   border: "border-amber-200 dark:border-amber-800",   label: "text-amber-700 dark:text-amber-300",  icon: <Coffee  size={15} /> },
+  midday:    { bg: "bg-blue-50 dark:bg-blue-950/20",     border: "border-blue-200 dark:border-blue-800",     label: "text-blue-700 dark:text-blue-300",    icon: <Sun     size={15} /> },
+  afternoon: { bg: "bg-violet-50 dark:bg-violet-950/20", border: "border-violet-200 dark:border-violet-800", label: "text-violet-700 dark:text-violet-300", icon: <Zap     size={15} /> },
+  evening:   { bg: "bg-emerald-50 dark:bg-emerald-950/20", border: "border-emerald-200 dark:border-emerald-800", label: "text-emerald-700 dark:text-emerald-300", icon: <Sunset size={15} /> },
+};
+
+const ITEM_TYPE_STYLES: Record<string, string> = {
+  task:     "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  event:    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  goal:     "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  habit:    "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  planning: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+};
+
+const PRIORITY_DOT: Record<string, string> = {
+  high:   "bg-red-500",
+  medium: "bg-amber-400",
+  low:    "bg-gray-300 dark:bg-gray-600",
+};
+
+function DayPlannerView() {
+  const { toast } = useToast();
+  const [plan, setPlan] = useState<DayPlan | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+
+  const today = format(new Date(), "EEEE, MMMM d, yyyy");
+
+  async function generate() {
+    setLoading(true);
+    setError(null);
+    setCheckedItems(new Set());
+    try {
+      const res = await apiRequest("POST", "/api/ai/day-planner", {});
+      if (!res.ok) {
+        const err = await res.json();
+        if (err.error === "no_api_key") {
+          setError("Add your Anthropic API key in Settings → API Keys to use AI features.");
+        } else {
+          setError(err.message ?? "Failed to generate plan. Try again.");
+        }
+        return;
+      }
+      const data: DayPlan = await res.json();
+      setPlan(data);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggleItem(blockId: string, idx: number) {
+    const key = `${blockId}-${idx}`;
+    setCheckedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
+        <div className="relative">
+          <Sparkles size={40} className="text-primary animate-pulse" />
+        </div>
+        <p className="text-sm font-medium animate-pulse">Building your day plan…</p>
+        <p className="text-xs text-muted-foreground/60">Reviewing your goals, tasks, and calendar</p>
+      </div>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <div className="max-w-xl mx-auto py-16 text-center px-4">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-5 shadow-lg">
+          <Sparkles size={30} className="text-white" />
+        </div>
+        <h2 className="text-xl font-bold mb-2">AI Day Planner</h2>
+        <p className="text-muted-foreground text-sm mb-1 leading-relaxed">
+          Get a personalized schedule built from your goals, projects, tasks, and calendar events.
+        </p>
+        <p className="text-xs text-muted-foreground/70 mb-6">
+          Prioritizes quick wins in the morning, schedules deep work midday, and suggests a gentle wind-down in the evening.
+        </p>
+        {error && (
+          <div className="mb-5 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive text-left">
+            {error}
+          </div>
+        )}
+        <Button onClick={generate} size="lg" className="gap-2 shadow-sm">
+          <Sparkles size={16} /> Generate My Day Plan
+        </Button>
+        <p className="text-xs text-muted-foreground/50 mt-3">Uses your Anthropic API key — add it in Settings</p>
+      </div>
+    );
+  }
+
+  const totalItems = plan.blocks.reduce((s, b) => s + b.items.length, 0);
+  const doneCount = checkedItems.size;
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <CalendarDays size={12} />
+            <span>{today}</span>
+          </div>
+          <p className="text-base font-semibold leading-snug">{plan.greeting}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{plan.highlights}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={generate} className="gap-1.5 shrink-0 text-xs">
+          <RefreshCw size={12} /> Regenerate
+        </Button>
+      </div>
+
+      {/* Progress bar */}
+      {totalItems > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+            <span>{doneCount} of {totalItems} items done</span>
+            <span>{Math.round((doneCount / totalItems) * 100)}%</span>
+          </div>
+          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500"
+              style={{ width: `${(doneCount / totalItems) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Time blocks */}
+      <div className="space-y-4 mb-6">
+        {plan.blocks.filter(b => b.items.length > 0).map((block) => {
+          const style = BLOCK_STYLES[block.id] ?? BLOCK_STYLES.morning;
+          return (
+            <div key={block.id} className={`rounded-xl border p-4 ${style.bg} ${style.border}`}>
+              {/* Block header */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className={style.label}>{style.icon}</span>
+                  <div>
+                    <span className={`text-sm font-bold ${style.label}`}>{block.label}</span>
+                    <span className="text-xs text-muted-foreground ml-1.5">{block.timeRange}</span>
+                  </div>
+                </div>
+                <span className="text-xs text-muted-foreground italic">{block.theme}</span>
+              </div>
+
+              {/* Items */}
+              <div className="space-y-2">
+                {block.items.map((item, idx) => {
+                  const key = `${block.id}-${idx}`;
+                  const done = checkedItems.has(key);
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => toggleItem(block.id, idx)}
+                      className={`flex items-start gap-3 p-2.5 rounded-lg bg-background/70 border border-transparent hover:border-border cursor-pointer transition-all ${done ? "opacity-50" : ""}`}
+                    >
+                      {/* Checkbox */}
+                      <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${done ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                        {done && <Check size={9} className="text-primary-foreground" />}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-sm font-medium ${done ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ITEM_TYPE_STYLES[item.type] ?? ITEM_TYPE_STYLES.task}`}>
+                            {item.type}
+                          </span>
+                          {item.goalLink && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                              <Star size={9} />{item.goalLink}
+                            </span>
+                          )}
+                        </div>
+                        {item.notes && !done && (
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.notes}</p>
+                        )}
+                      </div>
+
+                      {/* Right meta */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className={`w-2 h-2 rounded-full ${PRIORITY_DOT[item.priority] ?? PRIORITY_DOT.medium}`} title={`${item.priority} priority`} />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                          <Clock size={10} />{item.duration}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Tips */}
+      {plan.tips && plan.tips.length > 0 && (
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <BookOpen size={12} /> Today's Tips
+          </p>
+          <ul className="space-y-1.5">
+            {plan.tips.map((tip, i) => (
+              <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                <span className="text-primary mt-0.5 shrink-0">•</span>
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
-type ViewMode = "list" | "goals" | "calendar";
+type ViewMode = "list" | "goals" | "calendar" | "today";
 
 export default function PlannerPage() {
   const { theme, toggle } = useTheme();
@@ -714,6 +967,7 @@ export default function PlannerPage() {
   );
 
   const navItems: { id: ViewMode; icon: React.ReactNode; label: string }[] = [
+    { id: "today",    icon: <Sparkles size={14} />,    label: "Day Plan" },
     { id: "list",     icon: <List size={14} />,       label: "All" },
     { id: "goals",    icon: <LayoutGrid size={14} />,  label: "Goals & Projects" },
     { id: "calendar", icon: <Calendar size={14} />,    label: "Calendar" },
@@ -758,7 +1012,9 @@ export default function PlannerPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
-        <UpcomingAlert events={events} />
+        {view !== "today" && <UpcomingAlert events={events} />}
+
+        {view === "today" && <DayPlannerView />}
 
         {view === "goals" && <GoalsProjectsView events={events} onEdit={(e) => { setEditingEvent(e); setModalOpen(true); }} onDelete={(id) => deleteMut.mutate(id)} />}
 
