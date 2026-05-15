@@ -2064,71 +2064,22 @@ Rules: Keep items realistic for one day (8–14 items total). Spread items sensi
         `- ${i.name}${i.type ? ` (${i.type})` : ""}${i.date ? ` on ${i.date}` : ""}${i.address ? `, ${i.address}` : ""}`
       ).join("\n");
 
-      const prompt = `You are an expert travel planner with deep local knowledge. Generate a comprehensive, location-aware trip planning guide for the following trip.
+      const maxDays = Math.min(durationDays ?? 3, 5);
 
-TRIP: ${tripName}
-DESTINATION: ${destination}
-${startDate ? `DATES: ${startDate}${endDate ? ` to ${endDate}` : ""}` : ""}
-${durationDays ? `DURATION: ${durationDays} day${durationDays !== 1 ? "s" : ""}` : ""}
-${tripNotes ? `NOTES/CONTEXT: ${tripNotes}` : ""}
-${existingStops ? `ALREADY PLANNED STOPS:\n${existingStops}` : ""}
-${preferences ? `TRAVELER PREFERENCES: ${preferences}` : ""}
+      const prompt = `You are an expert travel planner. Return ONLY a raw JSON object — no markdown, no code fences, no explanation, nothing before or after the JSON.
 
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "overview": "2-3 sentence engaging overview of the trip and what makes it special",
-  "prep": [
-    {
-      "category": "category name e.g. Bookings, Documents, Health, Money",
-      "emoji": "single relevant emoji",
-      "items": ["specific actionable prep item", "..."]
-    }
-  ],
-  "packing": [
-    {
-      "category": "category name e.g. Clothing, Toiletries, Tech, Documents",
-      "emoji": "single relevant emoji",
-      "items": ["specific item to pack", "..."]
-    }
-  ],
-  "recommendations": [
-    {
-      "name": "Place or experience name",
-      "type": "restaurant|cafe|attraction|neighborhood|hotel|activity|day_trip",
-      "emoji": "relevant emoji",
-      "description": "1-2 sentence description of why it's worth visiting",
-      "area": "neighborhood or district name (e.g. Le Marais, Shibuya, Downtown)",
-      "location": "specific address or well-known cross-street/landmark it is near (e.g. '23 Rue de Rivoli' or 'Near the Colosseum, Celio')",
-      "tip": "one practical insider tip"
-    }
-  ],
-  "dayByDay": [
-    {
-      "day": 1,
-      "label": "Arrival & First Impressions",
-      "area": "primary neighborhood or district the day is based in (e.g. Old Town, Midtown, Shibuya)",
-      "highlights": ["Morning: [activity] near [location/landmark]", "Lunch: [place] in [area]", "Afternoon: [activity] — walkable from lunch", "Evening: [place] nearby"]
-    }
-  ],
-  "budgetTips": ["specific money-saving tip for this destination", "..."],
-  "localTips": ["cultural insight or etiquette tip", "practical local knowledge", "..."]
-}
+Trip: ${tripName} | Destination: ${destination}${startDate ? ` | Dates: ${startDate}${endDate ? ` to ${endDate}` : ""}` : ""}${durationDays ? ` | ${durationDays} days` : ""}
+${tripNotes ? `Context: ${tripNotes}` : ""}${existingStops ? `\nExisting stops: ${existingStops}` : ""}${preferences ? `\nPreferences: ${preferences}` : ""}
 
-Rules:
-- Make recommendations specific and authentic (real places if you know them, clearly labeled as suggestions otherwise)
-- Always include both "area" (neighborhood/district) and "location" (specific address or nearby landmark) for every recommendation
-- Tailor prep and packing to the destination's climate, culture, and activities
-- GEOGRAPHIC ORGANIZATION: Structure each day around a specific neighborhood or area of the city to minimize travel. Group activities, meals, and sights that are physically close together into the same day. Anchor each day to its area in the "area" field.
-- In each day's highlights, note the location/area context so the traveler knows where they are (e.g. "Lunch at a trattoria in Trastevere — steps from the morning walk")
-- dayByDay should have one entry per day (max 7 days; if longer trip, show first 7)
-- Include 6-10 place recommendations, mixing must-sees with hidden gems
-- Keep each highlight concise but include the location context
-- If existing stops are listed, complement them, incorporate their locations into the geographic flow, and don't duplicate`;
+Respond with exactly this JSON shape (no extra keys, no comments):
+{"overview":"2 sentence trip overview","prep":[{"category":"Bookings","emoji":"📋","items":["item1","item2","item3"]},{"category":"Documents","emoji":"📄","items":["item1","item2"]},{"category":"Health","emoji":"💊","items":["item1","item2"]},{"category":"Money","emoji":"💳","items":["item1","item2"]}],"packing":[{"category":"Clothing","emoji":"👕","items":["item1","item2","item3"]},{"category":"Toiletries","emoji":"🧴","items":["item1","item2"]},{"category":"Tech","emoji":"🔌","items":["item1","item2"]},{"category":"Extras","emoji":"🎒","items":["item1","item2"]}],"recommendations":[{"name":"place name","type":"attraction","emoji":"🏛️","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"},{"name":"place name","type":"restaurant","emoji":"🍽️","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"},{"name":"place name","type":"cafe","emoji":"☕","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"},{"name":"place name","type":"attraction","emoji":"🌿","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"},{"name":"place name","type":"activity","emoji":"🚶","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"},{"name":"place name","type":"restaurant","emoji":"🥘","description":"Why visit — 1 sentence.","area":"Neighborhood name","location":"Street address or nearest landmark","tip":"Insider tip"}],"dayByDay":[{"day":1,"label":"Day theme","area":"Neighborhood for the day","highlights":["Morning: activity near landmark","Lunch: restaurant in area","Afternoon: activity, walkable from lunch","Evening: dinner or activity nearby"]}],"budgetTips":["tip1","tip2","tip3"],"localTips":["tip1","tip2","tip3"]}
+
+Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cluster nearby places together to minimize travel. Use real place names for ${destination}. Keep every string value under 15 words. Type must be one of: restaurant, cafe, attraction, hotel, activity, day_trip, neighborhood.`;
 
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 4096, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 6000, messages: [{ role: "user", content: prompt }] }),
       });
       if (!r.ok) {
         const err = await r.json() as any;
@@ -2136,8 +2087,13 @@ Rules:
       }
       const data = await r.json() as any;
       const text: string = data.content?.[0]?.text ?? "";
+      console.log("[trip-planner] stop_reason:", data.stop_reason, "| response length:", text.length);
+      if (data.stop_reason === "max_tokens") console.warn("[trip-planner] Response truncated — increase max_tokens");
       const parsed = extractJson(text);
-      if (!parsed) return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      if (!parsed) {
+        console.error("[trip-planner] Parse failed. First 300 chars:", text.slice(0, 300));
+        return res.status(500).json({ error: "parse_error", message: "Could not parse AI response. Try again." });
+      }
       res.json(parsed);
     } catch (e) {
       handleError(res, e);
