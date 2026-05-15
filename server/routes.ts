@@ -2393,6 +2393,62 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  app.get("/api/friends/enriched", requireAuth, async (req, res) => {
+    try {
+      const data = await storage.getFriendsEnriched((req.user as User).id);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Unified Recommendations Inbox ─────────────────────────────────────────────
+
+  app.get("/api/recommendations/inbox", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const filterType = String(req.query.type ?? "all");
+      const items = await storage.getRecommendationsInbox(userId, filterType);
+      res.json(items);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/recommendations/:type/:id/read", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      await storage.markRecommendationRead(userId, req.params.type, +req.params.id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/recommendations/:type/:id/add", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const result = await storage.addRecommendationToCollection(userId, req.params.type, +req.params.id);
+      res.status(201).json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/recommendations/send", requireAuth, async (req, res) => {
+    try {
+      const fromUserId = (req.user as User).id;
+      const { toUserId, type, title, subtitle, imageUrl, note } = req.body;
+      if (!toUserId || !type || !title) return res.status(400).json({ error: "toUserId, type, title required" });
+      // Verify friendship
+      const friends = await storage.getFriends(fromUserId);
+      if (!friends.find(f => f.id === toUserId)) return res.status(403).json({ error: "Not friends" });
+      const result = await storage.sendUnifiedRecommendation(fromUserId, toUserId, type, { title, subtitle, imageUrl, note });
+      res.status(201).json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/profile/:userId/match", requireAuth, async (req, res) => {
+    try {
+      const viewerId = (req.user as User).id;
+      const targetId = +req.params.userId;
+      const data = await storage.getProfileTasteMatch(viewerId, targetId);
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Book Recommendations ──────────────────────────────────────────────────────
   app.get("/api/book-recommendations", requireAuth, async (req, res) => {
     try {

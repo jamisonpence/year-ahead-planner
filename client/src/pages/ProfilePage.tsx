@@ -5,7 +5,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette, Quote,
-  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles, Flame,
+  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles, Flame, Send, X,
+  Loader2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -618,6 +619,30 @@ export default function ProfilePage() {
     enabled: !!userId,
   });
 
+  type MatchData = { pct: number; total: number; mutualFriends: number; breakdown: { books: number; movies: number; songs: number; recipes: number; spots: number } };
+  const { data: matchData } = useQuery<MatchData>({
+    queryKey: ["/api/profile", userId, "match"],
+    queryFn: () => apiRequest("GET", `/api/profile/${userId}/match`).then(r => r.json()),
+    enabled: !!userId,
+  });
+
+  // Recent feed for this friend
+  const { data: recentFeed = [] } = useQuery<any[]>({
+    queryKey: ["/api/feed/mine", userId],
+    queryFn: () => apiRequest("GET", `/api/feed/mine?userId=${userId}&limit=5`).then(r => r.json()).catch(() => []),
+    enabled: !!userId,
+  });
+
+  const [recOpen, setRecOpen] = useState(false);
+  const [recType, setRecType] = useState("book");
+  const [recTitle, setRecTitle] = useState("");
+  const [recNote, setRecNote] = useState("");
+  const sendRecMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/recommendations/send", { toUserId: userId, type: recType, title: recTitle.trim(), note: recNote.trim() || undefined }),
+    onSuccess: () => { toast({ title: "Recommendation sent!" }); setRecOpen(false); setRecTitle(""); setRecNote(""); },
+    onError: () => toast({ title: "Couldn't send recommendation", variant: "destructive" }),
+  });
+
   // Track which items have been added
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
@@ -718,18 +743,91 @@ export default function ProfilePage() {
       </button>
 
       {/* Profile header */}
-      <div className="flex items-center gap-4 mb-8 p-5 rounded-2xl border bg-card">
-        <Avatar name={user.name} avatarUrl={user.avatarUrl} size={64} />
-        <div>
-          <h1 className="text-xl font-bold">{user.name}</h1>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {displayTabs.length === 0
-              ? "No public tabs"
-              : `${displayTabs.length} tab${displayTabs.length === 1 ? "" : "s"} shared`}
-          </p>
+      <div className="mb-6 p-5 rounded-2xl border bg-card space-y-4">
+        {/* Top row: avatar + name + Rec button */}
+        <div className="flex items-start gap-4">
+          <Avatar name={user.name} avatarUrl={user.avatarUrl} size={64} />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold">{user.name}</h1>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
+          </div>
+          <button
+            onClick={() => setRecOpen(true)}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+          >
+            <Send size={13} /> Rec
+          </button>
         </div>
+
+        {/* Stats row */}
+        <div className="flex gap-4">
+          <div className="text-center">
+            <p className="text-base font-bold">{matchData?.pct ?? 0}%</p>
+            <p className="text-[10px] text-muted-foreground">Taste match</p>
+          </div>
+          {matchData?.mutualFriends !== undefined && (
+            <div className="text-center">
+              <p className="text-base font-bold">{matchData.mutualFriends}</p>
+              <p className="text-[10px] text-muted-foreground">Mutual friends</p>
+            </div>
+          )}
+          {matchData && matchData.total > 0 && (
+            <div className="text-center">
+              <p className="text-base font-bold">{matchData.total}</p>
+              <p className="text-[10px] text-muted-foreground">In common</p>
+            </div>
+          )}
+        </div>
+
+        {/* Taste breakdown */}
+        {matchData && matchData.total > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "books",   label: "books",   emoji: "📚" },
+              { key: "movies",  label: "movies",  emoji: "🎬" },
+              { key: "songs",   label: "songs",   emoji: "🎵" },
+              { key: "recipes", label: "recipes", emoji: "🍽️" },
+              { key: "spots",   label: "spots",   emoji: "📍" },
+            ].filter(c => (matchData.breakdown as any)[c.key] > 0).map(c => (
+              <span key={c.key} className="text-xs bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 px-2 py-1 rounded-full font-medium">
+                {c.emoji} {(matchData.breakdown as any)[c.key]} {c.label} in common
+              </span>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Rec modal */}
+      {recOpen && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end justify-center lg:items-center" onClick={() => setRecOpen(false)}>
+          <div className="bg-card border rounded-t-3xl lg:rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base">Recommend to {user.name}</h3>
+              <button onClick={() => setRecOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary"><X size={16} /></button>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {["book","movie","music","recipe","spot","art","quote"].map(t => (
+                <button key={t} onClick={() => setRecType(t)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors capitalize ${recType === t ? "bg-violet-500 text-white" : "bg-secondary"}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <input value={recTitle} onChange={e => setRecTitle(e.target.value)} placeholder="Title…"
+              className="w-full px-3 py-2 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+            />
+            <textarea value={recNote} onChange={e => setRecNote(e.target.value)} placeholder="Add a note (optional)" rows={2}
+              className="w-full px-3 py-2 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-violet-400/30 resize-none"
+            />
+            <button onClick={() => sendRecMut.mutate()} disabled={!recTitle.trim() || sendRecMut.isPending}
+              className="w-full py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {sendRecMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send Recommendation
+            </button>
+          </div>
+        </div>
+      )}
 
       {displayTabs.length === 0 ? (
         <div className="text-center py-16">

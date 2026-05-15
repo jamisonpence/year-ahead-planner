@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import FriendsSocialHub from "@/components/FriendsSocialHub";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
@@ -1097,10 +1098,34 @@ export default function RelationshipsPage() {
     }
   }
 
-  return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+  const [socialTab, setSocialTab] = useState<"friends" | "contacts">("friends");
 
-      {/* ── Header ────────────────────────────────────────────────────────────── */}
+  return (
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
+
+      {/* ── Tab switcher ─────────────────────────────────────────────────────── */}
+      <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit">
+        <button
+          onClick={() => setSocialTab("friends")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "friends" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Friends
+        </button>
+        <button
+          onClick={() => setSocialTab("contacts")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "contacts" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Contacts
+        </button>
+      </div>
+
+      {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
+      {socialTab === "friends" && <FriendsSocialHub />}
+
+      {/* ── Contacts (existing CRM) ───────────────────────────────────────────── */}
+      {socialTab === "contacts" && (
+      <div className="space-y-5">
+
       {/* ── Header ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -1517,6 +1542,8 @@ export default function RelationshipsPage() {
         onClose={() => { setGroupModal(false); setEditGroup(null); }}
         editGroup={editGroup}
       />
+      </div> {/* end contacts content */}
+      )} {/* end contacts tab */}
     </div>
   );
 }

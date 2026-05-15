@@ -3309,6 +3309,285 @@ export const storage: IStorage = {
     await pool.query(`UPDATE ${table} SET is_read = true WHERE to_user_id = $1 AND is_read = false`, [userId]);
   },
 
+  // ── Unified Recommendations Inbox ────────────────────────────────────────────
+
+  async getRecommendationsInbox(userId: number, filterType?: string) {
+    type Row = { id: number; from_user_id: number; from_name: string; from_avatar: string | null; title: string; subtitle: string | null; image_url: string | null; note: string | null; created_at: string; is_read: boolean };
+
+    const queries: Array<{ type: string; sql: string }> = [
+      { type: "book", sql: `
+        SELECT br.id, br.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          br.book_title as title, br.book_author as subtitle, br.cover_url as image_url,
+          br.notes as note, br.created_at, br.is_read
+        FROM book_recommendations br JOIN users u ON u.id = br.from_user_id
+        WHERE br.to_user_id = $1 AND br.is_dismissed = false` },
+      { type: "movie", sql: `
+        SELECT ms.id, ms.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          ms.title, ms.director as subtitle, ms.poster_url as image_url,
+          ms.notes as note, ms.created_at, ms.is_read
+        FROM movie_shares ms JOIN users u ON u.id = ms.from_user_id
+        WHERE ms.to_user_id = $1 AND ms.is_dismissed = false` },
+      { type: "music", sql: `
+        SELECT mr.id, mr.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          mr.artist_name as title, mr.song_title as subtitle, NULL::text as image_url,
+          mr.notes as note, mr.created_at, mr.is_read
+        FROM music_recommendations mr JOIN users u ON u.id = mr.from_user_id
+        WHERE mr.to_user_id = $1 AND mr.is_dismissed = false` },
+      { type: "recipe", sql: `
+        SELECT rs.id, rs.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          rs.recipe_name as title, rs.recipe_category as subtitle, rs.recipe_image_url as image_url,
+          rs.notes as note, rs.created_at, rs.is_read
+        FROM recipe_shares rs JOIN users u ON u.id = rs.from_user_id
+        WHERE rs.to_user_id = $1 AND rs.is_dismissed = false` },
+      { type: "spot", sql: `
+        SELECT ss.id, ss.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          ss.name as title, ss.city as subtitle, NULL::text as image_url,
+          ss.notes as note, ss.created_at, ss.is_read
+        FROM spot_shares ss JOIN users u ON u.id = ss.from_user_id
+        WHERE ss.to_user_id = $1 AND ss.is_dismissed = false` },
+      { type: "art", sql: `
+        SELECT as2.id, as2.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          as2.title, as2.artist_name as subtitle, as2.image_url as image_url,
+          as2.notes as note, as2.created_at, as2.is_read
+        FROM art_shares as2 JOIN users u ON u.id = as2.from_user_id
+        WHERE as2.to_user_id = $1 AND as2.is_dismissed = false` },
+      { type: "quote", sql: `
+        SELECT qs.id, qs.from_user_id, u.name as from_name, u.avatar_url as from_avatar,
+          qs.text as title, qs.author as subtitle, NULL::text as image_url,
+          qs.notes as note, qs.created_at, qs.is_read
+        FROM quote_shares qs JOIN users u ON u.id = qs.from_user_id
+        WHERE qs.to_user_id = $1 AND qs.is_dismissed = false` },
+    ];
+
+    const active = filterType && filterType !== "all"
+      ? queries.filter(q => q.type === filterType)
+      : queries;
+
+    const results = await Promise.all(
+      active.map(q => pool.query<Row>(q.sql, [userId]).then(r => r.rows.map(row => ({
+        id: row.id,
+        recType: q.type,
+        fromUser: { id: row.from_user_id, name: row.from_name, avatarUrl: row.from_avatar },
+        title: row.title,
+        subtitle: row.subtitle,
+        imageUrl: row.image_url,
+        note: row.note,
+        createdAt: row.created_at,
+        isRead: row.is_read,
+      }))))
+    );
+
+    return results.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async markRecommendationRead(userId: number, type: string, id: number) {
+    const tableMap: Record<string, string> = {
+      book: "book_recommendations", movie: "movie_shares", music: "music_recommendations",
+      recipe: "recipe_shares", spot: "spot_shares", art: "art_shares", quote: "quote_shares",
+    };
+    const table = tableMap[type];
+    if (!table) return;
+    await pool.query(
+      `UPDATE ${table} SET is_read = true WHERE id = $1 AND to_user_id = $2`,
+      [id, userId]
+    );
+  },
+
+  async addRecommendationToCollection(userId: number, type: string, recId: number) {
+    const tableMap: Record<string, string> = {
+      book: "book_recommendations", movie: "movie_shares", music: "music_recommendations",
+      recipe: "recipe_shares", spot: "spot_shares", art: "art_shares", quote: "quote_shares",
+    };
+    const table = tableMap[type];
+    if (!table) throw new Error(`Unknown rec type: ${type}`);
+
+    // Fetch the rec row
+    const row = await pool.query(`SELECT * FROM ${table} WHERE id = $1 AND to_user_id = $2`, [recId, userId]);
+    if (!row.rows[0]) throw new Error("Recommendation not found");
+    const r = row.rows[0];
+
+    // Mark read
+    await pool.query(`UPDATE ${table} SET is_read = true WHERE id = $1`, [recId]);
+
+    // Insert into user's collection using same logic as copyFromProfile
+    switch (type) {
+      case "book":
+        return db.insert(books).values({ userId, title: r.book_title, author: r.book_author ?? null, coverUrl: r.cover_url ?? null, status: "want_to_read", isFavorite: false }).returning().then(x => x[0]);
+      case "movie":
+        return db.insert(movies).values({ userId, title: r.title, mediaType: r.media_type ?? "movie", posterUrl: r.poster_url ?? null, posterColor: r.poster_color ?? null, status: "backlog", isFavorite: false }).returning().then(x => x[0]);
+      case "music": {
+        const artist = await db.insert(musicArtists).values({ userId, name: r.artist_name, genres: null, isFavorite: false }).returning().then(x => x[0]);
+        if (r.song_title) {
+          await db.insert(musicSongs).values({ userId, artistId: artist.id, title: r.song_title, isFavorite: false }).catch(() => {});
+        }
+        return artist;
+      }
+      case "recipe":
+        return db.insert(recipes).values({ userId, name: r.recipe_name, emoji: r.recipe_emoji ?? "🍽️", category: r.recipe_category ?? null, tags: null }).returning().then(x => x[0]);
+      case "spot":
+        return db.insert(spots).values({ userId, name: r.name, type: r.type ?? "restaurant", city: r.city ?? null, neighborhood: r.neighborhood ?? null, status: "want_to_visit", isFavorite: false }).returning().then(x => x[0]);
+      case "art":
+        return db.insert(artPieces).values({ userId, title: r.title, artistName: r.artist_name ?? null, medium: r.medium ?? "other", imageUrl: r.image_url ?? null, accentColor: r.accent_color ?? null, whereViewed: r.where_viewed ?? null, status: "want_to_see", isFavorite: false }).returning().then(x => x[0]);
+      case "quote":
+        return db.insert(quotes).values({ userId, text: r.text, author: r.author ?? null, category: r.category ?? "other", isFavorite: false }).returning().then(x => x[0]);
+      default:
+        throw new Error(`Cannot add type: ${type}`);
+    }
+  },
+
+  async sendUnifiedRecommendation(fromUserId: number, toUserId: number, type: string, data: { title: string; subtitle?: string; imageUrl?: string; note?: string }) {
+    const now = new Date().toISOString();
+    switch (type) {
+      case "book":
+        return db.insert(bookRecommendations).values({ fromUserId, toUserId, bookTitle: data.title, bookAuthor: data.subtitle ?? null, coverUrl: data.imageUrl ?? null, notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "movie":
+        return db.insert(movieShares).values({ fromUserId, toUserId, title: data.title, mediaType: "movie", notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "music":
+        return db.insert(musicRecommendations).values({ fromUserId, toUserId, type: data.subtitle ? "song" : "artist", artistName: data.title, songTitle: data.subtitle ?? null, notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "recipe":
+        return db.insert(recipeShares).values({ fromUserId, toUserId, recipeName: data.title, recipeEmoji: "🍽️", recipeIngredients: "[]", notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "spot":
+        return db.insert(spotShares).values({ fromUserId, toUserId, name: data.title, type: "restaurant", notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "art":
+        return db.insert(artShares).values({ fromUserId, toUserId, title: data.title, artistName: data.subtitle ?? null, notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      case "quote":
+        return db.insert(quoteShares).values({ fromUserId, toUserId, text: data.title, author: data.subtitle ?? null, notes: data.note ?? null, createdAt: now, isDismissed: false }).returning().then(x => x[0]);
+      default:
+        throw new Error(`Unknown rec type: ${type}`);
+    }
+  },
+
+  async getFriendsEnriched(userId: number) {
+    // Get all friends
+    const friendsRes = await pool.query<{ id: number; name: string; email: string; avatarUrl: string | null }>(`
+      SELECT u.id, u.name, u.email, u.avatar_url as "avatarUrl"
+      FROM friend_requests fr
+      JOIN users u ON u.id = CASE WHEN fr.from_user_id = $1 THEN fr.to_user_id ELSE fr.from_user_id END
+      WHERE fr.status = 'accepted' AND (fr.from_user_id = $1 OR fr.to_user_id = $1)
+      ORDER BY u.name ASC
+    `, [userId]);
+    const friends = friendsRes.rows;
+    if (friends.length === 0) return [];
+
+    const friendIds = friends.map(f => f.id);
+
+    // Batch: overlap counts for all friends
+    const overlapRes = await pool.query(`
+      SELECT af2.user_id as friend_id, COUNT(*) as overlap_count
+      FROM activity_feed af1
+      JOIN activity_feed af2
+        ON af2.item_type = af1.item_type
+        AND af2.item_title = af1.item_title
+        AND af2.user_id != $1
+      WHERE af1.user_id = $1
+        AND af1.item_title IS NOT NULL
+        AND af2.user_id = ANY($2::int[])
+      GROUP BY af2.user_id
+    `, [userId, friendIds]);
+    const overlapMap = new Map<number, number>(
+      overlapRes.rows.map((r: any) => [r.friend_id, parseInt(r.overlap_count, 10)])
+    );
+
+    // My total for denominator
+    const myTotalRes = await pool.query(`SELECT COUNT(*) as c FROM activity_feed WHERE user_id = $1`, [userId]);
+    const myTotal = parseInt(myTotalRes.rows[0].c, 10);
+
+    // Batch: most recent activity per friend
+    const actRes = await pool.query(`
+      SELECT DISTINCT ON (user_id)
+        user_id, activity_type, item_title, item_type, created_at
+      FROM activity_feed
+      WHERE user_id = ANY($1::int[])
+        AND item_title IS NOT NULL
+      ORDER BY user_id, created_at DESC
+    `, [friendIds]);
+    const actMap = new Map(actRes.rows.map((r: any) => [r.user_id, r]));
+
+    // Friend totals for denominator
+    const friendTotalsRes = await pool.query(`
+      SELECT user_id, COUNT(*) as c
+      FROM activity_feed
+      WHERE user_id = ANY($1::int[])
+      GROUP BY user_id
+    `, [friendIds]);
+    const friendTotalMap = new Map<number, number>(
+      friendTotalsRes.rows.map((r: any) => [r.user_id, parseInt(r.c, 10)])
+    );
+
+    return friends.map(f => {
+      const overlap = overlapMap.get(f.id) ?? 0;
+      const friendTotal = friendTotalMap.get(f.id) ?? 0;
+      const denom = Math.max(myTotal, friendTotal, 1);
+      const tasteMatchPct = Math.round((overlap / denom) * 100);
+
+      const act = actMap.get(f.id);
+      let recentActivityLabel: string | null = null;
+      if (act) {
+        const typeLabels: Record<string, string> = {
+          book: "book", movie: "movie", song: "song", recipe: "recipe",
+          spot: "spot", quote: "quote", art: "artwork", workout: "workout",
+        };
+        const label = typeLabels[act.item_type] ?? act.item_type;
+        const daysAgo = Math.round((Date.now() - new Date(act.created_at).getTime()) / 86400000);
+        const when = daysAgo === 0 ? "today" : daysAgo === 1 ? "yesterday" : `${daysAgo}d ago`;
+        recentActivityLabel = `Added "${act.item_title.slice(0, 25)}${act.item_title.length > 25 ? "…" : ""}" ${when}`;
+      }
+
+      return { ...f, tasteMatchPct, recentActivityLabel, overlapCount: overlap };
+    });
+  },
+
+  async getProfileTasteMatch(viewerId: number, targetId: number) {
+    const [viewerRes, targetRes, overlapRes, mutualRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) as c FROM activity_feed WHERE user_id = $1`, [viewerId]),
+      pool.query(`SELECT COUNT(*) as c FROM activity_feed WHERE user_id = $1`, [targetId]),
+      pool.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE af1.item_type = 'book')   as books,
+          COUNT(*) FILTER (WHERE af1.item_type = 'movie')  as movies,
+          COUNT(*) FILTER (WHERE af1.item_type = 'song')   as songs,
+          COUNT(*) FILTER (WHERE af1.item_type = 'recipe') as recipes,
+          COUNT(*) FILTER (WHERE af1.item_type = 'spot')   as spots
+        FROM activity_feed af1
+        JOIN activity_feed af2
+          ON af2.user_id = $2
+          AND af2.item_type = af1.item_type
+          AND af2.item_title = af1.item_title
+        WHERE af1.user_id = $1 AND af1.item_title IS NOT NULL
+      `, [viewerId, targetId]),
+      pool.query(`
+        SELECT COUNT(*) as c
+        FROM friend_requests fr1
+        JOIN friend_requests fr2
+          ON (
+            CASE WHEN fr1.from_user_id = $1 THEN fr1.to_user_id ELSE fr1.from_user_id END =
+            CASE WHEN fr2.from_user_id = $2 THEN fr2.to_user_id ELSE fr2.from_user_id END
+          )
+        WHERE fr1.status = 'accepted' AND (fr1.from_user_id = $1 OR fr1.to_user_id = $1)
+          AND fr2.status = 'accepted' AND (fr2.from_user_id = $2 OR fr2.to_user_id = $2)
+          AND CASE WHEN fr1.from_user_id = $1 THEN fr1.to_user_id ELSE fr1.from_user_id END != $2
+      `, [viewerId, targetId]),
+    ]);
+    const vTotal = parseInt(viewerRes.rows[0].c, 10);
+    const tTotal = parseInt(targetRes.rows[0].c, 10);
+    const denom = Math.max(vTotal, tTotal, 1);
+    const ov = overlapRes.rows[0];
+    const overlapTotal = parseInt(ov.total, 10);
+    return {
+      pct: Math.round((overlapTotal / denom) * 100),
+      total: overlapTotal,
+      mutualFriends: parseInt(mutualRes.rows[0].c, 10),
+      breakdown: {
+        books: parseInt(ov.books, 10),
+        movies: parseInt(ov.movies, 10),
+        songs: parseInt(ov.songs, 10),
+        recipes: parseInt(ov.recipes, 10),
+        spots: parseInt(ov.spots, 10),
+      },
+    };
+  },
+
   // ── Workout Plans ────────────────────────────────────────────────────────────
   async getAllWorkoutPlans(userId) {
     return db.select().from(workoutPlans).where(eq(workoutPlans.userId, userId)).orderBy(desc(workoutPlans.createdAt));
