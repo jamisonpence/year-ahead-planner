@@ -67,6 +67,14 @@ async function buildAll() {
 }
 
 buildAll().catch((err) => {
+  // Print esbuild/Vite error details before the raw error object
+  if (err && Array.isArray(err.errors) && err.errors.length > 0) {
+    console.error("Build errors:");
+    for (const e of err.errors as any[]) {
+      const loc = e.location ? ` (${e.location.file}:${e.location.line})` : "";
+      console.error(`  • ${e.text}${loc}`);
+    }
+  }
   console.error(err);
   process.exit(1);
 });
