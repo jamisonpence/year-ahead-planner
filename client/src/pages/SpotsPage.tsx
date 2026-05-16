@@ -416,6 +416,20 @@ function StarRating({ value, onChange, readonly = false }: { value: number | nul
   );
 }
 
+// ── Type accent bar colors ─────────────────────────────────────────────────────
+const TYPE_ACCENT: Record<string, string> = {
+  restaurant: "bg-orange-400",
+  bar:        "bg-purple-500",
+  cafe:       "bg-amber-400",
+  park:       "bg-green-500",
+  trail:      "bg-teal-500",
+  shop:       "bg-pink-400",
+  service:    "bg-slate-400",
+  attraction: "bg-blue-500",
+  hotel:      "bg-indigo-500",
+  other:      "bg-gray-400",
+};
+
 // ── Spot Card ─────────────────────────────────────────────────────────────────
 
 function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
@@ -425,55 +439,260 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
   onToggleFav: () => void;
   onShare: () => void;
 }) {
-  const tags = (spot.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
   const location = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([spot.name, spot.address, spot.city].filter(Boolean).join(', '))}`;
+  const accentColor = TYPE_ACCENT[spot.type] ?? "bg-gray-400";
 
   return (
-    <div className="p-4 rounded-lg border bg-card space-y-2 hover:shadow-sm transition-shadow">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="text-xl shrink-0 mt-0.5">{typeEmoji(spot.type)}</span>
-          <div className="min-w-0">
-            <p className="font-medium text-sm leading-tight">{spot.name}</p>
+    <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+      {/* Accent bar */}
+      <div className={`h-1 w-full ${accentColor}`} />
+
+      <div className="p-4 flex flex-col gap-2.5 flex-1">
+        {/* Top row: emoji + name/location + action buttons */}
+        <div className="flex items-start gap-3">
+          <span className="text-3xl shrink-0 leading-none mt-0.5">{typeEmoji(spot.type)}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm leading-tight">{spot.name}</p>
             {location && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Navigation size={10} />{location}</p>}
           </div>
+          {/* Action buttons */}
+          <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
+            <button onClick={onToggleFav} title={spot.isFavorite ? "Remove from favorites" : "Add to favorites"}
+              className={`p-1.5 rounded-lg transition-colors ${spot.isFavorite ? "text-pink-500" : "text-muted-foreground/40 hover:text-pink-400"}`}>
+              <Heart size={14} fill={spot.isFavorite ? "currentColor" : "none"} />
+            </button>
+            <button onClick={onShare} title="Share with friend"
+              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+              <Send size={13} className="text-muted-foreground" />
+            </button>
+            <button onClick={onEdit} title="Edit"
+              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+              <Pencil size={13} className="text-muted-foreground" />
+            </button>
+            <button onClick={onDelete} title="Delete"
+              className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors">
+              <Trash2 size={13} className="text-muted-foreground" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button onClick={onToggleFav} className={`p-1.5 rounded transition-colors ${spot.isFavorite ? "text-pink-500" : "text-muted-foreground/40 hover:text-pink-400"}`}>
-            <Heart size={14} fill={spot.isFavorite ? "currentColor" : "none"} />
-          </button>
-          <button onClick={onShare} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share with friend">
-            <Send size={13} className="text-muted-foreground" />
-          </button>
-          <button onClick={onEdit} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
-          <button onClick={onDelete} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+
+        {/* Badges row */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge className={`text-xs ${STATUS_COLORS[spot.status]}`}>{SPOT_STATUSES.find((s) => s.value === spot.status)?.label}</Badge>
+          {spot.priceRange ? <Badge variant="outline" className="text-xs font-medium">{PRICE_LABELS[spot.priceRange]}</Badge> : null}
+          {spot.rating != null && (
+            <div className="flex items-center gap-0.5">
+              <StarRating value={spot.rating} readonly />
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="text-xs">{typeLabel(spot.type)}</Badge>
-        <Badge className={`text-xs ${STATUS_COLORS[spot.status]}`}>{SPOT_STATUSES.find((s) => s.value === spot.status)?.label}</Badge>
-        {spot.priceRange && <span className="text-xs font-medium text-muted-foreground">{PRICE_LABELS[spot.priceRange]}</span>}
-        {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
-      </div>
-
-      {spot.rating != null && <StarRating value={spot.rating} readonly />}
-
-      <div className="text-xs text-muted-foreground space-y-0.5">
-        {spot.address && <p className="flex items-center gap-1"><MapPin size={10} />{spot.address}</p>}
-        {spot.openingHours && <p className="flex items-center gap-1"><Clock size={10} />{spot.openingHours}</p>}
-        {spot.website && (
-          <a href={spot.website.startsWith("http") ? spot.website : `https://${spot.website}`}
-            target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-blue-500 hover:underline">
-            <Globe size={10} />{spot.website}
-          </a>
+        {/* Notes */}
+        {spot.notes && (
+          <p className="text-xs text-muted-foreground italic leading-relaxed border-t pt-2">{spot.notes}</p>
         )}
-        {spot.visitedDate && <p>Visited: {new Date(spot.visitedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>}
-      </div>
 
-      {spot.notes && <p className="text-xs text-muted-foreground border-t pt-1">{spot.notes}</p>}
+        {/* Links row */}
+        <div className="flex flex-wrap items-center gap-3 mt-auto pt-1 border-t">
+          {spot.website && (
+            <a href={spot.website.startsWith("http") ? spot.website : `https://${spot.website}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-blue-500 hover:underline">
+              <Globe size={10} /> Website
+            </a>
+          )}
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-500 hover:underline">
+            <Navigation size={10} /> Get directions
+          </a>
+          {spot.visitedDate && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              Visited {new Date(spot.visitedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+// ── Trip Planner Modal ────────────────────────────────────────────────────────
+
+function TripPlannerModal({ open, onClose, spots }: { open: boolean; onClose: () => void; spots: Spot[] }) {
+  const { toast } = useToast();
+  const [city, setCity] = useState("");
+  const [duration, setDuration] = useState<"day" | "weekend">("day");
+  const [vibe, setVibe] = useState("");
+  const [budget, setBudget] = useState("moderate ($$)");
+  const [date, setDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [plan, setPlan] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const VIBES = [
+    { value: "romantic date night", label: "💑 Romantic" },
+    { value: "family fun with kids", label: "👨‍👩‍👧 Family" },
+    { value: "outdoorsy adventure", label: "🥾 Outdoorsy" },
+    { value: "foodie exploration", label: "🍽️ Foodie" },
+    { value: "cultural and arts", label: "🎨 Cultural" },
+    { value: "relaxing and chill", label: "😌 Relaxed" },
+    { value: "nightlife and bars", label: "🍸 Nightlife" },
+    { value: "shopping and exploration", label: "🛍️ Shopping" },
+  ];
+
+  const BUDGETS = [
+    { value: "budget-friendly ($)", label: "$ Budget" },
+    { value: "moderate ($$)", label: "$$ Moderate" },
+    { value: "upscale ($$$)", label: "$$$ Upscale" },
+    { value: "luxury ($$$$)", label: "$$$$ Luxury" },
+  ];
+
+  async function handleGenerate() {
+    if (!city.trim() || !vibe) {
+      toast({ title: "Please fill in city and vibe", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    setPlan("");
+    try {
+      const res = await apiRequest("POST", "/api/spots/plan-trip", { city, duration, vibe, budget, date, notes });
+      if (!res.ok) {
+        const err = await res.json();
+        if (err.error === "no_api_key") {
+          toast({ title: "Anthropic API key required", description: "Add your key in Settings to use AI features.", variant: "destructive" });
+        } else {
+          toast({ title: err.message ?? "Error generating plan", variant: "destructive" });
+        }
+        return;
+      }
+      const data = await res.json();
+      setPlan(data.plan ?? "");
+    } catch {
+      toast({ title: "Failed to generate plan", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function reset() { setPlan(""); setCity(""); setVibe(""); setDate(""); setNotes(""); }
+
+  const citySpotsCount = city ? spots.filter(s => s.city?.toLowerCase().includes(city.toLowerCase())).length : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) { onClose(); if (!loading) reset(); } }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-4 shrink-0 border-b">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Sparkles size={18} className="text-primary" />
+            Plan My {duration === "day" ? "Day" : "Weekend"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          {!plan ? (
+            <div className="px-6 py-4 space-y-5">
+              {/* Duration toggle */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Duration</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["day", "weekend"] as const).map(d => (
+                    <button key={d} onClick={() => setDuration(d)}
+                      className={`py-2.5 rounded-lg border text-sm font-medium transition-all ${duration === d ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40"}`}>
+                      {d === "day" ? "🌅 One Day" : "🗓️ Full Weekend"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* City */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">City / Destination</label>
+                <Input placeholder="e.g. Austin, Chicago, NYC…" value={city} onChange={e => setCity(e.target.value)} />
+                {citySpotsCount > 0 && (
+                  <p className="text-xs text-primary mt-1">✓ {citySpotsCount} saved spot{citySpotsCount !== 1 ? "s" : ""} in this city will be included</p>
+                )}
+              </div>
+
+              {/* Vibe */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Vibe</label>
+                <div className="flex flex-wrap gap-2">
+                  {VIBES.map(v => (
+                    <button key={v.value} onClick={() => setVibe(v.value)}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-all ${vibe === v.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40"}`}>
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Budget */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Budget</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {BUDGETS.map(b => (
+                    <button key={b.value} onClick={() => setBudget(b.value)}
+                      className={`py-2 rounded-lg border text-xs font-medium transition-all ${budget === b.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40"}`}>
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date + Notes */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Date (optional)</label>
+                  <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Special requests</label>
+                  <Input placeholder="e.g. No seafood, dog-friendly…" value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
+              </div>
+
+              <Button className="w-full gap-2 h-11" onClick={handleGenerate} disabled={loading || !city.trim() || !vibe}>
+                {loading ? <><Loader2 size={15} className="animate-spin" /> Crafting your plan…</> : <><Sparkles size={15} /> Generate Plan</>}
+              </Button>
+            </div>
+          ) : (
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-base">Your {duration === "day" ? "Day" : "Weekend"} in {city}</h3>
+                <Button variant="outline" size="sm" onClick={reset} className="gap-1.5 text-xs"><RefreshCw size={12} /> New Plan</Button>
+              </div>
+              {/* Render the plan as formatted text */}
+              <div className="space-y-2">
+                {plan.split('\n').map((line, i) => {
+                  if (!line.trim()) return <div key={i} className="h-2" />;
+                  if (line.startsWith('**SECTION')) return (
+                    <div key={i} className="mt-6 mb-3 pb-2 border-b">
+                      <h2 className="font-bold text-base text-foreground">{line.replace(/\*\*/g, '')}</h2>
+                    </div>
+                  );
+                  if (line.startsWith('**') && line.endsWith('**')) return (
+                    <p key={i} className="font-semibold text-sm text-foreground mt-4">{line.replace(/\*\*/g, '')}</p>
+                  );
+                  if (/^\*\*\d{1,2}:\d{2}/.test(line)) return (
+                    <div key={i} className="flex gap-3 py-2 border-l-2 border-primary/30 pl-3">
+                      <span className="text-sm">{line.replace(/\*\*/g, '')}</span>
+                    </div>
+                  );
+                  if (line.startsWith('- ')) return (
+                    <div key={i} className="flex gap-2 text-sm text-muted-foreground pl-2">
+                      <span className="shrink-0">•</span>
+                      <span>{line.slice(2)}</span>
+                    </div>
+                  );
+                  return <p key={i} className="text-sm text-muted-foreground leading-relaxed">{line}</p>;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -485,7 +704,9 @@ export default function SpotsPage() {
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [filterTypeLocal, setFilterTypeLocal] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatusLocal, setFilterStatusLocal] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [filterCity, setFilterCity] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
@@ -494,6 +715,8 @@ export default function SpotsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
+  const [plannerOpen, setPlannerOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setActiveTab("shared");
   }, []);
@@ -656,12 +879,16 @@ export default function SpotsPage() {
   }
 
   function applyFilters(list: Spot[]) {
+    // Pill filters take precedence over dropdown filters when set
+    const effectiveType = filterTypeLocal !== "all" ? filterTypeLocal : filterType;
+    const effectiveStatus = filterStatusLocal !== "all" ? filterStatusLocal : filterStatus;
     return list.filter((s) => {
       const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
         (s.city ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (s.neighborhood ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchType = filterType === "all" || s.type === filterType;
-      const matchStatus = filterStatus === "all" || s.status === filterStatus;
+      const matchType = effectiveType === "all" || s.type === effectiveType;
+      const matchStatus = effectiveStatus === "all" || s.status === effectiveStatus ||
+        (effectiveStatus === "favorites" && s.isFavorite);
       const matchTag = filterTag === "all" || (s.tags ?? "").split(",").map((t) => t.trim()).includes(filterTag);
       const matchCity = filterCity === "all" || s.city === filterCity;
       return matchSearch && matchType && matchStatus && matchTag && matchCity;
@@ -679,81 +906,147 @@ export default function SpotsPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <MapPin size={22} className="text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">Spots</h1>
-            <p className="text-sm text-muted-foreground">Places to visit & explore</p>
+      {/* Header */}
+      <div className="mb-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+          <div className="flex items-center gap-3">
+            <MapPin size={22} className="text-primary" />
+            <div>
+              <h1 className="text-xl font-bold">Spots</h1>
+              <p className="text-sm text-muted-foreground">Places to visit & explore</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" onClick={() => setPlannerOpen(true)} className="gap-1.5">
+              <Sparkles size={13} /> Plan My Day
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setNominatimOpen(true)} className="gap-1.5">
+              <Search size={13} /> Search
+            </Button>
+            <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
+              <Plus size={14} /> Add Spot
+            </Button>
+            {/* More menu */}
+            <div className="relative">
+              <Button size="sm" variant="outline" onClick={() => setMoreMenuOpen(p => !p)} className="gap-1 px-2">
+                <ChevronDown size={14} />
+              </Button>
+              {moreMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-card border rounded-lg shadow-md min-w-[160px] py-1"
+                  onMouseLeave={() => setMoreMenuOpen(false)}>
+                  <button onClick={() => { downloadCsvTemplate(); setMoreMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                    <Download size={13} /> CSV Template
+                  </button>
+                  <button onClick={() => { setCsvInfoOpen(true); setMoreMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                    <HelpCircle size={13} /> CSV Format
+                  </button>
+                  <button onClick={() => { csvRef.current?.click(); setMoreMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                    <Upload size={13} /> Upload CSV
+                  </button>
+                </div>
+              )}
+            </div>
+            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => setNominatimOpen(true)} className="gap-1.5">
-            <Search size={13} /> Search
-          </Button>
-          <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
-            <Plus size={14} /> Add Spot
-          </Button>
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-            <Download size={13} /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-            <HelpCircle size={13} /> CSV Format
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-            <Upload size={13} /> Upload CSV
-          </Button>
-          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+
+        {/* Stats chips */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Total", count: spots.length, color: "bg-secondary text-foreground" },
+            { label: "Want to Visit", count: spots.filter(s => s.status === "want_to_visit").length, color: "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300" },
+            { label: "Visited", count: spots.filter(s => s.status === "visited").length, color: "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300" },
+            { label: "Favorites", count: spots.filter(s => s.isFavorite).length, color: "bg-pink-50 text-pink-700 dark:bg-pink-950/30 dark:text-pink-300" },
+          ].map(({ label, count, color }) => (
+            <div key={label} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
+              <span className="font-bold">{count}</span> {label}
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
         <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-        <TabsList className="w-max sm:w-auto flex-nowrap">
-          <TabsTrigger value="all">All <span className="ml-1 text-xs text-muted-foreground">({spots.length})</span></TabsTrigger>
-          <TabsTrigger value="want_to_visit">Want to Visit <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "want_to_visit").length})</span></TabsTrigger>
-          <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
-          <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
-          <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
-          <TabsTrigger value="trips" className="gap-1.5"><Plane size={13} /> Trips</TabsTrigger>
-          <TabsTrigger value="events" className="gap-1.5"><span className="text-sm leading-none">🎟️</span> Events</TabsTrigger>
-        </TabsList>
+          <TabsList className="w-max sm:w-auto flex-nowrap">
+            <TabsTrigger value="all">All <span className="ml-1 text-xs text-muted-foreground">({spots.length})</span></TabsTrigger>
+            <TabsTrigger value="want_to_visit">Want to Visit <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "want_to_visit").length})</span></TabsTrigger>
+            <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
+            <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
+            <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
+            <TabsTrigger value="trips" className="gap-1.5"><Plane size={13} /> Trips</TabsTrigger>
+            <TabsTrigger value="events" className="gap-1.5"><span className="text-sm leading-none">🎟️</span> Events</TabsTrigger>
+          </TabsList>
         </div>
       </Tabs>
 
       {/* Filters */}
-      {activeTab !== "trips" && activeTab !== "events" && <div className="flex flex-wrap gap-2 mb-4">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input className="pl-8 h-9 w-full sm:w-52" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
+        <div className="space-y-3 mb-4">
+          {/* Search row */}
+          <div className="relative w-full sm:w-72">
+            <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input className="pl-8 h-9" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+
+          {/* Type pills */}
+          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+            <div className="flex gap-1.5 w-max">
+              {[{ value: "all", label: "All", emoji: "🗺️" }, ...SPOT_TYPES].map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => setFilterTypeLocal(t.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition-all ${
+                    filterTypeLocal === t.value
+                      ? "bg-primary text-primary-foreground border-primary font-medium"
+                      : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span>{t.emoji}</span> {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Status pills */}
+          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+            <div className="flex gap-1.5 w-max">
+              {[
+                { value: "all", label: "All" },
+                { value: "want_to_visit", label: "Want to Visit" },
+                { value: "visited", label: "Visited" },
+                { value: "favorites", label: "❤️ Favorites" },
+              ].map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => setFilterStatusLocal(s.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition-all ${
+                    filterStatusLocal === s.value
+                      ? "bg-primary text-primary-foreground border-primary font-medium"
+                      : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* City filter — only when 2+ cities */}
+          {allCities.length >= 2 && (
+            <Select value={filterCity} onValueChange={setFilterCity}>
+              <SelectTrigger className="h-9 w-full sm:w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cities</SelectItem>
+                {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {SPOT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {allCities.length > 0 && (
-          <Select value={filterCity} onValueChange={setFilterCity}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All cities</SelectItem>
-              {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        {allTags.length > 0 && (
-          <Select value={filterTag} onValueChange={setFilterTag}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tags</SelectItem>
-              {allTags.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-      </div>}
+      )}
 
       {/* Results */}
       {activeTab === "shared" ? (
@@ -781,6 +1074,13 @@ export default function SpotsPage() {
           ))}
         </div>
       )}
+
+      {/* Trip Planner Modal */}
+      <TripPlannerModal
+        open={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        spots={spots}
+      />
 
       {/* Nominatim Search Modal */}
       <NominatimSearchModal

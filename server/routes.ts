@@ -2072,6 +2072,78 @@ Rules: Keep items realistic for one day (8–14 items total). Spread items sensi
     }
   });
 
+  // ── Spots Plan My Day/Weekend ─────────────────────────────────────────────────
+  app.post("/api/spots/plan-trip", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const enc = await storage.getAnthropicApiKeyEnc(user.id);
+      if (!enc) return res.status(402).json({ error: "no_api_key", message: "Add your Anthropic API key in Settings to use AI features." });
+      const apiKey = decrypt(enc);
+
+      const { city, duration, vibe, budget, date, notes } = req.body as {
+        city: string; duration: "day" | "weekend"; vibe: string; budget: string; date?: string; notes?: string;
+      };
+
+      // Fetch user's saved spots, filter by city if provided
+      const allSpots = await storage.getAllSpots(user.id);
+      const citySpots = city
+        ? allSpots.filter(s => s.city?.toLowerCase().includes(city.toLowerCase()))
+        : allSpots;
+
+      const spotsContext = citySpots.length > 0
+        ? citySpots.map(s => `- ${s.name} (${s.type}${s.status === 'favorite' || s.isFavorite ? ', ★ favorite' : ''}${s.status === 'visited' ? ', already visited' : ''}${s.address ? ', ' + s.address : ''}${s.notes ? ' — ' + s.notes : ''})`).join('\n')
+        : "No saved spots for this city yet.";
+
+      const durationLabel = duration === "day" ? "one-day itinerary" : "weekend itinerary (Saturday + Sunday)";
+      const dateLabel = date ? ` starting ${date}` : "";
+
+      const prompt = `You are a local travel expert planning a ${durationLabel}${dateLabel} in ${city || "the user's chosen destination"}.
+
+Vibe: ${vibe}
+Budget: ${budget}
+${notes ? `Special requests: ${notes}` : ""}
+
+The user's saved spots in this city:
+${spotsContext}
+
+Please create a comprehensive plan with two sections:
+
+**SECTION 1: RECOMMENDATIONS**
+First, provide 6-10 curated place recommendations. For each, include:
+- Name and type (restaurant, attraction, park, etc.)
+- Why it fits the ${vibe} vibe
+- Price range ($ to $$$$)
+- Best time to visit
+- 1 must-try tip
+
+Mix the user's saved spots (especially favorites and want-to-visit) with additional AI-researched suggestions. Flag saved spots with ⭐.
+
+**SECTION 2: ITINERARY**
+Then write a detailed hour-by-hour itinerary for ${duration === "day" ? "the full day (9am–10pm)" : "Saturday and Sunday (9am–10pm each day)"}.
+Format each time block as: **9:00 AM** — Place Name — what to do/eat/see (approx. duration)
+Include travel time notes between spots. Group spots logically by neighborhood to minimize travel. Include meals, coffee breaks, and evening plans. Be specific and actionable.
+
+Write in an enthusiastic, friendly tone. Be specific with real place names and practical tips.`;
+
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: prompt }]
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json() as any;
+        return res.status(400).json({ error: "anthropic_error", message: err.error?.message ?? "API error" });
+      }
+      const data = await r.json() as any;
+      const text: string = data.content?.[0]?.text ?? "";
+      res.json({ plan: text });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── AI Trip Planner ───────────────────────────────────────────────────────────
   app.post("/api/ai/trip-planner", requireAuth, async (req, res) => {
     try {
