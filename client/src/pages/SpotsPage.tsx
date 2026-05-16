@@ -419,109 +419,187 @@ function StarRating({ value, onChange, readonly = false }: { value: number | nul
   );
 }
 
-// ── Type accent bar colors ─────────────────────────────────────────────────────
-const TYPE_ACCENT: Record<string, string> = {
-  restaurant: "bg-orange-400",
-  bar:        "bg-purple-500",
-  cafe:       "bg-amber-400",
-  park:       "bg-green-500",
-  trail:      "bg-teal-500",
-  shop:       "bg-pink-400",
-  service:    "bg-slate-400",
-  attraction: "bg-blue-500",
-  hotel:      "bg-indigo-500",
-  other:      "bg-gray-400",
+// ── Bottom Sheet ──────────────────────────────────────────────────────────────
+
+function BottomSheet({ open, onClose, title, children, maxHeight = "80vh" }: {
+  open: boolean; onClose: () => void; title?: string; children: React.ReactNode; maxHeight?: string;
+}) {
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      {/* Sheet */}
+      <div className="relative bg-card rounded-t-2xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-4 duration-200"
+        style={{ maxHeight }}>
+        {/* Handle */}
+        <div className="flex justify-center pt-2.5 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+        {title && (
+          <div className="flex items-center justify-between px-4 pb-3 shrink-0">
+            <h3 className="font-semibold text-base">{title}</h3>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary">
+              <X size={16} className="text-muted-foreground" />
+            </button>
+          </div>
+        )}
+        <div className="overflow-y-auto flex-1 pb-safe">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Type thumbnail background ─────────────────────────────────────────────────
+const TYPE_THUMB: Record<string, string> = {
+  restaurant: "bg-orange-100 text-orange-500",
+  bar:        "bg-purple-100 text-purple-500",
+  cafe:       "bg-amber-100 text-amber-500",
+  park:       "bg-green-100 text-green-500",
+  trail:      "bg-teal-100 text-teal-500",
+  shop:       "bg-pink-100 text-pink-500",
+  service:    "bg-slate-100 text-slate-500",
+  attraction: "bg-blue-100 text-blue-500",
+  hotel:      "bg-indigo-100 text-indigo-500",
+  other:      "bg-gray-100 text-gray-500",
+};
+
+// Status-based top border color
+const STATUS_ACCENT_BAR: Record<string, string> = {
+  want_to_visit: "bg-orange-400",
+  visited:       "bg-green-500",
+  favorite:      "bg-red-500",
 };
 
 // ── Spot Card ─────────────────────────────────────────────────────────────────
 
-function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip }: {
+function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, onRate }: {
   spot: Spot;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
   onShare: () => void;
   onAddToTrip: () => void;
+  onRate: (rating: number) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const location = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([spot.name, spot.address, spot.city].filter(Boolean).join(', '))}`;
-  const accentColor = TYPE_ACCENT[spot.type] ?? "bg-gray-400";
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([spot.name, spot.address, spot.city].filter(Boolean).join(", "))}`;
+  const thumbBg = TYPE_THUMB[spot.type] ?? "bg-gray-100 text-gray-500";
+  const accentBar = STATUS_ACCENT_BAR[spot.isFavorite ? "favorite" : spot.status] ?? "bg-gray-300";
+
+  const statusLabel =
+    spot.isFavorite ? "❤️ Favorite" :
+    spot.status === "visited" ? "✓ Visited" :
+    "Want to Visit";
+  const statusColor =
+    spot.isFavorite ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" :
+    spot.status === "visited" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+    "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow flex flex-col">
-      {/* Accent bar */}
-      <div className={`h-1 w-full ${accentColor}`} />
+    <>
+      <div className="rounded-xl border bg-card overflow-hidden active:opacity-90 transition-opacity">
+        {/* Status-colored top border */}
+        <div className={`h-1 w-full ${accentBar}`} />
 
-      <div className="p-4 flex flex-col gap-2.5 flex-1">
-        {/* Top row: emoji + name/location + action buttons */}
-        <div className="flex items-start gap-3">
-          <span className="text-3xl shrink-0 leading-none mt-0.5">{typeEmoji(spot.type)}</span>
+        <div className="flex gap-3 p-3">
+          {/* Left thumbnail */}
+          <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl shrink-0 ${thumbBg}`}>
+            {typeEmoji(spot.type)}
+          </div>
+
+          {/* Right content */}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm leading-tight">{spot.name}</p>
-            {location && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Navigation size={10} />{location}</p>}
-          </div>
-          {/* Action buttons */}
-          <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
-            <button onClick={onToggleFav} title={spot.isFavorite ? "Remove from favorites" : "Add to favorites"}
-              className={`p-1.5 rounded-lg transition-colors ${spot.isFavorite ? "text-pink-500" : "text-muted-foreground/40 hover:text-pink-400"}`}>
-              <Heart size={14} fill={spot.isFavorite ? "currentColor" : "none"} />
-            </button>
-            <button onClick={onShare} title="Share with friend"
-              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
-              <Send size={13} className="text-muted-foreground" />
-            </button>
-            <button onClick={onAddToTrip} title="Add to Trip"
-              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
-              <Plane size={13} className="text-muted-foreground" />
-            </button>
-            <button onClick={onEdit} title="Edit"
-              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
-              <Pencil size={13} className="text-muted-foreground" />
-            </button>
-            <button onClick={onDelete} title="Delete"
-              className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors">
-              <Trash2 size={13} className="text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-
-        {/* Badges row */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge className={`text-xs ${STATUS_COLORS[spot.status]}`}>{spot.status === "favorite" ? "❤️ Favorite" : SPOT_STATUSES.find((s) => s.value === spot.status)?.label}</Badge>
-          {spot.priceRange ? <Badge variant="outline" className="text-xs font-medium">{PRICE_LABELS[spot.priceRange]}</Badge> : null}
-          {spot.rating != null && (
-            <div className="flex items-center gap-0.5">
-              <StarRating value={spot.rating} readonly />
+            {/* Name row + heart + three-dot */}
+            <div className="flex items-start gap-1 -mr-1.5 -mt-0.5">
+              <p className="font-semibold text-sm leading-snug flex-1 pr-1">{spot.name}</p>
+              <button
+                onClick={onToggleFav}
+                className={`p-1.5 rounded-lg shrink-0 transition-colors ${spot.isFavorite ? "text-red-500" : "text-muted-foreground/40 hover:text-red-400"}`}
+              >
+                <Heart size={15} fill={spot.isFavorite ? "currentColor" : "none"} />
+              </button>
+              <button
+                onClick={() => setMenuOpen(true)}
+                className="p-1.5 rounded-lg shrink-0 text-muted-foreground hover:bg-secondary transition-colors"
+              >
+                <span className="text-base leading-none font-bold tracking-wider">⋯</span>
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* Notes */}
-        {spot.notes && (
-          <p className="text-xs text-muted-foreground italic leading-relaxed border-t pt-2">{spot.notes}</p>
-        )}
+            {/* Location */}
+            {location && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1.5">
+                <Navigation size={9} className="shrink-0" />{location}
+              </p>
+            )}
 
-        {/* Links row */}
-        <div className="flex flex-wrap items-center gap-3 mt-auto pt-1 border-t">
-          {spot.website && (
-            <a href={spot.website.startsWith("http") ? spot.website : `https://${spot.website}`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-blue-500 hover:underline">
-              <Globe size={10} /> Website
-            </a>
-          )}
-          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-blue-500 hover:underline">
-            <Navigation size={10} /> Get directions
-          </a>
-          {spot.visitedDate && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              Visited {new Date(spot.visitedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {/* Status badge */}
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+              {statusLabel}
             </span>
-          )}
+
+            {/* Star rating — always shown, tappable */}
+            <div className="flex gap-0.5 mt-1.5">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onRate(n === spot.rating ? 0 : n)}
+                  className={`text-sm transition-colors ${(spot.rating ?? 0) >= n ? "text-yellow-400" : "text-muted-foreground/25 hover:text-yellow-300"}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            {/* Notes (compact, one-line) */}
+            {spot.notes && (
+              <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1">{spot.notes}</p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Overflow menu bottom sheet */}
+      <BottomSheet open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <div className="px-4 pb-6 space-y-1">
+          <p className="text-xs text-muted-foreground font-medium px-2 pb-2">{spot.name}</p>
+          {[
+            { icon: <Pencil size={17} />, label: "Edit place", action: () => { setMenuOpen(false); onEdit(); } },
+            { icon: <Plane size={17} />, label: "Add to Trip", action: () => { setMenuOpen(false); onAddToTrip(); } },
+            { icon: <Send size={17} />, label: "Share with friend", action: () => { setMenuOpen(false); onShare(); } },
+            { icon: <Navigation size={17} />, label: "Get directions", href: mapsUrl },
+            ...(spot.website ? [{ icon: <Globe size={17} />, label: "Open website", href: spot.website.startsWith("http") ? spot.website : `https://${spot.website}` }] : []),
+            { icon: <Trash2 size={17} className="text-destructive" />, label: <span className="text-destructive">Delete</span>, action: () => { setMenuOpen(false); onDelete(); } },
+          ].map((item, i) =>
+            "href" in item ? (
+              <a key={i} href={item.href} target="_blank" rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 w-full px-3 py-3.5 rounded-xl hover:bg-secondary transition-colors text-sm">
+                <span className="text-muted-foreground">{item.icon}</span>
+                {item.label}
+              </a>
+            ) : (
+              <button key={i} onClick={item.action}
+                className="flex items-center gap-3 w-full px-3 py-3.5 rounded-xl hover:bg-secondary transition-colors text-sm text-left">
+                <span className="text-muted-foreground">{item.icon}</span>
+                {item.label}
+              </button>
+            )
+          )}
+        </div>
+      </BottomSheet>
+    </>
   );
 }
 
@@ -926,6 +1004,7 @@ export default function SpotsPage() {
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [addToTripSpot, setAddToTripSpot] = useState<Spot | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [collapsedCities, setCollapsedCities] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setActiveTab("shared");
@@ -964,6 +1043,11 @@ export default function SpotsPage() {
   });
   const favMut = useMutation({
     mutationFn: ({ id, isFavorite }: { id: number; isFavorite: boolean }) => apiRequest("PATCH", `/api/spots/${id}`, { isFavorite }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spots"] }),
+  });
+  const rateMut = useMutation({
+    mutationFn: ({ id, rating }: { id: number; rating: number }) =>
+      apiRequest("PATCH", `/api/spots/${id}`, { rating: rating === 0 ? null : rating }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spots"] }),
   });
 
@@ -1101,234 +1185,306 @@ export default function SpotsPage() {
   const displaySpots = tabSpots[activeTab] ?? [];
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="mb-5">
-        <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-          <div className="flex items-center gap-3">
-            <MapPin size={22} className="text-primary" />
-            <div>
-              <h1 className="text-xl font-bold">Places</h1>
-              <p className="text-sm text-muted-foreground">Places to visit & explore</p>
+    <div className="flex flex-col h-full">
+      {/* ── Top bar: Search + Filters + Map toggle ─────────────────────────── */}
+      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" ? (
+        <div className="px-3 pt-3 pb-2 space-y-2">
+          {/* Search row */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                className="pl-9 h-10 rounded-xl bg-secondary border-transparent focus:border-border text-sm"
+                placeholder="Search places…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Filters button */}
+            <button
+              onClick={() => setFilterSheetOpen(true)}
+              className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border text-sm font-medium shrink-0 transition-colors relative ${
+                (filterType !== "all" || filterStatus !== "all" || filterCity !== "all")
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Tag size={14} />
+              Filters
+              {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
+              )}
+            </button>
+
+            {/* Map/List toggle */}
+            <div className="flex items-center rounded-xl border overflow-hidden h-10 shrink-0">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`h-full px-2.5 text-sm transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                title="List view"
+              >☰</button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={`h-full px-2.5 text-sm transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                title="Map view"
+              >🗺️</button>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setPlannerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white
-                bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
-                shadow-sm transition-all"
-            >
-              <Sparkles size={13} /> Plan My Day
-            </button>
-            <Button size="sm" variant="outline" onClick={() => setNominatimOpen(true)} className="gap-1.5">
-              <Search size={13} /> Search
-            </Button>
-            <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
-              <Plus size={14} /> Add Spot
-            </Button>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+
+          {/* Plan My Day pill */}
+          <button
+            onClick={() => setPlannerOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full text-white
+              bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
+              shadow-sm transition-all"
+          >
+            <Sparkles size={13} /> Plan My Day
+          </button>
+        </div>
+      ) : (
+        <div className="px-3 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <MapPin size={18} className="text-primary" />
+            <h1 className="text-lg font-bold">Places</h1>
           </div>
         </div>
+      )}
 
-        {/* Stats chips */}
-        <div className="flex flex-wrap gap-2">
+      {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
+      <div className="overflow-x-auto scrollbar-hide px-3 pb-2 shrink-0">
+        <div className="flex gap-1 w-max">
           {[
-            { label: "Total", count: spots.length, color: "bg-secondary text-foreground" },
-            { label: "Want to Visit", count: spots.filter(s => s.status === "want_to_visit").length, color: "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300" },
-            { label: "Visited", count: spots.filter(s => s.status === "visited").length, color: "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300" },
-            { label: "Favorites", count: spots.filter(s => s.isFavorite).length, color: "bg-pink-50 text-pink-700 dark:bg-pink-950/30 dark:text-pink-300" },
-          ].map(({ label, count, color }) => (
-            <div key={label} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-              <span className="font-bold">{count}</span> {label}
-            </div>
+            { value: "all",           label: `All (${spots.length})` },
+            { value: "want_to_visit", label: `Want to Visit (${spots.filter(s => s.status === "want_to_visit").length})` },
+            { value: "visited",       label: `Visited (${spots.filter(s => s.status === "visited").length})` },
+            { value: "favorites",     label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
+            { value: "shared",        label: "Shared" },
+            { value: "trips",         label: "Trips" },
+            { value: "events",        label: "Events 🎟️" },
+          ].map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                activeTab === tab.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-          <TabsList className="w-max sm:w-auto flex-nowrap">
-            <TabsTrigger value="all">All <span className="ml-1 text-xs text-muted-foreground">({spots.length})</span></TabsTrigger>
-            <TabsTrigger value="want_to_visit">Want to Visit <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "want_to_visit").length})</span></TabsTrigger>
-            <TabsTrigger value="visited">Visited <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.status === "visited").length})</span></TabsTrigger>
-            <TabsTrigger value="favorites"><Heart size={12} className="inline mr-1" />Favorites <span className="ml-1 text-xs text-muted-foreground">({spots.filter((s) => s.isFavorite).length})</span></TabsTrigger>
-            <TabsTrigger value="shared" className="gap-1.5"><Inbox size={13} /> Shared</TabsTrigger>
-            <TabsTrigger value="trips" className="gap-1.5"><Plane size={13} /> Trips</TabsTrigger>
-            <TabsTrigger value="events" className="gap-1.5"><span className="text-sm leading-none">🎟️</span> Events</TabsTrigger>
-          </TabsList>
-        </div>
-      </Tabs>
-
-      {/* Filters */}
-      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input className="pl-8 h-9" placeholder="Search places…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* ── Content ──────────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-3 pb-6">
+        {activeTab === "shared" ? (
+          <SharedSpotsTab />
+        ) : activeTab === "trips" ? (
+          <TripsTab spots={spots} />
+        ) : activeTab === "events" ? (
+          <EventsTab />
+        ) : spots.length === 0 ? (
+          /* Empty state: no spots at all */
+          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>
+            <div className="text-center">
+              <p className="font-semibold text-foreground mb-1">Start building your places list</p>
+              <p className="text-sm">Add spots you love, want to visit, or come back to.</p>
+            </div>
+            <button
+              onClick={() => setNominatimOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+            >
+              <Search size={15} /> Find Places
+            </button>
           </div>
+        ) : displaySpots.length === 0 ? (
+          /* Empty state: filters active */
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+            <Search size={36} className="opacity-20" />
+            <div className="text-center">
+              <p className="font-semibold text-foreground mb-1">No spots match your filters</p>
+              <p className="text-sm">Try adjusting or clearing your filters.</p>
+            </div>
+            <button
+              onClick={() => { setSearch(""); setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); }}
+              className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : viewMode === "map" ? (
+          <MapView spots={displaySpots} />
+        ) : activeTab === "all" && filterCity === "all" && !search ? (
+          /* Grouped by city */
+          (() => {
+            const cityMap = new Map<string, Spot[]>();
+            displaySpots.forEach(s => {
+              const key = s.city ?? "Other";
+              if (!cityMap.has(key)) cityMap.set(key, []);
+              cityMap.get(key)!.push(s);
+            });
+            const cityGroups = Array.from(cityMap.entries())
+              .map(([city, citySpots]) => ({ city, spots: citySpots }))
+              .sort((a, b) => b.spots.length - a.spots.length);
+            return (
+              <div className="space-y-4">
+                {cityGroups.map(({ city, spots: citySpots }) => {
+                  const collapsed = collapsedCities.has(city);
+                  return (
+                    <div key={city}>
+                      <button
+                        onClick={() => setCollapsedCities(prev => {
+                          const next = new Set(prev);
+                          if (collapsed) next.delete(city); else next.add(city);
+                          return next;
+                        })}
+                        className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-2 border-b"
+                      >
+                        <MapPin size={13} className="text-primary shrink-0" />
+                        <span className="font-semibold text-sm">{city}</span>
+                        <span className="text-xs text-muted-foreground">({citySpots.length})</span>
+                        <span className="ml-auto text-muted-foreground">
+                          {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                        </span>
+                      </button>
+                      {!collapsed && (
+                        <div className="space-y-2">
+                          {citySpots.map(spot => (
+                            <SpotCard
+                              key={spot.id}
+                              spot={spot}
+                              onEdit={() => openEdit(spot)}
+                              onDelete={() => deleteMut.mutate(spot.id)}
+                              onShare={() => setShareSpot(spot)}
+                              onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                              onAddToTrip={() => setAddToTripSpot(spot)}
+                              onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
+        ) : (
+          /* Flat list */
+          <div className="space-y-2">
+            {displaySpots.map(spot => (
+              <SpotCard
+                key={spot.id}
+                spot={spot}
+                onEdit={() => openEdit(spot)}
+                onDelete={() => deleteMut.mutate(spot.id)}
+                onShare={() => setShareSpot(spot)}
+                onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                onAddToTrip={() => setAddToTripSpot(spot)}
+                onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-          {/* City dropdown button — only shown when 2+ cities */}
+      {/* ── Hidden CSV input ──────────────────────────────────────────────────── */}
+      <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+
+      {/* ── Filter Bottom Sheet ──────────────────────────────────────────────── */}
+      <BottomSheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Places">
+        <div className="px-4 pb-6 space-y-5">
+          {/* Find new places */}
+          <button
+            onClick={() => { setFilterSheetOpen(false); setNominatimOpen(true); }}
+            className="flex items-center gap-2 w-full px-4 py-3 rounded-xl bg-secondary text-sm font-medium"
+          >
+            <Search size={15} className="text-primary" /> Find & add new places
+          </button>
+
+          {/* City */}
           {allCities.length >= 2 && (
-            <div className="relative">
-              <Select value={filterCity} onValueChange={setFilterCity}>
-                <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterCity !== "all" ? "border-blue-500 text-blue-600" : ""}`}>
-                  <MapPin size={13} />
-                  <SelectValue placeholder="City" />
-                  {filterCity !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All cities</SelectItem>
-                  {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">City</label>
+              <div className="flex flex-wrap gap-2">
+                {["all", ...allCities].map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setFilterCity(c)}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      filterCity === c ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                    }`}
+                  >
+                    {c === "all" ? "All cities" : c}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Category dropdown */}
-          <div className="relative">
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterType !== "all" ? "border-primary text-primary" : ""}`}>
-                <Tag size={13} />
-                <SelectValue placeholder="Category" />
-                {filterType !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                {SPOT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Status dropdown */}
-          <div className="relative">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterStatus !== "all" ? "border-green-500 text-green-600" : ""}`}>
-                <CheckCircle2 size={13} />
-                <SelectValue placeholder="Status" />
-                {filterStatus !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="want_to_visit">Want to Visit</SelectItem>
-                <SelectItem value="visited">Visited</SelectItem>
-                <SelectItem value="favorite">Favorite</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Map/List toggle */}
-          <div className="flex items-center rounded-lg border overflow-hidden ml-auto">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`px-2.5 py-1.5 text-sm transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-muted-foreground"}`}
-              title="List view"
-            >
-              ☰
-            </button>
-            <button
-              onClick={() => setViewMode("map")}
-              className={`px-2.5 py-1.5 text-sm transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-muted-foreground"}`}
-              title="Map view"
-            >
-              🗺️
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Results */}
-      {activeTab === "shared" ? (
-        <SharedSpotsTab />
-      ) : activeTab === "trips" ? (
-        <TripsTab spots={spots} />
-      ) : activeTab === "events" ? (
-        <EventsTab />
-      ) : displaySpots.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <MapPin size={36} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No spots yet. Start adding places!</p>
-        </div>
-      ) : viewMode === "map" ? (
-        <MapView spots={displaySpots} />
-      ) : activeTab === "all" && filterCity === "all" && !search ? (
-        // Grouped by city view
-        (() => {
-          const cityGroups: { city: string; spots: Spot[] }[] = [];
-          const cityMap = new Map<string, Spot[]>();
-          displaySpots.forEach(s => {
-            const key = s.city ?? "Other";
-            if (!cityMap.has(key)) cityMap.set(key, []);
-            cityMap.get(key)!.push(s);
-          });
-          cityMap.forEach((spots, city) => cityGroups.push({ city, spots }));
-          cityGroups.sort((a, b) => b.spots.length - a.spots.length);
-          return (
-            <div className="space-y-6">
-              {cityGroups.map(({ city, spots: citySpots }) => {
-                const collapsed = collapsedCities.has(city);
-                return (
-                  <div key={city}>
-                    <button
-                      onClick={() => setCollapsedCities(prev => {
-                        const next = new Set(prev);
-                        if (collapsed) next.delete(city); else next.add(city);
-                        return next;
-                      })}
-                      className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-3 border-b"
-                    >
-                      <MapPin size={14} className="text-primary shrink-0" />
-                      <span className="font-semibold text-sm">{city}</span>
-                      <span className="text-xs text-muted-foreground ml-1">({citySpots.length})</span>
-                      <span className="ml-auto text-muted-foreground">{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</span>
-                    </button>
-                    {!collapsed && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {citySpots.map(spot => (
-                          <SpotCard
-                            key={spot.id}
-                            spot={spot}
-                            onEdit={() => openEdit(spot)}
-                            onDelete={() => deleteMut.mutate(spot.id)}
-                            onShare={() => setShareSpot(spot)}
-                            onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                            onAddToTrip={() => setAddToTripSpot(spot)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          {/* Category */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Category</label>
+            <div className="flex flex-wrap gap-2">
+              {[{ value: "all", label: "All", emoji: "🗺️" }, ...SPOT_TYPES].map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => setFilterType(t.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    filterType === t.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                  }`}
+                >
+                  <span>{t.emoji}</span> {t.label}
+                </button>
+              ))}
             </div>
-          );
-        })()
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {displaySpots.map((spot) => (
-            <SpotCard
-              key={spot.id}
-              spot={spot}
-              onEdit={() => openEdit(spot)}
-              onDelete={() => deleteMut.mutate(spot.id)}
-              onShare={() => setShareSpot(spot)}
-              onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-              onAddToTrip={() => setAddToTripSpot(spot)}
-            />
-          ))}
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Status</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: "all", label: "All statuses" },
+                { value: "want_to_visit", label: "Want to Visit" },
+                { value: "visited", label: "Visited" },
+                { value: "favorite", label: "❤️ Favorite" },
+              ].map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => setFilterStatus(s.value)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    filterStatus === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Clear all */}
+          {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
+            <button
+              onClick={() => { setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); setFilterSheetOpen(false); }}
+              className="w-full py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm font-medium"
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
-      )}
+      </BottomSheet>
 
-      {/* Trip Planner Modal */}
-      <TripPlannerModal
-        open={plannerOpen}
-        onClose={() => setPlannerOpen(false)}
-        spots={spots}
-      />
-
-      {/* Nominatim Search Modal */}
+      {/* ── Nominatim Search Modal ────────────────────────────────────────────── */}
       <NominatimSearchModal
         open={nominatimOpen}
         onClose={() => setNominatimOpen(false)}
@@ -1339,10 +1495,10 @@ export default function SpotsPage() {
         }}
       />
 
-      {/* Add/Edit Modal */}
+      {/* ── Add/Edit Modal ────────────────────────────────────────────────────── */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? "Edit Spot" : "Add Spot"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Edit Place" : "Add Place"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
@@ -1395,10 +1551,7 @@ export default function SpotsPage() {
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Rating</label>
                 <div className="mt-1.5">
-                  <StarRating
-                    value={form.rating !== "" ? Number(form.rating) : null}
-                    onChange={(v) => setForm({ ...form, rating: v })}
-                  />
+                  <StarRating value={form.rating !== "" ? Number(form.rating) : null} onChange={(v) => setForm({ ...form, rating: v })} />
                 </div>
               </div>
             </div>
@@ -1418,7 +1571,7 @@ export default function SpotsPage() {
             )}
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Tags (comma-separated)</label>
-              <Input placeholder="e.g. Date Night, Kid-Friendly, Dog-Friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+              <Input placeholder="e.g. Date Night, Kid-Friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
@@ -1426,26 +1579,24 @@ export default function SpotsPage() {
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="spotFav" checked={form.isFavorite} onChange={(e) => setForm({ ...form, isFavorite: e.target.checked })} className="rounded" />
-              <label htmlFor="spotFav" className="text-sm flex items-center gap-1"><Heart size={13} className="text-pink-500" />Mark as Favorite</label>
+              <label htmlFor="spotFav" className="text-sm flex items-center gap-1"><Heart size={13} className="text-red-500" />Mark as Favorite</label>
             </div>
             <div className="flex gap-2 pt-1">
-              <Button className="flex-1" onClick={handleSave} disabled={!form.name.trim()}>{editing ? "Save" : "Add Spot"}</Button>
+              <Button className="flex-1" onClick={handleSave} disabled={!form.name.trim()}>{editing ? "Save" : "Add Place"}</Button>
               <Button variant="outline" onClick={closeModal}>Cancel</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Spot Share Modal */}
-      {shareSpot && (
-        <SpotShareModal spot={shareSpot} onClose={() => setShareSpot(null)} />
-      )}
+      {/* ── Spot Share Modal ──────────────────────────────────────────────────── */}
+      {shareSpot && <SpotShareModal spot={shareSpot} onClose={() => setShareSpot(null)} />}
 
-      {/* Add to Trip Modal */}
-      {addToTripSpot && (
-        <AddToTripModal spot={addToTripSpot} onClose={() => setAddToTripSpot(null)} />
-      )}
+      {/* ── Add to Trip ───────────────────────────────────────────────────────── */}
+      {addToTripSpot && <AddToTripModal spot={addToTripSpot} onClose={() => setAddToTripSpot(null)} />}
 
+      {/* ── Trip Planner ──────────────────────────────────────────────────────── */}
+      <TripPlannerModal open={plannerOpen} onClose={() => setPlannerOpen(false)} spots={spots} />
     </div>
   );
 }
