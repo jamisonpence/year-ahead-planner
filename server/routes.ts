@@ -3228,13 +3228,15 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       }
 
       // ── SeatGeek ─────────────────────────────────────────────────────────
-      const sgKey = process.env.SEATGEEK_API_KEY;
-      if (sgKey) {
+      const sgClientId     = process.env.SEATGEEK_CLIENT_ID;
+      const sgClientSecret = process.env.SEATGEEK_CLIENT_SECRET;
+      if (sgClientId) {
         try {
           const params = new URLSearchParams({
-            client_id: sgKey,
+            client_id: sgClientId,
             per_page:  "20",
           });
+          if (sgClientSecret) params.set("client_secret", sgClientSecret);
           if (keyword)   params.set("q", keyword);
           if (city)      params.set("venue.city", city);
           if (startDate) params.set("datetime_local.gte", `${startDate}T00:00:00`);
@@ -3270,7 +3272,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         } catch (sgErr) { console.warn("SeatGeek fetch failed:", sgErr); }
       }
 
-      if (!tmKey && !sgKey) {
+      if (!tmKey && !sgClientId) {
         return res.status(500).json({ error: "No event API keys configured" });
       }
 

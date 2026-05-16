@@ -378,13 +378,13 @@ export default function EventsTab() {
             <div className="text-center py-16 text-muted-foreground">
               <span className="text-4xl block mb-3">🎟️</span>
               <p className="font-medium">Search for events near you</p>
-              <p className="text-xs mt-1">Results from Ticketmaster & Eventbrite</p>
+              <p className="text-xs mt-1">Results from Ticketmaster & SeatGeek</p>
             </div>
           )}
           {hasSearched && searching && (
             <div className="text-center py-16 text-muted-foreground">
               <Loader2 size={28} className="animate-spin mx-auto mb-3" />
-              <p className="text-sm">Searching Ticketmaster & Eventbrite...</p>
+              <p className="text-sm">Searching Ticketmaster & SeatGeek...</p>
             </div>
           )}
           {hasSearched && !searching && searchResults.length === 0 && (
