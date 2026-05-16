@@ -3231,18 +3231,18 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       if (ebKey) {
         try {
           const params = new URLSearchParams({
-            token: ebKey,
             "location.address": city || "United States",
             "location.within":  "50mi",
             expand: "venue",
             page_size: "20",
           });
           if (keyword)   params.set("q", keyword);
-          if (startDate) params.set("start_date.range_start", `${startDate}T00:00:00`);
-          if (endDate)   params.set("start_date.range_end",   `${endDate}T23:59:59`);
+          if (startDate) params.set("start_date.range_start", `${startDate}T00:00:00Z`);
+          if (endDate)   params.set("start_date.range_end",   `${endDate}T23:59:59Z`);
 
           const ebRes = await fetch(
-            `https://www.eventbriteapi.com/v3/events/search/?${params}`
+            `https://www.eventbriteapi.com/v3/events/search/?${params}`,
+            { headers: { Authorization: `Bearer ${ebKey}` } }
           );
           if (ebRes.ok) {
             const ebData = await ebRes.json() as any;
@@ -3265,8 +3265,11 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
                 classifications: e.category?.name ?? null,
               });
             }
+          } else {
+            const errText = await ebRes.text().catch(() => "");
+            console.warn(`Eventbrite API error ${ebRes.status}:`, errText.slice(0, 300));
           }
-        } catch (_) { /* Eventbrite failed — continue */ }
+        } catch (ebErr) { console.warn("Eventbrite fetch failed:", ebErr); }
       }
 
       if (!tmKey && !ebKey) {
