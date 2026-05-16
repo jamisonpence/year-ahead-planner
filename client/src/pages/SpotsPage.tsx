@@ -1610,7 +1610,7 @@ export default function SpotsPage() {
       {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
         <button
           onClick={() => setNominatimOpen(true)}
-          className="fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
           title="Add place"
         >
           <Plus size={24} />
