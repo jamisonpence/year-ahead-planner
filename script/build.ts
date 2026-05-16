@@ -57,6 +57,8 @@ async function buildAll() {
       "process.env.LASTFM_API_KEY": JSON.stringify(process.env.LASTFM_API_KEY ?? ""),
       "process.env.PERENUAL_API_KEY": JSON.stringify(process.env.PERENUAL_API_KEY ?? ""),
       "process.env.ENCRYPTION_KEY": JSON.stringify(process.env.ENCRYPTION_KEY ?? ""),
+      "process.env.EVENTBRITE_API_KEY": JSON.stringify(process.env.EVENTBRITE_API_KEY ?? ""),
+      "process.env.TICKETMASTER_API_KEY": JSON.stringify(process.env.TICKETMASTER_API_KEY ?? ""),
     },
     minify: true,
     external: externals,
