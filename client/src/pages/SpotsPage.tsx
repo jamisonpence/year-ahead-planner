@@ -1403,13 +1403,21 @@ export default function SpotsPage() {
       {/* ── Filter Bottom Sheet ──────────────────────────────────────────────── */}
       <BottomSheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Places">
         <div className="px-4 pb-6 space-y-5">
-          {/* Find new places */}
-          <button
-            onClick={() => { setFilterSheetOpen(false); setNominatimOpen(true); }}
-            className="flex items-center gap-2 w-full px-4 py-3 rounded-xl bg-secondary text-sm font-medium"
-          >
-            <Search size={15} className="text-primary" /> Find & add new places
-          </button>
+          {/* Add actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setFilterSheetOpen(false); setNominatimOpen(true); }}
+              className="flex items-center gap-2 flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+            >
+              <Search size={15} /> Search & add
+            </button>
+            <button
+              onClick={() => { setFilterSheetOpen(false); setEditing(null); setForm({ ...EMPTY_FORM }); setModalOpen(true); }}
+              className="flex items-center gap-2 flex-1 px-4 py-3 rounded-xl bg-secondary text-sm font-medium"
+            >
+              <Plus size={15} /> Add manually
+            </button>
+          </div>
 
           {/* City */}
           {allCities.length >= 2 && (
@@ -1597,6 +1605,17 @@ export default function SpotsPage() {
 
       {/* ── Trip Planner ──────────────────────────────────────────────────────── */}
       <TripPlannerModal open={plannerOpen} onClose={() => setPlannerOpen(false)} spots={spots} />
+
+      {/* ── Floating Add Button ───────────────────────────────────────────────── */}
+      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
+        <button
+          onClick={() => setNominatimOpen(true)}
+          className="fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          title="Add place"
+        >
+          <Plus size={24} />
+        </button>
+      )}
     </div>
   );
 }
