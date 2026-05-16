@@ -687,6 +687,9 @@ export async function initializeStorage() {
     )
   `);
 
+  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lat REAL`);
+  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lon REAL`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journal_entries (
       id SERIAL PRIMARY KEY,

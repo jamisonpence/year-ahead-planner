@@ -548,6 +548,8 @@ export const spots = pgTable("spots", {
   visitedDate: text("visited_date"),       // ISO date
   isFavorite: boolean("is_favorite").notNull().default(false),
   openingHours: text("opening_hours"),
+  lat: real("lat"),
+  lon: real("lon"),
 });
 
 // ── NAV PREFERENCES ───────────────────────────────────────────────────────────

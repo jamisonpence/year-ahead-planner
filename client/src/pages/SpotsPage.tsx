@@ -42,9 +42,9 @@ const SPOT_STATUSES = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  want_to_visit: "bg-blue-100 text-blue-700",
-  visited:       "bg-green-100 text-green-700",
-  favorite:      "bg-pink-100 text-pink-700",
+  want_to_visit: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  visited:       "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  favorite:      "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const PRICE_LABELS = ["", "$", "$$", "$$$", "$$$$"];
@@ -53,6 +53,7 @@ const EMPTY_FORM = {
   name: "", type: "restaurant", address: "", neighborhood: "", city: "",
   status: "want_to_visit", rating: "" as string | number, notes: "", website: "",
   priceRange: "" as string | number, tags: "", visitedDate: "", isFavorite: false, openingHours: "",
+  lat: null as number | null, lon: null as number | null,
 };
 
 // ── Nominatim types ───────────────────────────────────────────────────────────
@@ -193,6 +194,8 @@ function NominatimSearchModal({ open, onClose, onSelect }: {
       city: buildCity(addr),
       website: r.extratags?.website ?? r.extratags?.["contact:website"] ?? "",
       openingHours: r.extratags?.opening_hours ?? "",
+      lat: parseFloat(r.lat),
+      lon: parseFloat(r.lon),
     };
   }
 
@@ -432,12 +435,13 @@ const TYPE_ACCENT: Record<string, string> = {
 
 // ── Spot Card ─────────────────────────────────────────────────────────────────
 
-function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
+function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip }: {
   spot: Spot;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
   onShare: () => void;
+  onAddToTrip: () => void;
 }) {
   const location = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([spot.name, spot.address, spot.city].filter(Boolean).join(', '))}`;
@@ -466,6 +470,10 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
               className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
               <Send size={13} className="text-muted-foreground" />
             </button>
+            <button onClick={onAddToTrip} title="Add to Trip"
+              className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+              <Plane size={13} className="text-muted-foreground" />
+            </button>
             <button onClick={onEdit} title="Edit"
               className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
               <Pencil size={13} className="text-muted-foreground" />
@@ -479,7 +487,7 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
 
         {/* Badges row */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge className={`text-xs ${STATUS_COLORS[spot.status]}`}>{SPOT_STATUSES.find((s) => s.value === spot.status)?.label}</Badge>
+          <Badge className={`text-xs ${STATUS_COLORS[spot.status]}`}>{spot.status === "favorite" ? "❤️ Favorite" : SPOT_STATUSES.find((s) => s.value === spot.status)?.label}</Badge>
           {spot.priceRange ? <Badge variant="outline" className="text-xs font-medium">{PRICE_LABELS[spot.priceRange]}</Badge> : null}
           {spot.rating != null && (
             <div className="flex items-center gap-0.5">
@@ -514,6 +522,208 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare }: {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Map View ──────────────────────────────────────────────────────────────────
+
+function MapView({ spots }: { spots: Spot[] }) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
+
+  const mappable = spots.filter(s => s.lat != null && s.lon != null);
+  const unmappableCount = spots.length - mappable.length;
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    function initMap() {
+      const L = (window as any).L;
+      if (!L || !mapContainerRef.current) return;
+      if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+
+      const defaultCenter: [number, number] = mappable.length > 0
+        ? [mappable[0].lat!, mappable[0].lon!]
+        : [39.5, -98.35]; // center of US
+
+      const map = L.map(mapContainerRef.current, { zoomControl: true }).setView(defaultCenter, 13);
+      mapInstanceRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map);
+
+      const TYPE_PIN_COLOR: Record<string, string> = {
+        restaurant: "#f97316", bar: "#a855f7", cafe: "#f59e0b",
+        park: "#22c55e", trail: "#14b8a6", shop: "#ec4899",
+        service: "#64748b", attraction: "#3b82f6", hotel: "#6366f1", other: "#6b7280",
+      };
+
+      mappable.forEach(spot => {
+        const color = TYPE_PIN_COLOR[spot.type] ?? "#6b7280";
+        const iconHtml = `<div style="
+          width:32px;height:32px;border-radius:50% 50% 50% 0;
+          background:${color};border:2px solid white;
+          transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.3);
+          display:flex;align-items:center;justify-content:center;">
+        </div>`;
+        const icon = L.divIcon({ html: iconHtml, className: "", iconSize: [32, 32], iconAnchor: [16, 32] });
+        const marker = L.marker([spot.lat!, spot.lon!], { icon }).addTo(map);
+        marker.on("click", () => setSelectedSpot(spot));
+      });
+
+      if (mappable.length > 1) {
+        const bounds = L.latLngBounds(mappable.map(s => [s.lat!, s.lon!]));
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+    }
+
+    // Load Leaflet CSS
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    if ((window as any).L) {
+      initMap();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = initMap;
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+    };
+  }, [JSON.stringify(mappable.map(s => s.id + s.lat + s.lon))]);
+
+  return (
+    <div className="relative">
+      {mappable.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 border rounded-xl text-muted-foreground gap-2">
+          <MapPin size={32} className="opacity-20" />
+          <p className="text-sm font-medium">No spots with location data</p>
+          <p className="text-xs text-center max-w-xs">Add spots via the Search button to automatically capture their coordinates for mapping.</p>
+        </div>
+      ) : (
+        <div ref={mapContainerRef} className="h-[500px] rounded-xl overflow-hidden border" style={{ zIndex: 0 }} />
+      )}
+
+      {unmappableCount > 0 && (
+        <p className="text-xs text-muted-foreground text-center mt-2">
+          {unmappableCount} spot{unmappableCount !== 1 ? "s" : ""} without coordinates not shown on map
+        </p>
+      )}
+
+      {/* Bottom sheet for selected spot */}
+      {selectedSpot && (
+        <div className="absolute bottom-0 left-0 right-0 bg-card border-t rounded-t-2xl p-4 shadow-2xl z-50 animate-in slide-in-from-bottom-4">
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{SPOT_TYPES.find(t => t.value === selectedSpot.type)?.emoji ?? "📍"}</span>
+              <div>
+                <p className="font-semibold">{selectedSpot.name}</p>
+                {(selectedSpot.neighborhood || selectedSpot.city) && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Navigation size={10} />
+                    {[selectedSpot.neighborhood, selectedSpot.city].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button onClick={() => setSelectedSpot(null)} className="p-1.5 rounded-lg hover:bg-secondary">
+              <X size={16} className="text-muted-foreground" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {selectedSpot.address && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([selectedSpot.name, selectedSpot.address, selectedSpot.city].filter(Boolean).join(', '))}`}
+                target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+              >
+                <Navigation size={10} /> Directions
+              </a>
+            )}
+            {selectedSpot.website && (
+              <a
+                href={selectedSpot.website.startsWith("http") ? selectedSpot.website : `https://${selectedSpot.website}`}
+                target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+              >
+                <Globe size={10} /> Website
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Add to Trip Modal ─────────────────────────────────────────────────────────
+
+function AddToTripModal({ spot, onClose }: { spot: Spot; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: trips = [] } = useQuery<any[]>({ queryKey: ["/api/trips"] });
+
+  const addItemMut = useMutation({
+    mutationFn: (tripId: number) => apiRequest("POST", `/api/trips/${tripId}/items`, {
+      name: spot.name,
+      type: spot.type,
+      address: spot.address ?? null,
+      date: null, time: null, duration: null,
+      notes: spot.notes ?? null,
+      spotId: spot.id,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/trips"] });
+      toast({ title: `${spot.name} added to trip!` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to add to trip", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plane size={16} className="text-primary" /> Add to Trip
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground mb-3">Select a trip to add <strong>{spot.name}</strong> to:</p>
+        {trips.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Plane size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No trips yet. Create a trip in the Trips tab first.</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {trips.map((trip: any) => (
+              <button
+                key={trip.id}
+                onClick={() => addItemMut.mutate(trip.id)}
+                disabled={addItemMut.isPending}
+                className="w-full text-left flex items-center gap-3 p-3 rounded-lg border hover:bg-secondary transition-colors"
+              >
+                <Plane size={14} className="text-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{trip.name}</p>
+                  {trip.destination && <p className="text-xs text-muted-foreground truncate">{trip.destination}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -704,9 +914,7 @@ export default function SpotsPage() {
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
-  const [filterTypeLocal, setFilterTypeLocal] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterStatusLocal, setFilterStatusLocal] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [filterCity, setFilterCity] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
@@ -716,7 +924,9 @@ export default function SpotsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [addToTripSpot, setAddToTripSpot] = useState<Spot | null>(null);
+  const [collapsedCities, setCollapsedCities] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setActiveTab("shared");
   }, []);
@@ -758,7 +968,6 @@ export default function SpotsPage() {
   });
 
   const csvRef = useRef<HTMLInputElement>(null);
-  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
 
   // Normalize type/status values so CSV doesn't need exact casing
   const TYPE_MAP: Record<string, string> = {
@@ -793,16 +1002,6 @@ export default function SpotsPage() {
       else cur += c;
     }
     result.push(cur); return result;
-  }
-
-  function downloadCsvTemplate() {
-    const header = "name,type,address,neighborhood,city,status,rating,notes,website,priceRange,tags";
-    const ex1 = `"Franklin Barbecue",restaurant,"900 E 11th St",East Austin,Austin,want_to_visit,,Best brisket in Texas,franklinbbq.com,2,bbq`;
-    const ex2 = `"Barton Springs Pool",park,,Zilker,Austin,visited,5,Perfect swimming hole,,1,outdoor`;
-    const blob = new Blob([`${header}\n${ex1}\n${ex2}`], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "spots_template.csv"; a.click();
-    URL.revokeObjectURL(url);
   }
 
   async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -862,6 +1061,7 @@ export default function SpotsPage() {
       notes: s.notes ?? "", website: s.website ?? "", priceRange: s.priceRange ?? "",
       tags: s.tags ?? "", visitedDate: s.visitedDate ?? "", isFavorite: s.isFavorite,
       openingHours: s.openingHours ?? "",
+      lat: s.lat ?? null, lon: s.lon ?? null,
     });
     setModalOpen(true);
   }
@@ -879,16 +1079,12 @@ export default function SpotsPage() {
   }
 
   function applyFilters(list: Spot[]) {
-    // Pill filters take precedence over dropdown filters when set
-    const effectiveType = filterTypeLocal !== "all" ? filterTypeLocal : filterType;
-    const effectiveStatus = filterStatusLocal !== "all" ? filterStatusLocal : filterStatus;
     return list.filter((s) => {
       const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
         (s.city ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (s.neighborhood ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchType = effectiveType === "all" || s.type === effectiveType;
-      const matchStatus = effectiveStatus === "all" || s.status === effectiveStatus ||
-        (effectiveStatus === "favorites" && s.isFavorite);
+      const matchType = filterType === "all" || s.type === filterType;
+      const matchStatus = filterStatus === "all" || s.status === filterStatus;
       const matchTag = filterTag === "all" || (s.tags ?? "").split(",").map((t) => t.trim()).includes(filterTag);
       const matchCity = filterCity === "all" || s.city === filterCity;
       return matchSearch && matchType && matchStatus && matchTag && matchCity;
@@ -917,9 +1113,14 @@ export default function SpotsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button size="sm" onClick={() => setPlannerOpen(true)} className="gap-1.5">
+            <button
+              onClick={() => setPlannerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white
+                bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
+                shadow-sm transition-all"
+            >
               <Sparkles size={13} /> Plan My Day
-            </Button>
+            </button>
             <Button size="sm" variant="outline" onClick={() => setNominatimOpen(true)} className="gap-1.5">
               <Search size={13} /> Search
             </Button>
@@ -962,66 +1163,79 @@ export default function SpotsPage() {
 
       {/* Filters */}
       {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
-        <div className="space-y-3 mb-4">
-          {/* Search row */}
-          <div className="relative w-full sm:w-72">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input className="pl-8 h-9" placeholder="Search spots…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-8 h-9" placeholder="Search places…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
-          {/* Type pills */}
-          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-            <div className="flex gap-1.5 w-max">
-              {[{ value: "all", label: "All", emoji: "🗺️" }, ...SPOT_TYPES].map(t => (
-                <button
-                  key={t.value}
-                  onClick={() => setFilterTypeLocal(t.value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition-all ${
-                    filterTypeLocal === t.value
-                      ? "bg-primary text-primary-foreground border-primary font-medium"
-                      : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span>{t.emoji}</span> {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Status pills */}
-          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-            <div className="flex gap-1.5 w-max">
-              {[
-                { value: "all", label: "All" },
-                { value: "want_to_visit", label: "Want to Visit" },
-                { value: "visited", label: "Visited" },
-                { value: "favorites", label: "❤️ Favorites" },
-              ].map(s => (
-                <button
-                  key={s.value}
-                  onClick={() => setFilterStatusLocal(s.value)}
-                  className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition-all ${
-                    filterStatusLocal === s.value
-                      ? "bg-primary text-primary-foreground border-primary font-medium"
-                      : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* City filter — only when 2+ cities */}
+          {/* City dropdown button — only shown when 2+ cities */}
           {allCities.length >= 2 && (
-            <Select value={filterCity} onValueChange={setFilterCity}>
-              <SelectTrigger className="h-9 w-full sm:w-44"><SelectValue /></SelectTrigger>
+            <div className="relative">
+              <Select value={filterCity} onValueChange={setFilterCity}>
+                <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterCity !== "all" ? "border-blue-500 text-blue-600" : ""}`}>
+                  <MapPin size={13} />
+                  <SelectValue placeholder="City" />
+                  {filterCity !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All cities</SelectItem>
+                  {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Category dropdown */}
+          <div className="relative">
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterType !== "all" ? "border-primary text-primary" : ""}`}>
+                <Tag size={13} />
+                <SelectValue placeholder="Category" />
+                {filterType !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All cities</SelectItem>
-                {allCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                <SelectItem value="all">All types</SelectItem>
+                {SPOT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}
               </SelectContent>
             </Select>
-          )}
+          </div>
+
+          {/* Status dropdown */}
+          <div className="relative">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className={`h-9 gap-1.5 text-sm ${filterStatus !== "all" ? "border-green-500 text-green-600" : ""}`}>
+                <CheckCircle2 size={13} />
+                <SelectValue placeholder="Status" />
+                {filterStatus !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="want_to_visit">Want to Visit</SelectItem>
+                <SelectItem value="visited">Visited</SelectItem>
+                <SelectItem value="favorite">Favorite</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Map/List toggle */}
+          <div className="flex items-center rounded-lg border overflow-hidden ml-auto">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`px-2.5 py-1.5 text-sm transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-muted-foreground"}`}
+              title="List view"
+            >
+              ☰
+            </button>
+            <button
+              onClick={() => setViewMode("map")}
+              className={`px-2.5 py-1.5 text-sm transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "hover:bg-secondary text-muted-foreground"}`}
+              title="Map view"
+            >
+              🗺️
+            </button>
+          </div>
         </div>
       )}
 
@@ -1037,6 +1251,60 @@ export default function SpotsPage() {
           <MapPin size={36} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No spots yet. Start adding places!</p>
         </div>
+      ) : viewMode === "map" ? (
+        <MapView spots={displaySpots} />
+      ) : activeTab === "all" && filterCity === "all" && !search ? (
+        // Grouped by city view
+        (() => {
+          const cityGroups: { city: string; spots: Spot[] }[] = [];
+          const cityMap = new Map<string, Spot[]>();
+          displaySpots.forEach(s => {
+            const key = s.city ?? "Other";
+            if (!cityMap.has(key)) cityMap.set(key, []);
+            cityMap.get(key)!.push(s);
+          });
+          cityMap.forEach((spots, city) => cityGroups.push({ city, spots }));
+          cityGroups.sort((a, b) => b.spots.length - a.spots.length);
+          return (
+            <div className="space-y-6">
+              {cityGroups.map(({ city, spots: citySpots }) => {
+                const collapsed = collapsedCities.has(city);
+                return (
+                  <div key={city}>
+                    <button
+                      onClick={() => setCollapsedCities(prev => {
+                        const next = new Set(prev);
+                        if (collapsed) next.delete(city); else next.add(city);
+                        return next;
+                      })}
+                      className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-3 border-b"
+                    >
+                      <MapPin size={14} className="text-primary shrink-0" />
+                      <span className="font-semibold text-sm">{city}</span>
+                      <span className="text-xs text-muted-foreground ml-1">({citySpots.length})</span>
+                      <span className="ml-auto text-muted-foreground">{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</span>
+                    </button>
+                    {!collapsed && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {citySpots.map(spot => (
+                          <SpotCard
+                            key={spot.id}
+                            spot={spot}
+                            onEdit={() => openEdit(spot)}
+                            onDelete={() => deleteMut.mutate(spot.id)}
+                            onShare={() => setShareSpot(spot)}
+                            onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                            onAddToTrip={() => setAddToTripSpot(spot)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {displaySpots.map((spot) => (
@@ -1047,6 +1315,7 @@ export default function SpotsPage() {
               onDelete={() => deleteMut.mutate(spot.id)}
               onShare={() => setShareSpot(spot)}
               onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+              onAddToTrip={() => setAddToTripSpot(spot)}
             />
           ))}
         </div>
@@ -1172,37 +1441,11 @@ export default function SpotsPage() {
         <SpotShareModal spot={shareSpot} onClose={() => setShareSpot(null)} />
       )}
 
-      {/* CSV Format Info Dialog */}
-      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Spots CSV Format</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">name</span> is required — all others are optional.</p>
-          <div className="space-y-1 text-sm">
-            {[
-              { col: "name", req: true,  note: "Name of the spot" },
-              { col: "type", req: false, note: "restaurant · bar · cafe · park · trail · beach · museum · hotel · shop · gym · venue · activity · other" },
-              { col: "address", req: false, note: "Street address" },
-              { col: "neighborhood", req: false, note: "Neighborhood name" },
-              { col: "city", req: false, note: "City name" },
-              { col: "status", req: false, note: "want_to_visit · visited · favorite  (default: want_to_visit)" },
-              { col: "rating", req: false, note: "1–5" },
-              { col: "notes", req: false, note: "Free text" },
-              { col: "website", req: false, note: "URL, e.g. franklinbbq.com" },
-              { col: "priceRange", req: false, note: "1 ($) · 2 ($$) · 3 ($$$) · 4 ($$$$)" },
-              { col: "tags", req: false, note: "Comma-separated, e.g. Date Night, Dog-Friendly" },
-            ].map(({ col, req, note }) => (
-              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
-                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
-                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
-                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
-        </DialogContent>
-      </Dialog>
+      {/* Add to Trip Modal */}
+      {addToTripSpot && (
+        <AddToTripModal spot={addToTripSpot} onClose={() => setAddToTripSpot(null)} />
+      )}
+
     </div>
   );
 }
