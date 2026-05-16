@@ -3227,52 +3227,50 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         } catch (_) { /* Ticketmaster failed — continue */ }
       }
 
-      // ── Eventbrite ───────────────────────────────────────────────────────
-      if (ebKey) {
+      // ── SeatGeek ─────────────────────────────────────────────────────────
+      const sgKey = process.env.SEATGEEK_API_KEY;
+      if (sgKey) {
         try {
           const params = new URLSearchParams({
-            "location.address": city || "United States",
-            "location.within":  "50mi",
-            expand: "venue",
-            page_size: "20",
+            client_id: sgKey,
+            per_page:  "20",
           });
           if (keyword)   params.set("q", keyword);
-          if (startDate) params.set("start_date.range_start", `${startDate}T00:00:00Z`);
-          if (endDate)   params.set("start_date.range_end",   `${endDate}T23:59:59Z`);
+          if (city)      params.set("venue.city", city);
+          if (startDate) params.set("datetime_local.gte", `${startDate}T00:00:00`);
+          if (endDate)   params.set("datetime_local.lte", `${endDate}T23:59:59`);
 
-          const ebRes = await fetch(
-            `https://www.eventbriteapi.com/v3/events/search/?${params}`,
-            { headers: { Authorization: `Bearer ${ebKey}` } }
-          );
-          if (ebRes.ok) {
-            const ebData = await ebRes.json() as any;
-            for (const e of ebData.events ?? []) {
+          const sgRes = await fetch(`https://api.seatgeek.com/2/events?${params}`);
+          if (sgRes.ok) {
+            const sgData = await sgRes.json() as any;
+            for (const e of sgData.events ?? []) {
               const venue = e.venue;
-              const isFree = e.is_free;
+              const lo = e.stats?.lowest_price;
+              const hi = e.stats?.highest_price;
               results.push({
-                source:       "eventbrite",
-                externalId:   e.id,
-                name:         e.name?.text ?? "Untitled",
-                description:  e.description?.text?.slice(0, 300) ?? null,
-                startDatetime: e.start?.utc ?? e.start?.local ?? null,
-                endDatetime:   e.end?.utc   ?? e.end?.local   ?? null,
-                venueName:    venue?.name ?? null,
-                venueAddress: venue ? [venue.address?.address_1, venue.address?.city, venue.address?.region].filter(Boolean).join(", ") : null,
-                city:         (venue?.address?.city ?? city) || null,
-                url:          e.url ?? null,
-                imageUrl:     e.logo?.url ?? null,
-                priceInfo:    isFree ? "Free" : null,
-                classifications: e.category?.name ?? null,
+                source:        "seatgeek",
+                externalId:    String(e.id),
+                name:          e.title ?? e.short_title ?? "Untitled",
+                description:   null,
+                startDatetime: e.datetime_utc ?? e.datetime_local ?? null,
+                endDatetime:   null,
+                venueName:     venue?.name ?? null,
+                venueAddress:  venue ? [venue.address, venue.city, venue.state].filter(Boolean).join(", ") : null,
+                city:          venue?.city ?? city || null,
+                url:           e.url ?? null,
+                imageUrl:      e.performers?.[0]?.image ?? null,
+                priceInfo:     lo ? `$${lo}${hi && hi !== lo ? `–$${hi}` : ""}` : null,
+                classifications: e.type ?? null,
               });
             }
           } else {
-            const errText = await ebRes.text().catch(() => "");
-            console.warn(`Eventbrite API error ${ebRes.status}:`, errText.slice(0, 300));
+            const errText = await sgRes.text().catch(() => "");
+            console.warn(`SeatGeek API error ${sgRes.status}:`, errText.slice(0, 300));
           }
-        } catch (ebErr) { console.warn("Eventbrite fetch failed:", ebErr); }
+        } catch (sgErr) { console.warn("SeatGeek fetch failed:", sgErr); }
       }
 
-      if (!tmKey && !ebKey) {
+      if (!tmKey && !sgKey) {
         return res.status(500).json({ error: "No event API keys configured" });
       }
 

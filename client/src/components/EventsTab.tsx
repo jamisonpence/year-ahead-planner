@@ -38,7 +38,7 @@ export interface SavedEvent extends EventResult {
 
 const SOURCE_BADGE: Record<string, { label: string; color: string }> = {
   ticketmaster: { label: "Ticketmaster", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
-  eventbrite:   { label: "Eventbrite",   color: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" },
+  seatgeek:     { label: "SeatGeek",     color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
 };
 
 const EVENT_STATUS_OPTIONS = [
