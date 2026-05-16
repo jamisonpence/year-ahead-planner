@@ -3256,7 +3256,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
                 endDatetime:   null,
                 venueName:     venue?.name ?? null,
                 venueAddress:  venue ? [venue.address, venue.city, venue.state].filter(Boolean).join(", ") : null,
-                city:          venue?.city ?? city || null,
+                city:          (venue?.city ?? city) || null,
                 url:           e.url ?? null,
                 imageUrl:      e.performers?.[0]?.image ?? null,
                 priceInfo:     lo ? `$${lo}${hi && hi !== lo ? `–$${hi}` : ""}` : null,
