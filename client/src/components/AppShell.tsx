@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import QuickAddModal from "@/components/QuickAddModal";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
@@ -868,45 +869,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       />}
 
       {/* ── Quick-add modal ──────────────────────────────────────────────────── */}
-      {quickAddOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setQuickAddOpen(false)}>
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
-              <span className="font-bold text-base">Add Something</span>
-              <button onClick={() => setQuickAddOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
-            </div>
-            <div className="p-4 grid grid-cols-3 gap-3 pb-8">
-              {[
-                { label: "Book",    emoji: "📚", path: "/reading",  desc: "Reading list"  },
-                { label: "Movie",   emoji: "🎬", path: "/movies",   desc: "Watch list"    },
-                { label: "Song",    emoji: "🎵", path: "/music",    desc: "Music"         },
-                { label: "Recipe",  emoji: "🍽️", path: "/recipes",  desc: "Recipes"      },
-                { label: "Spot",    emoji: "📍", path: "/spots",    desc: "Places"        },
-                { label: "Quote",   emoji: "💬", path: "/quotes",   desc: "Quotes"        },
-                { label: "Goal",    emoji: "🎯", path: "/goals",    desc: "Goals"         },
-                { label: "Event",   emoji: "📅", path: "/calendar", desc: "Calendar"      },
-                { label: "Workout", emoji: "💪", path: "/workouts", desc: "Fitness"       },
-              ].map(item => (
-                <Link key={item.path} href={item.path}>
-                  <button
-                    onClick={() => setQuickAddOpen(false)}
-                    className="w-full flex flex-col items-center gap-2 p-4 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-colors"
-                  >
-                    <span className="text-2xl leading-none">{item.emoji}</span>
-                    <div className="text-center">
-                      <p className="text-xs font-semibold">{item.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{item.desc}</p>
-                    </div>
-                  </button>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
 
       {/* Mobile notifications panel */}
       {notifOpen && (
