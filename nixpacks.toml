@@ -5,7 +5,10 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install --legacy-peer-deps"]
 
 [phases.build]
-cmds = ["NODE_OPTIONS='--max-old-space-size=4096' npm run build"]
+cmds = [
+  "node --max-old-space-size=3072 node_modules/.bin/tsx script/build-client.ts",
+  "node --max-old-space-size=3072 node_modules/.bin/tsx script/build-server.ts"
+]
 
 [start]
 cmd = "npm start"
