@@ -1695,9 +1695,8 @@ export default function RecipesPage() {
       {/* ── LIBRARY ── */}
       {subView === "library" && (
         <div className="space-y-6">
-          {/* Component type filter + collapse/expand controls */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 flex-1">
+          {/* Component type filter */}
+          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
             <div className="flex gap-2 w-max sm:flex-wrap sm:w-auto">
               {([{ value: "all", label: "All", icon: <Layers size={13} /> },
                  ...COMPONENT_TYPES.map(ct => ({ value: ct.value, label: ct.label, icon: ct.icon })),
@@ -1715,11 +1714,11 @@ export default function RecipesPage() {
                 </button>
               ))}
             </div>
-            </div>
-            <div className="flex gap-1.5 shrink-0">
-              <button onClick={collapseAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Collapse</button>
-              <button onClick={expandAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Expand</button>
-            </div>
+          </div>
+          {/* Collapse / Expand controls on their own row */}
+          <div className="flex gap-1.5">
+            <button onClick={collapseAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Collapse</button>
+            <button onClick={expandAll} className="text-xs px-2.5 py-1 rounded-md border hover:bg-secondary transition-colors text-muted-foreground whitespace-nowrap">Expand</button>
           </div>
 
           {/* Sectioned view when "All" selected */}
