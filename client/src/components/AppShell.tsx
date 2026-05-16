@@ -460,6 +460,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const qc = useQueryClient();
 
+  // Close all overlay sheets whenever the route changes
+  useEffect(() => {
+    setMyLifosOpen(false);
+    setDiscoverOpen(false);
+    setQuickAddOpen(false);
+  }, [location]);
+
   // Privacy settings (used by My Lifos sheet)
   const { data: privacySettings = [] } = useQuery<{ path: string; visibility: string }[]>({
     queryKey: ["/api/tab-privacy"],
