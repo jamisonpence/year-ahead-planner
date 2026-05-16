@@ -1205,6 +1205,29 @@ export async function initializeStorage() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS saved_events (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      start_datetime TEXT,
+      end_datetime TEXT,
+      venue_name TEXT,
+      venue_address TEXT,
+      city TEXT,
+      url TEXT,
+      image_url TEXT,
+      price_info TEXT,
+      status TEXT NOT NULL DEFAULT 'want_to_attend',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, source, external_id)
+    );
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -4546,6 +4569,67 @@ export const storage: IStorage = {
       recommendationsSent: parseInt(recsRes.rows[0].total, 10),
       counts: sectionCounts,
     };
+  },
+
+  // ── Saved Events ────────────────────────────────────────────────────────────
+
+  async getSavedEvents(userId: number) {
+    const result = await pool.query(
+      `SELECT * FROM saved_events WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId]
+    );
+    return result.rows.map((r: any) => ({
+      id: r.id,
+      source: r.source,
+      externalId: r.external_id,
+      name: r.name,
+      description: r.description,
+      startDatetime: r.start_datetime,
+      endDatetime: r.end_datetime,
+      venueName: r.venue_name,
+      venueAddress: r.venue_address,
+      city: r.city,
+      url: r.url,
+      imageUrl: r.image_url,
+      priceInfo: r.price_info,
+      status: r.status,
+      notes: r.notes,
+      createdAt: r.created_at,
+    }));
+  },
+
+  async saveEvent(userId: number, data: {
+    source: string; externalId: string; name: string; description?: string;
+    startDatetime?: string; endDatetime?: string; venueName?: string;
+    venueAddress?: string; city?: string; url?: string; imageUrl?: string; priceInfo?: string;
+  }) {
+    const result = await pool.query(
+      `INSERT INTO saved_events
+        (user_id, source, external_id, name, description, start_datetime, end_datetime,
+         venue_name, venue_address, city, url, image_url, price_info)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (user_id, source, external_id) DO NOTHING
+       RETURNING *`,
+      [userId, data.source, data.externalId, data.name, data.description ?? null,
+       data.startDatetime ?? null, data.endDatetime ?? null, data.venueName ?? null,
+       data.venueAddress ?? null, data.city ?? null, data.url ?? null,
+       data.imageUrl ?? null, data.priceInfo ?? null]
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async deleteSavedEvent(userId: number, id: number) {
+    await pool.query(
+      `DELETE FROM saved_events WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+  },
+
+  async updateSavedEventStatus(userId: number, id: number, status: string, notes?: string) {
+    await pool.query(
+      `UPDATE saved_events SET status = $1, notes = COALESCE($2, notes) WHERE id = $3 AND user_id = $4`,
+      [status, notes ?? null, id, userId]
+    );
   },
 };
 

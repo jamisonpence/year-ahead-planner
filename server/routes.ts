@@ -3175,6 +3175,150 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Events: Ticketmaster + Eventbrite proxy ────────────────────────────────
+
+  app.get("/api/events/search", requireAuth, async (req, res) => {
+    try {
+      const city      = String(req.query.city || "").trim();
+      const keyword   = String(req.query.q    || "").trim();
+      const startDate = String(req.query.startDate || "").trim(); // YYYY-MM-DD
+      const endDate   = String(req.query.endDate   || "").trim();
+
+      const tmKey = process.env.TICKETMASTER_API_KEY;
+      const ebKey = process.env.EVENTBRITE_API_KEY;
+
+      const results: any[] = [];
+
+      // ── Ticketmaster ─────────────────────────────────────────────────────
+      if (tmKey) {
+        try {
+          const params = new URLSearchParams({ apikey: tmKey, size: "20" });
+          if (keyword)   params.set("keyword", keyword);
+          if (city)      params.set("city", city);
+          if (startDate) params.set("startDateTime", `${startDate}T00:00:00Z`);
+          if (endDate)   params.set("endDateTime",   `${endDate}T23:59:59Z`);
+
+          const tmRes = await fetch(
+            `https://app.ticketmaster.com/discovery/v2/events.json?${params}`
+          );
+          if (tmRes.ok) {
+            const tmData = await tmRes.json() as any;
+            const events = tmData?._embedded?.events ?? [];
+            for (const e of events) {
+              const venue = e._embedded?.venues?.[0];
+              const priceRange = e.priceRanges?.[0];
+              results.push({
+                source:       "ticketmaster",
+                externalId:   e.id,
+                name:         e.name,
+                description:  e.info ?? e.pleaseNote ?? null,
+                startDatetime: e.dates?.start?.dateTime ?? e.dates?.start?.localDate ?? null,
+                endDatetime:   e.dates?.end?.dateTime   ?? null,
+                venueName:    venue?.name ?? null,
+                venueAddress: venue ? [venue.address?.line1, venue.city?.name, venue.state?.stateCode].filter(Boolean).join(", ") : null,
+                city:         venue?.city?.name ?? city || null,
+                url:          e.url ?? null,
+                imageUrl:     (e.images?.find((img: any) => img.ratio === "16_9" && img.width > 500) ?? e.images?.[0])?.url ?? null,
+                priceInfo:    priceRange ? `$${priceRange.min}–$${priceRange.max}` : null,
+                classifications: e.classifications?.[0]?.segment?.name ?? null,
+              });
+            }
+          }
+        } catch (_) { /* Ticketmaster failed — continue */ }
+      }
+
+      // ── Eventbrite ───────────────────────────────────────────────────────
+      if (ebKey) {
+        try {
+          const params = new URLSearchParams({
+            token: ebKey,
+            "location.address": city || "United States",
+            "location.within":  "50mi",
+            expand: "venue",
+            page_size: "20",
+          });
+          if (keyword)   params.set("q", keyword);
+          if (startDate) params.set("start_date.range_start", `${startDate}T00:00:00`);
+          if (endDate)   params.set("start_date.range_end",   `${endDate}T23:59:59`);
+
+          const ebRes = await fetch(
+            `https://www.eventbriteapi.com/v3/events/search/?${params}`
+          );
+          if (ebRes.ok) {
+            const ebData = await ebRes.json() as any;
+            for (const e of ebData.events ?? []) {
+              const venue = e.venue;
+              const isFree = e.is_free;
+              results.push({
+                source:       "eventbrite",
+                externalId:   e.id,
+                name:         e.name?.text ?? "Untitled",
+                description:  e.description?.text?.slice(0, 300) ?? null,
+                startDatetime: e.start?.utc ?? e.start?.local ?? null,
+                endDatetime:   e.end?.utc   ?? e.end?.local   ?? null,
+                venueName:    venue?.name ?? null,
+                venueAddress: venue ? [venue.address?.address_1, venue.address?.city, venue.address?.region].filter(Boolean).join(", ") : null,
+                city:         venue?.address?.city ?? city || null,
+                url:          e.url ?? null,
+                imageUrl:     e.logo?.url ?? null,
+                priceInfo:    isFree ? "Free" : null,
+                classifications: e.category?.name ?? null,
+              });
+            }
+          }
+        } catch (_) { /* Eventbrite failed — continue */ }
+      }
+
+      if (!tmKey && !ebKey) {
+        return res.status(500).json({ error: "No event API keys configured" });
+      }
+
+      // Sort by start date ascending
+      results.sort((a, b) => {
+        const da = a.startDatetime ? new Date(a.startDatetime).getTime() : 0;
+        const db = b.startDatetime ? new Date(b.startDatetime).getTime() : 0;
+        return da - db;
+      });
+
+      res.json(results);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Saved Events CRUD ─────────────────────────────────────────────────────
+
+  app.get("/api/events/saved", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const events = await storage.getSavedEvents(user.id);
+      res.json(events);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/events/saved", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const event = await storage.saveEvent(user.id, req.body);
+      res.status(201).json(event ?? { ok: true, already_saved: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/events/saved/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      await storage.deleteSavedEvent(user.id, Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/events/saved/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { status, notes } = req.body as { status?: string; notes?: string };
+      if (status) await storage.updateSavedEventStatus(user.id, Number(req.params.id), status, notes);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Hobbies ──────────────────────────────────────────────────────────────────
   app.get("/api/hobbies", requireAuth, async (req, res) => {
     try {
