@@ -912,7 +912,7 @@ export default function SpotsPage() {
           <div className="flex items-center gap-3">
             <MapPin size={22} className="text-primary" />
             <div>
-              <h1 className="text-xl font-bold">Spots</h1>
+              <h1 className="text-xl font-bold">Places</h1>
               <p className="text-sm text-muted-foreground">Places to visit & explore</p>
             </div>
           </div>
@@ -926,29 +926,6 @@ export default function SpotsPage() {
             <Button size="sm" variant="outline" onClick={openNew} className="gap-1.5">
               <Plus size={14} /> Add Spot
             </Button>
-            {/* More menu */}
-            <div className="relative">
-              <Button size="sm" variant="outline" onClick={() => setMoreMenuOpen(p => !p)} className="gap-1 px-2">
-                <ChevronDown size={14} />
-              </Button>
-              {moreMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-50 bg-card border rounded-lg shadow-md min-w-[160px] py-1"
-                  onMouseLeave={() => setMoreMenuOpen(false)}>
-                  <button onClick={() => { downloadCsvTemplate(); setMoreMenuOpen(false); }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
-                    <Download size={13} /> CSV Template
-                  </button>
-                  <button onClick={() => { setCsvInfoOpen(true); setMoreMenuOpen(false); }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
-                    <HelpCircle size={13} /> CSV Format
-                  </button>
-                  <button onClick={() => { csvRef.current?.click(); setMoreMenuOpen(false); }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-secondary transition-colors">
-                    <Upload size={13} /> Upload CSV
-                  </button>
-                </div>
-              )}
-            </div>
             <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           </div>
         </div>
