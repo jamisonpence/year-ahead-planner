@@ -343,6 +343,96 @@ const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
   ],
 };
 
+// ── Strength PR Plan Generator ────────────────────────────────────────────────
+
+function generateStrengthPRPlan(exercise: string, currentMax: number, unit: string, totalWeeks: number): WeekScheduleV2[] {
+  const r5 = (n: number) => Math.round(n / 5) * 5;
+
+  function getPhase(w: number, total: number): 1 | 2 | 3 | 4 | 5 {
+    if (w === total) return 5;                                    // last week = max test
+    if (w === total - 1 && total >= 7) return 4;                 // penultimate (≥7w) = peak/deload
+    const activeWeeks = total >= 7 ? total - 2 : total - 1;
+    if (w <= Math.ceil(activeWeeks / 3)) return 1;
+    if (w <= Math.ceil(activeWeeks * 2 / 3)) return 2;
+    return 3;
+  }
+
+  const accessories: Record<string, string> = {
+    "Bench Press": "tricep dips / incline DB press / cable rows",
+    "Squat": "leg press / Romanian deadlift / leg curls",
+    "Deadlift": "rack pull / Romanian deadlift / lat pulldown",
+    "Overhead Press": "lateral raises / face pulls / tricep pushdowns",
+  };
+  const acc = accessories[exercise] ?? "accessory work";
+
+  return Array.from({ length: totalWeeks }, (_, i) => {
+    const w = i + 1;
+    const phase = getPhase(w, totalWeeks);
+
+    let dayA: PlanDayEntryV2;
+    let dayB: PlanDayEntryV2;
+
+    if (phase === 1) {
+      dayA = {
+        dayOfWeek: "monday",
+        label: `Heavy ${exercise}`,
+        notes: `4×3 @ ${r5(currentMax * 0.80)}${unit} (80% 1RM) · 2–3 min rest · leave 1–2 reps in tank`,
+      };
+      dayB = {
+        dayOfWeek: "thursday",
+        label: `Volume ${exercise}`,
+        notes: `3×6 @ ${r5(currentMax * 0.70)}${unit} (70% 1RM) · 60–90 sec rest · ${acc}`,
+      };
+    } else if (phase === 2) {
+      dayA = {
+        dayOfWeek: "monday",
+        label: `Heavy ${exercise}`,
+        notes: `5×3 @ ${r5(currentMax * 0.825)}${unit} (82.5% 1RM) · 2–3 min rest · add 5${unit} once all reps feel clean`,
+      };
+      dayB = {
+        dayOfWeek: "thursday",
+        label: `Volume ${exercise}`,
+        notes: `4×6 @ ${r5(currentMax * 0.725)}${unit} (72.5% 1RM) · 60–90 sec rest · ${acc}`,
+      };
+    } else if (phase === 3) {
+      dayA = {
+        dayOfWeek: "monday",
+        label: `Heavy ${exercise}`,
+        notes: `4×4 @ ${r5(currentMax * 0.85)}${unit} (85% 1RM) · 3 min rest · avoid grinding to failure`,
+      };
+      dayB = {
+        dayOfWeek: "thursday",
+        label: `Volume ${exercise}`,
+        notes: `4×8 @ ${r5(currentMax * 0.75)}${unit} (75% 1RM) · 90 sec rest · ${acc}`,
+      };
+    } else if (phase === 4) {
+      dayA = {
+        dayOfWeek: "monday",
+        label: `Peak ${exercise}`,
+        notes: `3–4 singles @ ${r5(currentMax * 0.90)}${unit} (90% 1RM) · 3–4 min full rest · dial in technique`,
+      };
+      dayB = {
+        dayOfWeek: "thursday",
+        label: `Deload ${exercise}`,
+        notes: `2×5 @ ${r5(currentMax * 0.60)}${unit} (60% 1RM) · stay fresh · no pushing`,
+      };
+    } else {
+      dayA = {
+        dayOfWeek: "monday",
+        label: `Max Test — ${exercise} 🏆`,
+        notes: `Rest 3–4 days before this · warm up thoroughly · attempt new PR!`,
+      };
+      dayB = {
+        dayOfWeek: "thursday",
+        label: "Recovery Day",
+        notes: "Light mobility · no heavy pressing · rest up",
+      };
+    }
+
+    return { week: w, days: [dayA, dayB] };
+  });
+}
+
 const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
 
@@ -1173,7 +1263,7 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
 
   function handleSelectGoalType(type: GoalType) {
     setGoalType(type);
-    const dur = type === "endurance" ? "16" : type === "strength_pr" ? "12" : type === "body_composition" ? "12" : "8";
+    const dur = type === "endurance" ? "16" : type === "strength_pr" ? "8" : type === "body_composition" ? "12" : "8";
     setDurationWeeks(dur);
     setMilestones(generateMilestones(type, parseInt(dur)));
     setStep("details");
@@ -1299,6 +1389,52 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                     </Select>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Suggested Strength Program card */}
+            {goalType === "strength_pr" && exercise.trim() && parseFloat(currentWeight) > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-orange-500" /> Suggested Program
+                </p>
+                {(() => {
+                  const weeks = parseInt(durationWeeks) || 8;
+                  const current = parseFloat(currentWeight);
+                  const target = parseFloat(targetWeight);
+                  const isLoaded = scheduleByWeek.length === weeks &&
+                    scheduleByWeek[0]?.days[0]?.label?.includes(exercise);
+                  const phases = weeks >= 7 ? "5 phases (base → build → strength → peak → max test)" : "4 phases (base → build → strength → max test)";
+                  return (
+                    <div className={`flex items-start gap-3 rounded-xl border-2 p-3 transition-all ${isLoaded ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30" : "border-border bg-card"}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{weeks}-Week {exercise} Program</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          2 days/week (Mon heavy + Thu volume) · {phases}
+                          {target > current ? ` · targeting ${target}${weightUnit}` : ""}
+                        </p>
+                        {isLoaded && (
+                          <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-1 flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Loaded — customize in the schedule builder
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={isLoaded ? "outline" : "default"}
+                        className="shrink-0 h-8 text-xs gap-1.5"
+                        onClick={() => {
+                          const plan = generateStrengthPRPlan(exercise, current, weightUnit, weeks);
+                          setScheduleByWeek(plan);
+                          setMilestones(generateMilestones("strength_pr", weeks));
+                          if (!name.trim()) setName(`${exercise} PR Program`);
+                        }}
+                      >
+                        {isLoaded ? "Regenerate" : <><Zap size={11} /> Generate Plan</>}
+                      </Button>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
