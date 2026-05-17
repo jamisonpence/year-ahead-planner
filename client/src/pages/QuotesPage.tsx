@@ -744,143 +744,156 @@ export default function QuotesPage() {
   }, [allQuotes, search, categoryFilter, favOnly, sortBy]);
 
   const favoriteCount = allQuotes.filter((q) => q.isFavorite).length;
+  const [mainTab, setMainTab] = useState<"quotes" | "mantras">("quotes");
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <QuoteIcon size={22} /> Quotes
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {allQuotes.length} quote{allQuotes.length !== 1 ? "s" : ""} · {favoriteCount} favorited
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" onClick={() => setQuotableOpen(true)} className="gap-1.5">
-            <Search size={13} /> Find Quotes
-          </Button>
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-            <Download size={13} /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-            <HelpCircle size={13} /> CSV Format
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-            <Upload size={13} /> Upload CSV
-          </Button>
-          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button onClick={openAdd} size="sm" className="gap-1.5">
-            <Plus size={15} /> Add Quote
-          </Button>
-        </div>
-      </div>
-
-      {/* Search + filters */}
-      <div className="space-y-3 mb-5">
-        <div className="flex flex-wrap gap-2">
-          <div className="relative flex-1 min-w-48">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search quotes, authors, tags…"
-              className="pl-8 h-8 text-sm"
-            />
-          </div>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-40 h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button
-            variant={favOnly ? "default" : "outline"}
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => { setFavOnly(!favOnly); setShowShared(false); }}
-          >
-            <Heart size={13} className={favOnly ? "fill-current" : ""} />
-            Favorites
-          </Button>
-          <Button
-            variant={showShared ? "default" : "outline"}
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => { setShowShared(!showShared); setFavOnly(false); }}
-          >
-            <Inbox size={13} /> Shared
-          </Button>
-          {(search || categoryFilter !== "all" || favOnly) && !showShared && (
-            <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setCategoryFilter("all"); setFavOnly(false); }}>
-              <X size={13} /> Clear
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <QuoteIcon size={22} /> Quotes &amp; Mantras
+        </h1>
+        {mainTab === "quotes" ? (
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => setQuotableOpen(true)} className="gap-1.5">
+              <Search size={13} /> Find Quotes
             </Button>
-          )}
-        </div>
-
-        {/* Category pills */}
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => setCategoryFilter(c.value)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-all border ${
-                categoryFilter === c.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card hover:bg-secondary border-transparent"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Quote list / Shared tab */}
-      {showShared ? (
-        <SharedQuotesTab />
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <QuoteIcon size={48} className="mx-auto mb-4 opacity-20" />
-          <p className="text-sm">{allQuotes.length === 0 ? "No quotes yet. Add your first one!" : "No quotes match your filters."}</p>
-          {allQuotes.length === 0 && (
-            <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={openAdd}>
-              <Plus size={14} /> Add Quote
+            <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
+              <Download size={13} /> Template
             </Button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((q) => (
-            <QuoteCard
-              key={q.id}
-              quote={q}
-              onEdit={() => openEdit(q)}
-              onDelete={() => deleteMut.mutate(q.id)}
-              onToggleFav={() => toggleFav.mutate({ id: q.id, isFavorite: !q.isFavorite })}
-              onShare={() => setShareQuote(q)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── Mantras Section ──────────────────────────────────────────────────── */}
-      <div className="mt-10 pt-8 border-t">
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <span className="text-2xl">🔥</span> Mantras
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {allMantras.length} mantra{allMantras.length !== 1 ? "s" : ""} · {allMantras.filter(m => m.isActive).length} active
-            </p>
+            <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
+              <HelpCircle size={13} /> CSV Format
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
+              <Upload size={13} /> Upload CSV
+            </Button>
+            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+            <Button onClick={openAdd} size="sm" className="gap-1.5">
+              <Plus size={15} /> Add Quote
+            </Button>
           </div>
+        ) : (
           <Button onClick={openAddMantra} size="sm" className="gap-1.5">
             <Plus size={15} /> Add Mantra
           </Button>
+        )}
+      </div>
+
+      {/* Main tab switcher */}
+      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-5">
+        <button
+          onClick={() => setMainTab("quotes")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            mainTab === "quotes" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <QuoteIcon size={14} /> Quotes
+          <span className="text-xs opacity-60">({allQuotes.length})</span>
+        </button>
+        <button
+          onClick={() => setMainTab("mantras")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            mainTab === "mantras" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          🔥 Mantras
+          <span className="text-xs opacity-60">({allMantras.length})</span>
+        </button>
+      </div>
+
+      {/* ── Quotes tab ── */}
+      {mainTab === "quotes" && <>
+        {/* Search + filters */}
+        <div className="space-y-3 mb-5">
+          <div className="flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-48">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search quotes, authors, tags…"
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-40 h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button
+              variant={favOnly ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => { setFavOnly(!favOnly); setShowShared(false); }}
+            >
+              <Heart size={13} className={favOnly ? "fill-current" : ""} />
+              Favorites
+            </Button>
+            <Button
+              variant={showShared ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => { setShowShared(!showShared); setFavOnly(false); }}
+            >
+              <Inbox size={13} /> Shared
+            </Button>
+            {(search || categoryFilter !== "all" || favOnly) && !showShared && (
+              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setCategoryFilter("all"); setFavOnly(false); }}>
+                <X size={13} /> Clear
+              </Button>
+            )}
+          </div>
+
+          {/* Category pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => setCategoryFilter(c.value)}
+                className={`px-3 py-1 rounded-full text-sm font-medium transition-all border ${
+                  categoryFilter === c.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card hover:bg-secondary border-transparent"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Quote list / Shared tab */}
+        {showShared ? (
+          <SharedQuotesTab />
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <QuoteIcon size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="text-sm">{allQuotes.length === 0 ? "No quotes yet. Add your first one!" : "No quotes match your filters."}</p>
+            {allQuotes.length === 0 && (
+              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={openAdd}>
+                <Plus size={14} /> Add Quote
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.map((q) => (
+              <QuoteCard
+                key={q.id}
+                quote={q}
+                onEdit={() => openEdit(q)}
+                onDelete={() => deleteMut.mutate(q.id)}
+                onToggleFav={() => toggleFav.mutate({ id: q.id, isFavorite: !q.isFavorite })}
+                onShare={() => setShareQuote(q)}
+              />
+            ))}
+          </div>
+        )}
+      </>}
+
+      {/* ── Mantras tab ── */}
+      {mainTab === "mantras" && <>
         {/* Category filter pills */}
         {allMantras.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-5">
@@ -901,7 +914,7 @@ export default function QuotesPage() {
         )}
 
         {filteredMantras.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
+          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-xl">
             <div className="text-4xl mb-3">🔥</div>
             <p className="font-medium text-foreground mb-1">No mantras yet</p>
             <p className="text-sm mb-4">Add short affirmations you return to daily.</p>
@@ -923,7 +936,7 @@ export default function QuotesPage() {
             ))}
           </div>
         )}
-      </div>
+      </>}
 
       {/* Add/Edit Mantra Modal */}
       <Dialog open={mantraModalOpen} onOpenChange={(o) => { if (!o) { setMantraModalOpen(false); setEditingMantra(null); } }}>
