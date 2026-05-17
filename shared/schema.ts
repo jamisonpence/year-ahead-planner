@@ -611,12 +611,24 @@ export const workoutPlans = pgTable("workout_plans", {
   // JSON: [{ dayOfWeek: "monday"|"tuesday"|..., templateId: number, templateName: string }]
   scheduleJson: text("schedule_json").notNull().default("[]"),
   createdAt: text("created_at").notNull(),
+  // Goal-oriented fields
+  // "strength_pr" | "endurance" | "body_composition" | "general"
+  goalType: text("goal_type").notNull().default("general"),
+  // strength_pr: { exercise, currentValue, targetValue, unit }
+  // endurance: { raceDistance, raceDate, currentDistance, unit }
+  // body_composition: { metric, currentValue, targetValue, unit }
+  goalMetricJson: text("goal_metric_json"),
+  startDate: text("start_date"),
+  isActive: boolean("is_active").notNull().default(false),
+  // [{ week: number, description: string, targetValue?: number }]
+  milestonesJson: text("milestones_json").notNull().default("[]"),
 });
 
 export const insertWorkoutPlanSchema = createInsertSchema(workoutPlans).omit({ id: true });
 export type InsertWorkoutPlan = z.infer<typeof insertWorkoutPlanSchema>;
 export type WorkoutPlan = typeof workoutPlans.$inferSelect;
 export type WorkoutPlanDayEntry = { dayOfWeek: string; templateId: number; templateName: string };
+export type WorkoutPlanMilestone = { week: number; description: string; targetValue?: number };
 
 // ── WORKOUT SHARES ────────────────────────────────────────────────────────────
 // Share a template or plan with a friend

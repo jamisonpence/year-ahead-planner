@@ -707,6 +707,13 @@ Return exactly this structure:
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
+  app.post("/api/workout-plans/:id/activate", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const updated = await storage.setActivePlan(+req.params.id, uid);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
 
   // ── Workout Shares ────────────────────────────────────────────────────────────
   app.get("/api/workout-shares", requireAuth, async (req, res) => {

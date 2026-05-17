@@ -7,7 +7,8 @@ import {
   Plus, Dumbbell, Flame, Star, Pencil, Trash2, MoreHorizontal,
   LayoutTemplate, ClipboardList, Zap, Package, Search, Loader2,
   Sparkles, ChevronRight, CheckCircle2, X, Info, ExternalLink,
-  CalendarDays, Share2, Users, Send, CheckCheck,
+  CalendarDays, Share2, Users, Send, CheckCheck, Trophy, Target,
+  TrendingUp, Heart, Play, CheckSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { workoutStreak, weeklyWorkoutStats, getRecentPRs, WORKOUT_TYPE_LABELS, WORKOUT_TYPES } from "@/lib/plannerUtils";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import WorkoutTemplateModal from "@/components/modals/WorkoutTemplateModal";
-import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser } from "@shared/schema";
+import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser, WorkoutPlanMilestone } from "@shared/schema";
 
 type PlanDayEntry = { dayOfWeek: string; templateId: number; templateName: string };
 type PublicUser = { id: number; name: string; avatarUrl: string | null; email: string };
@@ -690,23 +691,122 @@ function EquipmentModal({ open, onClose, editing }: {
 
 // ── Plan Builder Modal ────────────────────────────────────────────────────────
 
+type GoalType = "strength_pr" | "endurance" | "body_composition" | "general";
+
+const GOAL_TYPES: { value: GoalType; label: string; icon: React.ReactNode; desc: string; color: string }[] = [
+  { value: "strength_pr", label: "Strength PR", icon: <Trophy size={18} />, desc: "Hit a new max on a lift", color: "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:border-orange-700 dark:text-orange-300" },
+  { value: "endurance", label: "Endurance Race", icon: <TrendingUp size={18} />, desc: "Train for a run or race", color: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300" },
+  { value: "body_composition", label: "Body Composition", icon: <Heart size={18} />, desc: "Weight, fat %, or muscle", color: "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30 dark:border-green-700 dark:text-green-300" },
+  { value: "general", label: "General Fitness", icon: <Dumbbell size={18} />, desc: "Build habit & consistency", color: "border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:border-purple-700 dark:text-purple-300" },
+];
+
+const RACE_DISTANCES = ["5K", "10K", "Half Marathon", "Marathon", "50K Ultra", "50 Mile Ultra", "Triathlon (Sprint)", "Triathlon (Olympic)", "Triathlon (Ironman)", "Custom"];
+
 function PlanBuilderModal({ open, onClose, editing, templates }: {
   open: boolean; onClose: () => void;
   editing: WorkoutPlan | null; templates: WorkoutTemplate[];
 }) {
   const { toast } = useToast();
+  const [step, setStep] = useState<"goal" | "details" | "schedule">("goal");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [durationWeeks, setDurationWeeks] = useState("4");
+  const [durationWeeks, setDurationWeeks] = useState("12");
   const [schedule, setSchedule] = useState<PlanDayEntry[]>([]);
+  const [goalType, setGoalType] = useState<GoalType>("general");
+
+  // Strength PR
+  const [exercise, setExercise] = useState("");
+  const [currentWeight, setCurrentWeight] = useState("");
+  const [targetWeight, setTargetWeight] = useState("");
+  const [weightUnit, setWeightUnit] = useState("lbs");
+
+  // Endurance
+  const [raceDistance, setRaceDistance] = useState("Marathon");
+  const [raceDate, setRaceDate] = useState("");
+  const [currentDistance, setCurrentDistance] = useState("");
+  const [distanceUnit, setDistanceUnit] = useState("miles");
+
+  // Body Composition
+  const [bodyMetric, setBodyMetric] = useState("weight");
+  const [bodyCurrentValue, setBodyCurrentValue] = useState("");
+  const [bodyTargetValue, setBodyTargetValue] = useState("");
+  const [bodyUnit, setBodyUnit] = useState("lbs");
+
+  // Milestones (auto-generated based on goal)
+  const [milestones, setMilestones] = useState<WorkoutPlanMilestone[]>([]);
 
   useEffect(() => {
     if (!open) return;
+    const dur = editing?.durationWeeks ?? 12;
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
-    setDurationWeeks(String(editing?.durationWeeks ?? 4));
+    setDurationWeeks(String(dur));
+    setGoalType((editing?.goalType as GoalType) ?? "general");
+    setStep(editing ? "details" : "goal");
     try { setSchedule(editing ? JSON.parse(editing.scheduleJson) : []); } catch { setSchedule([]); }
+    try { setMilestones(editing?.milestonesJson ? JSON.parse(editing.milestonesJson) : []); } catch { setMilestones([]); }
+
+    // Parse existing goal metric
+    try {
+      const m = editing?.goalMetricJson ? JSON.parse(editing.goalMetricJson) : null;
+      if (m) {
+        if (editing?.goalType === "strength_pr") {
+          setExercise(m.exercise ?? ""); setCurrentWeight(String(m.currentValue ?? "")); setTargetWeight(String(m.targetValue ?? "")); setWeightUnit(m.unit ?? "lbs");
+        } else if (editing?.goalType === "endurance") {
+          setRaceDistance(m.raceDistance ?? "Marathon"); setRaceDate(m.raceDate ?? ""); setCurrentDistance(String(m.currentDistance ?? "")); setDistanceUnit(m.unit ?? "miles");
+        } else if (editing?.goalType === "body_composition") {
+          setBodyMetric(m.metric ?? "weight"); setBodyCurrentValue(String(m.currentValue ?? "")); setBodyTargetValue(String(m.targetValue ?? "")); setBodyUnit(m.unit ?? "lbs");
+        }
+      }
+    } catch {}
   }, [open, editing]);
+
+  // Auto-generate milestones when goal type or duration changes
+  function generateMilestones(type: GoalType, weeks: number): WorkoutPlanMilestone[] {
+    const w = parseInt(String(weeks));
+    if (type === "strength_pr") {
+      const checkpoints = [Math.round(w * 0.25), Math.round(w * 0.5), Math.round(w * 0.75), w];
+      return checkpoints.filter(c => c > 0).map((wk, i) => ({
+        week: wk,
+        description: i === 0 ? "Form check & baseline test" : i === 1 ? "Mid-program deload & retest" : i === 2 ? "Peak intensity week" : "Final PR attempt 🏆",
+      }));
+    } else if (type === "endurance") {
+      const checkpoints = [Math.round(w * 0.2), Math.round(w * 0.4), Math.round(w * 0.6), Math.round(w * 0.8), w];
+      const labels = ["Base building complete", "Long run milestone", "Peak training week", "Taper begins", "Race week 🏁"];
+      return checkpoints.filter(c => c > 0).map((wk, i) => ({ week: wk, description: labels[i] ?? `Week ${wk} check-in` }));
+    } else if (type === "body_composition") {
+      const checkpoints = [4, 8, 12, w].filter(c => c <= w && c > 0);
+      return [...new Set(checkpoints)].map(wk => ({ week: wk, description: `Week ${wk} progress check-in` }));
+    }
+    return [];
+  }
+
+  function handleSelectGoalType(type: GoalType) {
+    setGoalType(type);
+    const dur = type === "endurance" ? "16" : type === "strength_pr" ? "12" : type === "body_composition" ? "12" : "8";
+    setDurationWeeks(dur);
+    setMilestones(generateMilestones(type, parseInt(dur)));
+    setStep("details");
+  }
+
+  function buildGoalMetricJson(): string | null {
+    if (goalType === "strength_pr") {
+      if (!exercise) return null;
+      return JSON.stringify({ exercise, currentValue: parseFloat(currentWeight) || 0, targetValue: parseFloat(targetWeight) || 0, unit: weightUnit });
+    } else if (goalType === "endurance") {
+      return JSON.stringify({ raceDistance, raceDate, currentDistance: parseFloat(currentDistance) || 0, unit: distanceUnit });
+    } else if (goalType === "body_composition") {
+      return JSON.stringify({ metric: bodyMetric, currentValue: parseFloat(bodyCurrentValue) || 0, targetValue: parseFloat(bodyTargetValue) || 0, unit: bodyUnit });
+    }
+    return null;
+  }
+
+  function autoName(): string {
+    if (goalType === "strength_pr" && exercise) return `${exercise} PR Program`;
+    if (goalType === "endurance" && raceDistance) return `${raceDistance} Training Plan`;
+    if (goalType === "body_composition") return `Body Composition Plan`;
+    return "My Training Plan";
+  }
 
   const createMut = useMutation({
     mutationFn: (d: any) => apiRequest("POST", "/api/workout-plans", d).then(r => r.json()),
@@ -733,87 +833,283 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
   }
 
   function handleSave() {
-    if (!name.trim()) return;
-    const payload = { name: name.trim(), description: description.trim() || null, durationWeeks: parseInt(durationWeeks), scheduleJson: JSON.stringify(schedule) };
+    const finalName = name.trim() || autoName();
+    const payload = {
+      name: finalName,
+      description: description.trim() || null,
+      durationWeeks: parseInt(durationWeeks),
+      scheduleJson: JSON.stringify(schedule),
+      goalType,
+      goalMetricJson: buildGoalMetricJson(),
+      startDate: editing?.startDate ?? new Date().toISOString().slice(0, 10),
+      milestonesJson: JSON.stringify(milestones),
+    };
     editing ? updateMut.mutate(payload) : createMut.mutate(payload);
   }
 
   const activeDays = schedule.length;
+  const isPending = createMut.isPending || updateMut.isPending;
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CalendarDays size={16} /> {editing ? "Edit Plan" : "New Workout Plan"}
+            <CalendarDays size={16} /> {editing ? "Edit Plan" : "New Training Plan"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Plan Name *</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. 4-Week Strength Builder" autoFocus />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span></label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="What's the goal of this plan?" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Duration</label>
-            <Select value={durationWeeks} onValueChange={setDurationWeeks}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {["1","2","3","4","6","8","10","12","16"].map(w => <SelectItem key={w} value={w}>{w} week{+w > 1 ? "s" : ""}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Weekly Schedule <span className="font-normal">({activeDays} workout{activeDays !== 1 ? "s" : ""}/week)</span></p>
-            {templates.length === 0 ? (
-              <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">Create templates first to assign them to days.</p>
-            ) : (
-              <div className="grid grid-cols-7 gap-1">
-                {DAYS_OF_WEEK.map(day => {
-                  const entry = schedule.find(e => e.dayOfWeek === day);
-                  const tmplId = entry?.templateId ?? null;
-                  return (
-                    <div key={day} className="flex flex-col items-center gap-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
-                      <Select
-                        value={String(tmplId ?? "__rest__")}
-                        onValueChange={v => setDay(day, v === "__rest__" ? null : parseInt(v))}
-                      >
-                        <SelectTrigger className={`h-16 w-full flex-col items-center justify-center text-center text-[10px] leading-tight px-1 py-1 gap-0 ${entry ? "border-primary/50 bg-primary/5 text-primary" : "text-muted-foreground"}`}>
-                          <SelectValue>
-                            {entry ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <Dumbbell size={12} />
-                                <span className="line-clamp-2 text-center">{entry.templateName}</span>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground/50">Rest</span>
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__rest__">Rest day</SelectItem>
-                          {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                })}
+        {/* Step: Goal Type */}
+        {step === "goal" && (
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-muted-foreground">What's your main goal for this plan?</p>
+            <div className="grid grid-cols-2 gap-3">
+              {GOAL_TYPES.map(g => (
+                <button
+                  key={g.value}
+                  onClick={() => handleSelectGoalType(g.value)}
+                  className={`flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${g.color}`}
+                >
+                  {g.icon}
+                  <div>
+                    <p className="font-semibold text-sm leading-tight">{g.label}</p>
+                    <p className="text-xs opacity-70 mt-0.5">{g.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step: Details */}
+        {step === "details" && (
+          <div className="space-y-4 pt-1">
+            {/* Goal type chip */}
+            <div className="flex items-center gap-2">
+              {!editing && (
+                <button onClick={() => setStep("goal")} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  ← Back
+                </button>
+              )}
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${GOAL_TYPES.find(g => g.value === goalType)?.color}`}>
+                {GOAL_TYPES.find(g => g.value === goalType)?.label}
+              </span>
+            </div>
+
+            {/* Goal-specific inputs */}
+            {goalType === "strength_pr" && (
+              <div className="space-y-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 flex items-center gap-1.5"><Trophy size={13} /> Strength Goal</p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Exercise (e.g. Bench Press, Squat, Deadlift)</label>
+                  <Input value={exercise} onChange={e => setExercise(e.target.value)} placeholder="Bench Press" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Current max</label>
+                    <Input type="number" value={currentWeight} onChange={e => setCurrentWeight(e.target.value)} placeholder="185" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Target max</label>
+                    <Input type="number" value={targetWeight} onChange={e => setTargetWeight(e.target.value)} placeholder="225" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Unit</label>
+                    <Select value={weightUnit} onValueChange={setWeightUnit}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="lbs">lbs</SelectItem><SelectItem value="kg">kg</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
             )}
-          </div>
 
-          <div className="flex gap-2 pt-1">
-            <Button className="flex-1" onClick={handleSave} disabled={!name.trim() || createMut.isPending || updateMut.isPending}>
-              {editing ? "Save Changes" : "Create Plan"}
-            </Button>
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            {goalType === "endurance" && (
+              <div className="space-y-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5"><TrendingUp size={13} /> Race Goal</p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Race Distance</label>
+                  <Select value={raceDistance} onValueChange={setRaceDistance}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>{RACE_DISTANCES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Race Date</label>
+                    <Input type="date" value={raceDate} onChange={e => setRaceDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Current longest run</label>
+                    <div className="flex gap-1">
+                      <Input type="number" value={currentDistance} onChange={e => setCurrentDistance(e.target.value)} placeholder="6" className="flex-1" />
+                      <Select value={distanceUnit} onValueChange={setDistanceUnit}>
+                        <SelectTrigger className="h-9 w-20"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="miles">mi</SelectItem><SelectItem value="km">km</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {goalType === "body_composition" && (
+              <div className="space-y-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5"><Heart size={13} /> Body Goal</p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Metric</label>
+                  <Select value={bodyMetric} onValueChange={setBodyMetric}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weight">Body Weight</SelectItem>
+                      <SelectItem value="body_fat">Body Fat %</SelectItem>
+                      <SelectItem value="muscle_mass">Muscle Mass</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Current</label>
+                    <Input type="number" value={bodyCurrentValue} onChange={e => setBodyCurrentValue(e.target.value)} placeholder="185" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Target</label>
+                    <Input type="number" value={bodyTargetValue} onChange={e => setBodyTargetValue(e.target.value)} placeholder="170" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Unit</label>
+                    <Select value={bodyUnit} onValueChange={setBodyUnit}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lbs">lbs</SelectItem>
+                        <SelectItem value="kg">kg</SelectItem>
+                        <SelectItem value="%">%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {goalType === "general" && (
+              <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                <p className="text-xs text-purple-700 dark:text-purple-300">Build a consistent training habit. Set your schedule and track your progress week by week.</p>
+              </div>
+            )}
+
+            {/* Plan details */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Plan Name</label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder={autoName()} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Duration</label>
+                <Select value={durationWeeks} onValueChange={v => { setDurationWeeks(v); setMilestones(generateMilestones(goalType, parseInt(v))); }}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["4","6","8","10","12","16","20","24"].map(w => <SelectItem key={w} value={w}>{w} weeks</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Start Date</label>
+                <Input type="date" defaultValue={editing?.startDate ?? new Date().toISOString().slice(0, 10)} onChange={() => {}} />
+              </div>
+            </div>
+
+            {/* Milestones preview */}
+            {milestones.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Milestones</p>
+                <div className="space-y-1.5">
+                  {milestones.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground w-14 shrink-0">Week {m.week}</span>
+                      <Input
+                        value={m.description}
+                        onChange={e => setMilestones(ms => ms.map((mi, j) => j === i ? { ...mi, description: e.target.value } : mi))}
+                        className="h-7 text-xs"
+                      />
+                      <button onClick={() => setMilestones(ms => ms.filter((_, j) => j !== i))} className="text-muted-foreground/40 hover:text-destructive shrink-0"><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setMilestones(ms => [...ms, { week: parseInt(durationWeeks), description: "Final check-in" }])}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <Plus size={11} /> Add milestone
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={() => setStep("schedule")}>
+                Set Weekly Schedule →
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Step: Schedule */}
+        {step === "schedule" && (
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setStep("details")} className="text-xs text-muted-foreground hover:text-foreground">← Back</button>
+              <span className="text-xs text-muted-foreground">Assign workouts to days of the week</span>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Weekly Schedule <span className="font-normal">({activeDays} workout{activeDays !== 1 ? "s" : ""}/week)</span></p>
+              {templates.length === 0 ? (
+                <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">
+                  No workouts yet. Create some in "My Workouts" first — or skip this and assign workouts later.
+                </p>
+              ) : (
+                <div className="grid grid-cols-7 gap-1">
+                  {DAYS_OF_WEEK.map(day => {
+                    const entry = schedule.find(e => e.dayOfWeek === day);
+                    const tmplId = entry?.templateId ?? null;
+                    return (
+                      <div key={day} className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
+                        <Select
+                          value={String(tmplId ?? "__rest__")}
+                          onValueChange={v => setDay(day, v === "__rest__" ? null : parseInt(v))}
+                        >
+                          <SelectTrigger className={`h-16 w-full flex-col items-center justify-center text-center text-[10px] leading-tight px-1 py-1 gap-0 ${entry ? "border-primary/50 bg-primary/5 text-primary" : "text-muted-foreground"}`}>
+                            <SelectValue>
+                              {entry ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <Dumbbell size={12} />
+                                  <span className="line-clamp-2 text-center">{entry.templateName}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/50">Rest</span>
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__rest__">Rest day</SelectItem>
+                            {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={handleSave} disabled={isPending}>
+                {isPending ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : editing ? "Save Changes" : "Create Plan"}
+              </Button>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -952,6 +1248,10 @@ export default function WorkoutsPage() {
   const deletePlan = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-plans/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan deleted" }); }
+  });
+  const activatePlan = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/workout-plans/${id}/activate`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Active plan set!" }); }
   });
   const deleteEquipment = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/equipment/${id}`),
@@ -1281,7 +1581,7 @@ export default function WorkoutsPage() {
       {tab === "plans" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-sm text-muted-foreground">A plan is a weekly schedule of workouts that repeats</p>
+            <p className="text-sm text-muted-foreground">Goal-oriented training programs</p>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setGenerateOpen(true)} className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30">
                 <Sparkles size={13} /> Generate with AI
@@ -1294,41 +1594,133 @@ export default function WorkoutsPage() {
           {plans.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground border rounded-xl border-dashed">
               <CalendarDays size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium">No plans yet</p>
-              <p className="text-sm mt-1">Group your templates into a weekly training plan</p>
+              <p className="font-medium">No training plans yet</p>
+              <p className="text-sm mt-1">Create a goal-oriented plan — marathon, strength PR, body composition, or general fitness</p>
               <Button variant="outline" size="sm" className="mt-4 gap-1" onClick={() => { setEditPlan(null); setPlanModal(true); }}>
-                <Plus size={13} /> Create Plan
+                <Target size={13} /> Create Your First Plan
               </Button>
             </div>
           ) : plans.map(plan => {
-            let schedule: PlanDayEntry[] = [];
-            try { schedule = JSON.parse(plan.scheduleJson); } catch {}
-            const activeDays = schedule.length;
+            let planSchedule: PlanDayEntry[] = [];
+            try { planSchedule = JSON.parse(plan.scheduleJson); } catch {}
+            const activeDaysCount = planSchedule.length;
+            let goalMetric: any = null;
+            try { goalMetric = plan.goalMetricJson ? JSON.parse(plan.goalMetricJson) : null; } catch {}
+            let milestones: WorkoutPlanMilestone[] = [];
+            try { milestones = plan.milestonesJson ? JSON.parse(plan.milestonesJson) : []; } catch {}
+
+            // Calculate week progress
+            const startDate = plan.startDate ? new Date(plan.startDate) : null;
+            const today = new Date();
+            const weeksElapsed = startDate
+              ? Math.max(0, Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+              : 0;
+            const currentWeek = Math.min(weeksElapsed + 1, plan.durationWeeks);
+            const progressPct = Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100));
+
+            // Goal progress bar
+            const goalProgress = goalMetric?.currentValue && goalMetric?.targetValue
+              ? Math.min(100, Math.round(((goalMetric.currentValue) / goalMetric.targetValue) * 100))
+              : null;
+
+            const goalInfo = GOAL_TYPES.find(g => g.value === plan.goalType);
+            const nextMilestone = milestones.find(m => m.week >= currentWeek);
+
             return (
-              <div key={plan.id} className="bg-card border rounded-xl overflow-hidden">
-                <div className="flex items-start justify-between gap-3 p-4 pb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm">{plan.name}</p>
-                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">{plan.durationWeeks}w</span>
-                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">{activeDays} day{activeDays !== 1 ? "s" : ""}/week</span>
-                    </div>
-                    {plan.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{plan.description}</p>}
+              <div key={plan.id} className={`bg-card border-2 rounded-xl overflow-hidden transition-all ${plan.isActive ? "border-primary shadow-sm shadow-primary/10" : "border-border"}`}>
+                {/* Active banner */}
+                {plan.isActive && (
+                  <div className="bg-primary text-primary-foreground text-xs font-semibold px-4 py-1.5 flex items-center gap-1.5">
+                    <Play size={10} fill="currentColor" /> Active Plan — Week {currentWeek} of {plan.durationWeeks}
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { setEditPlan(plan); setPlanModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openShareModal("plan", plan)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deletePlan.mutate(plan.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                {schedule.length > 0 && (
-                  <div className="px-4 pb-4">
+                )}
+
+                <div className="p-4 pb-3 space-y-3">
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <p className="font-semibold text-sm">{plan.name}</p>
+                        {goalInfo && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${goalInfo.color}`}>
+                            {goalInfo.label}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{plan.durationWeeks}w · {activeDaysCount}d/wk</span>
+                      </div>
+                      {plan.description && <p className="text-xs text-muted-foreground line-clamp-1">{plan.description}</p>}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => { setEditPlan(plan); setPlanModal(true); }}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openShareModal("plan", plan)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deletePlan.mutate(plan.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Goal metric display */}
+                  {goalMetric && plan.goalType === "strength_pr" && (
+                    <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2">
+                      <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 flex items-center gap-1.5 mb-1"><Trophy size={11} /> {goalMetric.exercise}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold">{goalMetric.currentValue}{goalMetric.unit}</span>
+                        <div className="flex-1 h-1.5 bg-orange-100 dark:bg-orange-900/50 rounded-full overflow-hidden">
+                          <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${goalProgress ?? 0}%` }} />
+                        </div>
+                        <span className="text-sm font-bold text-orange-600 dark:text-orange-400">{goalMetric.targetValue}{goalMetric.unit}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {goalMetric && plan.goalType === "endurance" && (
+                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 mb-1"><TrendingUp size={11} /> {goalMetric.raceDistance}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {goalMetric.raceDate && <span>🗓 Race: {new Date(goalMetric.raceDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
+                        {goalMetric.currentDistance > 0 && <span>· Current long run: {goalMetric.currentDistance} {goalMetric.unit}</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {goalMetric && plan.goalType === "body_composition" && (
+                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5 mb-1"><Heart size={11} /> {goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold">{goalMetric.currentValue}{goalMetric.unit}</span>
+                        <span className="text-xs text-muted-foreground">→</span>
+                        <span className="text-sm font-bold text-green-600 dark:text-green-400">{goalMetric.targetValue}{goalMetric.unit}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Week progress bar */}
+                  {plan.startDate && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Week {currentWeek} of {plan.durationWeeks}</span>
+                        <span>{progressPct}% complete</span>
+                      </div>
+                      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next milestone */}
+                  {nextMilestone && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded-lg px-3 py-2 bg-muted/30">
+                      <CheckSquare size={11} className="text-primary shrink-0" />
+                      <span><span className="font-medium">Week {nextMilestone.week}:</span> {nextMilestone.description}</span>
+                    </div>
+                  )}
+
+                  {/* Weekly schedule mini-grid */}
+                  {planSchedule.length > 0 && (
                     <div className="grid grid-cols-7 gap-1">
                       {DAYS_OF_WEEK.map(day => {
-                        const entry = schedule.find(e => e.dayOfWeek === day);
+                        const entry = planSchedule.find(e => e.dayOfWeek === day);
                         return (
                           <div key={day} className={`rounded-lg p-1.5 text-center flex flex-col items-center gap-0.5 ${entry ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
@@ -1344,8 +1736,21 @@ export default function WorkoutsPage() {
                         );
                       })}
                     </div>
+                  )}
+
+                  {/* Footer actions */}
+                  <div className="flex items-center gap-2 pt-1 border-t">
+                    {!plan.isActive ? (
+                      <Button size="sm" className="gap-1.5 h-8 flex-1" onClick={() => activatePlan.mutate(plan.id)} disabled={activatePlan.isPending}>
+                        <Play size={12} /> Set as Active Plan
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-primary flex-1">
+                        <CheckCircle2 size={13} /> Currently Active
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}

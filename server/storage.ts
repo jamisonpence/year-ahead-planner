@@ -929,6 +929,13 @@ export async function initializeStorage() {
     )
   `);
 
+  // Migrate: add goal-oriented columns to workout_plans
+  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'general'`);
+  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_metric_json TEXT`);
+  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS start_date TEXT`);
+  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workout_shares (
       id SERIAL PRIMARY KEY,
@@ -3667,6 +3674,13 @@ export const storage: IStorage = {
   async deleteWorkoutPlan(id) {
     const result = await db.delete(workoutPlans).where(eq(workoutPlans.id, id));
     return (result.rowCount ?? 0) > 0;
+  },
+  async setActivePlan(id: number, userId: number) {
+    // Deactivate all plans for this user
+    await db.update(workoutPlans).set({ isActive: false }).where(eq(workoutPlans.userId, userId));
+    // Activate the chosen plan
+    const result = await db.update(workoutPlans).set({ isActive: true }).where(eq(workoutPlans.id, id)).returning();
+    return result[0] ?? null;
   },
 
   // ── Workout Shares ───────────────────────────────────────────────────────────
