@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, serial, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, serial, boolean, timestamp, sql } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -849,6 +849,22 @@ export const quotes = pgTable("quotes", {
 export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true });
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 export type Quote = typeof quotes.$inferSelect;
+
+// ── MANTRAS ────────────────────────────────────────────────────────────────────
+export const mantras = pgTable("mantras", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  text: text("text").notNull(),
+  intention: text("intention"),            // what this mantra helps with
+  category: text("category").notNull().default("other"), // confidence|calm|focus|resilience|gratitude|love|other
+  isActive: boolean("is_active").notNull().default(true),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const insertMantraSchema = createInsertSchema(mantras).omit({ id: true });
+export type InsertMantra = z.infer<typeof insertMantraSchema>;
+export type Mantra = typeof mantras.$inferSelect;
 
 // ── QUOTE SHARES ───────────────────────────────────────────────────────────────
 export const quoteShares = pgTable("quote_shares", {

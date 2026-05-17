@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Quote, QuoteShareWithUser, PublicUser } from "@shared/schema";
+import type { Quote, QuoteShareWithUser, PublicUser, Mantra } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format, parseISO } from "date-fns";
 import {
   Quote as QuoteIcon, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download,
-  HelpCircle, Shuffle, CheckCircle2, Loader2, Tag, Send, Inbox, CornerUpRight, Check,
+  HelpCircle, Shuffle, CheckCircle2, Loader2, Tag, Send, Inbox, CornerUpRight, Check, Circle,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -51,6 +51,34 @@ const EMPTY_FORM = {
   category: "other",
   tags: "",
   notes: "",
+  isFavorite: false,
+};
+
+const MANTRA_CATEGORIES = [
+  { value: "confidence", label: "Confidence", emoji: "💪" },
+  { value: "calm",       label: "Calm",       emoji: "🌊" },
+  { value: "focus",      label: "Focus",      emoji: "🎯" },
+  { value: "resilience", label: "Resilience", emoji: "🔥" },
+  { value: "gratitude",  label: "Gratitude",  emoji: "🙏" },
+  { value: "love",       label: "Love",       emoji: "❤️" },
+  { value: "other",      label: "Other",      emoji: "✨" },
+];
+
+const MANTRA_CATEGORY_COLORS: Record<string, string> = {
+  confidence: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  calm:       "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  focus:      "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  resilience: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  gratitude:  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  love:       "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
+  other:      "bg-secondary text-secondary-foreground",
+};
+
+const EMPTY_MANTRA_FORM = {
+  text: "",
+  intention: "",
+  category: "other",
+  isActive: true,
   isFavorite: false,
 };
 
@@ -401,6 +429,61 @@ function QuoteCard({
   );
 }
 
+// ── Mantra Card ───────────────────────────────────────────────────────────────
+
+function MantraCard({ mantra, onEdit, onDelete, onToggleFav, onToggleActive }: {
+  mantra: Mantra;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleFav: () => void;
+  onToggleActive: () => void;
+}) {
+  const catColor = MANTRA_CATEGORY_COLORS[mantra.category] ?? MANTRA_CATEGORY_COLORS.other;
+  const catInfo = MANTRA_CATEGORIES.find(c => c.value === mantra.category);
+
+  return (
+    <div className={`rounded-xl border bg-card p-5 flex flex-col gap-3 transition-opacity ${!mantra.isActive ? "opacity-60" : ""}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <p className="text-base font-medium leading-relaxed">{mantra.text}</p>
+          {mantra.intention && (
+            <p className="text-xs text-muted-foreground mt-1 italic">Intention: {mantra.intention}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={onToggleFav} className="p-1.5 rounded hover:bg-secondary transition-colors">
+            <Heart size={14} className={mantra.isFavorite ? "text-rose-500 fill-rose-500" : "text-muted-foreground"} />
+          </button>
+          <button onClick={onEdit} className="p-1.5 rounded hover:bg-secondary transition-colors">
+            <Pencil size={13} className="text-muted-foreground" />
+          </button>
+          <button onClick={onDelete} className="p-1.5 rounded hover:bg-secondary transition-colors">
+            <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge className={`text-xs py-0 px-1.5 border-0 ${catColor}`}>
+            {catInfo?.emoji} {catInfo?.label ?? mantra.category}
+          </Badge>
+        </div>
+        <button
+          onClick={onToggleActive}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+            mantra.isActive
+              ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+              : "bg-secondary text-muted-foreground border-border"
+          }`}
+        >
+          {mantra.isActive ? <><CheckCircle2 size={11} /> Active</> : <><Circle size={11} /> Inactive</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function QuotesPage() {
@@ -418,6 +501,12 @@ export default function QuotesPage() {
   const [shareQuote, setShareQuote] = useState<Quote | null>(null);
   const [showShared, setShowShared] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
+
+  // Mantras
+  const [mantraModalOpen, setMantraModalOpen] = useState(false);
+  const [editingMantra, setEditingMantra] = useState<Mantra | null>(null);
+  const [mantraForm, setMantraForm] = useState({ ...EMPTY_MANTRA_FORM });
+  const [mantraCategoryFilter, setMantraCategoryFilter] = useState("all");
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setShowShared(true);
   }, []);
@@ -451,6 +540,70 @@ export default function QuotesPage() {
       apiRequest("PATCH", `/api/quotes/${id}`, { isFavorite }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/quotes"] }),
   });
+
+  const { data: allMantras = [] } = useQuery<Mantra[]>({
+    queryKey: ["/api/mantras"],
+    queryFn: async () => (await apiRequest("GET", "/api/mantras")).json(),
+  });
+
+  const createMantraMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/mantras", d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/mantras"] }); setMantraModalOpen(false); setEditingMantra(null); },
+    onError: () => toast({ title: "Error saving", variant: "destructive" }),
+  });
+  const updateMantraMut = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/mantras/${id}`, d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/mantras"] }); setMantraModalOpen(false); setEditingMantra(null); },
+  });
+  const deleteMantraMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/mantras/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/mantras"] }),
+  });
+  const toggleMantraFav = useMutation({
+    mutationFn: ({ id, isFavorite }: { id: number; isFavorite: boolean }) =>
+      apiRequest("PATCH", `/api/mantras/${id}`, { isFavorite }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/mantras"] }),
+  });
+  const toggleMantraActive = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+      apiRequest("PATCH", `/api/mantras/${id}`, { isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/mantras"] }),
+  });
+
+  function openAddMantra() {
+    setEditingMantra(null);
+    setMantraForm({ ...EMPTY_MANTRA_FORM });
+    setMantraModalOpen(true);
+  }
+  function openEditMantra(m: Mantra) {
+    setEditingMantra(m);
+    setMantraForm({
+      text: m.text,
+      intention: m.intention ?? "",
+      category: m.category,
+      isActive: m.isActive,
+      isFavorite: m.isFavorite,
+    });
+    setMantraModalOpen(true);
+  }
+  function saveMantra() {
+    if (!mantraForm.text.trim()) { toast({ title: "Mantra text is required", variant: "destructive" }); return; }
+    const payload = {
+      text: mantraForm.text.trim(),
+      intention: mantraForm.intention.trim() || null,
+      category: mantraForm.category,
+      isActive: mantraForm.isActive,
+      isFavorite: mantraForm.isFavorite,
+    };
+    if (editingMantra) updateMantraMut.mutate({ id: editingMantra.id, d: payload });
+    else createMantraMut.mutate(payload);
+  }
+
+  const filteredMantras = useMemo(() => {
+    let result = [...allMantras];
+    if (mantraCategoryFilter !== "all") result = result.filter(m => m.category === mantraCategoryFilter);
+    return result;
+  }, [allMantras, mantraCategoryFilter]);
 
   function parseCsvText(text: string): Record<string, string>[] {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -711,6 +864,147 @@ export default function QuotesPage() {
           ))}
         </div>
       )}
+
+      {/* ── Mantras Section ──────────────────────────────────────────────────── */}
+      <div className="mt-10 pt-8 border-t">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <span className="text-2xl">🔥</span> Mantras
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {allMantras.length} mantra{allMantras.length !== 1 ? "s" : ""} · {allMantras.filter(m => m.isActive).length} active
+            </p>
+          </div>
+          <Button onClick={openAddMantra} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add Mantra
+          </Button>
+        </div>
+
+        {/* Category filter pills */}
+        {allMantras.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-5">
+            {[{ value: "all", label: "All", emoji: "🗺️" }, ...MANTRA_CATEGORIES].map(c => (
+              <button
+                key={c.value}
+                onClick={() => setMantraCategoryFilter(c.value)}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-all border ${
+                  mantraCategoryFilter === c.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card hover:bg-secondary border-transparent"
+                }`}
+              >
+                {c.emoji} {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {filteredMantras.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
+            <div className="text-4xl mb-3">🔥</div>
+            <p className="font-medium text-foreground mb-1">No mantras yet</p>
+            <p className="text-sm mb-4">Add short affirmations you return to daily.</p>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={openAddMantra}>
+              <Plus size={14} /> Add your first mantra
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredMantras.map(m => (
+              <MantraCard
+                key={m.id}
+                mantra={m}
+                onEdit={() => openEditMantra(m)}
+                onDelete={() => deleteMantraMut.mutate(m.id)}
+                onToggleFav={() => toggleMantraFav.mutate({ id: m.id, isFavorite: !m.isFavorite })}
+                onToggleActive={() => toggleMantraActive.mutate({ id: m.id, isActive: !m.isActive })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Mantra Modal */}
+      <Dialog open={mantraModalOpen} onOpenChange={(o) => { if (!o) { setMantraModalOpen(false); setEditingMantra(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingMantra ? "Edit Mantra" : "Add Mantra"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Mantra *</label>
+              <Textarea
+                value={mantraForm.text}
+                onChange={e => setMantraForm(f => ({ ...f, text: e.target.value }))}
+                placeholder="e.g. I am calm, focused, and capable"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Intention (optional)</label>
+              <Input
+                value={mantraForm.intention}
+                onChange={e => setMantraForm(f => ({ ...f, intention: e.target.value }))}
+                placeholder="e.g. Before stressful meetings"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Category</label>
+              <div className="flex flex-wrap gap-2">
+                {MANTRA_CATEGORIES.map(c => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setMantraForm(f => ({ ...f, category: c.value }))}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${
+                      mantraForm.category === c.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border hover:bg-secondary"
+                    }`}
+                  >
+                    {c.emoji} {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setMantraForm(f => ({ ...f, isActive: !f.isActive }))}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                  mantraForm.isActive
+                    ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400"
+                    : "bg-card hover:bg-secondary"
+                }`}
+              >
+                <CheckCircle2 size={14} />
+                {mantraForm.isActive ? "Active" : "Inactive"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMantraForm(f => ({ ...f, isFavorite: !f.isFavorite }))}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                  mantraForm.isFavorite
+                    ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400"
+                    : "bg-card hover:bg-secondary"
+                }`}
+              >
+                <Heart size={14} className={mantraForm.isFavorite ? "fill-current" : ""} />
+                {mantraForm.isFavorite ? "Favorited" : "Favorite"}
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => { setMantraModalOpen(false); setEditingMantra(null); }}>Cancel</Button>
+              <Button size="sm" onClick={saveMantra}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Quote Share Modal */}
       {shareQuote && (

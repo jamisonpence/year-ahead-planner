@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -31,6 +31,7 @@ import type {
   InsertChildMemory, ChildMemory,
   InsertChildPrepItem, ChildPrepItem,
   InsertQuote, Quote,
+  InsertMantra, Mantra,
   InsertArtPiece, ArtPiece,
   InsertJournalEntry, JournalEntry,
   InsertEquipment, Equipment,
@@ -643,6 +644,19 @@ export async function initializeStorage() {
       notes TEXT,
       is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
       sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mantras (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      text TEXT NOT NULL,
+      intention TEXT,
+      category TEXT NOT NULL DEFAULT 'other',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      is_favorite BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -1439,6 +1453,11 @@ export interface IStorage {
   createQuote(data: InsertQuote, userId: number): Promise<Quote>;
   updateQuote(id: number, data: Partial<InsertQuote>): Promise<Quote | undefined>;
   deleteQuote(id: number): Promise<boolean>;
+  // Mantras
+  getAllMantras(userId: number): Promise<Mantra[]>;
+  createMantra(data: InsertMantra, userId: number): Promise<Mantra>;
+  updateMantra(id: number, data: Partial<InsertMantra>): Promise<Mantra | undefined>;
+  deleteMantra(id: number): Promise<boolean>;
   // Art Pieces
   getAllArtPieces(userId: number): Promise<ArtPiece[]>;
   createArtPiece(data: InsertArtPiece, userId: number): Promise<ArtPiece>;
@@ -2721,6 +2740,25 @@ export const storage: IStorage = {
   },
   async deleteQuote(id) {
     const result = await db.delete(quotes).where(eq(quotes.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Mantras ───────────────────────────────────────────────────────────────────
+  async getAllMantras(userId: number) {
+    return db.select().from(mantras).where(eq(mantras.userId, userId)).orderBy(desc(mantras.isActive), asc(mantras.id));
+  },
+  async createMantra(data, userId) {
+    const result = await db.insert(mantras).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateMantra(id, data) {
+    const existing = await db.select().from(mantras).where(eq(mantras.id, id)).limit(1);
+    if (!existing[0]) return undefined;
+    const result = await db.update(mantras).set(data).where(eq(mantras.id, id)).returning();
+    return result[0];
+  },
+  async deleteMantra(id) {
+    const result = await db.delete(mantras).where(eq(mantras.id, id));
     return result.rowCount > 0;
   },
 

@@ -25,6 +25,7 @@ import {
   insertChoreSchema, insertHouseProjectSchema, insertApplianceSchema, insertSpotSchema,
   insertChildSchema, insertChildMilestoneSchema, insertChildMemorySchema, insertChildPrepItemSchema,
   insertQuoteSchema,
+  insertMantraSchema,
   insertArtPieceSchema,
   insertEquipmentSchema,
   insertTabCollaborationSchema,
@@ -2947,6 +2948,29 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   app.delete("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteQuote(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Mantras ───────────────────────────────────────────────────────────────────
+  app.get("/api/mantras", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllMantras((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/mantras", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertMantraSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createMantra(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/mantras/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateMantra(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/mantras/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteMantra(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
