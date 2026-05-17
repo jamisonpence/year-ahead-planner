@@ -357,17 +357,103 @@ function generateStrengthPRPlan(exercise: string, currentMax: number, unit: stri
     return 3;
   }
 
-  const accessories: Record<string, string> = {
-    "Bench Press": "tricep dips / incline DB press / cable rows",
-    "Squat": "leg press / Romanian deadlift / leg curls",
-    "Deadlift": "rack pull / Romanian deadlift / lat pulldown",
-    "Overhead Press": "lateral raises / face pulls / tricep pushdowns",
-  };
-  const acc = accessories[exercise] ?? "accessory work";
+  // Per-exercise accessory blocks: each phase returns lines formatted as "Exercise — Sets×Reps @ Weight"
+  // Weights are derived from % of current max or fixed values for isolation work.
+  type AccBlock = { a: string[]; b: string[] }; // Day A (heavy) and Day B (volume) accessories
+
+  function getAccessories(phase: 1|2|3|4|5): AccBlock {
+    const w = (pct: number) => `${r5(currentMax * pct)}${unit}`;
+
+    if (exercise === "Bench Press") {
+      const tricepWt  = unit === "kg" ? r5(currentMax * 0.25) : r5(currentMax * 0.25);
+      const inclineWt = (phase: number) => w(phase <= 2 ? 0.45 : 0.50);
+      const cableRow  = unit === "kg" ? 30 : 65;
+      if (phase === 1) return {
+        a: [`Close-Grip Bench Press — 3×8 @ ${w(0.55)} · tricep emphasis`, `Dumbbell Flye — 3×12 @ ${r5(currentMax * 0.15)}${unit} per hand`, `Cable Tricep Pushdown — 3×12 @ ${unit === "kg" ? 15 : 35}${unit}`],
+        b: [`Incline Dumbbell Press — 3×10 @ ${inclineWt(1)} per hand`, `Cable Row — 3×10 @ ${cableRow}${unit}`, `Dumbbell Lateral Raise — 3×15 @ ${unit === "kg" ? 8 : 15}${unit} per hand`],
+      };
+      if (phase === 2) return {
+        a: [`Close-Grip Bench Press — 4×6 @ ${w(0.60)}`, `Dumbbell Flye — 3×12 @ ${r5(currentMax * 0.15)}${unit} per hand`, `Cable Tricep Pushdown — 3×12 @ ${unit === "kg" ? 18 : 40}${unit}`],
+        b: [`Incline Dumbbell Press — 4×8 @ ${inclineWt(2)} per hand`, `Cable Row — 4×10 @ ${cableRow}${unit}`, `Face Pull — 3×15 @ ${unit === "kg" ? 15 : 30}${unit}`],
+      };
+      if (phase === 3) return {
+        a: [`Close-Grip Bench Press — 4×5 @ ${w(0.65)}`, `Weighted Dip — 3×8 @ ${r5(currentMax * 0.10)}${unit} added`, `Cable Tricep Pushdown — 4×10 @ ${unit === "kg" ? 20 : 45}${unit}`],
+        b: [`Incline Dumbbell Press — 4×8 @ ${inclineWt(3)} per hand`, `Cable Row — 4×10 @ ${r5(cableRow * 1.1)}${unit}`, `Face Pull — 3×15 @ ${unit === "kg" ? 15 : 30}${unit}`],
+      };
+      return { a: [], b: [] }; // phase 4/5 — no accessories needed
+    }
+
+    if (exercise === "Squat") {
+      if (phase === 1) return {
+        a: [`Leg Press — 3×10 @ ${w(0.80)}`, `Romanian Deadlift — 3×10 @ ${w(0.45)}`, `Leg Curl (machine) — 3×12 @ ${unit === "kg" ? 30 : 65}${unit}`],
+        b: [`Bulgarian Split Squat — 3×10 each @ ${w(0.25)} per hand`, `Leg Extension — 3×15 @ ${unit === "kg" ? 25 : 55}${unit}`, `Standing Calf Raise — 4×15 @ ${w(0.40)}`],
+      };
+      if (phase === 2) return {
+        a: [`Leg Press — 4×8 @ ${w(0.85)}`, `Romanian Deadlift — 4×8 @ ${w(0.50)}`, `Leg Curl (machine) — 3×12 @ ${unit === "kg" ? 35 : 75}${unit}`],
+        b: [`Bulgarian Split Squat — 4×8 each @ ${w(0.28)} per hand`, `Leg Extension — 3×15 @ ${unit === "kg" ? 30 : 65}${unit}`, `Standing Calf Raise — 4×15 @ ${w(0.45)}`],
+      };
+      if (phase === 3) return {
+        a: [`Leg Press — 4×6 @ ${w(0.90)}`, `Romanian Deadlift — 4×6 @ ${w(0.55)}`, `Leg Curl (machine) — 4×10 @ ${unit === "kg" ? 40 : 85}${unit}`],
+        b: [`Bulgarian Split Squat — 4×6 each @ ${w(0.30)} per hand`, `Leg Extension — 4×12 @ ${unit === "kg" ? 35 : 75}${unit}`, `Standing Calf Raise — 4×15 @ ${w(0.50)}`],
+      };
+      return { a: [], b: [] };
+    }
+
+    if (exercise === "Deadlift") {
+      if (phase === 1) return {
+        a: [`Rack Pull (just below knee) — 3×5 @ ${w(0.85)}`, `Barbell Row — 3×8 @ ${w(0.45)}`, `Lat Pulldown — 3×12 @ ${unit === "kg" ? 45 : 100}${unit}`],
+        b: [`Romanian Deadlift — 3×10 @ ${w(0.55)}`, `Cable Row — 3×12 @ ${unit === "kg" ? 45 : 100}${unit}`, `Hyperextension — 3×15 @ bodyweight`],
+      };
+      if (phase === 2) return {
+        a: [`Rack Pull (just below knee) — 4×4 @ ${w(0.90)}`, `Barbell Row — 4×6 @ ${w(0.50)}`, `Lat Pulldown — 4×10 @ ${unit === "kg" ? 50 : 110}${unit}`],
+        b: [`Romanian Deadlift — 4×8 @ ${w(0.60)}`, `Cable Row — 4×10 @ ${unit === "kg" ? 50 : 110}${unit}`, `Hyperextension — 3×15 @ ${unit === "kg" ? 10 : 25}${unit} added`],
+      };
+      if (phase === 3) return {
+        a: [`Rack Pull (just below knee) — 4×3 @ ${w(0.95)}`, `Barbell Row — 4×5 @ ${w(0.55)}`, `Lat Pulldown — 4×10 @ ${unit === "kg" ? 55 : 120}${unit}`],
+        b: [`Romanian Deadlift — 4×6 @ ${w(0.65)}`, `Cable Row — 4×10 @ ${unit === "kg" ? 55 : 120}${unit}`, `Hyperextension — 4×12 @ ${unit === "kg" ? 15 : 35}${unit} added`],
+      };
+      return { a: [], b: [] };
+    }
+
+    if (exercise === "Overhead Press") {
+      if (phase === 1) return {
+        a: [`Push Press — 3×5 @ ${w(0.75)} · explosive drive`, `Dumbbell Lateral Raise — 3×15 @ ${unit === "kg" ? 8 : 15}${unit} per hand`, `Face Pull — 3×15 @ ${unit === "kg" ? 15 : 30}${unit}`],
+        b: [`Arnold Press — 3×10 @ ${w(0.35)} per hand`, `Cable Lateral Raise — 3×15 @ ${unit === "kg" ? 5 : 10}${unit} per side`, `Tricep Pushdown — 3×12 @ ${unit === "kg" ? 18 : 40}${unit}`],
+      };
+      if (phase === 2) return {
+        a: [`Push Press — 4×4 @ ${w(0.80)}`, `Dumbbell Lateral Raise — 4×12 @ ${unit === "kg" ? 10 : 20}${unit} per hand`, `Face Pull — 4×15 @ ${unit === "kg" ? 18 : 35}${unit}`],
+        b: [`Arnold Press — 4×8 @ ${w(0.38)} per hand`, `Cable Lateral Raise — 3×15 @ ${unit === "kg" ? 7 : 12}${unit} per side`, `Tricep Pushdown — 4×10 @ ${unit === "kg" ? 20 : 45}${unit}`],
+      };
+      if (phase === 3) return {
+        a: [`Push Press — 4×3 @ ${w(0.85)}`, `Dumbbell Lateral Raise — 4×12 @ ${unit === "kg" ? 12 : 25}${unit} per hand`, `Face Pull — 4×15 @ ${unit === "kg" ? 20 : 40}${unit}`],
+        b: [`Arnold Press — 4×6 @ ${w(0.40)} per hand`, `Cable Lateral Raise — 4×12 @ ${unit === "kg" ? 8 : 15}${unit} per side`, `Tricep Pushdown — 4×10 @ ${unit === "kg" ? 22 : 50}${unit}`],
+      };
+      return { a: [], b: [] };
+    }
+
+    // Generic fallback for custom exercises
+    if (phase === 1) return {
+      a: [`Accessory A1 — 3×10 @ ${w(0.50)}`, `Accessory A2 — 3×12 @ ${w(0.35)}`, `Core — 3×15 reps`],
+      b: [`Accessory B1 — 3×10 @ ${w(0.45)}`, `Accessory B2 — 3×12 @ ${w(0.30)}`, `Core — 3×15 reps`],
+    };
+    if (phase === 2) return {
+      a: [`Accessory A1 — 4×8 @ ${w(0.55)}`, `Accessory A2 — 3×12 @ ${w(0.38)}`, `Core — 3×15 reps`],
+      b: [`Accessory B1 — 4×8 @ ${w(0.50)}`, `Accessory B2 — 3×12 @ ${w(0.33)}`, `Core — 3×15 reps`],
+    };
+    if (phase === 3) return {
+      a: [`Accessory A1 — 4×6 @ ${w(0.60)}`, `Accessory A2 — 4×10 @ ${w(0.40)}`, `Core — 4×12 reps`],
+      b: [`Accessory B1 — 4×6 @ ${w(0.55)}`, `Accessory B2 — 4×10 @ ${w(0.35)}`, `Core — 4×12 reps`],
+    };
+    return { a: [], b: [] };
+  }
 
   return Array.from({ length: totalWeeks }, (_, i) => {
     const w = i + 1;
     const phase = getPhase(w, totalWeeks);
+    const acc = getAccessories(phase as 1|2|3|4|5);
+
+    const fmtNotes = (mainLine: string, rest: string, extras: string[]) =>
+      [mainLine, `Rest: ${rest}`, ...extras].join("\n");
 
     let dayA: PlanDayEntryV2;
     let dayB: PlanDayEntryV2;
@@ -375,52 +461,52 @@ function generateStrengthPRPlan(exercise: string, currentMax: number, unit: stri
     if (phase === 1) {
       dayA = {
         dayOfWeek: "monday",
-        label: `Heavy ${exercise}`,
-        notes: `4×3 @ ${r5(currentMax * 0.80)}${unit} (80% 1RM) · 2–3 min rest · leave 1–2 reps in tank`,
+        label: `Heavy ${exercise} — Phase 1`,
+        notes: fmtNotes(`${exercise} — 4×3 @ ${r5(currentMax * 0.80)}${unit} (80% 1RM)`, "2–3 min · leave 1–2 reps in tank", acc.a),
       };
       dayB = {
         dayOfWeek: "thursday",
-        label: `Volume ${exercise}`,
-        notes: `3×6 @ ${r5(currentMax * 0.70)}${unit} (70% 1RM) · 60–90 sec rest · ${acc}`,
+        label: `Volume ${exercise} — Phase 1`,
+        notes: fmtNotes(`${exercise} — 3×6 @ ${r5(currentMax * 0.70)}${unit} (70% 1RM)`, "60–90 sec", acc.b),
       };
     } else if (phase === 2) {
       dayA = {
         dayOfWeek: "monday",
-        label: `Heavy ${exercise}`,
-        notes: `5×3 @ ${r5(currentMax * 0.825)}${unit} (82.5% 1RM) · 2–3 min rest · add 5${unit} once all reps feel clean`,
+        label: `Heavy ${exercise} — Phase 2`,
+        notes: fmtNotes(`${exercise} — 5×3 @ ${r5(currentMax * 0.825)}${unit} (82.5% 1RM)`, `2–3 min · add 5${unit} once all reps clean`, acc.a),
       };
       dayB = {
         dayOfWeek: "thursday",
-        label: `Volume ${exercise}`,
-        notes: `4×6 @ ${r5(currentMax * 0.725)}${unit} (72.5% 1RM) · 60–90 sec rest · ${acc}`,
+        label: `Volume ${exercise} — Phase 2`,
+        notes: fmtNotes(`${exercise} — 4×6 @ ${r5(currentMax * 0.725)}${unit} (72.5% 1RM)`, "60–90 sec", acc.b),
       };
     } else if (phase === 3) {
       dayA = {
         dayOfWeek: "monday",
-        label: `Heavy ${exercise}`,
-        notes: `4×4 @ ${r5(currentMax * 0.85)}${unit} (85% 1RM) · 3 min rest · avoid grinding to failure`,
+        label: `Heavy ${exercise} — Phase 3`,
+        notes: fmtNotes(`${exercise} — 4×4 @ ${r5(currentMax * 0.85)}${unit} (85% 1RM)`, "3 min · avoid grinding to failure", acc.a),
       };
       dayB = {
         dayOfWeek: "thursday",
-        label: `Volume ${exercise}`,
-        notes: `4×8 @ ${r5(currentMax * 0.75)}${unit} (75% 1RM) · 90 sec rest · ${acc}`,
+        label: `Volume ${exercise} — Phase 3`,
+        notes: fmtNotes(`${exercise} — 4×8 @ ${r5(currentMax * 0.75)}${unit} (75% 1RM)`, "90 sec", acc.b),
       };
     } else if (phase === 4) {
       dayA = {
         dayOfWeek: "monday",
         label: `Peak ${exercise}`,
-        notes: `3–4 singles @ ${r5(currentMax * 0.90)}${unit} (90% 1RM) · 3–4 min full rest · dial in technique`,
+        notes: fmtNotes(`${exercise} — 3–4 singles @ ${r5(currentMax * 0.90)}${unit} (90% 1RM)`, "3–4 min full rest · dial in technique", []),
       };
       dayB = {
         dayOfWeek: "thursday",
         label: `Deload ${exercise}`,
-        notes: `2×5 @ ${r5(currentMax * 0.60)}${unit} (60% 1RM) · stay fresh · no pushing`,
+        notes: fmtNotes(`${exercise} — 2×5 @ ${r5(currentMax * 0.60)}${unit} (60% 1RM)`, "as needed · stay fresh", []),
       };
     } else {
       dayA = {
         dayOfWeek: "monday",
         label: `Max Test — ${exercise} 🏆`,
-        notes: `Rest 3–4 days before this · warm up thoroughly · attempt new PR!`,
+        notes: `${exercise} — Work up to 1RM\nRest 3–4 days before · warm up thoroughly · attempt new PR!`,
       };
       dayB = {
         dayOfWeek: "thursday",
