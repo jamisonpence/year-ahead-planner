@@ -3676,10 +3676,10 @@ export const storage: IStorage = {
     return (result.rowCount ?? 0) > 0;
   },
   async setActivePlan(id: number, userId: number) {
-    // Deactivate all plans for this user
-    await db.update(workoutPlans).set({ isActive: false }).where(eq(workoutPlans.userId, userId));
-    // Activate the chosen plan
-    const result = await db.update(workoutPlans).set({ isActive: true }).where(eq(workoutPlans.id, id)).returning();
+    // Toggle — flip isActive for this plan only, others unchanged
+    const [current] = await db.select().from(workoutPlans).where(eq(workoutPlans.id, id));
+    if (!current || current.userId !== userId) return null;
+    const result = await db.update(workoutPlans).set({ isActive: !current.isActive }).where(eq(workoutPlans.id, id)).returning();
     return result[0] ?? null;
   },
 
