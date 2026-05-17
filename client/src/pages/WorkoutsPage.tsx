@@ -1064,39 +1064,28 @@ export default function WorkoutsPage() {
             </span>
           )}
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" onClick={() => setExerciseSearchOpen(true)} className="gap-1.5">
-            <Search size={13} /> Exercise Library
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setGenerateOpen(true)} className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30">
-            <Sparkles size={13} /> Generate Plan
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => { setEditTemplate(null); setTemplateModal(true); }} className="gap-1.5">
-            <Plus size={13} /><LayoutTemplate size={13} /> Template
-          </Button>
-          <Button size="sm" onClick={() => { setEditLog(null); setLogModal(true); }} className="gap-1.5">
-            <Plus size={13} /><ClipboardList size={13} /> Log Workout
-          </Button>
-        </div>
+        <Button onClick={() => { setEditLog(null); setLogModal(true); }} className="gap-2">
+          <Plus size={15} /> Log Workout
+        </Button>
       </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-card border rounded-xl p-3 text-center">
-          <p className="text-xl font-bold">{wkCompleted}</p>
-          <p className="text-xs text-muted-foreground">Done this week</p>
+        <div className="bg-card border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold">{wkCompleted}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Completed this week</p>
         </div>
-        <div className="bg-card border rounded-xl p-3 text-center">
-          <p className="text-xl font-bold">{wkPlanned}</p>
-          <p className="text-xs text-muted-foreground">Planned</p>
+        <div className="bg-card border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold">{wkPlanned}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Planned this week</p>
         </div>
-        <div className="bg-card border rounded-xl p-3 text-center">
-          <p className="text-xl font-bold">{streak}d</p>
-          <p className="text-xs text-muted-foreground">Current streak</p>
+        <div className="bg-card border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold">{streak}d</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Current streak</p>
         </div>
-        <div className="bg-card border rounded-xl p-3 text-center">
-          <p className="text-xl font-bold">{logs.filter(l => l.completed).length}</p>
-          <p className="text-xs text-muted-foreground">Total logged</p>
+        <div className="bg-card border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold">{logs.filter(l => l.completed).length}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Total workouts</p>
         </div>
       </div>
 
@@ -1119,29 +1108,47 @@ export default function WorkoutsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 flex-wrap">
-        <button onClick={() => setTab("logs")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "logs" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-          <ClipboardList size={14} /> Logs <span className="text-xs opacity-60">{logs.length}</span>
-        </button>
-        <button onClick={() => setTab("templates")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "templates" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-          <LayoutTemplate size={14} /> Templates <span className="text-xs opacity-60">{templates.length}</span>
-        </button>
-        <button onClick={() => setTab("plans")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "plans" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-          <CalendarDays size={14} /> Plans <span className="text-xs opacity-60">{plans.length}</span>
-        </button>
-        {sharedItems.length > 0 && (
-          <button onClick={() => setTab("shared")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "shared" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-            <Users size={14} /> Shared <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{sharedItems.length}</span>
-          </button>
-        )}
-        <button onClick={() => setTab("equipment")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === "equipment" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-          <Package size={14} /> Equipment <span className="text-xs opacity-60">{equipmentList.length}</span>
-        </button>
+      <div className="overflow-x-auto scrollbar-hide -mx-3 px-3">
+        <div className="flex gap-1 w-max pb-1">
+          {[
+            { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
+            { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
+            { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
+            { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
+            { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
+          ].map(t => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value as any)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                tab === t.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}
+            >
+              <t.icon size={13} />
+              {t.label}
+              {t.count > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  tab === t.value ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground"
+                }`}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Workout Logs */}
       {tab === "logs" && (
         <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Your past workout sessions</p>
+            <Button size="sm" onClick={() => { setEditLog(null); setLogModal(true); }} className="gap-1.5">
+              <Plus size={13} /> Log Workout
+            </Button>
+          </div>
           {logs.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground"><Dumbbell size={40} className="mx-auto mb-4 opacity-20" /><p className="font-medium">No workouts logged yet</p></div>
           ) : logs.map(log => {
@@ -1189,16 +1196,27 @@ export default function WorkoutsPage() {
         </div>
       )}
 
-      {/* Templates */}
+      {/* My Workouts (Templates) */}
       {tab === "templates" && (
         <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm text-muted-foreground">Reusable workout routines you can start any time</p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setExerciseSearchOpen(true)} className="gap-1.5">
+                <Search size={13} /> Exercise Library
+              </Button>
+              <Button size="sm" onClick={() => { setEditTemplate(null); setTemplateModal(true); }} className="gap-1.5">
+                <Plus size={13} /> New Workout
+              </Button>
+            </div>
+          </div>
           {templates.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <LayoutTemplate size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium">No templates yet</p>
-              <p className="text-sm mt-1">Create a template or use <strong>Generate Plan</strong> to build one with AI</p>
+              <p className="font-medium">No workouts yet</p>
+              <p className="text-sm mt-1">Create a workout or use <strong>Generate Plan</strong> to build one with AI</p>
               <div className="flex gap-2 justify-center mt-4">
-                <Button variant="outline" size="sm" className="gap-1" onClick={() => { setEditTemplate(null); setTemplateModal(true); }}><Plus size={13} /> New Template</Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => { setEditTemplate(null); setTemplateModal(true); }}><Plus size={13} /> New Workout</Button>
                 <Button variant="outline" size="sm" className="gap-1 border-purple-300 text-purple-700" onClick={() => setGenerateOpen(true)}><Sparkles size={13} /> Generate Plan</Button>
               </div>
             </div>
@@ -1208,7 +1226,7 @@ export default function WorkoutsPage() {
             return (
               <div key={t.id} className="bg-card border rounded-xl p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <p className="font-semibold text-sm">{t.name}</p>
                       <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">{WORKOUT_TYPE_LABELS[t.workoutType] ?? t.workoutType}</span>
@@ -1234,7 +1252,19 @@ export default function WorkoutsPage() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { setEditLog(null); setLogModal(true); }}><ClipboardList size={13} className="mr-2" />Log this workout</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { setEditTemplate(t); setTemplateModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openShareModal("template", t)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteTemplate.mutate(t.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                  <Button size="sm" className="gap-1.5 h-8 flex-1" onClick={() => { setEditLog(null); setLogModal(true); }}>
+                    <Zap size={12} /> Start Workout
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => { setEditTemplate(t); setTemplateModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openShareModal("template", t)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
                       <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteTemplate.mutate(t.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
@@ -1250,11 +1280,16 @@ export default function WorkoutsPage() {
       {/* Plans */}
       {tab === "plans" && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Group templates into a repeating weekly schedule.</p>
-            <Button size="sm" className="gap-1.5" onClick={() => { setEditPlan(null); setPlanModal(true); }}>
-              <Plus size={13} /><CalendarDays size={13} /> New Plan
-            </Button>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm text-muted-foreground">A plan is a weekly schedule of workouts that repeats</p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setGenerateOpen(true)} className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30">
+                <Sparkles size={13} /> Generate with AI
+              </Button>
+              <Button size="sm" onClick={() => { setEditPlan(null); setPlanModal(true); }} className="gap-1.5">
+                <Plus size={13} /> New Plan
+              </Button>
+            </div>
           </div>
           {plans.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground border rounded-xl border-dashed">
@@ -1324,7 +1359,7 @@ export default function WorkoutsPage() {
             <div className="text-center py-16 text-muted-foreground">
               <Users size={40} className="mx-auto mb-4 opacity-20" />
               <p className="font-medium">No shared workouts yet</p>
-              <p className="text-sm mt-1">When friends share templates or plans, they'll appear here</p>
+              <p className="text-sm mt-1">When friends share templates or plans with you, they'll appear here</p>
             </div>
           ) : sharedItems.map(item => {
             let content: any = {};
