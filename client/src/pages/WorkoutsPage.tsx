@@ -109,6 +109,37 @@ const FIFTY_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   }));
 })();
 
+// Couch-to-Sprint Triathlon 12-week plan (Swim/Bike/Run/Brick, duration-based)
+const SPRINT_TRI_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  // [week, monSwimMin, monNote, tueBikeMin, tueNote, wedRunMin, wedNote, friSwimMin, friNote, satMin, satNote, satLabel]
+  type Row = [number, number, string, number, string, number, string, number, string, number, string, string];
+  const rows: Row[] = [
+    [1,  20,"Easy technique swim",   25,"Easy spin",                 15,"Easy run/walk",       20,"Easy swim",          30,"20 min bike + 10 min run","Brick Workout"],
+    [2,  20,"Easy swim",             30,"Easy spin",                 20,"Easy run/walk",       25,"Drills + easy",      35,"25 min bike + 10 min run","Brick Workout"],
+    [3,  25,"Easy continuous",       30,"Easy spin",                 20,"Easy run",            25,"Drills + easy",      40,"30 min bike + 10 min run","Brick Workout"],
+    [4,  25,"Cutback: easy",         25,"Cutback: easy",             20,"Cutback: easy",       20,"Easy",               30,"Short brick",              "Brick Workout"],
+    [5,  30,"Steady",                35,"Steady",                    25,"Easy run",            30,"Drills + steady",    45,"35 min bike + 10 min run","Brick Workout"],
+    [6,  30,"Continuous",            40,"Steady",                    25,"Easy with strides",   30,"Drills + easy",      50,"40 min bike + 10 min run","Brick Workout"],
+    [7,  30,"Steady",                40,"Include moderate efforts",  30,"Easy run",            30,"Drills + steady",    55,"45 min bike + 10 min run","Brick Workout"],
+    [8,  25,"Cutback swim",          35,"Cutback ride",              25,"Cutback run",         25,"Easy",               40,"Short brick",              "Brick Workout"],
+    [9,  35,"Steady",                45,"Steady",                    30,"Easy run",            30,"Drills + steady",    60,"45 min bike + 15 min run","Brick Workout"],
+    [10, 35,"Continuous",            50,"Steady, some race-pace",    30,"Easy",                30,"Drills + easy",      65,"50 min bike + 15 min run","Brick Workout"],
+    [11, 30,"Taper: easy",           40,"Taper: steady",             25,"Taper: easy",         25,"Easy",               45,"35 min bike + 10 min run","Brick Workout"],
+    [12, 20,"Easy",                  30,"Easy",                      20,"Easy",                0, "",                   0, "Race day!",                "Race Day 🏁"],
+  ];
+  const fmt = (min: number) => min > 0 ? `${min} min` : "";
+  return rows.map(([week, monMin, monNote, tueMin, tueNote, wedMin, wedNote, friMin, friNote, satMin, satNote, satLabel]) => {
+    const days: PlanDayEntryV2[] = [
+      { dayOfWeek: "monday",    label: "Swim", notes: [fmt(monMin), monNote].filter(Boolean).join(" · ") },
+      { dayOfWeek: "tuesday",   label: "Bike", notes: [fmt(tueMin), tueNote].filter(Boolean).join(" · ") },
+      { dayOfWeek: "wednesday", label: "Run",  notes: [fmt(wedMin), wedNote].filter(Boolean).join(" · ") },
+    ];
+    if (friMin > 0) days.push({ dayOfWeek: "friday", label: "Swim", notes: [fmt(friMin), friNote].filter(Boolean).join(" · ") });
+    days.push({ dayOfWeek: "saturday", label: satLabel, notes: satMin > 0 ? [fmt(satMin), satNote].filter(Boolean).join(" · ") : satNote });
+    return { week, days };
+  });
+})();
+
 // Couch-to-5K 8-week plan (Mon/Wed/Sat, 3 days/week)
 const FIVE_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   // [week, mon label, mon miles, wed label, wed miles, sat miles, sat label]
@@ -186,6 +217,16 @@ type StarterPlan = {
 };
 
 const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
+  "Triathlon (Sprint)": [
+    {
+      id: "sprint_tri_couch_12wk",
+      name: "Couch to Sprint Triathlon",
+      description: "12-week beginner plan · 5–6 days/week · swim/bike/run + weekly brick sessions · taper Week 11 · race Week 12",
+      weeks: 12,
+      daysPerWeek: 5,
+      schedule: SPRINT_TRI_COUCH_TO_PLAN,
+    },
+  ],
   "5K": [
     {
       id: "5k_couch_8wk",
