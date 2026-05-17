@@ -3679,7 +3679,22 @@ export const storage: IStorage = {
     // Toggle — flip isActive for this plan only, others unchanged
     const [current] = await db.select().from(workoutPlans).where(eq(workoutPlans.id, id));
     if (!current || current.userId !== userId) return null;
-    const result = await db.update(workoutPlans).set({ isActive: !current.isActive }).where(eq(workoutPlans.id, id)).returning();
+    const activating = !current.isActive;
+    // When activating, set startDate to the Monday of the following calendar week
+    // so week 1 begins then and the first scheduled workout falls in week 1.
+    let startDate: string | null = null;
+    if (activating) {
+      const today = new Date();
+      const day = today.getDay(); // 0=Sun … 6=Sat
+      const daysUntilNextMonday = ((1 - day + 7) % 7) || 7;
+      const nextMonday = new Date(today);
+      nextMonday.setDate(today.getDate() + daysUntilNextMonday);
+      startDate = nextMonday.toISOString().split("T")[0]; // YYYY-MM-DD
+    }
+    const result = await db.update(workoutPlans)
+      .set({ isActive: activating, startDate })
+      .where(eq(workoutPlans.id, id))
+      .returning();
     return result[0] ?? null;
   },
 

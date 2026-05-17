@@ -2515,7 +2515,13 @@ export default function WorkoutsPage() {
                         <div className="h-2 bg-secondary rounded-full overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${color.dot}`} style={{ width: `${progressPct}%` }} />
                         </div>
-                        <p className="text-xs text-muted-foreground">Started {startDate ? startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</p>
+                        {startDate && startDate > today ? (
+                          <p className="text-xs font-medium text-primary">
+                            🗓 Starts {startDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Started {startDate ? startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</p>
+                        )}
                       </div>
 
                       {/* Goal metric */}
