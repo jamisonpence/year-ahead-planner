@@ -109,6 +109,30 @@ const FIFTY_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   }));
 })();
 
+// Couch-to-5K 8-week plan (Mon/Wed/Sat, 3 days/week)
+const FIVE_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  // [week, mon label, mon miles, wed label, wed miles, sat miles, sat label]
+  const rows: [number, string, number, string, number, number, string][] = [
+    [1, "Easy run/walk", 0.5,  "Easy run/walk", 0.5,  0.75, "Easy run/walk"],
+    [2, "Easy run/walk", 0.75, "Easy run/walk", 0.75, 1,    "Easy run/walk"],
+    [3, "Easy run/walk", 1,    "Easy run/walk", 1,    1.5,  "Easy run"],
+    [4, "Easy run/walk", 1,    "Easy run",      1.25, 1.75, "Easy run"],
+    [5, "Easy run",      1.25, "Easy run",      1.5,  2,    "Easy run"],
+    [6, "Easy run",      1.5,  "Easy run",      1.5,  2.25, "Easy run"],
+    [7, "Easy run",      1.5,  "Easy run",      2,    2.5,  "Easy run"],
+    [8, "Easy run",      1.5,  "Easy run",      2,    3.1,  "5K Race / Simulation"],
+  ];
+  const fmt = (n: number) => `${n} mile${n !== 1 ? "s" : ""}`;
+  return rows.map(([week, monLabel, mon, wedLabel, wed, sat, satLabel]) => ({
+    week,
+    days: [
+      { dayOfWeek: "monday",    label: monLabel, notes: fmt(mon) },
+      { dayOfWeek: "wednesday", label: wedLabel, notes: fmt(wed) },
+      { dayOfWeek: "saturday",  label: satLabel, notes: fmt(sat) },
+    ],
+  }));
+})();
+
 // Couch-to-50 Mile Ultra 28-week plan (same Tue/Thu/Sat+Sat2/Sun structure as 50K)
 const FIFTY_MILE_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   // [week, tue, sat, sat2, sun]
@@ -162,6 +186,16 @@ type StarterPlan = {
 };
 
 const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
+  "5K": [
+    {
+      id: "5k_couch_8wk",
+      name: "Couch to 5K",
+      description: "8-week beginner plan · 3 days/week (Mon/Wed/Sat) · starts with run/walk intervals · race sim in Week 8",
+      weeks: 8,
+      daysPerWeek: 3,
+      schedule: FIVE_K_COUCH_TO_PLAN,
+    },
+  ],
   Marathon: [
     {
       id: "marathon_couch_24wk",
