@@ -1146,6 +1146,19 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
   const [bodyTargetValue, setBodyTargetValue] = useState("");
   const [bodyUnit, setBodyUnit] = useState("lbs");
 
+  // Body Fat % calculator (Navy tape method)
+  const [bfCalcOpen, setBfCalcOpen] = useState(false);
+  const [bfSex, setBfSex] = useState<"male"|"female">("male");
+  const [bfHeightIn, setBfHeightIn] = useState("");
+  const [bfNeckIn, setBfNeckIn] = useState("");
+  const [bfWaistIn, setBfWaistIn] = useState("");
+  const [bfHipsIn, setBfHipsIn] = useState("");
+
+  // Muscle Mass calculator (from weight + BF%)
+  const [mmCalcOpen, setMmCalcOpen] = useState(false);
+  const [mmWeightLbs, setMmWeightLbs] = useState("");
+  const [mmBfPct, setMmBfPct] = useState("");
+
   // Milestones (auto-generated based on goal)
   const [milestones, setMilestones] = useState<WorkoutPlanMilestone[]>([]);
 
@@ -1533,7 +1546,13 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                 <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5"><Heart size={13} /> Body Goal</p>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Metric</label>
-                  <Select value={bodyMetric} onValueChange={setBodyMetric}>
+                  <Select value={bodyMetric} onValueChange={v => {
+                    setBodyMetric(v);
+                    setBodyCurrentValue(""); setBodyTargetValue("");
+                    if (v === "body_fat") setBodyUnit("%");
+                    else setBodyUnit("lbs");
+                    setBfCalcOpen(false); setMmCalcOpen(false);
+                  }}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="weight">Body Weight</SelectItem>
@@ -1542,27 +1561,181 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Current</label>
-                    <Input type="number" value={bodyCurrentValue} onChange={e => setBodyCurrentValue(e.target.value)} placeholder="185" />
+
+                {/* Dynamic current / target / unit inputs per metric */}
+                {bodyMetric === "weight" && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Current weight</label>
+                      <Input type="number" value={bodyCurrentValue} onChange={e => setBodyCurrentValue(e.target.value)} placeholder="185" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Goal weight</label>
+                      <Input type="number" value={bodyTargetValue} onChange={e => setBodyTargetValue(e.target.value)} placeholder="170" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Unit</label>
+                      <Select value={bodyUnit} onValueChange={setBodyUnit}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lbs">lbs</SelectItem>
+                          <SelectItem value="kg">kg</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Target</label>
-                    <Input type="number" value={bodyTargetValue} onChange={e => setBodyTargetValue(e.target.value)} placeholder="170" />
+                )}
+
+                {bodyMetric === "body_fat" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Current body fat %</label>
+                        <Input type="number" value={bodyCurrentValue} onChange={e => setBodyCurrentValue(e.target.value)} placeholder="22" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Goal body fat %</label>
+                        <Input type="number" value={bodyTargetValue} onChange={e => setBodyTargetValue(e.target.value)} placeholder="15" />
+                      </div>
+                    </div>
+                    {/* Body Fat % Calculator */}
+                    <div className="border border-green-300 dark:border-green-700 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setBfCalcOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-300 bg-green-100/60 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5"><Sparkles size={11} /> Body Fat % Calculator (Navy Tape Method)</span>
+                        <ChevronRight size={13} className={`transition-transform ${bfCalcOpen ? "rotate-90" : ""}`} />
+                      </button>
+                      {bfCalcOpen && (() => {
+                        const h = parseFloat(bfHeightIn); const n = parseFloat(bfNeckIn); const w = parseFloat(bfWaistIn); const hip = parseFloat(bfHipsIn);
+                        let result: number | null = null;
+                        if (bfSex === "male" && h > 0 && n > 0 && w > n) {
+                          result = Math.max(0, 86.010 * Math.log10(w - n) - 70.041 * Math.log10(h) + 36.76);
+                        } else if (bfSex === "female" && h > 0 && n > 0 && w > 0 && hip > 0) {
+                          result = Math.max(0, 163.205 * Math.log10(w + hip - n) - 97.684 * Math.log10(h) - 78.387);
+                        }
+                        const res = result !== null ? parseFloat(result.toFixed(1)) : null;
+                        return (
+                          <div className="p-3 space-y-3">
+                            <p className="text-xs text-muted-foreground">All measurements in inches. Measure at the narrowest point (neck/waist) and widest point (hips).</p>
+                            <div className="flex gap-2">
+                              {(["male","female"] as const).map(s => (
+                                <button key={s} type="button" onClick={() => setBfSex(s)}
+                                  className={`flex-1 h-8 rounded-lg text-xs font-medium border-2 transition-all ${bfSex === s ? "border-green-500 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300" : "border-border bg-background text-muted-foreground"}`}>
+                                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Height (in)</label>
+                                <Input type="number" value={bfHeightIn} onChange={e => setBfHeightIn(e.target.value)} placeholder='70"' className="h-8 text-xs" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Neck (in)</label>
+                                <Input type="number" value={bfNeckIn} onChange={e => setBfNeckIn(e.target.value)} placeholder='15"' className="h-8 text-xs" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Waist (in)</label>
+                                <Input type="number" value={bfWaistIn} onChange={e => setBfWaistIn(e.target.value)} placeholder='34"' className="h-8 text-xs" />
+                              </div>
+                              {bfSex === "female" && (
+                                <div className="space-y-1">
+                                  <label className="text-xs text-muted-foreground">Hips (in)</label>
+                                  <Input type="number" value={bfHipsIn} onChange={e => setBfHipsIn(e.target.value)} placeholder='38"' className="h-8 text-xs" />
+                                </div>
+                              )}
+                            </div>
+                            {res !== null && (
+                              <div className="flex items-center justify-between bg-green-100 dark:bg-green-900/30 rounded-lg px-3 py-2">
+                                <span className="text-sm font-bold text-green-700 dark:text-green-300">Estimated: {res}%</span>
+                                <Button size="sm" variant="outline" className="h-7 text-xs"
+                                  onClick={() => { setBodyCurrentValue(String(res)); setBfCalcOpen(false); }}>
+                                  Use {res}% as current
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Unit</label>
-                    <Select value={bodyUnit} onValueChange={setBodyUnit}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="lbs">lbs</SelectItem>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="%">%</SelectItem>
-                      </SelectContent>
-                    </Select>
+                )}
+
+                {bodyMetric === "muscle_mass" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Current muscle mass</label>
+                        <Input type="number" value={bodyCurrentValue} onChange={e => setBodyCurrentValue(e.target.value)} placeholder="140" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Goal muscle mass</label>
+                        <Input type="number" value={bodyTargetValue} onChange={e => setBodyTargetValue(e.target.value)} placeholder="155" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Unit</label>
+                        <Select value={bodyUnit} onValueChange={setBodyUnit}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="lbs">lbs</SelectItem>
+                            <SelectItem value="kg">kg</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {/* Muscle Mass Calculator */}
+                    <div className="border border-green-300 dark:border-green-700 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setMmCalcOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-300 bg-green-100/60 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5"><Sparkles size={11} /> Muscle Mass Estimator (from Body Fat %)</span>
+                        <ChevronRight size={13} className={`transition-transform ${mmCalcOpen ? "rotate-90" : ""}`} />
+                      </button>
+                      {mmCalcOpen && (() => {
+                        const wt = parseFloat(mmWeightLbs); const bf = parseFloat(mmBfPct);
+                        let lbm: number | null = null; let muscle: number | null = null;
+                        if (wt > 0 && bf > 0 && bf < 100) {
+                          lbm = wt * (1 - bf / 100);
+                          muscle = parseFloat((lbm * 0.56).toFixed(1)); // ~56% of LBM is skeletal muscle
+                        }
+                        const unitLabel = bodyUnit === "kg" ? "kg" : "lbs";
+                        const convert = (v: number) => bodyUnit === "kg" ? parseFloat((v / 2.205).toFixed(1)) : v;
+                        return (
+                          <div className="p-3 space-y-3">
+                            <p className="text-xs text-muted-foreground">Enter your total body weight and body fat % to estimate skeletal muscle mass (≈56% of lean body mass).</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Body weight (lbs)</label>
+                                <Input type="number" value={mmWeightLbs} onChange={e => setMmWeightLbs(e.target.value)} placeholder="185" className="h-8 text-xs" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Body fat %</label>
+                                <Input type="number" value={mmBfPct} onChange={e => setMmBfPct(e.target.value)} placeholder="20" className="h-8 text-xs" />
+                              </div>
+                            </div>
+                            {muscle !== null && lbm !== null && (
+                              <div className="space-y-1.5">
+                                <div className="bg-green-100 dark:bg-green-900/30 rounded-lg px-3 py-2 text-xs space-y-1">
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Lean Body Mass</span><span className="font-semibold">{convert(lbm)} {unitLabel}</span></div>
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Est. Skeletal Muscle</span><span className="font-bold text-green-700 dark:text-green-300">{convert(muscle)} {unitLabel}</span></div>
+                                </div>
+                                <Button size="sm" variant="outline" className="w-full h-7 text-xs"
+                                  onClick={() => { setBodyCurrentValue(String(convert(muscle!))); setMmCalcOpen(false); }}>
+                                  Use {convert(muscle)} {unitLabel} as current muscle mass
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
