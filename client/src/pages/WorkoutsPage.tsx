@@ -2042,7 +2042,7 @@ function ShareWorkoutModal({ open, onClose, shareType, contentJson, itemName }: 
 
 export default function WorkoutsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"logs" | "templates" | "plans" | "shared" | "equipment">("logs");
+  const [tab, setTab] = useState<"active" | "logs" | "templates" | "plans" | "shared" | "equipment">("active");
   const [logModal, setLogModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
   const [editLog, setEditLog] = useState<WorkoutLog | null>(null);
@@ -2231,11 +2231,12 @@ export default function WorkoutsPage() {
       <div className="overflow-x-auto scrollbar-hide -mx-3 px-3">
         <div className="flex gap-1 w-max pb-1">
           {[
-            { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
+            { value: "active", label: "Active Plan", icon: Play, count: plans.filter(p => p.isActive).length },
             { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
             { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
             { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
             { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
+            { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
           ].map(t => (
             <button
               key={t.value}
@@ -2259,6 +2260,249 @@ export default function WorkoutsPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Active Plan ────────────────────────────────────────────────── */}
+      {tab === "active" && (() => {
+        const activePlans = plans.filter(p => p.isActive);
+        if (activePlans.length === 0) return (
+          <div className="text-center py-16 text-muted-foreground space-y-3">
+            <Play size={40} className="mx-auto opacity-20" />
+            <p className="font-medium">No active plan</p>
+            <p className="text-sm">Go to Plans and set one as Active to see it here.</p>
+            <Button size="sm" variant="outline" onClick={() => setTab("plans")}>
+              <CalendarDays size={13} className="mr-1.5" /> View Plans
+            </Button>
+          </div>
+        );
+        return (
+          <div className="space-y-6">
+            {activePlans.map(plan => {
+              const parsedSched = parseSchedule(plan.scheduleJson ?? "[]");
+              const startDate = plan.startDate ? new Date(plan.startDate) : null;
+              const today = new Date();
+              const todayDow = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][today.getDay()];
+              const weeksElapsed = startDate
+                ? Math.max(0, Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+                : 0;
+              const currentWeek = Math.min(weeksElapsed + 1, plan.durationWeeks);
+              const progressPct = Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100));
+
+              let currentWeekDays: PlanDayEntryV2[] = [];
+              if (parsedSched.isV2) {
+                currentWeekDays = parsedSched.weeks.find(w => w.week === currentWeek)?.days
+                  ?? parsedSched.weeks[0]?.days ?? [];
+              } else {
+                currentWeekDays = parsedSched.flatDays.map(e => ({
+                  dayOfWeek: e.dayOfWeek,
+                  label: e.label ?? e.templateName ?? "Workout",
+                  templateId: e.templateId,
+                }));
+              }
+
+              let goalMetric: any = null;
+              try { goalMetric = plan.goalMetricJson ? JSON.parse(plan.goalMetricJson) : null; } catch {}
+              let milestones: WorkoutPlanMilestone[] = [];
+              try { milestones = plan.milestonesJson ? JSON.parse(plan.milestonesJson) : []; } catch {}
+              const nextMilestone = milestones.find(m => m.week >= currentWeek);
+              const goalInfo = GOAL_TYPES.find(g => g.value === plan.goalType);
+
+              const totalWeeks = parsedSched.isV2 ? parsedSched.weeks.length : plan.durationWeeks;
+
+              return (
+                <div key={plan.id} className="space-y-4">
+                  {/* Plan header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-base">{plan.name}</h3>
+                        {goalInfo && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${goalInfo.color}`}>{goalInfo.label}</span>
+                        )}
+                      </div>
+                      {plan.description && <p className="text-xs text-muted-foreground mt-0.5">{plan.description}</p>}
+                    </div>
+                    <Button size="sm" variant="outline" className="h-8 text-xs shrink-0 gap-1.5"
+                      onClick={() => { setEditPlan(plan); setPlanModal(true); }}>
+                      <Pencil size={11} /> Edit
+                    </Button>
+                  </div>
+
+                  {/* Overall progress */}
+                  <div className="bg-card border rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">Overall Progress</p>
+                      <span className="text-xs text-muted-foreground">Week {currentWeek} of {plan.durationWeeks}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Started {startDate ? startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</span>
+                        <span>{progressPct}% complete</span>
+                      </div>
+                    </div>
+                    {/* Milestone strip */}
+                    {milestones.length > 0 && (
+                      <div className="flex gap-1 overflow-x-auto pb-0.5">
+                        {milestones.map(m => {
+                          const done = m.week < currentWeek;
+                          const active = m.week === currentWeek;
+                          return (
+                            <div key={m.week} className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border ${
+                              done ? "bg-primary/10 border-primary/30 text-primary" :
+                              active ? "bg-primary text-primary-foreground border-primary" :
+                              "bg-secondary/50 border-border text-muted-foreground"
+                            }`}>
+                              {done ? <CheckCircle2 size={10} /> : <Target size={10} />}
+                              <span className="font-medium">Wk {m.week}</span>
+                              <span className="hidden sm:inline">· {m.description}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Goal metric card */}
+                  {goalMetric && plan.goalType === "strength_pr" && (
+                    <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 flex items-center gap-2 mb-2"><Trophy size={13} /> Strength Goal — {goalMetric.exercise}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-center"><p className="text-xs text-muted-foreground">Starting</p><p className="text-lg font-bold">{goalMetric.currentValue}<span className="text-xs font-normal">{goalMetric.unit}</span></p></div>
+                        <div className="flex-1 h-2 bg-orange-100 dark:bg-orange-900/50 rounded-full overflow-hidden"><div className="h-full bg-orange-500 rounded-full" style={{ width: `${progressPct}%` }} /></div>
+                        <div className="text-center"><p className="text-xs text-muted-foreground">Target</p><p className="text-lg font-bold text-orange-600 dark:text-orange-400">{goalMetric.targetValue}<span className="text-xs font-normal">{goalMetric.unit}</span></p></div>
+                      </div>
+                    </div>
+                  )}
+                  {goalMetric && plan.goalType === "endurance" && (
+                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-2 mb-1"><TrendingUp size={13} /> {goalMetric.raceDistance} Race Goal</p>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        {goalMetric.raceDate && <span>🗓 {new Date(goalMetric.raceDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
+                        {goalMetric.currentDistance > 0 && <span>· Current long run: {goalMetric.currentDistance} {goalMetric.unit}</span>}
+                      </div>
+                    </div>
+                  )}
+                  {goalMetric && plan.goalType === "body_composition" && (
+                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-2 mb-2"><Heart size={13} /> {goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"} Goal</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-center"><p className="text-xs text-muted-foreground">Current</p><p className="text-lg font-bold">{goalMetric.currentValue}<span className="text-xs font-normal">{goalMetric.unit}</span></p></div>
+                        <div className="flex-1 text-center text-muted-foreground text-lg">→</div>
+                        <div className="text-center"><p className="text-xs text-muted-foreground">Target</p><p className="text-lg font-bold text-green-600 dark:text-green-400">{goalMetric.targetValue}<span className="text-xs font-normal">{goalMetric.unit}</span></p></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next milestone callout */}
+                  {nextMilestone && (
+                    <div className="flex items-center gap-2 text-xs border rounded-xl px-4 py-3 bg-primary/5 border-primary/20">
+                      <CheckSquare size={13} className="text-primary shrink-0" />
+                      <span><span className="font-semibold text-primary">Week {nextMilestone.week} milestone:</span> {nextMilestone.description}</span>
+                    </div>
+                  )}
+
+                  {/* This week schedule */}
+                  <div className="bg-card border rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b bg-muted/30">
+                      <p className="text-sm font-semibold">Week {currentWeek} Schedule</p>
+                      <p className="text-xs text-muted-foreground">{totalWeeks > 1 ? `${totalWeeks} unique weeks planned` : "Repeating week"}</p>
+                    </div>
+                    <div className="divide-y">
+                      {DAYS_OF_WEEK.map(day => {
+                        const entry = currentWeekDays.find(e => e.dayOfWeek === day);
+                        const isToday = day === todayDow;
+                        return (
+                          <div key={day} className={`flex items-start gap-3 px-4 py-3 ${isToday ? "bg-primary/5" : ""} ${!entry ? "opacity-40" : ""}`}>
+                            <div className={`w-10 shrink-0 text-center pt-0.5`}>
+                              <p className={`text-xs font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>{DAY_LABELS[day]}</p>
+                              {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mx-auto mt-0.5" />}
+                            </div>
+                            {entry ? (
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  {entry.templateId
+                                    ? <Dumbbell size={13} className="text-primary shrink-0" />
+                                    : <TrendingUp size={13} className="text-primary shrink-0" />}
+                                  <p className="text-sm font-medium">{entry.label}</p>
+                                  {isToday && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>}
+                                </div>
+                                {entry.notes && <p className="text-xs text-muted-foreground mt-0.5 ml-5">{entry.notes}</p>}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground flex-1">Rest</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Full plan week-by-week accordion */}
+                  {parsedSched.isV2 && parsedSched.weeks.length > 1 && (() => {
+                    const [expandedWeeks, setExpandedWeeks] = useState<number[]>([currentWeek]);
+                    return (
+                      <div className="bg-card border rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b bg-muted/30">
+                          <p className="text-sm font-semibold">Full Plan — All {parsedSched.weeks.length} Weeks</p>
+                        </div>
+                        <div className="divide-y">
+                          {parsedSched.weeks.map(wk => {
+                            const isCurrentWk = wk.week === currentWeek;
+                            const isPastWk = wk.week < currentWeek;
+                            const isOpen = expandedWeeks.includes(wk.week);
+                            return (
+                              <div key={wk.week}>
+                                <button
+                                  type="button"
+                                  className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors ${isCurrentWk ? "bg-primary/5" : ""}`}
+                                  onClick={() => setExpandedWeeks(prev => prev.includes(wk.week) ? prev.filter(w => w !== wk.week) : [...prev, wk.week])}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    {isPastWk
+                                      ? <CheckCircle2 size={14} className="text-primary shrink-0" />
+                                      : isCurrentWk
+                                        ? <Play size={14} className="text-primary shrink-0" fill="currentColor" />
+                                        : <div className="w-3.5 h-3.5 rounded-full border-2 border-border shrink-0" />}
+                                    <span className={`text-sm font-medium ${isCurrentWk ? "text-primary" : isPastWk ? "text-muted-foreground" : ""}`}>
+                                      Week {wk.week}
+                                      {isCurrentWk && " (current)"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">{wk.days.length} workouts</span>
+                                  </div>
+                                  <ChevronRight size={14} className={`text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                                </button>
+                                {isOpen && (
+                                  <div className="divide-y bg-muted/10">
+                                    {DAYS_OF_WEEK.map(day => {
+                                      const e = wk.days.find(d => d.dayOfWeek === day);
+                                      if (!e) return null;
+                                      return (
+                                        <div key={day} className="flex items-start gap-3 px-6 py-2.5">
+                                          <span className="text-xs font-bold uppercase text-muted-foreground w-8 shrink-0 pt-0.5">{DAY_LABELS[day]}</span>
+                                          <div>
+                                            <p className="text-sm font-medium">{e.label}</p>
+                                            {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Workout Logs */}
       {tab === "logs" && (
