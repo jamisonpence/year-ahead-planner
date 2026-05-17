@@ -786,16 +786,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Feed */}
           <Link href="/">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Home size={22} className={location === "/" ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/" ? "text-violet-500" : "text-muted-foreground"}`}>Feed</span>
+              <Home size={22} className={location === "/" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Feed</span>
             </button>
           </Link>
 
           {/* Discover */}
           <Link href="/discover">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Search size={22} className={location === "/discover" ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/discover" ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
+              <Search size={22} className={location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
             </button>
           </Link>
 
@@ -823,12 +823,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/relationships">
             <button className="relative flex flex-col items-center gap-0.5 min-w-[56px] py-1">
               <div className="relative">
-                <Users size={22} className={location === "/relationships" ? "text-violet-500" : "text-muted-foreground"} />
+                <Users size={22} className={location === "/relationships" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
                 {totalNotifCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-card" />
                 )}
               </div>
-              <span className={`text-[10px] font-medium ${location === "/relationships" ? "text-violet-500" : "text-muted-foreground"}`}>Friends</span>
+              <span className={`text-[10px] font-medium ${location === "/relationships" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Friends</span>
             </button>
           </Link>
         </div>
