@@ -44,17 +44,8 @@ function parseSchedule(json: string): { isV2: boolean; weeks: WeekScheduleV2[]; 
 
 // ── Built-in Starter Plans ─────────────────────────────────────────────────────
 
-// Couch-to-Marathon 24-week plan (Mon easy, Wed rest/cross-train, Fri easy, Sun long run)
-const MARATHON_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
-  // [week, monMiles, friMiles, sunMiles]
-  const rows: [number, number, number, number][] = [
-    [1, 1, 1, 1.5], [2, 1, 1.5, 2], [3, 1.5, 1.5, 2.5], [4, 1, 1.5, 2],
-    [5, 1.5, 2, 3], [6, 2, 2, 4], [7, 2, 2.5, 5], [8, 1.5, 2, 3.5],
-    [9, 2, 3, 6], [10, 2.5, 3, 7], [11, 3, 3, 8], [12, 2, 3, 6],
-    [13, 3, 4, 9], [14, 3, 4, 10], [15, 3, 4, 12], [16, 2.5, 3, 8],
-    [17, 3, 5, 14], [18, 4, 5, 16], [19, 4, 5, 18], [20, 3, 4, 12],
-    [21, 3, 4, 14], [22, 3, 3, 10], [23, 2, 3, 8], [24, 2, 2, 6],
-  ];
+// Helper to build a Mon/Wed/Fri/Sun endurance schedule from row data
+function buildEndurancePlan(rows: [number, number, number, number][], sunLabel = "Long Run"): WeekScheduleV2[] {
   const fmt = (n: number) => `${n} mile${n !== 1 ? "s" : ""}`;
   return rows.map(([week, mon, fri, sun]) => ({
     week,
@@ -62,10 +53,28 @@ const MARATHON_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
       { dayOfWeek: "monday", label: "Easy Run", notes: fmt(mon) },
       { dayOfWeek: "wednesday", label: "Rest or Cross-Train" },
       { dayOfWeek: "friday", label: "Easy Run", notes: fmt(fri) },
-      { dayOfWeek: "sunday", label: "Long Run", notes: fmt(sun) },
+      { dayOfWeek: "sunday", label: sunLabel, notes: fmt(sun) },
     ],
   }));
-})();
+}
+
+// Couch-to-Marathon 24-week plan
+const MARATHON_COUCH_TO_PLAN: WeekScheduleV2[] = buildEndurancePlan([
+  [1, 1, 1, 1.5], [2, 1, 1.5, 2], [3, 1.5, 1.5, 2.5], [4, 1, 1.5, 2],
+  [5, 1.5, 2, 3], [6, 2, 2, 4], [7, 2, 2.5, 5], [8, 1.5, 2, 3.5],
+  [9, 2, 3, 6], [10, 2.5, 3, 7], [11, 3, 3, 8], [12, 2, 3, 6],
+  [13, 3, 4, 9], [14, 3, 4, 10], [15, 3, 4, 12], [16, 2.5, 3, 8],
+  [17, 3, 5, 14], [18, 4, 5, 16], [19, 4, 5, 18], [20, 3, 4, 12],
+  [21, 3, 4, 14], [22, 3, 3, 10], [23, 2, 3, 8], [24, 2, 2, 6],
+]);
+
+// Couch-to-Half Marathon 16-week plan
+const HALF_MARATHON_COUCH_TO_PLAN: WeekScheduleV2[] = buildEndurancePlan([
+  [1, 1, 1, 2], [2, 1, 1.5, 2.5], [3, 1.5, 1.5, 3], [4, 1, 1.5, 2.5],
+  [5, 1.5, 2, 3.5], [6, 2, 2, 4], [7, 2, 2.5, 5], [8, 1.5, 2, 4],
+  [9, 2, 3, 6], [10, 2.5, 3, 7], [11, 3, 3, 8], [12, 2, 3, 6],
+  [13, 3, 4, 9], [14, 3, 4, 10], [15, 3, 3, 8], [16, 2, 2, 6],
+], "Long Run / Race Sim");
 
 type StarterPlan = {
   id: string;
@@ -85,6 +94,16 @@ const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
       weeks: 24,
       daysPerWeek: 4,
       schedule: MARATHON_COUCH_TO_PLAN,
+    },
+  ],
+  "Half Marathon": [
+    {
+      id: "half_marathon_couch_16wk",
+      name: "Couch to Half Marathon",
+      description: "16-week beginner plan · 4 days/week · builds from 1 → 10 miles · race sim in Week 16",
+      weeks: 16,
+      daysPerWeek: 4,
+      schedule: HALF_MARATHON_COUCH_TO_PLAN,
     },
   ],
 };
