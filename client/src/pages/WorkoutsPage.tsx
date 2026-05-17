@@ -2186,7 +2186,7 @@ function ShareWorkoutModal({ open, onClose, shareType, contentJson, itemName }: 
 
 export default function WorkoutsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"active" | "logs" | "templates" | "plans" | "shared" | "equipment">("active");
+  const [tab, setTab] = useState<"active" | "logs" | "templates" | "plans" | "shared" | "equipment">("plans");
   const [logModal, setLogModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
   const [editLog, setEditLog] = useState<WorkoutLog | null>(null);
@@ -2214,6 +2214,14 @@ export default function WorkoutsPage() {
   const { data: sharedItems = [] } = useQuery<WorkoutShareWithUser[]>({ queryKey: ["/api/workout-shares"] });
   const { data: equipmentList = [] } = useQuery<Equipment[]>({ queryKey: ["/api/equipment"] });
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+
+  const activePlansCount = plans.filter(p => p.isActive).length;
+
+  // Auto-navigate to Active Plan tab when a plan is activated; fall back to Plans when all deactivated
+  useEffect(() => {
+    if (activePlansCount > 0 && tab !== "active") setTab("active");
+    if (activePlansCount === 0 && tab === "active") setTab("plans");
+  }, [activePlansCount]);
 
   // Auto-switch to shared tab from notification
   useEffect(() => {
@@ -2398,9 +2406,9 @@ export default function WorkoutsPage() {
       <div className="overflow-x-auto scrollbar-hide -mx-3 px-3">
         <div className="flex gap-1 w-max pb-1">
           {[
-            { value: "active", label: "Active Plan", icon: Play, count: plans.filter(p => p.isActive).length },
-            { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
+            ...(activePlansCount > 0 ? [{ value: "active", label: "Active Plan", icon: Play, count: activePlansCount }] : []),
             { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
+            { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
             { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
             { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
             { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
