@@ -523,7 +523,7 @@ const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturd
 const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
 
 // Proper component so useState is valid (rules of hooks)
-function PlanWeekAccordion({ weeks, currentWeek }: { weeks: WeekScheduleV2[]; currentWeek: number }) {
+function PlanWeekAccordion({ weeks, currentWeek, templates }: { weeks: WeekScheduleV2[]; currentWeek: number; templates: WorkoutTemplate[] }) {
   const [expandedWeeks, setExpandedWeeks] = useState<number[]>([currentWeek]);
   return (
     <div className="bg-card border rounded-xl overflow-hidden">
@@ -563,9 +563,50 @@ function PlanWeekAccordion({ weeks, currentWeek }: { weeks: WeekScheduleV2[]; cu
                     return (
                       <div key={day} className="flex items-start gap-3 px-6 py-2.5">
                         <span className="text-xs font-bold uppercase text-muted-foreground w-8 shrink-0 pt-0.5">{DAY_LABELS[day]}</span>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium">{e.label}</p>
                           {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
+                          {e.templateId && (() => {
+                            const tmpl = templates.find(t => t.id === e.templateId);
+                            if (!tmpl) return null;
+                            let exs: any[] = [];
+                            try { exs = JSON.parse(tmpl.exercisesJson); } catch { return null; }
+                            if (!exs.length) return null;
+                            return (
+                              <div className="mt-1 space-y-0.5">
+                                {exs.map((ex: any, xi: number) => {
+                                  const type = ex.type ?? "";
+                                  const isCardioEx = ["Run","Bike","Swim"].includes(type);
+                                  const isDurEx = ["Yoga","Stretch"].includes(type);
+                                  let detail = "";
+                                  if (isCardioEx) {
+                                    const parts = [ex.distance, ex.duration].filter(Boolean);
+                                    detail = parts.join(" · ");
+                                  } else if (isDurEx) {
+                                    detail = ex.duration ?? "";
+                                  } else {
+                                    const sets = Array.isArray(ex.sets) ? ex.sets : Array.from({ length: ex.sets || 3 }, () => ({ reps: ex.reps || 8, weight: ex.weight || 0 }));
+                                    if (sets.length > 0) {
+                                      const allSame = sets.every((s: any) => s.reps === sets[0].reps && s.weight === sets[0].weight);
+                                      if (allSame) {
+                                        detail = sets[0].weight > 0
+                                          ? `${sets.length}×${sets[0].reps} @ ${sets[0].weight} lbs`
+                                          : `${sets.length}×${sets[0].reps}`;
+                                      } else {
+                                        detail = sets.map((s: any) => s.weight > 0 ? `${s.reps}@${s.weight}` : `${s.reps}`).join(", ");
+                                      }
+                                    }
+                                  }
+                                  return (
+                                    <p key={xi} className="text-xs text-muted-foreground">
+                                      <span className="font-medium text-foreground/70">{ex.name}</span>
+                                      {detail && <span className="ml-1">— {detail}</span>}
+                                    </p>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -2565,6 +2606,47 @@ export default function WorkoutsPage() {
                                   <MoreHorizontal size={12} className="ml-auto opacity-0 group-hover:opacity-40 text-muted-foreground" />
                                 </div>
                                 {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                                {entry.templateId && (() => {
+                                  const tmpl = templates.find(t => t.id === entry.templateId);
+                                  if (!tmpl) return null;
+                                  let exs: any[] = [];
+                                  try { exs = JSON.parse(tmpl.exercisesJson); } catch { return null; }
+                                  if (!exs.length) return null;
+                                  return (
+                                    <div className="mt-1 space-y-0.5">
+                                      {exs.map((ex: any, xi: number) => {
+                                        const type = ex.type ?? "";
+                                        const isCardioEx = ["Run","Bike","Swim"].includes(type);
+                                        const isDurEx = ["Yoga","Stretch"].includes(type);
+                                        let detail = "";
+                                        if (isCardioEx) {
+                                          const parts = [ex.distance, ex.duration].filter(Boolean);
+                                          detail = parts.join(" · ");
+                                        } else if (isDurEx) {
+                                          detail = ex.duration ?? "";
+                                        } else {
+                                          const sets = Array.isArray(ex.sets) ? ex.sets : Array.from({ length: ex.sets || 3 }, () => ({ reps: ex.reps || 8, weight: ex.weight || 0 }));
+                                          if (sets.length > 0) {
+                                            const allSame = sets.every((s: any) => s.reps === sets[0].reps && s.weight === sets[0].weight);
+                                            if (allSame) {
+                                              detail = sets[0].weight > 0
+                                                ? `${sets.length}×${sets[0].reps} @ ${sets[0].weight} lbs`
+                                                : `${sets.length}×${sets[0].reps}`;
+                                            } else {
+                                              detail = sets.map((s: any) => s.weight > 0 ? `${s.reps}@${s.weight}` : `${s.reps}`).join(", ");
+                                            }
+                                          }
+                                        }
+                                        return (
+                                          <p key={xi} className="text-xs text-muted-foreground">
+                                            <span className="font-medium text-foreground/70">{ex.name}</span>
+                                            {detail && <span className="ml-1">— {detail}</span>}
+                                          </p>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
                               </button>
                             );
                           })}
@@ -2672,7 +2754,7 @@ export default function WorkoutsPage() {
 
                       {/* Full plan accordion */}
                       {parsedSched.isV2 && parsedSched.weeks.length > 1 && (
-                        <PlanWeekAccordion weeks={parsedSched.weeks} currentWeek={currentWeek} />
+                        <PlanWeekAccordion weeks={parsedSched.weeks} currentWeek={currentWeek} templates={templates} />
                       )}
                     </div>
                   </div>
