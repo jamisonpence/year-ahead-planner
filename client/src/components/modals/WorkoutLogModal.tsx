@@ -21,9 +21,9 @@ const isCardio = (t: string) => CARDIO_TYPES.has(t);
 const isDurationOnly = (t: string) => DURATION_ONLY_TYPES.has(t);
 const usesSetTable = (t: string) => !isCardio(t) && !isDurationOnly(t);
 
-export default function WorkoutLogModal({ open, onClose, templates, editLog, prefillName }: {
+export default function WorkoutLogModal({ open, onClose, templates, editLog, prefillName, prefillTemplateId }: {
   open: boolean; onClose: () => void; templates: WorkoutTemplate[];
-  editLog: WorkoutLog | null; prefillName?: string;
+  editLog: WorkoutLog | null; prefillName?: string; prefillTemplateId?: number;
 }) {
   const { toast } = useToast();
   const [templateId, setTemplateId] = useState("__none__");
@@ -43,7 +43,8 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog, pre
         setNotes(editLog.notes ?? "");
         try { setExercises(JSON.parse(editLog.exercisesJson)); } catch { setExercises([]); }
       } else {
-        setTemplateId("__none__"); setName(prefillName ?? ""); setWType("custom"); setDate(todayStr());
+        const tid = prefillTemplateId ? String(prefillTemplateId) : "__none__";
+        setTemplateId(tid); setName(prefillName ?? ""); setWType("custom"); setDate(todayStr());
         setDuration(""); setNotes(""); setExercises([]);
       }
     }

@@ -2248,6 +2248,7 @@ export default function WorkoutsPage() {
   const [editEntryLabel, setEditEntryLabel] = useState("");
   const [editEntryNotes, setEditEntryNotes] = useState("");
   const [logPrefillName, setLogPrefillName] = useState("");
+  const [logPrefillTemplateId, setLogPrefillTemplateId] = useState<number | undefined>(undefined);
 
   const { data: logs = [] } = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
   const { data: templates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
@@ -3286,7 +3287,7 @@ export default function WorkoutsPage() {
       )}
 
       {/* Modals */}
-      <WorkoutLogModal open={logModal} onClose={() => { setLogModal(false); setEditLog(null); setLogPrefillName(""); }} templates={templates} editLog={editLog} prefillName={logPrefillName} />
+      <WorkoutLogModal open={logModal} onClose={() => { setLogModal(false); setEditLog(null); setLogPrefillName(""); setLogPrefillTemplateId(undefined); }} templates={templates} editLog={editLog} prefillName={logPrefillName} prefillTemplateId={logPrefillTemplateId} />
 
       {/* Workout action dialog (Edit / Delete / Log from Active Plan) */}
       <Dialog open={!!workoutActionTarget} onOpenChange={open => { if (!open) { setWorkoutActionTarget(null); setWorkoutActionMode("menu"); } }}>
@@ -3306,17 +3307,28 @@ export default function WorkoutsPage() {
                 {/* Log */}
                 <Button className="w-full gap-2 justify-start" onClick={() => {
                   setLogPrefillName(workoutActionTarget.entry.label);
+                  if (workoutActionTarget.entry.templateId) setLogPrefillTemplateId(workoutActionTarget.entry.templateId);
                   setWorkoutActionTarget(null);
                   setEditLog(null);
                   setLogModal(true);
                 }}>
                   <ClipboardList size={14} /> Log This Workout
                 </Button>
-                {/* Edit */}
+                {/* Edit — for template entries open full log modal; for custom show label/notes editor */}
                 <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
-                  setEditEntryLabel(workoutActionTarget.entry.label);
-                  setEditEntryNotes(workoutActionTarget.entry.notes ?? "");
-                  setWorkoutActionMode("edit");
+                  if (workoutActionTarget.entry.templateId) {
+                    // Template-linked: open the full workout log modal pre-populated
+                    setLogPrefillName(workoutActionTarget.entry.label);
+                    setLogPrefillTemplateId(workoutActionTarget.entry.templateId);
+                    setWorkoutActionTarget(null);
+                    setEditLog(null);
+                    setLogModal(true);
+                  } else {
+                    // Custom entry: edit label + notes inline
+                    setEditEntryLabel(workoutActionTarget.entry.label);
+                    setEditEntryNotes(workoutActionTarget.entry.notes ?? "");
+                    setWorkoutActionMode("edit");
+                  }
                 }}>
                   <Pencil size={14} /> Edit Workout
                 </Button>
