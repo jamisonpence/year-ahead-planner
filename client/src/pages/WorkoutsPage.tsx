@@ -2114,6 +2114,14 @@ export default function WorkoutsPage() {
   const [shareModal, setShareModal] = useState(false);
   const [sharePayload, setSharePayload] = useState<{ type: "template" | "plan"; contentJson: string; name: string } | null>(null);
 
+  // Workout action menu (in Active Plan tab)
+  type WorkoutActionTarget = { planId: number; week: number; dayOfWeek: string; entry: PlanDayEntryV2 } | null;
+  const [workoutActionTarget, setWorkoutActionTarget] = useState<WorkoutActionTarget>(null);
+  const [workoutActionMode, setWorkoutActionMode] = useState<"menu" | "edit">("menu");
+  const [editEntryLabel, setEditEntryLabel] = useState("");
+  const [editEntryNotes, setEditEntryNotes] = useState("");
+  const [logPrefillName, setLogPrefillName] = useState("");
+
   const { data: logs = [] } = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
   const { data: templates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
   const { data: plans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
@@ -2158,6 +2166,17 @@ export default function WorkoutsPage() {
   const deleteEquipment = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/equipment/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/equipment"] }),
+  });
+
+  // Patch a plan's scheduleJson (used by workout action menu to edit/delete day entries)
+  const patchPlanSchedule = useMutation({
+    mutationFn: ({ planId, scheduleJson }: { planId: number; scheduleJson: string }) =>
+      apiRequest("PATCH", `/api/workout-plans/${planId}`, { scheduleJson }).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] });
+      setWorkoutActionTarget(null);
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
   const [gymAdding, setGymAdding] = useState(false);
@@ -2424,23 +2443,37 @@ export default function WorkoutsPage() {
                         {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mx-auto mt-0.5" />}
                       </div>
                       {entries.length > 0 ? (
-                        <div className="flex-1 min-w-0 space-y-2">
-                          {entries.map(({ entry, planName, color }, i) => (
-                            <div key={i} className="min-w-0">
-                              {activePlans.length > 1 && (
-                                <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border mb-0.5 ${color.tag}`}>
-                                  <div className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />
-                                  {planName}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {entries.map(({ entry, planName, color }, i) => {
+                            const meta = planMetas.find(m => m.plan.name === planName);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                className="w-full text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
+                                onClick={() => {
+                                  const m = planMetas.find(pm => pm.plan.name === planName);
+                                  if (!m) return;
+                                  setWorkoutActionTarget({ planId: m.plan.id, week: m.currentWeek, dayOfWeek: day, entry });
+                                  setWorkoutActionMode("menu");
+                                }}
+                              >
+                                {activePlans.length > 1 && (
+                                  <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border mb-0.5 ${color.tag}`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />
+                                    {planName}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {entry.templateId ? <Dumbbell size={12} className="text-primary shrink-0" /> : <TrendingUp size={12} className="text-primary shrink-0" />}
+                                  <p className="text-sm font-medium">{entry.label}</p>
+                                  {isToday && i === 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>}
+                                  <MoreHorizontal size={12} className="ml-auto opacity-0 group-hover:opacity-40 text-muted-foreground" />
                                 </div>
-                              )}
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {entry.templateId ? <Dumbbell size={12} className="text-primary shrink-0" /> : <TrendingUp size={12} className="text-primary shrink-0" />}
-                                <p className="text-sm font-medium">{entry.label}</p>
-                                {isToday && i === 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>}
-                              </div>
-                              {entry.notes && <p className="text-xs text-muted-foreground ml-4">{entry.notes}</p>}
-                            </div>
-                          ))}
+                                {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-sm text-muted-foreground flex-1">Rest</p>
@@ -3071,7 +3104,103 @@ export default function WorkoutsPage() {
       )}
 
       {/* Modals */}
-      <WorkoutLogModal open={logModal} onClose={() => { setLogModal(false); setEditLog(null); }} templates={templates} editLog={editLog} />
+      <WorkoutLogModal open={logModal} onClose={() => { setLogModal(false); setEditLog(null); setLogPrefillName(""); }} templates={templates} editLog={editLog} prefillName={logPrefillName} />
+
+      {/* Workout action dialog (Edit / Delete / Log from Active Plan) */}
+      <Dialog open={!!workoutActionTarget} onOpenChange={open => { if (!open) { setWorkoutActionTarget(null); setWorkoutActionMode("menu"); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {workoutActionMode === "edit" ? "Edit Workout" : workoutActionTarget?.entry.label ?? "Workout"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {workoutActionMode === "menu" && workoutActionTarget && (
+            <div className="space-y-3">
+              {workoutActionTarget.entry.notes && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">{workoutActionTarget.entry.notes}</p>
+              )}
+              <div className="space-y-2">
+                {/* Log */}
+                <Button className="w-full gap-2 justify-start" onClick={() => {
+                  setLogPrefillName(workoutActionTarget.entry.label);
+                  setWorkoutActionTarget(null);
+                  setEditLog(null);
+                  setLogModal(true);
+                }}>
+                  <ClipboardList size={14} /> Log This Workout
+                </Button>
+                {/* Edit */}
+                <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
+                  setEditEntryLabel(workoutActionTarget.entry.label);
+                  setEditEntryNotes(workoutActionTarget.entry.notes ?? "");
+                  setWorkoutActionMode("edit");
+                }}>
+                  <Pencil size={14} /> Edit Workout
+                </Button>
+                {/* Delete */}
+                <Button variant="outline" className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30" onClick={() => {
+                  const target = workoutActionTarget;
+                  const plan = plans.find(p => p.id === target.planId);
+                  if (!plan) return;
+                  const parsed = parseSchedule(plan.scheduleJson ?? "[]");
+                  let newWeeks: WeekScheduleV2[];
+                  if (parsed.isV2) {
+                    newWeeks = parsed.weeks.map(w =>
+                      w.week === target.week
+                        ? { ...w, days: w.days.filter(d => d.dayOfWeek !== target.dayOfWeek) }
+                        : w
+                    );
+                  } else {
+                    newWeeks = [{ week: 1, days: parsed.flatDays.filter(d => d.dayOfWeek !== target.dayOfWeek) }];
+                  }
+                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
+                  toast({ title: "Workout removed from plan" });
+                }}>
+                  <Trash2 size={14} /> Delete from Plan
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {workoutActionMode === "edit" && workoutActionTarget && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Workout name</label>
+                <Input value={editEntryLabel} onChange={e => setEditEntryLabel(e.target.value)} placeholder="e.g. Easy Run, Heavy Bench" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Notes (distance, sets, focus…)</label>
+                <Textarea value={editEntryNotes} onChange={e => setEditEntryNotes(e.target.value)} placeholder="e.g. 8 miles · long run" rows={2} className="resize-none" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => setWorkoutActionMode("menu")}>Cancel</Button>
+                <Button className="flex-1" disabled={!editEntryLabel.trim() || patchPlanSchedule.isPending} onClick={() => {
+                  const target = workoutActionTarget;
+                  const plan = plans.find(p => p.id === target.planId);
+                  if (!plan) return;
+                  const parsed = parseSchedule(plan.scheduleJson ?? "[]");
+                  const updated: PlanDayEntryV2 = { ...target.entry, label: editEntryLabel.trim(), notes: editEntryNotes.trim() || undefined };
+                  let newWeeks: WeekScheduleV2[];
+                  if (parsed.isV2) {
+                    newWeeks = parsed.weeks.map(w =>
+                      w.week === target.week
+                        ? { ...w, days: w.days.map(d => d.dayOfWeek === target.dayOfWeek ? updated : d) }
+                        : w
+                    );
+                  } else {
+                    newWeeks = [{ week: 1, days: parsed.flatDays.map(d => d.dayOfWeek === target.dayOfWeek ? { ...updated } : { dayOfWeek: d.dayOfWeek, label: d.label ?? d.templateName ?? "Workout" }) }];
+                  }
+                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
+                  toast({ title: "Workout updated" });
+                }}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <WorkoutTemplateModal open={templateModal} onClose={() => { setTemplateModal(false); setEditTemplate(null); }} editTemplate={editTemplate} />
       <ExerciseSearchModal open={exerciseSearchOpen} onClose={() => setExerciseSearchOpen(false)} templates={templates} />
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
