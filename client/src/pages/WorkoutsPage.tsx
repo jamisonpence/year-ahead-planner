@@ -1261,6 +1261,11 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
     return [];
   }
 
+  function calcStrengthWeeks(current: number, target: number): number {
+    if (target > current) return Math.max(8, Math.ceil((target - current) / 5) * 4);
+    return 8;
+  }
+
   function handleSelectGoalType(type: GoalType) {
     setGoalType(type);
     const dur = type === "endurance" ? "16" : type === "strength_pr" ? "8" : type === "body_composition" ? "12" : "8";
@@ -1375,11 +1380,21 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Current max</label>
-                    <Input type="number" value={currentWeight} onChange={e => setCurrentWeight(e.target.value)} placeholder="185" />
+                    <Input type="number" value={currentWeight} onChange={e => {
+                      setCurrentWeight(e.target.value);
+                      const cur = parseFloat(e.target.value);
+                      const tgt = parseFloat(targetWeight);
+                      if (cur > 0 && tgt > cur) { const w = calcStrengthWeeks(cur, tgt); setDurationWeeks(String(w)); setMilestones(generateMilestones("strength_pr", w)); }
+                    }} placeholder="185" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Target max</label>
-                    <Input type="number" value={targetWeight} onChange={e => setTargetWeight(e.target.value)} placeholder="225" />
+                    <Input type="number" value={targetWeight} onChange={e => {
+                      setTargetWeight(e.target.value);
+                      const tgt = parseFloat(e.target.value);
+                      const cur = parseFloat(currentWeight);
+                      if (tgt > cur && cur > 0) { const w = calcStrengthWeeks(cur, tgt); setDurationWeeks(String(w)); setMilestones(generateMilestones("strength_pr", w)); }
+                    }} placeholder="225" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Unit</label>
@@ -1399,9 +1414,12 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                   <Sparkles size={12} className="text-orange-500" /> Suggested Program
                 </p>
                 {(() => {
-                  const weeks = parseInt(durationWeeks) || 8;
                   const current = parseFloat(currentWeight);
                   const target = parseFloat(targetWeight);
+                  const weeks = target > current && current > 0
+                    ? calcStrengthWeeks(current, target)
+                    : parseInt(durationWeeks) || 8;
+                  const gap = target > current ? target - current : 0;
                   const isLoaded = scheduleByWeek.length === weeks &&
                     scheduleByWeek[0]?.days[0]?.label?.includes(exercise);
                   const phases = weeks >= 7 ? "5 phases (base → build → strength → peak → max test)" : "4 phases (base → build → strength → max test)";
@@ -1411,8 +1429,12 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                         <p className="text-sm font-semibold">{weeks}-Week {exercise} Program</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           2 days/week (Mon heavy + Thu volume) · {phases}
-                          {target > current ? ` · targeting ${target}${weightUnit}` : ""}
                         </p>
+                        {gap > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            +{gap}{weightUnit} goal → 4 weeks per 5{weightUnit} increase
+                          </p>
+                        )}
                         {isLoaded && (
                           <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-1 flex items-center gap-1">
                             <CheckCircle2 size={11} /> Loaded — customize in the schedule builder
@@ -1426,6 +1448,7 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
                         onClick={() => {
                           const plan = generateStrengthPRPlan(exercise, current, weightUnit, weeks);
                           setScheduleByWeek(plan);
+                          setDurationWeeks(String(weeks));
                           setMilestones(generateMilestones("strength_pr", weeks));
                           if (!name.trim()) setName(`${exercise} PR Program`);
                         }}
