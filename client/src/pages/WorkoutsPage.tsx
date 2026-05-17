@@ -23,8 +23,24 @@ import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import WorkoutTemplateModal from "@/components/modals/WorkoutTemplateModal";
 import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser, WorkoutPlanMilestone } from "@shared/schema";
 
-type PlanDayEntry = { dayOfWeek: string; templateId: number; templateName: string };
+// Legacy flat format (kept for backward compat reading)
+type PlanDayEntry = { dayOfWeek: string; templateId?: number | null; templateName?: string; label?: string; notes?: string };
+// New per-week format
+type PlanDayEntryV2 = { dayOfWeek: string; label: string; notes?: string; templateId?: number | null };
+type WeekScheduleV2 = { week: number; days: PlanDayEntryV2[] };
 type PublicUser = { id: number; name: string; avatarUrl: string | null; email: string };
+
+// Parse scheduleJson — handles both old flat format and new week-by-week format
+function parseSchedule(json: string): { isV2: boolean; weeks: WeekScheduleV2[]; flatDays: PlanDayEntry[] } {
+  try {
+    const raw = JSON.parse(json);
+    if (!Array.isArray(raw)) return { isV2: false, weeks: [], flatDays: [] };
+    if (raw.length === 0) return { isV2: true, weeks: [], flatDays: [] };
+    if ("week" in raw[0]) return { isV2: true, weeks: raw as WeekScheduleV2[], flatDays: [] };
+    // Old format
+    return { isV2: false, weeks: [], flatDays: raw as PlanDayEntry[] };
+  } catch { return { isV2: false, weeks: [], flatDays: [] }; }
+}
 
 const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
@@ -692,6 +708,7 @@ function EquipmentModal({ open, onClose, editing }: {
 // ── Plan Builder Modal ────────────────────────────────────────────────────────
 
 type GoalType = "strength_pr" | "endurance" | "body_composition" | "general";
+type DayEditMode = "rest" | "template" | "custom";
 
 const GOAL_TYPES: { value: GoalType; label: string; icon: React.ReactNode; desc: string; color: string }[] = [
   { value: "strength_pr", label: "Strength PR", icon: <Trophy size={18} />, desc: "Hit a new max on a lift", color: "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:border-orange-700 dark:text-orange-300" },
@@ -711,7 +728,13 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [durationWeeks, setDurationWeeks] = useState("12");
-  const [schedule, setSchedule] = useState<PlanDayEntry[]>([]);
+  const [scheduleByWeek, setScheduleByWeek] = useState<WeekScheduleV2[]>([]);
+  const [viewWeek, setViewWeek] = useState(1);
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [dayMode, setDayMode] = useState<DayEditMode>("rest");
+  const [dayTemplateId, setDayTemplateId] = useState<number | null>(null);
+  const [dayLabel, setDayLabel] = useState("");
+  const [dayNotes, setDayNotes] = useState("");
   const [goalType, setGoalType] = useState<GoalType>("general");
 
   // Strength PR
@@ -735,6 +758,54 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
   // Milestones (auto-generated based on goal)
   const [milestones, setMilestones] = useState<WorkoutPlanMilestone[]>([]);
 
+  // Schedule helpers
+  function getWeekDays(week: number): PlanDayEntryV2[] {
+    return scheduleByWeek.find(w => w.week === week)?.days ?? [];
+  }
+  function getDayEntry(week: number, day: string): PlanDayEntryV2 | null {
+    return getWeekDays(week).find(d => d.dayOfWeek === day) ?? null;
+  }
+  function upsertDayEntry(week: number, dayOfWeek: string, entry: PlanDayEntryV2 | null) {
+    setScheduleByWeek(prev => {
+      const days = (prev.find(w => w.week === week)?.days ?? []).filter(d => d.dayOfWeek !== dayOfWeek);
+      const newDays = entry ? [...days, entry] : days;
+      const withoutWeek = prev.filter(w => w.week !== week);
+      return [...withoutWeek, { week, days: newDays }].sort((a, b) => a.week - b.week);
+    });
+  }
+  function copyWeekTo(fromWeek: number, toWeek: number) {
+    setScheduleByWeek(prev => {
+      const src = prev.find(w => w.week === fromWeek)?.days ?? [];
+      const withoutTo = prev.filter(w => w.week !== toWeek);
+      return [...withoutTo, { week: toWeek, days: src.map(d => ({ ...d })) }].sort((a, b) => a.week - b.week);
+    });
+  }
+
+  function openDayEditor(day: string) {
+    const entry = getDayEntry(viewWeek, day);
+    setEditingDay(day);
+    if (!entry) {
+      setDayMode("rest"); setDayTemplateId(null); setDayLabel(""); setDayNotes("");
+    } else if (entry.templateId) {
+      setDayMode("template"); setDayTemplateId(entry.templateId); setDayLabel(""); setDayNotes(entry.notes ?? "");
+    } else {
+      setDayMode("custom"); setDayTemplateId(null); setDayLabel(entry.label); setDayNotes(entry.notes ?? "");
+    }
+  }
+
+  function commitDayEdit() {
+    if (!editingDay) return;
+    if (dayMode === "rest") {
+      upsertDayEntry(viewWeek, editingDay, null);
+    } else if (dayMode === "template" && dayTemplateId) {
+      const tmpl = templates.find(t => t.id === dayTemplateId);
+      upsertDayEntry(viewWeek, editingDay, { dayOfWeek: editingDay, label: tmpl?.name ?? "Workout", templateId: dayTemplateId, notes: dayNotes || undefined });
+    } else if (dayMode === "custom" && dayLabel.trim()) {
+      upsertDayEntry(viewWeek, editingDay, { dayOfWeek: editingDay, label: dayLabel.trim(), templateId: null, notes: dayNotes.trim() || undefined });
+    }
+    setEditingDay(null);
+  }
+
   useEffect(() => {
     if (!open) return;
     const dur = editing?.durationWeeks ?? 12;
@@ -743,7 +814,25 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
     setDurationWeeks(String(dur));
     setGoalType((editing?.goalType as GoalType) ?? "general");
     setStep(editing ? "details" : "goal");
-    try { setSchedule(editing ? JSON.parse(editing.scheduleJson) : []); } catch { setSchedule([]); }
+    setEditingDay(null);
+    setViewWeek(1);
+
+    // Parse schedule - handle both old and new formats
+    try {
+      const parsed = parseSchedule(editing?.scheduleJson ?? "[]");
+      if (parsed.isV2) {
+        setScheduleByWeek(parsed.weeks);
+      } else {
+        // Convert old flat format to week 1 of new format
+        const days = parsed.flatDays.map(e => ({
+          dayOfWeek: e.dayOfWeek,
+          label: e.label ?? e.templateName ?? "Workout",
+          templateId: e.templateId ?? null,
+        }));
+        setScheduleByWeek(days.length > 0 ? [{ week: 1, days }] : []);
+      }
+    } catch { setScheduleByWeek([]); }
+
     try { setMilestones(editing?.milestonesJson ? JSON.parse(editing.milestonesJson) : []); } catch { setMilestones([]); }
 
     // Parse existing goal metric
@@ -819,26 +908,13 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
-  function setDay(day: string, templateId: number | null) {
-    if (templateId === null) {
-      setSchedule(s => s.filter(e => e.dayOfWeek !== day));
-    } else {
-      const tmpl = templates.find(t => t.id === templateId);
-      if (!tmpl) return;
-      setSchedule(s => {
-        const without = s.filter(e => e.dayOfWeek !== day);
-        return [...without, { dayOfWeek: day, templateId, templateName: tmpl.name }];
-      });
-    }
-  }
-
   function handleSave() {
     const finalName = name.trim() || autoName();
     const payload = {
       name: finalName,
       description: description.trim() || null,
       durationWeeks: parseInt(durationWeeks),
-      scheduleJson: JSON.stringify(schedule),
+      scheduleJson: JSON.stringify(scheduleByWeek),
       goalType,
       goalMetricJson: buildGoalMetricJson(),
       startDate: editing?.startDate ?? new Date().toISOString().slice(0, 10),
@@ -847,7 +923,8 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
     editing ? updateMut.mutate(payload) : createMut.mutate(payload);
   }
 
-  const activeDays = schedule.length;
+  const totalWeeks = parseInt(durationWeeks);
+  const currentWeekDays = getWeekDays(viewWeek).length;
   const isPending = createMut.isPending || updateMut.isPending;
 
   return (
@@ -1045,62 +1122,152 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
             )}
 
             <div className="flex gap-2 pt-1">
-              <Button className="flex-1" onClick={() => setStep("schedule")}>
-                Set Weekly Schedule →
+              <Button className="flex-1" onClick={() => { setStep("schedule"); setEditingDay(null); }}>
+                Build Schedule →
+              </Button>
+              <Button variant="outline" onClick={handleSave} disabled={isPending}>
+                {isPending ? <Loader2 size={14} className="animate-spin" /> : editing ? "Save" : "Save & Skip"}
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step: Schedule */}
+        {/* Step: Schedule — week-by-week */}
         {step === "schedule" && (
-          <div className="space-y-4 pt-1">
-            <div className="flex items-center gap-2">
+          <div className="space-y-3 pt-1">
+            {/* Week navigator */}
+            <div className="flex items-center justify-between">
               <button onClick={() => setStep("details")} className="text-xs text-muted-foreground hover:text-foreground">← Back</button>
-              <span className="text-xs text-muted-foreground">Assign workouts to days of the week</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setViewWeek(w => Math.max(1, w - 1)); setEditingDay(null); }}
+                  disabled={viewWeek === 1}
+                  className="w-7 h-7 rounded-full border flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >‹</button>
+                <span className="text-sm font-semibold w-28 text-center">Week {viewWeek} of {totalWeeks}</span>
+                <button
+                  onClick={() => { setViewWeek(w => Math.min(totalWeeks, w + 1)); setEditingDay(null); }}
+                  disabled={viewWeek === totalWeeks}
+                  className="w-7 h-7 rounded-full border flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >›</button>
+              </div>
+              {viewWeek > 1 && (
+                <button
+                  onClick={() => { copyWeekTo(viewWeek - 1, viewWeek); setEditingDay(null); }}
+                  className="text-xs text-primary hover:underline"
+                >Copy Week {viewWeek - 1}</button>
+              )}
+              {viewWeek === 1 && <span className="w-16" />}
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Weekly Schedule <span className="font-normal">({activeDays} workout{activeDays !== 1 ? "s" : ""}/week)</span></p>
-              {templates.length === 0 ? (
-                <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/30">
-                  No workouts yet. Create some in "My Workouts" first — or skip this and assign workouts later.
-                </p>
-              ) : (
-                <div className="grid grid-cols-7 gap-1">
-                  {DAYS_OF_WEEK.map(day => {
-                    const entry = schedule.find(e => e.dayOfWeek === day);
-                    const tmplId = entry?.templateId ?? null;
-                    return (
-                      <div key={day} className="flex flex-col items-center gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
-                        <Select
-                          value={String(tmplId ?? "__rest__")}
-                          onValueChange={v => setDay(day, v === "__rest__" ? null : parseInt(v))}
-                        >
-                          <SelectTrigger className={`h-16 w-full flex-col items-center justify-center text-center text-[10px] leading-tight px-1 py-1 gap-0 ${entry ? "border-primary/50 bg-primary/5 text-primary" : "text-muted-foreground"}`}>
-                            <SelectValue>
-                              {entry ? (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <Dumbbell size={12} />
-                                  <span className="line-clamp-2 text-center">{entry.templateName}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground/50">Rest</span>
-                              )}
-                            </SelectValue>
-                          </SelectTrigger>
+            {/* Day grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {DAYS_OF_WEEK.map(day => {
+                const entry = getDayEntry(viewWeek, day);
+                const isEditing = editingDay === day;
+                return (
+                  <button
+                    key={day}
+                    onClick={() => isEditing ? setEditingDay(null) : openDayEditor(day)}
+                    className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg border-2 text-center transition-all min-h-[60px] justify-start ${
+                      isEditing ? "border-primary bg-primary/5" :
+                      entry ? "border-primary/30 bg-primary/5 hover:border-primary/50" :
+                      "border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 bg-transparent"
+                    }`}
+                  >
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
+                    {entry ? (
+                      <>
+                        {entry.templateId ? <Dumbbell size={10} className="text-primary mt-0.5" /> : <TrendingUp size={10} className="text-primary mt-0.5" />}
+                        <span className="text-[8px] leading-tight font-medium text-primary line-clamp-2 text-center">{entry.label}</span>
+                        {entry.notes && <span className="text-[7px] text-muted-foreground line-clamp-1 text-center">{entry.notes}</span>}
+                      </>
+                    ) : (
+                      <span className="text-[9px] text-muted-foreground/40 mt-1">Rest</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Day editor — inline below grid */}
+            {editingDay && (
+              <div className="border rounded-xl p-3 bg-muted/30 space-y-3">
+                <p className="text-xs font-semibold capitalize">{editingDay}</p>
+
+                {/* Mode tabs */}
+                <div className="flex gap-1 bg-background rounded-lg p-0.5 border">
+                  {([["rest","Rest"],["custom","Custom"],["template","From Library"]] as const).map(([m, lbl]) => (
+                    <button key={m} onClick={() => setDayMode(m)} className={`flex-1 text-xs py-1 rounded-md font-medium transition-colors ${dayMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+
+                {dayMode === "rest" && (
+                  <p className="text-xs text-muted-foreground">This day will be a rest day.</p>
+                )}
+
+                {dayMode === "custom" && (
+                  <div className="space-y-2">
+                    <Input
+                      value={dayLabel}
+                      onChange={e => setDayLabel(e.target.value)}
+                      placeholder="e.g. Long Run, Tempo Run, Easy 5 miles…"
+                      className="h-8 text-sm"
+                      autoFocus
+                    />
+                    <Input
+                      value={dayNotes}
+                      onChange={e => setDayNotes(e.target.value)}
+                      placeholder="Notes (optional) — e.g. 14 miles, Zone 2, 70 min"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                )}
+
+                {dayMode === "template" && (
+                  <div className="space-y-2">
+                    {templates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No workout templates yet. Create some in "My Workouts" first.</p>
+                    ) : (
+                      <>
+                        <Select value={dayTemplateId ? String(dayTemplateId) : ""} onValueChange={v => setDayTemplateId(parseInt(v))}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Pick a workout…" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__rest__">Rest day</SelectItem>
                             {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                      </div>
-                    );
-                  })}
+                        <Input
+                          value={dayNotes}
+                          onChange={e => setDayNotes(e.target.value)}
+                          placeholder="Notes (optional) — e.g. go easy today"
+                          className="h-8 text-sm"
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-0.5">
+                  <Button size="sm" className="h-7 text-xs flex-1" onClick={commitDayEdit}
+                    disabled={dayMode === "custom" && !dayLabel.trim() || dayMode === "template" && !dayTemplateId}>
+                    Done
+                  </Button>
+                  {getDayEntry(viewWeek, editingDay) && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { upsertDayEntry(viewWeek, editingDay, null); setEditingDay(null); }}>
+                      Clear
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingDay(null)}>Cancel</Button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground text-center">
+              {currentWeekDays > 0 ? `${currentWeekDays} workout${currentWeekDays !== 1 ? "s" : ""} this week` : "Tap a day to add a workout"}
+              {" · "}{totalWeeks} week program
+            </p>
 
             <div className="flex gap-2 pt-1">
               <Button className="flex-1" onClick={handleSave} disabled={isPending}>
@@ -1294,30 +1461,16 @@ export default function WorkoutsPage() {
   });
   const saveSharedPlan = useMutation({
     mutationFn: async ({ content }: { content: any }) => {
-      // Save each template in the plan's schedule first, then create the plan
-      const scheduleWithNewIds: PlanDayEntry[] = [];
-      const savedTemplates: Record<string, number> = {};
-      for (const day of (content.schedule ?? [])) {
-        if (!savedTemplates[day.templateName]) {
-          const res = await apiRequest("POST", "/api/workout-templates", {
-            name: day.templateName, workoutType: day.workoutType ?? "custom",
-            exercisesJson: day.exercisesJson ?? "[]", notes: null,
-            scheduledDay: null, recurring: "none", linkedGoalId: null,
-          });
-          const t = await res.json();
-          savedTemplates[day.templateName] = t.id;
-        }
-        scheduleWithNewIds.push({ dayOfWeek: day.dayOfWeek, templateId: savedTemplates[day.templateName], templateName: day.templateName });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] });
       return apiRequest("POST", "/api/workout-plans", {
         name: content.name, description: content.description ?? null,
-        durationWeeks: content.durationWeeks ?? 4, scheduleJson: JSON.stringify(scheduleWithNewIds),
+        durationWeeks: content.durationWeeks ?? 4,
+        scheduleJson: content.scheduleJson ?? "[]",
+        goalType: content.goalType ?? "general",
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] });
-      toast({ title: "Plan + templates saved to your library!" });
+      toast({ title: "Plan saved to your library!" });
     },
     onError: () => toast({ title: "Failed to save plan", variant: "destructive" }),
   });
@@ -1329,14 +1482,8 @@ export default function WorkoutsPage() {
       contentJson = JSON.stringify({ name: t.name, workoutType: t.workoutType, exercisesJson: t.exercisesJson, notes: t.notes });
     } else {
       const p = item as WorkoutPlan;
-      let schedule: any[] = [];
-      try { schedule = JSON.parse(p.scheduleJson); } catch {}
-      // Enrich with full template data
-      const enriched = schedule.map((entry: PlanDayEntry) => {
-        const tmpl = templates.find(t => t.id === entry.templateId);
-        return { dayOfWeek: entry.dayOfWeek, templateName: entry.templateName, workoutType: tmpl?.workoutType ?? "custom", exercisesJson: tmpl?.exercisesJson ?? "[]" };
-      });
-      contentJson = JSON.stringify({ name: p.name, description: p.description, durationWeeks: p.durationWeeks, schedule: enriched });
+      // Pass raw scheduleJson through — receiver can parse it
+      contentJson = JSON.stringify({ name: p.name, description: p.description, durationWeeks: p.durationWeeks, scheduleJson: p.scheduleJson, goalType: p.goalType });
     }
     setSharePayload({ type, contentJson, name: item.name });
     setShareModal(true);
@@ -1601,15 +1748,9 @@ export default function WorkoutsPage() {
               </Button>
             </div>
           ) : plans.map(plan => {
-            let planSchedule: PlanDayEntry[] = [];
-            try { planSchedule = JSON.parse(plan.scheduleJson); } catch {}
-            const activeDaysCount = planSchedule.length;
-            let goalMetric: any = null;
-            try { goalMetric = plan.goalMetricJson ? JSON.parse(plan.goalMetricJson) : null; } catch {}
-            let milestones: WorkoutPlanMilestone[] = [];
-            try { milestones = plan.milestonesJson ? JSON.parse(plan.milestonesJson) : []; } catch {}
+            const parsedSched = parseSchedule(plan.scheduleJson ?? "[]");
 
-            // Calculate week progress
+            // Determine which week's schedule to show on the card
             const startDate = plan.startDate ? new Date(plan.startDate) : null;
             const today = new Date();
             const weeksElapsed = startDate
@@ -1617,6 +1758,28 @@ export default function WorkoutsPage() {
               : 0;
             const currentWeek = Math.min(weeksElapsed + 1, plan.durationWeeks);
             const progressPct = Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100));
+
+            // Get the display week's day entries
+            let displayDays: PlanDayEntryV2[] = [];
+            if (parsedSched.isV2) {
+              // Try to show the current week, fall back to week 1
+              displayDays = parsedSched.weeks.find(w => w.week === currentWeek)?.days
+                ?? parsedSched.weeks[0]?.days ?? [];
+            } else {
+              // Old format — convert
+              displayDays = parsedSched.flatDays.map(e => ({
+                dayOfWeek: e.dayOfWeek,
+                label: e.label ?? e.templateName ?? "Workout",
+                templateId: e.templateId,
+              }));
+            }
+            const activeDaysCount = displayDays.length;
+            const totalWeeksScheduled = parsedSched.isV2 ? parsedSched.weeks.length : 1;
+
+            let goalMetric: any = null;
+            try { goalMetric = plan.goalMetricJson ? JSON.parse(plan.goalMetricJson) : null; } catch {}
+            let milestones: WorkoutPlanMilestone[] = [];
+            try { milestones = plan.milestonesJson ? JSON.parse(plan.milestonesJson) : []; } catch {}
 
             // Goal progress bar
             const goalProgress = goalMetric?.currentValue && goalMetric?.targetValue
@@ -1646,7 +1809,7 @@ export default function WorkoutsPage() {
                             {goalInfo.label}
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">{plan.durationWeeks}w · {activeDaysCount}d/wk</span>
+                        <span className="text-xs text-muted-foreground">{plan.durationWeeks}w · {activeDaysCount}d/wk{totalWeeksScheduled > 1 ? ` · ${totalWeeksScheduled} wks planned` : ""}</span>
                       </div>
                       {plan.description && <p className="text-xs text-muted-foreground line-clamp-1">{plan.description}</p>}
                     </div>
@@ -1717,25 +1880,33 @@ export default function WorkoutsPage() {
                   )}
 
                   {/* Weekly schedule mini-grid */}
-                  {planSchedule.length > 0 && (
-                    <div className="grid grid-cols-7 gap-1">
-                      {DAYS_OF_WEEK.map(day => {
-                        const entry = planSchedule.find(e => e.dayOfWeek === day);
-                        return (
-                          <div key={day} className={`rounded-lg p-1.5 text-center flex flex-col items-center gap-0.5 ${entry ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
-                            <span className="text-[9px] font-bold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
-                            {entry ? (
-                              <>
-                                <Dumbbell size={10} className="text-primary" />
-                                <span className="text-[8px] leading-tight text-center line-clamp-2 font-medium">{entry.templateName}</span>
-                              </>
-                            ) : (
-                              <span className="text-[9px] text-muted-foreground/40 mt-0.5">—</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {displayDays.length > 0 && (
+                    <>
+                      {parsedSched.isV2 && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Week {currentWeek} schedule{totalWeeksScheduled > 1 ? ` (${totalWeeksScheduled} unique weeks planned)` : ""}
+                        </p>
+                      )}
+                      <div className="grid grid-cols-7 gap-1">
+                        {DAYS_OF_WEEK.map(day => {
+                          const entry = displayDays.find(e => e.dayOfWeek === day);
+                          return (
+                            <div key={day} className={`rounded-lg p-1.5 text-center flex flex-col items-center gap-0.5 ${entry ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
+                              <span className="text-[9px] font-bold text-muted-foreground uppercase">{DAY_LABELS[day]}</span>
+                              {entry ? (
+                                <>
+                                  {entry.templateId ? <Dumbbell size={10} className="text-primary" /> : <TrendingUp size={10} className="text-primary" />}
+                                  <span className="text-[8px] leading-tight text-center line-clamp-2 font-medium">{entry.label}</span>
+                                  {entry.notes && <span className="text-[7px] text-muted-foreground/70 line-clamp-1">{entry.notes}</span>}
+                                </>
+                              ) : (
+                                <span className="text-[9px] text-muted-foreground/40 mt-0.5">—</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
 
                   {/* Footer actions */}
