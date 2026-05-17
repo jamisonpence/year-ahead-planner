@@ -81,6 +81,34 @@ function buildTueThuSunPlan(rows: [number, number, number, number][], sunLabel =
   }));
 }
 
+// Couch-to-50K Ultra 24-week plan (Tue easy, Thu rest/cross-train, Sat long run, Sun long run)
+// Sat2 = back-to-back Saturday second run; when > 0 it's appended to Saturday notes
+const FIFTY_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  // [week, tue, sat, sat2, sun]
+  const rows: [number, number, number, number, number][] = [
+    [1, 3, 4, 0, 5],   [2, 3, 4, 0, 6],   [3, 3, 5, 0, 7],   [4, 2.5, 4, 0, 5],
+    [5, 3.5, 6, 3, 8], [6, 4, 6, 4, 10],  [7, 4, 7, 4, 12],  [8, 3, 5, 3, 8],
+    [9, 4, 8, 5, 14],  [10, 4, 8, 6, 16], [11, 4, 8, 6, 18], [12, 3, 6, 4, 12],
+    [13, 4, 9, 6, 18], [14, 4, 9, 7, 20], [15, 4, 10, 8, 22],[16, 3, 7, 5, 14],
+    [17, 4, 10, 8, 22],[18, 4, 10, 8, 20],[19, 3, 8, 6, 18], [20, 3, 6, 4, 14],
+    [21, 2.5, 5, 3, 10],[22, 2, 4, 0, 8], [23, 2, 3, 0, 6],  [24, 1.5, 2, 0, 4],
+  ];
+  const fmt = (n: number) => `${n} mile${n !== 1 ? "s" : ""}`;
+  return rows.map(([week, tue, sat, sat2, sun]) => ({
+    week,
+    days: [
+      { dayOfWeek: "tuesday", label: "Easy Run", notes: fmt(tue) },
+      { dayOfWeek: "thursday", label: "Rest or Cross-Train" },
+      {
+        dayOfWeek: "saturday",
+        label: sat2 > 0 ? "Long Run + Back-to-Back" : "Long Run",
+        notes: sat2 > 0 ? `${fmt(sat)} · back-to-back ${fmt(sat2)}` : fmt(sat),
+      },
+      { dayOfWeek: "sunday", label: "Long Run", notes: fmt(sun) },
+    ],
+  }));
+})();
+
 // Couch-to-10K 10-week plan
 const TEN_K_COUCH_TO_PLAN: WeekScheduleV2[] = buildTueThuSunPlan([
   [1, 2, 2, 3], [2, 2, 2.5, 3.5], [3, 2.5, 2.5, 4], [4, 2, 2.5, 3],
@@ -134,6 +162,16 @@ const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
       weeks: 10,
       daysPerWeek: 3,
       schedule: TEN_K_COUCH_TO_PLAN,
+    },
+  ],
+  "50K Ultra": [
+    {
+      id: "50k_couch_24wk",
+      name: "Couch to 50K Ultra",
+      description: "24-week plan · 4 days/week · Tue easy + Sat/Sun long runs · back-to-back weekends peak at 10+22 miles · taper Weeks 20–24",
+      weeks: 24,
+      daysPerWeek: 4,
+      schedule: FIFTY_K_COUCH_TO_PLAN,
     },
   ],
 };
