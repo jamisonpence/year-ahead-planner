@@ -140,6 +140,50 @@ const SPRINT_TRI_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   });
 })();
 
+// Couch-to-Olympic Triathlon 16-week plan
+// Mon swim, Tue bike, Wed run, Thu swim (most weeks), Fri rest/run, Sat brick/race, Sun run/rest
+const OLYMPIC_TRI_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  const fmt = (min: number) => `${min} min`;
+  // [week, monMin,monNote, tueMin,tueNote, wedMin,wedNote, thuMin,thuNote, friMin,friLabel,friNote, satMin,satNote,satLabel, sunMin,sunNote]
+  type Row = [number, number,string, number,string, number,string, number,string, number,string,string, number,string,string, number,string];
+  const rows: Row[] = [
+    // Weeks 1-4: base building
+    [1,  25,"Easy technique", 40,"Easy ride",            25,"Easy run",     25,"Drills",          0, "","",   45,"35 min bike + 10 min run","Brick Workout", 30,"Easy/long run"],
+    [2,  25,"Easy technique", 40,"Easy ride",            25,"Easy run",     25,"Drills",          0, "","",   45,"35 min bike + 10 min run","Brick Workout", 30,"Easy/long run"],
+    [3,  25,"Easy technique", 40,"Easy ride",            25,"Easy run",     25,"Drills",          0, "","",   45,"35 min bike + 10 min run","Brick Workout", 30,"Easy/long run"],
+    [4,  25,"Easy technique", 40,"Easy ride",            25,"Easy run",     25,"Drills",          0, "","",   45,"35 min bike + 10 min run","Brick Workout", 30,"Easy/long run"],
+    // Weeks 5-8: build
+    [5,  30,"Steady",         45,"Steady",               30,"Easy",         30,"Drills + steady", 0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy/long run"],
+    [6,  30,"Steady",         45,"Steady",               30,"Easy",         30,"Drills + steady", 0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy/long run"],
+    [7,  30,"Steady",         45,"Steady",               30,"Easy",         30,"Drills + steady", 0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy/long run"],
+    [8,  30,"Steady",         45,"Steady",               30,"Easy",         30,"Drills + steady", 0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy/long run"],
+    // Weeks 9-12: peak (Friday becomes a short run)
+    [9,  35,"Steady",         60,"Steady with tempo",    35,"Easy/steady",  35,"Drills + steady", 25,"Run","Short easy run", 70,"55 min bike + 15 min run","Brick Workout", 40,"Long run"],
+    [10, 35,"Steady",         60,"Steady with tempo",    35,"Easy/steady",  35,"Drills + steady", 25,"Run","Short easy run", 70,"55 min bike + 15 min run","Brick Workout", 40,"Long run"],
+    [11, 35,"Steady",         60,"Steady with tempo",    35,"Easy/steady",  35,"Drills + steady", 25,"Run","Short easy run", 70,"55 min bike + 15 min run","Brick Workout", 40,"Long run"],
+    [12, 35,"Steady",         60,"Steady with tempo",    35,"Easy/steady",  35,"Drills + steady", 25,"Run","Short easy run", 70,"55 min bike + 15 min run","Brick Workout", 40,"Long run"],
+    // Weeks 13-14: taper begins
+    [13, 30,"Taper: easy",    50,"Taper: steady",        30,"Easy",         30,"Easy",            0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy long run"],
+    [14, 30,"Taper: easy",    50,"Taper: steady",        30,"Easy",         30,"Easy",            0, "","",   55,"40 min bike + 15 min run","Brick Workout", 35,"Easy long run"],
+    // Week 15: deep taper
+    [15, 25,"Easy",           40,"Easy",                 25,"Easy",         25,"Easy",            0, "","",   45,"Short brick",             "Brick Workout", 0, ""],
+    // Week 16: race week
+    [16, 20,"Easy",           30,"Easy",                 20,"Easy",         0, "",                0, "","",   0, "Race day!",                "Race Day 🏁",  0, ""],
+  ];
+  return rows.map(([week, monMin,monNote, tueMin,tueNote, wedMin,wedNote, thuMin,thuNote, friMin,friLabel,friNote, satMin,satNote,satLabel, sunMin,sunNote]) => {
+    const days: PlanDayEntryV2[] = [
+      { dayOfWeek: "monday",    label: "Swim", notes: `${fmt(monMin)} · ${monNote}` },
+      { dayOfWeek: "tuesday",   label: "Bike", notes: `${fmt(tueMin)} · ${tueNote}` },
+      { dayOfWeek: "wednesday", label: "Run",  notes: `${fmt(wedMin)} · ${wedNote}` },
+    ];
+    if (thuMin > 0) days.push({ dayOfWeek: "thursday", label: "Swim", notes: `${fmt(thuMin)} · ${thuNote}` });
+    if (friMin > 0) days.push({ dayOfWeek: "friday",   label: friLabel, notes: `${fmt(friMin)} · ${friNote}` });
+    if (satMin > 0 || satLabel === "Race Day 🏁") days.push({ dayOfWeek: "saturday", label: satLabel, notes: satMin > 0 ? `${fmt(satMin)} · ${satNote}` : satNote });
+    if (sunMin > 0) days.push({ dayOfWeek: "sunday", label: "Run", notes: `${fmt(sunMin)} · ${sunNote}` });
+    return { week, days };
+  });
+})();
+
 // Couch-to-5K 8-week plan (Mon/Wed/Sat, 3 days/week)
 const FIVE_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   // [week, mon label, mon miles, wed label, wed miles, sat miles, sat label]
@@ -217,6 +261,16 @@ type StarterPlan = {
 };
 
 const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
+  "Triathlon (Olympic)": [
+    {
+      id: "olympic_tri_couch_16wk",
+      name: "Couch to Olympic Triathlon",
+      description: "16-week plan · 5–6 days/week · Mon/Thu swim, Tue bike, Wed/Fri run, Sat brick · peak 55 min bike + 15 min run · taper Weeks 13–15 · race Week 16",
+      weeks: 16,
+      daysPerWeek: 6,
+      schedule: OLYMPIC_TRI_COUCH_TO_PLAN,
+    },
+  ],
   "Triathlon (Sprint)": [
     {
       id: "sprint_tri_couch_12wk",
