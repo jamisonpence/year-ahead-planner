@@ -42,6 +42,53 @@ function parseSchedule(json: string): { isV2: boolean; weeks: WeekScheduleV2[]; 
   } catch { return { isV2: false, weeks: [], flatDays: [] }; }
 }
 
+// ── Built-in Starter Plans ─────────────────────────────────────────────────────
+
+// Couch-to-Marathon 24-week plan (Mon easy, Wed rest/cross-train, Fri easy, Sun long run)
+const MARATHON_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  // [week, monMiles, friMiles, sunMiles]
+  const rows: [number, number, number, number][] = [
+    [1, 1, 1, 1.5], [2, 1, 1.5, 2], [3, 1.5, 1.5, 2.5], [4, 1, 1.5, 2],
+    [5, 1.5, 2, 3], [6, 2, 2, 4], [7, 2, 2.5, 5], [8, 1.5, 2, 3.5],
+    [9, 2, 3, 6], [10, 2.5, 3, 7], [11, 3, 3, 8], [12, 2, 3, 6],
+    [13, 3, 4, 9], [14, 3, 4, 10], [15, 3, 4, 12], [16, 2.5, 3, 8],
+    [17, 3, 5, 14], [18, 4, 5, 16], [19, 4, 5, 18], [20, 3, 4, 12],
+    [21, 3, 4, 14], [22, 3, 3, 10], [23, 2, 3, 8], [24, 2, 2, 6],
+  ];
+  const fmt = (n: number) => `${n} mile${n !== 1 ? "s" : ""}`;
+  return rows.map(([week, mon, fri, sun]) => ({
+    week,
+    days: [
+      { dayOfWeek: "monday", label: "Easy Run", notes: fmt(mon) },
+      { dayOfWeek: "wednesday", label: "Rest or Cross-Train" },
+      { dayOfWeek: "friday", label: "Easy Run", notes: fmt(fri) },
+      { dayOfWeek: "sunday", label: "Long Run", notes: fmt(sun) },
+    ],
+  }));
+})();
+
+type StarterPlan = {
+  id: string;
+  name: string;
+  description: string;
+  weeks: number;
+  daysPerWeek: number;
+  schedule: WeekScheduleV2[];
+};
+
+const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
+  Marathon: [
+    {
+      id: "marathon_couch_24wk",
+      name: "Couch to Marathon",
+      description: "24-week beginner plan · 4 days/week · builds from 1 → 18 miles · includes taper",
+      weeks: 24,
+      daysPerWeek: 4,
+      schedule: MARATHON_COUCH_TO_PLAN,
+    },
+  ],
+};
+
 const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
 
@@ -1030,6 +1077,44 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
               </div>
             )}
 
+            {/* Starter plan picker — shown when a matching race distance has built-in templates */}
+            {goalType === "endurance" && ENDURANCE_STARTER_PLANS[raceDistance] && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-blue-500" /> Starter Training Plans
+                </p>
+                {ENDURANCE_STARTER_PLANS[raceDistance].map(sp => {
+                  const isLoaded = scheduleByWeek.length === sp.weeks && scheduleByWeek[0]?.days[0]?.label === sp.schedule[0]?.days[0]?.label;
+                  return (
+                    <div key={sp.id} className={`flex items-start gap-3 rounded-xl border-2 p-3 transition-all ${isLoaded ? "border-blue-400 bg-blue-50 dark:bg-blue-950/30" : "border-border bg-card"}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{sp.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{sp.description}</p>
+                        {isLoaded && (
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Loaded — customize in the schedule builder
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={isLoaded ? "outline" : "default"}
+                        className="shrink-0 h-8 text-xs gap-1.5"
+                        onClick={() => {
+                          setScheduleByWeek(sp.schedule);
+                          setDurationWeeks(String(sp.weeks));
+                          setMilestones(generateMilestones("endurance", sp.weeks));
+                          if (!name.trim()) setName(sp.name);
+                        }}
+                      >
+                        {isLoaded ? "Reload" : <><Plus size={11} /> Use Plan</>}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {goalType === "body_composition" && (
               <div className="space-y-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
                 <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5"><Heart size={13} /> Body Goal</p>
@@ -1123,7 +1208,9 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
 
             <div className="flex gap-2 pt-1">
               <Button className="flex-1" onClick={() => { setStep("schedule"); setEditingDay(null); }}>
-                Build Schedule →
+                {scheduleByWeek.length > 0
+                  ? <><CalendarDays size={14} /> Review Schedule ({scheduleByWeek.length} weeks) →</>
+                  : <>Build Schedule →</>}
               </Button>
               <Button variant="outline" onClick={handleSave} disabled={isPending}>
                 {isPending ? <Loader2 size={14} className="animate-spin" /> : editing ? "Save" : "Save & Skip"}
