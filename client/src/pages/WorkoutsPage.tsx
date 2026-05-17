@@ -109,6 +109,34 @@ const FIFTY_K_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
   }));
 })();
 
+// Couch-to-50 Mile Ultra 28-week plan (same Tue/Thu/Sat+Sat2/Sun structure as 50K)
+const FIFTY_MILE_COUCH_TO_PLAN: WeekScheduleV2[] = (() => {
+  // [week, tue, sat, sat2, sun]
+  const rows: [number, number, number, number, number][] = [
+    [1, 3, 4, 0, 5],   [2, 3, 4, 0, 6],    [3, 3.5, 5, 0, 7],  [4, 3, 4, 0, 5],
+    [5, 4, 6, 3, 8],   [6, 4, 6, 4, 10],   [7, 4.5, 7, 4, 12], [8, 3.5, 5, 3, 8],
+    [9, 4.5, 8, 5, 14],[10, 5, 8, 6, 16],  [11, 5, 9, 6, 18],  [12, 4, 6, 4, 12],
+    [13, 5, 10, 7, 18],[14, 5, 10, 8, 20], [15, 5, 11, 8, 22], [16, 4, 7, 5, 14],
+    [17, 5, 11, 8, 22],[18, 5, 12, 8, 24], [19, 4, 8, 6, 18],  [20, 4, 8, 6, 20],
+    [21, 4, 9, 7, 22], [22, 3.5, 7, 5, 16],[23, 3, 6, 4, 14],  [24, 3, 5, 3, 12],
+    [25, 2.5, 4, 0, 10],[26, 2, 4, 0, 8],  [27, 2, 3, 0, 6],   [28, 1.5, 2, 0, 4],
+  ];
+  const fmt = (n: number) => `${n} mile${n !== 1 ? "s" : ""}`;
+  return rows.map(([week, tue, sat, sat2, sun]) => ({
+    week,
+    days: [
+      { dayOfWeek: "tuesday", label: "Easy Run", notes: fmt(tue) },
+      { dayOfWeek: "thursday", label: "Rest or Cross-Train" },
+      {
+        dayOfWeek: "saturday",
+        label: sat2 > 0 ? "Long Run + Back-to-Back" : "Long Run",
+        notes: sat2 > 0 ? `${fmt(sat)} · back-to-back ${fmt(sat2)}` : fmt(sat),
+      },
+      { dayOfWeek: "sunday", label: "Long Run", notes: fmt(sun) },
+    ],
+  }));
+})();
+
 // Couch-to-10K 10-week plan
 const TEN_K_COUCH_TO_PLAN: WeekScheduleV2[] = buildTueThuSunPlan([
   [1, 2, 2, 3], [2, 2, 2.5, 3.5], [3, 2.5, 2.5, 4], [4, 2, 2.5, 3],
@@ -162,6 +190,16 @@ const ENDURANCE_STARTER_PLANS: Record<string, StarterPlan[]> = {
       weeks: 10,
       daysPerWeek: 3,
       schedule: TEN_K_COUCH_TO_PLAN,
+    },
+  ],
+  "50 Mile Ultra": [
+    {
+      id: "50mile_couch_28wk",
+      name: "Couch to 50 Mile Ultra",
+      description: "28-week plan · 4 days/week · Tue easy + Sat/Sun long runs · back-to-back weekends peak at 12+24 miles · taper Weeks 25–28",
+      weeks: 28,
+      daysPerWeek: 4,
+      schedule: FIFTY_MILE_COUCH_TO_PLAN,
     },
   ],
   "50K Ultra": [
