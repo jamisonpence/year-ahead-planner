@@ -436,6 +436,64 @@ function generateStrengthPRPlan(exercise: string, currentMax: number, unit: stri
 const DAYS_OF_WEEK = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesday:"Wed", thursday:"Thu", friday:"Fri", saturday:"Sat", sunday:"Sun" };
 
+// Proper component so useState is valid (rules of hooks)
+function PlanWeekAccordion({ weeks, currentWeek }: { weeks: WeekScheduleV2[]; currentWeek: number }) {
+  const [expandedWeeks, setExpandedWeeks] = useState<number[]>([currentWeek]);
+  return (
+    <div className="bg-card border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b bg-muted/30">
+        <p className="text-sm font-semibold">Full Plan — All {weeks.length} Weeks</p>
+      </div>
+      <div className="divide-y">
+        {weeks.map(wk => {
+          const isCurrentWk = wk.week === currentWeek;
+          const isPastWk = wk.week < currentWeek;
+          const isOpen = expandedWeeks.includes(wk.week);
+          return (
+            <div key={wk.week}>
+              <button
+                type="button"
+                className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors ${isCurrentWk ? "bg-primary/5" : ""}`}
+                onClick={() => setExpandedWeeks(prev => prev.includes(wk.week) ? prev.filter(w => w !== wk.week) : [...prev, wk.week])}
+              >
+                <div className="flex items-center gap-2.5">
+                  {isPastWk
+                    ? <CheckCircle2 size={14} className="text-primary shrink-0" />
+                    : isCurrentWk
+                      ? <Play size={14} className="text-primary shrink-0" fill="currentColor" />
+                      : <div className="w-3.5 h-3.5 rounded-full border-2 border-border shrink-0" />}
+                  <span className={`text-sm font-medium ${isCurrentWk ? "text-primary" : isPastWk ? "text-muted-foreground" : ""}`}>
+                    Week {wk.week}{isCurrentWk && " (current)"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{wk.days.length} workout{wk.days.length !== 1 ? "s" : ""}</span>
+                </div>
+                <ChevronRight size={14} className={`text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
+              </button>
+              {isOpen && (
+                <div className="divide-y bg-muted/10">
+                  {DAYS_OF_WEEK.map(day => {
+                    const e = wk.days.find(d => d.dayOfWeek === day);
+                    if (!e) return null;
+                    return (
+                      <div key={day} className="flex items-start gap-3 px-6 py-2.5">
+                        <span className="text-xs font-bold uppercase text-muted-foreground w-8 shrink-0 pt-0.5">{DAY_LABELS[day]}</span>
+                        <div>
+                          <p className="text-sm font-medium">{e.label}</p>
+                          {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const EQUIPMENT_CATEGORIES = [
@@ -2440,63 +2498,9 @@ export default function WorkoutsPage() {
                   </div>
 
                   {/* Full plan week-by-week accordion */}
-                  {parsedSched.isV2 && parsedSched.weeks.length > 1 && (() => {
-                    const [expandedWeeks, setExpandedWeeks] = useState<number[]>([currentWeek]);
-                    return (
-                      <div className="bg-card border rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 border-b bg-muted/30">
-                          <p className="text-sm font-semibold">Full Plan — All {parsedSched.weeks.length} Weeks</p>
-                        </div>
-                        <div className="divide-y">
-                          {parsedSched.weeks.map(wk => {
-                            const isCurrentWk = wk.week === currentWeek;
-                            const isPastWk = wk.week < currentWeek;
-                            const isOpen = expandedWeeks.includes(wk.week);
-                            return (
-                              <div key={wk.week}>
-                                <button
-                                  type="button"
-                                  className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors ${isCurrentWk ? "bg-primary/5" : ""}`}
-                                  onClick={() => setExpandedWeeks(prev => prev.includes(wk.week) ? prev.filter(w => w !== wk.week) : [...prev, wk.week])}
-                                >
-                                  <div className="flex items-center gap-2.5">
-                                    {isPastWk
-                                      ? <CheckCircle2 size={14} className="text-primary shrink-0" />
-                                      : isCurrentWk
-                                        ? <Play size={14} className="text-primary shrink-0" fill="currentColor" />
-                                        : <div className="w-3.5 h-3.5 rounded-full border-2 border-border shrink-0" />}
-                                    <span className={`text-sm font-medium ${isCurrentWk ? "text-primary" : isPastWk ? "text-muted-foreground" : ""}`}>
-                                      Week {wk.week}
-                                      {isCurrentWk && " (current)"}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">{wk.days.length} workouts</span>
-                                  </div>
-                                  <ChevronRight size={14} className={`text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                                </button>
-                                {isOpen && (
-                                  <div className="divide-y bg-muted/10">
-                                    {DAYS_OF_WEEK.map(day => {
-                                      const e = wk.days.find(d => d.dayOfWeek === day);
-                                      if (!e) return null;
-                                      return (
-                                        <div key={day} className="flex items-start gap-3 px-6 py-2.5">
-                                          <span className="text-xs font-bold uppercase text-muted-foreground w-8 shrink-0 pt-0.5">{DAY_LABELS[day]}</span>
-                                          <div>
-                                            <p className="text-sm font-medium">{e.label}</p>
-                                            {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  {parsedSched.isV2 && parsedSched.weeks.length > 1 && (
+                    <PlanWeekAccordion weeks={parsedSched.weeks} currentWeek={currentWeek} />
+                  )}
                 </div>
               );
             })}
