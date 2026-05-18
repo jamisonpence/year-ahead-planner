@@ -6,6 +6,7 @@ import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
   Users, UtensilsCrossed, Search, Loader2, Heart, Target, ArrowRight,
+  BookOpen, Zap, BookMarked,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input as UIInput } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select as UISelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal, WorkoutPlan } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal, WorkoutPlan, Recipe, NutritionSummary } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -852,17 +853,80 @@ function CareTeamTab() {
   );
 }
 
-// ── FoodSearchAdd ──────────────────────────────────────────────────────────
+// ── Shared meal-type + servings selectors ─────────────────────────────────
+const MEAL_TYPES = ["breakfast","lunch","dinner","snack"] as const;
+function MealServingRow({ mealType, setMealType, qty, setQty }: {
+  mealType: string; setMealType: (v: string) => void; qty: number; setQty: (v: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <p className="text-[10px] text-muted-foreground mb-0.5">Meal</p>
+        <UISelect value={mealType} onValueChange={setMealType}>
+          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {MEAL_TYPES.map(m => <SelectItem key={m} value={m} className="capitalize">{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>)}
+          </SelectContent>
+        </UISelect>
+      </div>
+      <div>
+        <p className="text-[10px] text-muted-foreground mb-0.5">Servings</p>
+        <UIInput type="number" value={qty} min={0.25} step={0.25}
+          onChange={e => setQty(parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
+      </div>
+    </div>
+  );
+}
+function MacroPreview({ cal, p, c, f }: { cal: number; p: number; c: number; f: number }) {
+  return (
+    <p className="text-[10px] text-muted-foreground">
+      {Math.round(cal)} kcal · P {Math.round(p)}g · C {Math.round(c)}g · F {Math.round(f)}g
+    </p>
+  );
+}
+
+// ── FoodSearchAdd (tabbed: Search / Quick Add / My Recipes) ───────────────
 function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<"search" | "quick" | "recipes">("search");
+
+  // ── Search tab state ───────────────────────────────────────────────────
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
-  const [mealType, setMealType] = useState("snack");
-  const [qty, setQty] = useState(1);
+  const [searchMeal, setSearchMeal] = useState("snack");
+  const [searchQty, setSearchQty] = useState(1);
   const [adding, setAdding] = useState(false);
 
+  // ── Quick Add tab state ────────────────────────────────────────────────
+  const [qaName, setQaName] = useState("");
+  const [qaServingSize, setQaServingSize] = useState("1");
+  const [qaServingUnit, setQaServingUnit] = useState("serving");
+  const [qaCals, setQaCals] = useState("");
+  const [qaProt, setQaProt] = useState("");
+  const [qaCarbs, setQaCarbs] = useState("");
+  const [qaFat, setQaFat] = useState("");
+  const [qaMeal, setQaMeal] = useState("snack");
+  const [qaQty, setQaQty] = useState(1);
+  const [qaSaveRecipe, setQaSaveRecipe] = useState(false);
+  const [qaAdding, setQaAdding] = useState(false);
+
+  // ── My Recipes tab state ───────────────────────────────────────────────
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [recipeMeal, setRecipeMeal] = useState("snack");
+  const [recipeQty, setRecipeQty] = useState(1);
+  const [recipeAdding, setRecipeAdding] = useState(false);
+
+  const { data: recipes = [] } = useQuery<Recipe[]>({
+    queryKey: ["/api/recipes"],
+    queryFn: () => apiRequest("GET", "/api/recipes").then(r => r.json()),
+    enabled: mode === "recipes",
+  });
+
+  // ── Search tab handlers ────────────────────────────────────────────────
   async function doSearch() {
     if (!query.trim()) return;
     setSearching(true);
@@ -874,7 +938,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
     setSearching(false);
   }
 
-  async function addFood() {
+  async function addSearchFood() {
     if (!selected) return;
     setAdding(true);
     try {
@@ -883,8 +947,8 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
         usdaFoodId: String(selected.fdcId),
         servingSize: selected.servingSize,
         servingUnit: selected.servingUnit,
-        quantity: qty,
-        mealType,
+        quantity: searchQty,
+        mealType: searchMeal,
         date,
         calories: selected.nutrients.calories,
         protein:  selected.nutrients.protein,
@@ -894,77 +958,325 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
         sugar:    selected.nutrients.sugar,
         sodium:   selected.nutrients.sodium,
       });
-      setSelected(null); setQuery(""); setResults([]); setQty(1);
+      setSelected(null); setQuery(""); setResults([]); setSearchQty(1);
       onAdded();
       toast({ title: "Food logged" });
     } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
     setAdding(false);
   }
 
+  // ── Quick Add handler ──────────────────────────────────────────────────
+  async function addQuickFood() {
+    if (!qaName.trim() || !qaCals) return;
+    setQaAdding(true);
+    try {
+      const cals  = parseFloat(qaCals)  || 0;
+      const prot  = parseFloat(qaProt)  || 0;
+      const carbs = parseFloat(qaCarbs) || 0;
+      const fat   = parseFloat(qaFat)   || 0;
+      const servSz = parseFloat(qaServingSize) || 1;
+
+      // Log to food log
+      await apiRequest("POST", "/api/nutrition/food-log", {
+        foodName: qaName.trim(),
+        servingSize: servSz,
+        servingUnit: qaServingUnit || "serving",
+        quantity: qaQty,
+        mealType: qaMeal,
+        date,
+        calories: cals,
+        protein:  prot,
+        carbs,
+        fat,
+        fiber: 0, sugar: 0, sodium: 0,
+      });
+
+      // Optionally save as recipe
+      if (qaSaveRecipe) {
+        const nutrition: NutritionSummary = { calories: cals, protein: prot, carbs, fat, fiber: 0, sugar: 0, sodium: 0, servings: 1 };
+        await apiRequest("POST", "/api/recipes", {
+          name: qaName.trim(),
+          emoji: "🍽️",
+          servings: 1,
+          ingredientsJson: "[]",
+          nutritionData: JSON.stringify(nutrition),
+        });
+        qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+        toast({ title: "Logged & saved as recipe!" });
+      } else {
+        toast({ title: "Food logged" });
+      }
+
+      // Reset
+      setQaName(""); setQaCals(""); setQaProt(""); setQaCarbs(""); setQaFat("");
+      setQaServingSize("1"); setQaServingUnit("serving"); setQaQty(1); setQaSaveRecipe(false);
+      onAdded();
+    } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
+    setQaAdding(false);
+  }
+
+  // ── My Recipes handler ─────────────────────────────────────────────────
+  async function addRecipeFood() {
+    if (!selectedRecipe) return;
+    setRecipeAdding(true);
+    try {
+      let nutrition: NutritionSummary | null = null;
+      try { nutrition = selectedRecipe.nutritionData ? JSON.parse(selectedRecipe.nutritionData as string) : null; } catch {}
+
+      await apiRequest("POST", "/api/nutrition/food-log", {
+        foodName: selectedRecipe.name,
+        servingSize: 1,
+        servingUnit: "serving",
+        quantity: recipeQty,
+        mealType: recipeMeal,
+        date,
+        calories: nutrition?.calories ?? 0,
+        protein:  nutrition?.protein  ?? 0,
+        carbs:    nutrition?.carbs    ?? 0,
+        fat:      nutrition?.fat      ?? 0,
+        fiber:    nutrition?.fiber    ?? 0,
+        sugar:    nutrition?.sugar    ?? 0,
+        sodium:   nutrition?.sodium   ?? 0,
+      });
+      setSelectedRecipe(null); setRecipeQty(1);
+      onAdded();
+      toast({ title: `${selectedRecipe.name} logged` });
+    } catch { toast({ title: "Failed to log recipe", variant: "destructive" }); }
+    setRecipeAdding(false);
+  }
+
+  const filteredRecipes = recipes.filter(r =>
+    !recipeSearch || r.name.toLowerCase().includes(recipeSearch.toLowerCase())
+  );
+
+  const TAB_STYLES = (active: boolean) =>
+    `flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+      active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+    }`;
+
   return (
-    <div className="rounded-xl border bg-card p-3 space-y-2">
-      <p className="text-xs font-semibold">Add Food</p>
-      <div className="flex gap-2">
-        <UIInput
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && doSearch()}
-          placeholder="Search food (e.g. chicken breast, apple)"
-          className="flex-1 h-8 text-sm"
-        />
-        <Button size="sm" variant="outline" onClick={doSearch} disabled={searching} className="h-8 shrink-0">
-          {searching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
-        </Button>
+    <div className="rounded-xl border bg-card p-3 space-y-3">
+      {/* Tab bar */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold">Add Food</p>
+        <div className="flex gap-1">
+          <button className={TAB_STYLES(mode === "search")}  onClick={() => { setMode("search");  setSelected(null); setResults([]); }}>
+            <Search size={10} /> Search
+          </button>
+          <button className={TAB_STYLES(mode === "quick")}   onClick={() => setMode("quick")}>
+            <Zap size={10} /> Quick Add
+          </button>
+          <button className={TAB_STYLES(mode === "recipes")} onClick={() => { setMode("recipes"); setSelectedRecipe(null); }}>
+            <BookOpen size={10} /> Recipes
+          </button>
+        </div>
       </div>
 
-      {results.length > 0 && !selected && (
-        <div className="space-y-1 max-h-48 overflow-y-auto border rounded-lg p-1">
-          {results.map((f: any) => (
-            <button key={f.fdcId} onClick={() => setSelected(f)}
-              className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
-              <p className="text-xs font-medium truncate">{f.description}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {Math.round(f.nutrients.calories)} kcal · P {Math.round(f.nutrients.protein)}g · C {Math.round(f.nutrients.carbs)}g · F {Math.round(f.nutrients.fat)}g
-                {" "}per {f.servingSize}{f.servingUnit}
-              </p>
-            </button>
-          ))}
+      {/* ── SEARCH TAB ─────────────────────────────────────────────── */}
+      {mode === "search" && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <UIInput
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && doSearch()}
+              placeholder="Search USDA database (e.g. chicken breast)"
+              className="flex-1 h-8 text-sm"
+            />
+            <Button size="sm" variant="outline" onClick={doSearch} disabled={searching} className="h-8 shrink-0">
+              {searching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+            </Button>
+          </div>
+
+          {results.length > 0 && !selected && (
+            <div className="space-y-1 max-h-48 overflow-y-auto border rounded-lg p-1">
+              {results.map((f: any) => (
+                <button key={f.fdcId} onClick={() => setSelected(f)}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                  <p className="text-xs font-medium truncate">{f.description}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {Math.round(f.nutrients.calories)} kcal · P {Math.round(f.nutrients.protein)}g · C {Math.round(f.nutrients.carbs)}g · F {Math.round(f.nutrients.fat)}g
+                    {" "}per {f.servingSize}{f.servingUnit}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selected && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-xs font-medium truncate">{selected.description}</p>
+              <MealServingRow mealType={searchMeal} setMealType={setSearchMeal} qty={searchQty} setQty={setSearchQty} />
+              <MacroPreview
+                cal={selected.nutrients.calories * searchQty}
+                p={selected.nutrients.protein  * searchQty}
+                c={selected.nutrients.carbs    * searchQty}
+                f={selected.nutrients.fat      * searchQty}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addSearchFood} disabled={adding} className="flex-1 h-7 text-xs">
+                  {adding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setSelected(null); setResults([]); }} className="h-7 text-xs">Back</Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {selected && (
-        <div className="space-y-2 pt-2 border-t">
-          <p className="text-xs font-medium">{selected.description}</p>
+      {/* ── QUICK ADD TAB ──────────────────────────────────────────── */}
+      {mode === "quick" && (
+        <div className="space-y-2.5">
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Food name *</p>
+            <UIInput value={qaName} onChange={e => setQaName(e.target.value)}
+              placeholder="e.g. Morning Smoothie" className="h-8 text-sm" />
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-[10px] text-muted-foreground mb-0.5">Meal</p>
-              <UISelect value={mealType} onValueChange={setMealType}>
-                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["breakfast","lunch","dinner","snack"].map(m => (
-                    <SelectItem key={m} value={m} className="capitalize">{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </UISelect>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Serving size</p>
+              <UIInput type="number" value={qaServingSize} onChange={e => setQaServingSize(e.target.value)}
+                placeholder="1" className="h-7 text-xs" />
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground mb-0.5">Servings</p>
-              <UIInput type="number" value={qty} min={0.25} step={0.25}
-                onChange={e => setQty(parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Unit</p>
+              <UIInput value={qaServingUnit} onChange={e => setQaServingUnit(e.target.value)}
+                placeholder="serving, cup, oz…" className="h-7 text-xs" />
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground">
-            = {Math.round(selected.nutrients.calories * qty)} kcal ·
-            P {Math.round(selected.nutrients.protein * qty)}g ·
-            C {Math.round(selected.nutrients.carbs * qty)}g ·
-            F {Math.round(selected.nutrients.fat * qty)}g
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={addFood} disabled={adding} className="flex-1 h-7 text-xs">
-              {adding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setSelected(null); setResults([]); }} className="h-7 text-xs">Cancel</Button>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Calories *</p>
+              <UIInput type="number" value={qaCals} onChange={e => setQaCals(e.target.value)}
+                placeholder="350" className="h-7 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Protein (g)</p>
+              <UIInput type="number" value={qaProt} onChange={e => setQaProt(e.target.value)}
+                placeholder="20" className="h-7 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Carbs (g)</p>
+              <UIInput type="number" value={qaCarbs} onChange={e => setQaCarbs(e.target.value)}
+                placeholder="45" className="h-7 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground">Fat (g)</p>
+              <UIInput type="number" value={qaFat} onChange={e => setQaFat(e.target.value)}
+                placeholder="8" className="h-7 text-xs" />
+            </div>
           </div>
+          <MealServingRow mealType={qaMeal} setMealType={setQaMeal} qty={qaQty} setQty={setQaQty} />
+          {/* Save as recipe toggle */}
+          <button
+            type="button"
+            onClick={() => setQaSaveRecipe(o => !o)}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+              qaSaveRecipe
+                ? "bg-primary/10 border-primary text-primary"
+                : "bg-secondary/30 border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BookMarked size={12} />
+            <span className="flex-1 text-left">Also save as a Recipe</span>
+            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+              qaSaveRecipe ? "bg-primary border-primary" : "border-muted-foreground/40"
+            }`}>
+              {qaSaveRecipe && <Check size={10} className="text-primary-foreground" />}
+            </div>
+          </button>
+          {qaSaveRecipe && (
+            <p className="text-[10px] text-muted-foreground px-1">
+              This will be saved to your Recipes tab so you can quickly log it again anytime.
+            </p>
+          )}
+          <Button size="sm" onClick={addQuickFood}
+            disabled={qaAdding || !qaName.trim() || !qaCals}
+            className="w-full h-8 text-xs gap-1.5">
+            {qaAdding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+            {qaSaveRecipe ? "Log & Save as Recipe" : "Add to Log"}
+          </Button>
+        </div>
+      )}
+
+      {/* ── MY RECIPES TAB ─────────────────────────────────────────── */}
+      {mode === "recipes" && (
+        <div className="space-y-2">
+          {!selectedRecipe ? (
+            <>
+              <UIInput
+                value={recipeSearch}
+                onChange={e => setRecipeSearch(e.target.value)}
+                placeholder="Search your recipes…"
+                className="h-8 text-sm"
+              />
+              {filteredRecipes.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <BookOpen size={24} className="mx-auto mb-2 opacity-20" />
+                  <p className="text-xs">
+                    {recipes.length === 0
+                      ? "No recipes yet. Add some in the Recipes tab."
+                      : "No recipes match your search."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-52 overflow-y-auto border rounded-lg p-1">
+                  {filteredRecipes.map(recipe => {
+                    let nutrition: NutritionSummary | null = null;
+                    try { nutrition = recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch {}
+                    return (
+                      <button key={recipe.id} onClick={() => setSelectedRecipe(recipe)}
+                        className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-secondary/60 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{recipe.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{recipe.name}</p>
+                            {nutrition ? (
+                              <p className="text-[10px] text-muted-foreground">
+                                {Math.round(nutrition.calories)} kcal · P {Math.round(nutrition.protein)}g · C {Math.round(nutrition.carbs)}g · F {Math.round(nutrition.fat)}g per serving
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-muted-foreground/60 italic">No nutrition data — will log as 0 kcal</p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2 pt-1 border-t">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{selectedRecipe.emoji}</span>
+                <p className="text-xs font-semibold flex-1 truncate">{selectedRecipe.name}</p>
+              </div>
+              {(() => {
+                let nutrition: NutritionSummary | null = null;
+                try { nutrition = selectedRecipe.nutritionData ? JSON.parse(selectedRecipe.nutritionData as string) : null; } catch {}
+                return nutrition ? (
+                  <MacroPreview
+                    cal={nutrition.calories * recipeQty}
+                    p={nutrition.protein  * recipeQty}
+                    c={nutrition.carbs    * recipeQty}
+                    f={nutrition.fat      * recipeQty}
+                  />
+                ) : (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                    ⚠️ No nutrition data. Open the Recipes tab to estimate it, or it will log as 0 kcal.
+                  </p>
+                );
+              })()}
+              <MealServingRow mealType={recipeMeal} setMealType={setRecipeMeal} qty={recipeQty} setQty={setRecipeQty} />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addRecipeFood} disabled={recipeAdding} className="flex-1 h-7 text-xs">
+                  {recipeAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedRecipe(null)} className="h-7 text-xs">Back</Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
