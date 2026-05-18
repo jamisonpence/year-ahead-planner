@@ -1296,9 +1296,10 @@ const GOAL_TYPES: { value: GoalType; label: string; icon: React.ReactNode; desc:
 
 const RACE_DISTANCES = ["5K", "10K", "Half Marathon", "Marathon", "50K Ultra", "50 Mile Ultra", "Triathlon (Sprint)", "Triathlon (Olympic)", "Triathlon (Ironman)", "Custom"];
 
-function PlanBuilderModal({ open, onClose, editing, templates }: {
+function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelected }: {
   open: boolean; onClose: () => void;
   editing: WorkoutPlan | null; templates: WorkoutTemplate[];
+  onBodyCompSelected?: () => void;
 }) {
   const { toast } = useToast();
   const [step, setStep] = useState<"goal" | "details" | "schedule">("goal");
@@ -1466,6 +1467,11 @@ function PlanBuilderModal({ open, onClose, editing, templates }: {
   }
 
   function handleSelectGoalType(type: GoalType) {
+    if (type === "body_composition" && onBodyCompSelected) {
+      onClose();
+      onBodyCompSelected();
+      return;
+    }
     setGoalType(type);
     const dur = type === "endurance" ? "16" : type === "strength_pr" ? "8" : type === "body_composition" ? "12" : "8";
     setDurationWeeks(dur);
@@ -2240,6 +2246,8 @@ export default function WorkoutsPage() {
   const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
   const [planModal, setPlanModal] = useState(false);
   const [editPlan, setEditPlan] = useState<WorkoutPlan | null>(null);
+  const [bodyCompWizardOpen, setBodyCompWizardOpen] = useState(false);
+  const [bodyCompEditingPlan, setBodyCompEditingPlan] = useState<WorkoutPlan | null>(null);
   const [shareModal, setShareModal] = useState(false);
   const [sharePayload, setSharePayload] = useState<{ type: "template" | "plan"; contentJson: string; name: string } | null>(null);
 
@@ -2679,7 +2687,14 @@ export default function WorkoutsPage() {
                         {goalInfo && <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${goalInfo.color}`}>{goalInfo.label}</span>}
                       </div>
                       <Button size="sm" variant="ghost" className="h-7 text-xs shrink-0 gap-1"
-                        onClick={() => { setEditPlan(plan); setPlanModal(true); }}>
+                        onClick={() => {
+                          if (plan.goalType === "body_composition") {
+                            setBodyCompEditingPlan(plan);
+                            setBodyCompWizardOpen(true);
+                          } else {
+                            setEditPlan(plan); setPlanModal(true);
+                          }
+                        }}>
                         <Pencil size={10} /> Edit
                       </Button>
                     </div>
@@ -2722,25 +2737,31 @@ export default function WorkoutsPage() {
                           </div>
                         </div>
                       )}
-                      {goalMetric && plan.goalType === "body_composition" && (
+                      {plan.goalType === "body_composition" && (
                         <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 space-y-2">
                           <div className="flex items-center gap-3">
                             <Heart size={13} className="text-green-500 shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-green-700 dark:text-green-300">{goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
-                              <p className="text-xs text-muted-foreground">{goalMetric.currentValue} → {goalMetric.targetValue} {goalMetric.unit}</p>
+                              {goalMetric && (
+                                <p className="text-xs font-semibold text-green-700 dark:text-green-300">
+                                  {goalMetric.metric === "body_weight" || goalMetric.metric === "weight" ? "Body Weight" :
+                                   goalMetric.metric === "body_fat" ? "Body Fat %" :
+                                   goalMetric.metric === "muscle_mass" ? "Muscle Mass" : "Body Recomposition"}
+                                </p>
+                              )}
+                              {goalMetric?.targetCalories && (
+                                <p className="text-xs text-muted-foreground">{goalMetric.targetCalories} kcal · P {goalMetric.proteinGrams}g · C {goalMetric.carbsGrams}g · F {goalMetric.fatGrams}g</p>
+                              )}
                             </div>
                           </div>
-                          {plan.isActive && (
-                            <button
-                              onClick={() => setLocation("/health")}
-                              className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-green-700 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 rounded-md px-2 py-1.5 transition-colors"
-                            >
-                              <UtensilsCrossed size={11} />
-                              Track nutrition in Health tab
-                              <ChevronRight size={11} />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => setLocation("/health")}
+                            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-green-700 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 rounded-md px-2 py-1.5 transition-colors"
+                          >
+                            <UtensilsCrossed size={11} />
+                            Track nutrition in Health tab
+                            <ChevronRight size={11} />
+                          </button>
                         </div>
                       )}
 
@@ -2931,7 +2952,7 @@ export default function WorkoutsPage() {
               </Button>
             </div>
           </div>
-          {plans.length === 0 ? (
+          {plans.filter(p => p.goalType !== "body_composition").length === 0 ? (
             <div className="text-center py-16 text-muted-foreground border rounded-xl border-dashed">
               <CalendarDays size={40} className="mx-auto mb-4 opacity-20" />
               <p className="font-medium">No training plans yet</p>
@@ -2940,7 +2961,7 @@ export default function WorkoutsPage() {
                 <Target size={13} /> Create Your First Plan
               </Button>
             </div>
-          ) : plans.map(plan => {
+          ) : plans.filter(p => p.goalType !== "body_composition").map(plan => {
             const parsedSched = parseSchedule(plan.scheduleJson ?? "[]");
 
             // Determine which week's schedule to show on the card
@@ -3009,7 +3030,14 @@ export default function WorkoutsPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setEditPlan(plan); setPlanModal(true); }}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          if (plan.goalType === "body_composition") {
+                            setBodyCompEditingPlan(plan);
+                            setBodyCompWizardOpen(true);
+                          } else {
+                            setEditPlan(plan); setPlanModal(true);
+                          }
+                        }}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openShareModal("plan", plan)}><Share2 size={13} className="mr-2" />Share with friend</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deletePlan.mutate(plan.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
                       </DropdownMenuContent>
@@ -3040,14 +3068,23 @@ export default function WorkoutsPage() {
                     </div>
                   )}
 
-                  {goalMetric && plan.goalType === "body_composition" && (
+                  {plan.goalType === "body_composition" && goalMetric && (
                     <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 space-y-2">
-                      <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5 mb-1"><Heart size={11} /> {goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold">{goalMetric.currentValue}{goalMetric.unit}</span>
-                        <span className="text-xs text-muted-foreground">→</span>
-                        <span className="text-sm font-bold text-green-600 dark:text-green-400">{goalMetric.targetValue}{goalMetric.unit}</span>
-                      </div>
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5 mb-1">
+                        <Heart size={11} />
+                        {goalMetric.metric === "body_weight" || goalMetric.metric === "weight" ? "Body Weight" :
+                         goalMetric.metric === "body_fat" ? "Body Fat %" :
+                         goalMetric.metric === "muscle_mass" ? "Muscle Mass" : "Body Recomposition"}
+                      </p>
+                      {goalMetric.targetCalories ? (
+                        <p className="text-xs text-muted-foreground">{goalMetric.targetCalories} kcal · P {goalMetric.proteinGrams}g · C {goalMetric.carbsGrams}g · F {goalMetric.fatGrams}g</p>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold">{goalMetric.currentValue}{goalMetric.unit}</span>
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <span className="text-sm font-bold text-green-600 dark:text-green-400">{goalMetric.targetValue}{goalMetric.unit}</span>
+                        </div>
+                      )}
                       {plan.isActive && (
                         <button
                           onClick={() => setLocation("/health")}
@@ -3132,9 +3169,11 @@ export default function WorkoutsPage() {
           })}
 
           {/* Body Composition Plans section */}
-          <div className="pt-2 border-t border-dashed mt-2">
-            <BodyCompositionPlanSection />
-          </div>
+          <BodyCompositionPlanSection
+            externalWizardOpen={bodyCompWizardOpen}
+            externalEditingPlan={bodyCompEditingPlan}
+            onExternalWizardClose={() => { setBodyCompWizardOpen(false); setBodyCompEditingPlan(null); }}
+          />
         </div>
       )}
 
@@ -3428,7 +3467,7 @@ export default function WorkoutsPage() {
       <ExerciseSearchModal open={exerciseSearchOpen} onClose={() => setExerciseSearchOpen(false)} templates={templates} />
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
       <EquipmentModal open={equipmentModal} onClose={() => { setEquipmentModal(false); setEditEquipment(null); }} editing={editEquipment} />
-      <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} />
+      <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} onBodyCompSelected={() => setBodyCompWizardOpen(true)} />
       {sharePayload && (
         <ShareWorkoutModal
           open={shareModal} onClose={() => { setShareModal(false); setSharePayload(null); }}

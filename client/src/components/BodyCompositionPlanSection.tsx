@@ -1,65 +1,144 @@
-import { useState } from "react";
+/**
+ * BodyCompositionPlanSection
+ *
+ * Unified Body Composition Plan component used in:
+ *   - WorkoutsPage → Plans tab  (triggered externally via props)
+ *   - HealthPage → Nutrition → Plans sub-section  (standalone)
+ *
+ * Plans are stored as workoutPlans with goalType = "body_composition".
+ * Check-ins are stored in body_comp_check_ins, referencing workoutPlan.id.
+ *
+ * goalMetricJson shape (extended backward-compat):
+ * {
+ *   metric: "body_weight" | "body_fat" | "muscle_mass" | "recomp",
+ *   currentValue, targetValue, unit,          ← legacy compat fields
+ *   weightUnit, currentWeight, goalWeight,
+ *   currentBodyFat, goalBodyFat,
+ *   currentMuscleMass, goalMuscleMass,
+ *   activityLevel, maintenanceCalories,
+ *   targetCalories, proteinGrams, carbsGrams, fatGrams,
+ *   proteinPerLb, fatPct,
+ * }
+ */
+
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Flame, TrendingUp, RefreshCw, X, ChevronRight, ChevronLeft,
-  Scale, Target, Dumbbell, CheckCircle2, Pencil, Trash2, Calendar,
-  MoreHorizontal, ClipboardList, Zap,
+  Scale, Target, Dumbbell, CheckCircle2, Pencil, Trash2,
+  MoreHorizontal, ClipboardList, Zap, Sparkles, Heart, Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { BodyCompPlan, BodyCompCheckIn } from "@shared/schema";
+import type { WorkoutPlan, BodyCompCheckIn } from "@shared/schema";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type PlanType = "cut" | "bulk" | "recomp";
+type GoalMetric = "body_weight" | "body_fat" | "muscle_mass" | "recomp";
 type ActivityLevel = "sedentary" | "light" | "moderate" | "heavy" | "athlete";
+type CalStrategy = "cut" | "bulk" | "recomp";
 
-interface PlanWithCheckIns extends BodyCompPlan {
-  checkIns?: BodyCompCheckIn[];
+interface ExtendedMetricJson {
+  metric: GoalMetric;
+  // legacy compat
+  currentValue?: number;
+  targetValue?: number;
+  unit?: string;
+  // body stats
+  weightUnit: "lbs" | "kg";
+  currentWeight?: number;
+  goalWeight?: number;
+  currentBodyFat?: number;
+  goalBodyFat?: number;
+  currentMuscleMass?: number;
+  goalMuscleMass?: number;
+  // nutrition
+  activityLevel?: ActivityLevel;
+  maintenanceCalories?: number;
+  targetCalories?: number;
+  proteinGrams?: number;
+  carbsGrams?: number;
+  fatGrams?: number;
+  proteinPerLb?: number;
+  fatPct?: number;
+}
+
+export interface BodyCompSectionProps {
+  /** When true, the wizard modal opens immediately (triggered externally, e.g. from PlanBuilderModal) */
+  externalWizardOpen?: boolean;
+  /** Plan to pre-fill when editing via an external trigger */
+  externalEditingPlan?: WorkoutPlan | null;
+  /** Called when externally-triggered wizard closes */
+  onExternalWizardClose?: () => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACTIVITY_LEVELS: { value: ActivityLevel; label: string; multiplier: number }[] = [
-  { value: "sedentary",  label: "Sedentary",                  multiplier: 1.2   },
-  { value: "light",      label: "Light Exercise (1–2 days/wk)", multiplier: 1.375 },
-  { value: "moderate",   label: "Moderate Exercise (3–5 days/wk)", multiplier: 1.55 },
-  { value: "heavy",      label: "Heavy Exercise (6–7 days/wk)",  multiplier: 1.725 },
-  { value: "athlete",    label: "Athlete (2× per day)",         multiplier: 1.9   },
+  { value: "sedentary",  label: "Sedentary",                      multiplier: 1.2   },
+  { value: "light",      label: "Light Exercise (1–2 days/wk)",   multiplier: 1.375 },
+  { value: "moderate",   label: "Moderate Exercise (3–5 days/wk)",multiplier: 1.55  },
+  { value: "heavy",      label: "Heavy Exercise (6–7 days/wk)",   multiplier: 1.725 },
+  { value: "athlete",    label: "Athlete (2× per day)",           multiplier: 1.9   },
 ];
 
-const PLAN_CARDS: { type: PlanType; icon: React.ReactNode; name: string; desc: string; timeframe: string; color: string; bgColor: string; borderColor: string }[] = [
+interface GoalCard {
+  metric: GoalMetric;
+  icon: React.ReactNode;
+  name: string;
+  desc: string;
+  timeframe: string;
+  strategy: CalStrategy;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+const GOAL_CARDS: GoalCard[] = [
   {
-    type: "cut",
-    icon: <Flame size={28} />,
-    name: "Fat Loss (Cut)",
-    desc: "Lose body fat while preserving muscle",
-    timeframe: "8–12 week blocks",
+    metric: "body_weight",
+    icon: <Scale size={28} />,
+    name: "Body Weight",
+    desc: "Reach your target body weight",
+    timeframe: "8–16 week blocks",
+    strategy: "cut",
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-50 dark:bg-orange-950/30",
     borderColor: "border-orange-300 dark:border-orange-700",
   },
   {
-    type: "bulk",
+    metric: "body_fat",
+    icon: <Flame size={28} />,
+    name: "Body Fat %",
+    desc: "Reduce body fat while preserving muscle",
+    timeframe: "8–12 week blocks",
+    strategy: "cut",
+    color: "text-red-600 dark:text-red-400",
+    bgColor: "bg-red-50 dark:bg-red-950/30",
+    borderColor: "border-red-300 dark:border-red-700",
+  },
+  {
+    metric: "muscle_mass",
     icon: <Dumbbell size={28} />,
-    name: "Muscle Gain (Bulk)",
-    desc: "Build muscle with a controlled surplus",
+    name: "Muscle Mass",
+    desc: "Build lean muscle with a controlled surplus",
     timeframe: "3–6 months",
+    strategy: "bulk",
     color: "text-blue-600 dark:text-blue-400",
     bgColor: "bg-blue-50 dark:bg-blue-950/30",
     borderColor: "border-blue-300 dark:border-blue-700",
   },
   {
-    type: "recomp",
+    metric: "recomp",
     icon: <RefreshCw size={28} />,
     name: "Body Recomposition",
     desc: "Lose fat and gain muscle simultaneously",
     timeframe: "8–12+ weeks",
+    strategy: "recomp",
     color: "text-green-600 dark:text-green-400",
     bgColor: "bg-green-50 dark:bg-green-950/30",
     borderColor: "border-green-300 dark:border-green-700",
@@ -68,58 +147,190 @@ const PLAN_CARDS: { type: PlanType; icon: React.ReactNode; name: string; desc: s
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function calcTDEE(weight: number, unit: "lbs" | "kg", age: number, heightIn: number, sex: "male" | "female", activity: ActivityLevel): number {
-  // Mifflin-St Jeor BMR
-  const weightKg = unit === "lbs" ? weight * 0.453592 : weight;
-  const heightCm = heightIn * 2.54;
+function calcTDEE(weightLbs: number, age: number, heightIn: number, sex: "male" | "female", activity: ActivityLevel): number {
+  const wKg = weightLbs * 0.453592;
+  const hCm = heightIn * 2.54;
   const bmr = sex === "male"
-    ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
-    : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
-  const mult = ACTIVITY_LEVELS.find(a => a.value === activity)?.multiplier ?? 1.55;
-  return Math.round(bmr * mult);
+    ? 10 * wKg + 6.25 * hCm - 5 * age + 5
+    : 10 * wKg + 6.25 * hCm - 5 * age - 161;
+  return Math.round(bmr * (ACTIVITY_LEVELS.find(a => a.value === activity)?.multiplier ?? 1.55));
 }
 
-function calcMacros(totalCals: number, proteinPerLb: number, fatPct: number, bodyweightLbs: number) {
-  const proteinGrams = Math.round(proteinPerLb * bodyweightLbs);
-  const proteinCals = proteinGrams * 4;
+function calcMacros(totalCals: number, proteinPerLb: number, fatPct: number, weightLbs: number) {
+  const proteinG = Math.round(proteinPerLb * weightLbs);
+  const proteinCals = proteinG * 4;
   const fatCals = Math.round(totalCals * (fatPct / 100));
-  const fatGrams = Math.round(fatCals / 9);
+  const fatG = Math.round(fatCals / 9);
   const carbCals = totalCals - proteinCals - fatCals;
-  const carbGrams = Math.round(Math.max(0, carbCals) / 4);
-  return { proteinGrams, fatGrams, carbGrams, proteinCals, fatCals, carbCals };
+  const carbG = Math.round(Math.max(0, carbCals) / 4);
+  return { proteinG, fatG, carbG, proteinCals, fatCals, carbCals };
 }
 
-function weeksFromDates(start: string, end: string): number {
-  const s = new Date(start).getTime();
-  const e = new Date(end).getTime();
-  return Math.max(1, Math.round((e - s) / (7 * 24 * 60 * 60 * 1000)));
-}
-
-function addWeeks(dateStr: string, weeks: number): string {
+function addWeeks(dateStr: string, weeks: number) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + weeks * 7);
   return d.toISOString().slice(0, 10);
 }
 
-function planTypeBadge(type: PlanType) {
-  if (type === "cut")   return { label: "Fat Loss",   className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-700" };
-  if (type === "bulk")  return { label: "Muscle Gain", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-700" };
-  return { label: "Recomp", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-700" };
+function weeksFromDates(start: string, end: string) {
+  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / (7 * 86400000)));
 }
 
-// ── Step 1 — Goal Selection ────────────────────────────────────────────────────
+function getCalStrategy(metric: GoalMetric, currentW: number, goalW: number): CalStrategy {
+  if (metric === "body_fat") return "cut";
+  if (metric === "muscle_mass") return "bulk";
+  if (metric === "recomp") return "recomp";
+  // body_weight: compare goal vs current
+  if (goalW > 0 && goalW < currentW) return "cut";
+  if (goalW > 0 && goalW > currentW) return "bulk";
+  return "recomp";
+}
 
-function Step1({ onSelect }: { onSelect: (type: PlanType) => void }) {
+function calRangeForStrategy(maintenance: number, strategy: CalStrategy): [number, number] {
+  if (strategy === "cut")  return [maintenance - 700, maintenance - 500];
+  if (strategy === "bulk") return [maintenance + 200, maintenance + 300];
+  return [maintenance - 150, maintenance + 150];
+}
+
+function metricBadge(metric: GoalMetric | string) {
+  const map: Record<string, { label: string; className: string }> = {
+    body_weight: { label: "Body Weight",   className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-700" },
+    body_fat:    { label: "Body Fat %",    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-700" },
+    muscle_mass: { label: "Muscle Mass",   className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-700" },
+    recomp:      { label: "Recomposition", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-700" },
+    // legacy compat
+    weight:      { label: "Body Weight",   className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-700" },
+    body_fat_pct:{ label: "Body Fat %",    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-700" },
+  };
+  return map[metric] ?? { label: "Body Comp", className: "bg-secondary text-muted-foreground border" };
+}
+
+function parseMetricJson(plan: WorkoutPlan): ExtendedMetricJson | null {
+  try {
+    if (!plan.goalMetricJson) return null;
+    return JSON.parse(plan.goalMetricJson) as ExtendedMetricJson;
+  } catch { return null; }
+}
+
+// ── Wizard state shape ────────────────────────────────────────────────────────
+
+interface WizardState {
+  metric: GoalMetric;
+  weightUnit: "lbs" | "kg";
+  currentWeight: string;
+  goalWeight: string;
+  currentBodyFat: string;
+  goalBodyFat: string;
+  currentMuscleMass: string;
+  goalMuscleMass: string;
+  activityLevel: ActivityLevel;
+  maintenanceCalories: string;
+  targetCalories: number;
+  proteinPerLb: number;
+  fatPct: number;
+  startDate: string;
+  endDate: string;
+  // TDEE calc fields
+  sex: "male" | "female";
+  age: string;
+  heightFt: string;
+  heightIn: string;
+  // BF% calc fields
+  bfCalcOpen: boolean;
+  bfSex: "male" | "female";
+  bfHeightIn: string;
+  bfNeckIn: string;
+  bfWaistIn: string;
+  bfHipsIn: string;
+  // Muscle mass estimator fields
+  mmCalcOpen: boolean;
+  mmWeightLbs: string;
+  mmBfPct: string;
+}
+
+const DEFAULT_PROTEIN: Record<GoalMetric, number> = {
+  body_weight: 1.0,
+  body_fat:    1.0,
+  muscle_mass: 0.8,
+  recomp:      0.9,
+};
+const DEFAULT_WEEKS: Record<GoalMetric, number> = {
+  body_weight: 10,
+  body_fat:    10,
+  muscle_mass: 16,
+  recomp:      12,
+};
+
+function makeDefaultState(metric: GoalMetric = "body_fat"): WizardState {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    metric,
+    weightUnit: "lbs",
+    currentWeight: "",
+    goalWeight: "",
+    currentBodyFat: "",
+    goalBodyFat: "",
+    currentMuscleMass: "",
+    goalMuscleMass: "",
+    activityLevel: "moderate",
+    maintenanceCalories: "",
+    targetCalories: 0,
+    proteinPerLb: DEFAULT_PROTEIN[metric],
+    fatPct: 25,
+    startDate: today,
+    endDate: addWeeks(today, DEFAULT_WEEKS[metric]),
+    sex: "male",
+    age: "",
+    heightFt: "",
+    heightIn: "",
+    bfCalcOpen: false,
+    bfSex: "male",
+    bfHeightIn: "",
+    bfNeckIn: "",
+    bfWaistIn: "",
+    bfHipsIn: "",
+    mmCalcOpen: false,
+    mmWeightLbs: "",
+    mmBfPct: "",
+  };
+}
+
+function stateFromPlan(plan: WorkoutPlan): WizardState {
+  const m = parseMetricJson(plan);
+  if (!m) return makeDefaultState();
+  const base = makeDefaultState(m.metric ?? "body_weight");
+  return {
+    ...base,
+    metric:           m.metric ?? "body_weight",
+    weightUnit:       m.weightUnit ?? "lbs",
+    currentWeight:    String(m.currentWeight ?? m.currentValue ?? ""),
+    goalWeight:       String(m.goalWeight ?? m.targetValue ?? ""),
+    currentBodyFat:   String(m.currentBodyFat ?? ""),
+    goalBodyFat:      String(m.goalBodyFat ?? ""),
+    currentMuscleMass:String(m.currentMuscleMass ?? ""),
+    goalMuscleMass:   String(m.goalMuscleMass ?? ""),
+    activityLevel:    m.activityLevel ?? "moderate",
+    maintenanceCalories: String(m.maintenanceCalories ?? ""),
+    targetCalories:   m.targetCalories ?? 0,
+    proteinPerLb:     m.proteinPerLb ?? DEFAULT_PROTEIN[m.metric ?? "body_fat"],
+    fatPct:           m.fatPct ?? 25,
+    startDate:        plan.startDate ?? new Date().toISOString().slice(0, 10),
+    endDate:          plan.startDate && plan.durationWeeks
+      ? addWeeks(plan.startDate, plan.durationWeeks)
+      : addWeeks(new Date().toISOString().slice(0, 10), DEFAULT_WEEKS[m.metric ?? "body_fat"]),
+  };
+}
+
+// ── Step 1: Goal Selection ────────────────────────────────────────────────────
+
+function Step1({ onSelect }: { onSelect: (m: GoalMetric) => void }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Choose your primary goal to get started.</p>
+      <p className="text-sm text-muted-foreground">Choose your primary body composition goal.</p>
       <div className="grid gap-3">
-        {PLAN_CARDS.map(card => (
-          <button
-            key={card.type}
-            onClick={() => onSelect(card.type)}
-            className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all hover:shadow-sm ${card.bgColor} ${card.borderColor} hover:scale-[1.01]`}
-          >
+        {GOAL_CARDS.map(card => (
+          <button key={card.metric} onClick={() => onSelect(card.metric)}
+            className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all hover:shadow-sm hover:scale-[1.01] ${card.bgColor} ${card.borderColor}`}>
             <div className={`shrink-0 ${card.color}`}>{card.icon}</div>
             <div className="flex-1 min-w-0">
               <p className={`font-semibold text-sm ${card.color}`}>{card.name}</p>
@@ -133,278 +344,326 @@ function Step1({ onSelect }: { onSelect: (type: PlanType) => void }) {
   );
 }
 
-// ── Step 2 — Stats ────────────────────────────────────────────────────────────
+// ── Step 2: Stats ─────────────────────────────────────────────────────────────
 
-interface Stats {
-  weightUnit: "lbs" | "kg";
-  currentWeight: string;
-  goalWeight: string;
-  currentBodyFat: string;
-  goalBodyFat: string;
-  activityLevel: ActivityLevel;
-  maintenanceCalories: string;
-  // TDEE calculator fields
-  sex: "male" | "female";
-  age: string;
-  heightFt: string;
-  heightIn: string;
-  startDate: string;
-  endDate: string;
-}
-
-function Step2({ planType, stats, onChange }: { planType: PlanType; stats: Stats; onChange: (s: Stats) => void }) {
-  const [tdeeOpen, setTdeeOpen] = useState(false);
-
-  const defaultWeeks = planType === "cut" ? 10 : planType === "bulk" ? 16 : 12;
-
+function Step2({ s, set }: { s: WizardState; set: (p: Partial<WizardState>) => void }) {
+  // TDEE calc
   function calcAndFill() {
-    const ht = (parseFloat(stats.heightFt) || 0) * 12 + (parseFloat(stats.heightIn) || 0);
-    const wt = parseFloat(stats.currentWeight) || 0;
-    const age = parseFloat(stats.age) || 0;
+    const ht = (parseFloat(s.heightFt) || 0) * 12 + (parseFloat(s.heightIn) || 0);
+    const wt = parseFloat(s.currentWeight) || 0;
+    const age = parseFloat(s.age) || 0;
     if (wt > 0 && ht > 0 && age > 0) {
-      const tdee = calcTDEE(wt, stats.weightUnit, age, ht, stats.sex, stats.activityLevel);
-      onChange({ ...stats, maintenanceCalories: String(tdee) });
+      const wtLbs = s.weightUnit === "kg" ? wt * 2.20462 : wt;
+      set({ maintenanceCalories: String(calcTDEE(wtLbs, age, ht, s.sex, s.activityLevel)) });
     }
   }
 
-  const set = (key: keyof Stats) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    onChange({ ...stats, [key]: e.target.value });
+  // BF% calculator result
+  const bfH = parseFloat(s.bfHeightIn), bfN = parseFloat(s.bfNeckIn),
+    bfW = parseFloat(s.bfWaistIn), bfHip = parseFloat(s.bfHipsIn);
+  let bfResult: number | null = null;
+  if (s.bfSex === "male" && bfH > 0 && bfN > 0 && bfW > bfN)
+    bfResult = Math.max(0, 86.010 * Math.log10(bfW - bfN) - 70.041 * Math.log10(bfH) + 36.76);
+  else if (s.bfSex === "female" && bfH > 0 && bfN > 0 && bfW > 0 && bfHip > 0)
+    bfResult = Math.max(0, 163.205 * Math.log10(bfW + bfHip - bfN) - 97.684 * Math.log10(bfH) - 78.387);
+  const bfRes = bfResult !== null ? parseFloat(bfResult.toFixed(1)) : null;
+
+  // Muscle mass estimator result
+  const mmWt = parseFloat(s.mmWeightLbs), mmBf = parseFloat(s.mmBfPct);
+  let mmResult: number | null = null;
+  if (mmWt > 0 && mmBf > 0 && mmBf < 100) {
+    const lbm = mmWt * (1 - mmBf / 100);
+    mmResult = parseFloat((lbm * 0.56).toFixed(1));
+  }
+  const toUnit = (v: number) => s.weightUnit === "kg" ? parseFloat((v / 2.205).toFixed(1)) : v;
+  const unitLabel = s.weightUnit;
 
   return (
     <div className="space-y-4">
       {/* Weight unit toggle */}
       <div className="flex gap-2">
         {(["lbs", "kg"] as const).map(u => (
-          <button key={u} onClick={() => onChange({ ...stats, weightUnit: u })}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${stats.weightUnit === u ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-            {u}
-          </button>
+          <button key={u} onClick={() => set({ weightUnit: u })}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${s.weightUnit === u ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{u}</button>
         ))}
       </div>
 
+      {/* Current weight (all goals) */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Current weight ({stats.weightUnit})</label>
-          <Input type="number" value={stats.currentWeight} onChange={set("currentWeight")} placeholder="185" className="h-9" />
+          <label className="text-xs font-medium text-muted-foreground">Current weight ({s.weightUnit})</label>
+          <Input type="number" value={s.currentWeight} onChange={e => set({ currentWeight: e.target.value })} placeholder="185" className="h-9" />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Goal weight ({stats.weightUnit}) <span className="text-muted-foreground/60">optional</span></label>
-          <Input type="number" value={stats.goalWeight} onChange={set("goalWeight")} placeholder="170" className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Current body fat % <span className="text-muted-foreground/60">optional</span></label>
-          <Input type="number" value={stats.currentBodyFat} onChange={set("currentBodyFat")} placeholder="22" className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Goal body fat % <span className="text-muted-foreground/60">optional</span></label>
-          <Input type="number" value={stats.goalBodyFat} onChange={set("goalBodyFat")} placeholder="15" className="h-9" />
-        </div>
+        {/* Goal weight — body_weight goal */}
+        {s.metric === "body_weight" && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Goal weight ({s.weightUnit})</label>
+            <Input type="number" value={s.goalWeight} onChange={e => set({ goalWeight: e.target.value })} placeholder="165" className="h-9" />
+          </div>
+        )}
       </div>
 
-      {/* Maintenance calories + TDEE calculator */}
+      {/* Body Fat % inputs */}
+      {(s.metric === "body_fat" || s.metric === "recomp") && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Current body fat %</label>
+            <Input type="number" value={s.currentBodyFat} onChange={e => set({ currentBodyFat: e.target.value })} placeholder="22" className="h-9" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Goal body fat % {s.metric === "recomp" ? <span className="text-muted-foreground/60">opt</span> : ""}</label>
+            <Input type="number" value={s.goalBodyFat} onChange={e => set({ goalBodyFat: e.target.value })} placeholder="15" className="h-9" />
+          </div>
+        </div>
+      )}
+      {s.metric === "body_weight" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Current body fat % <span className="text-muted-foreground/60">opt</span></label>
+            <Input type="number" value={s.currentBodyFat} onChange={e => set({ currentBodyFat: e.target.value })} placeholder="22" className="h-9" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Goal body fat % <span className="text-muted-foreground/60">opt</span></label>
+            <Input type="number" value={s.goalBodyFat} onChange={e => set({ goalBodyFat: e.target.value })} placeholder="15" className="h-9" />
+          </div>
+        </div>
+      )}
+
+      {/* Muscle mass inputs */}
+      {s.metric === "muscle_mass" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Current muscle mass ({s.weightUnit})</label>
+            <Input type="number" value={s.currentMuscleMass} onChange={e => set({ currentMuscleMass: e.target.value })} placeholder="140" className="h-9" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Goal muscle mass ({s.weightUnit})</label>
+            <Input type="number" value={s.goalMuscleMass} onChange={e => set({ goalMuscleMass: e.target.value })} placeholder="155" className="h-9" />
+          </div>
+        </div>
+      )}
+
+      {/* Body Fat % Calculator (Navy Tape Method) — shown for body_fat, muscle_mass (to estimate), body_weight */}
+      {(s.metric === "body_fat" || s.metric === "muscle_mass" || s.metric === "body_weight" || s.metric === "recomp") && (
+        <div className="border rounded-xl overflow-hidden">
+          <button type="button" onClick={() => set({ bfCalcOpen: !s.bfCalcOpen })}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950/20 hover:bg-green-100/60 dark:hover:bg-green-900/30 transition-colors">
+            <span className="flex items-center gap-1.5"><Sparkles size={12} /> Body Fat % Calculator (Navy Tape Method)</span>
+            <ChevronRight size={13} className={`transition-transform ${s.bfCalcOpen ? "rotate-90" : ""}`} />
+          </button>
+          {s.bfCalcOpen && (
+            <div className="p-4 space-y-3 bg-secondary/10">
+              <p className="text-[11px] text-muted-foreground">All measurements in inches. Narrowest point for neck/waist, widest for hips.</p>
+              <div className="flex gap-2">
+                {(["male", "female"] as const).map(sex => (
+                  <button key={sex} type="button" onClick={() => set({ bfSex: sex })}
+                    className={`flex-1 h-8 rounded-lg text-xs font-medium border-2 transition-all ${s.bfSex === sex ? "border-green-500 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300" : "border-border text-muted-foreground"}`}>
+                    {sex.charAt(0).toUpperCase() + sex.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Height (in)</label>
+                  <Input type="number" value={s.bfHeightIn} onChange={e => set({ bfHeightIn: e.target.value })} placeholder='70"' className="h-8 text-xs" /></div>
+                <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Neck (in)</label>
+                  <Input type="number" value={s.bfNeckIn} onChange={e => set({ bfNeckIn: e.target.value })} placeholder='15"' className="h-8 text-xs" /></div>
+                <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Waist (in)</label>
+                  <Input type="number" value={s.bfWaistIn} onChange={e => set({ bfWaistIn: e.target.value })} placeholder='34"' className="h-8 text-xs" /></div>
+                {s.bfSex === "female" && (
+                  <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Hips (in)</label>
+                    <Input type="number" value={s.bfHipsIn} onChange={e => set({ bfHipsIn: e.target.value })} placeholder='38"' className="h-8 text-xs" /></div>
+                )}
+              </div>
+              {bfRes !== null && (
+                <div className="flex items-center justify-between bg-green-100 dark:bg-green-900/30 rounded-lg px-3 py-2">
+                  <span className="text-sm font-bold text-green-700 dark:text-green-300">Estimated: {bfRes}%</span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => set({ currentBodyFat: String(bfRes), bfCalcOpen: false })}>Use as current</Button>
+                    {s.metric === "body_fat" && <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => set({ goalBodyFat: String(bfRes), bfCalcOpen: false })}>Use as goal</Button>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Muscle Mass Estimator — shown for muscle_mass goal */}
+      {s.metric === "muscle_mass" && (
+        <div className="border rounded-xl overflow-hidden">
+          <button type="button" onClick={() => set({ mmCalcOpen: !s.mmCalcOpen })}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100/60 dark:hover:bg-blue-900/30 transition-colors">
+            <span className="flex items-center gap-1.5"><Sparkles size={12} /> Muscle Mass Estimator (from Body Fat %)</span>
+            <ChevronRight size={13} className={`transition-transform ${s.mmCalcOpen ? "rotate-90" : ""}`} />
+          </button>
+          {s.mmCalcOpen && (
+            <div className="p-4 space-y-3 bg-secondary/10">
+              <p className="text-[11px] text-muted-foreground">Enter total body weight and body fat % to estimate skeletal muscle mass (≈56% of lean body mass).</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Body weight (lbs)</label>
+                  <Input type="number" value={s.mmWeightLbs} onChange={e => set({ mmWeightLbs: e.target.value })} placeholder="185" className="h-8 text-xs" /></div>
+                <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Body fat %</label>
+                  <Input type="number" value={s.mmBfPct} onChange={e => set({ mmBfPct: e.target.value })} placeholder="20" className="h-8 text-xs" /></div>
+              </div>
+              {mmResult !== null && (
+                <div className="space-y-1.5">
+                  <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-3 py-2 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Est. Lean Body Mass</span><span className="font-semibold">{toUnit(mmResult / 0.56)} {unitLabel}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Est. Skeletal Muscle</span><span className="font-bold text-blue-700 dark:text-blue-300">{toUnit(mmResult)} {unitLabel}</span></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => set({ currentMuscleMass: String(toUnit(mmResult!)), mmCalcOpen: false })}>Use as current</Button>
+                    <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => { const goal = toUnit(mmResult! * 1.05); set({ goalMuscleMass: String(goal), mmCalcOpen: false }); }}>Use +5% as goal</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Maintenance / TDEE */}
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Maintenance calories (TDEE)</label>
-        <Input type="number" value={stats.maintenanceCalories} onChange={set("maintenanceCalories")} placeholder="2400" className="h-9" />
-        <p className="text-[11px] text-muted-foreground">Your estimated daily calorie burn at current activity level.</p>
+        <Input type="number" value={s.maintenanceCalories} onChange={e => set({ maintenanceCalories: e.target.value })} placeholder="2400" className="h-9" />
+        <p className="text-[11px] text-muted-foreground">Your estimated daily calorie burn. Use the calculator below to find yours.</p>
       </div>
 
       {/* TDEE Calculator */}
       <div className="border rounded-xl overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setTdeeOpen(o => !o)}
-          className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
-        >
-          <span className="flex items-center gap-1.5"><Zap size={12} /> Calculate my TDEE</span>
-          <ChevronRight size={13} className={`transition-transform ${tdeeOpen ? "rotate-90" : ""}`} />
-        </button>
-        {tdeeOpen && (
-          <div className="p-4 space-y-3 bg-secondary/20">
-            <p className="text-[11px] text-muted-foreground">Enter your details to estimate your daily calorie burn (TDEE) using the Mifflin-St Jeor formula.</p>
-
+        <button type="button" onClick={() => set({ bfCalcOpen: false })}
+          className="hidden" />
+        <details className="group">
+          <summary className="flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-primary cursor-pointer list-none bg-primary/5 hover:bg-primary/10 transition-colors">
+            <span className="flex items-center gap-1.5"><Zap size={12} /> Calculate my TDEE</span>
+            <ChevronRight size={13} className="transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="p-4 space-y-3 bg-secondary/10">
+            <p className="text-[11px] text-muted-foreground">Uses the Mifflin-St Jeor formula to estimate your total daily energy expenditure.</p>
             <div className="flex gap-2">
-              {(["male", "female"] as const).map(s => (
-                <button key={s} type="button" onClick={() => onChange({ ...stats, sex: s })}
-                  className={`flex-1 h-8 rounded-lg text-xs font-medium border-2 transition-all ${stats.sex === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+              {(["male", "female"] as const).map(sx => (
+                <button key={sx} type="button" onClick={() => set({ sex: sx })}
+                  className={`flex-1 h-8 rounded-lg text-xs font-medium border-2 transition-all ${s.sex === sx ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                  {sx.charAt(0).toUpperCase() + sx.slice(1)}
                 </button>
               ))}
             </div>
-
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Age</label>
-                <Input type="number" value={stats.age} onChange={set("age")} placeholder="30" className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Height (ft)</label>
-                <Input type="number" value={stats.heightFt} onChange={set("heightFt")} placeholder="5" className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Height (in)</label>
-                <Input type="number" value={stats.heightIn} onChange={set("heightIn")} placeholder="10" className="h-8 text-xs" />
-              </div>
+              <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Age</label>
+                <Input type="number" value={s.age} onChange={e => set({ age: e.target.value })} placeholder="30" className="h-8 text-xs" /></div>
+              <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Height ft</label>
+                <Input type="number" value={s.heightFt} onChange={e => set({ heightFt: e.target.value })} placeholder="5" className="h-8 text-xs" /></div>
+              <div className="space-y-1"><label className="text-[11px] text-muted-foreground">Height in</label>
+                <Input type="number" value={s.heightIn} onChange={e => set({ heightIn: e.target.value })} placeholder="10" className="h-8 text-xs" /></div>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-muted-foreground">Activity level</label>
-              <select
-                value={stats.activityLevel}
-                onChange={e => onChange({ ...stats, activityLevel: e.target.value as ActivityLevel })}
-                className="w-full border rounded-lg px-3 h-8 text-xs bg-background"
-              >
-                {ACTIVITY_LEVELS.map(a => (
-                  <option key={a.value} value={a.value}>{a.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <Button size="sm" className="w-full gap-1.5 h-8" onClick={calcAndFill}>
-              <Zap size={12} /> Calculate & Fill In
-            </Button>
+            <select value={s.activityLevel} onChange={e => set({ activityLevel: e.target.value as ActivityLevel })}
+              className="w-full border rounded-lg px-3 h-9 text-xs bg-background">
+              {ACTIVITY_LEVELS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+            <Button size="sm" className="w-full gap-1.5 h-8" onClick={calcAndFill}><Zap size={12} /> Calculate & Fill In</Button>
           </div>
-        )}
+        </details>
       </div>
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Start date</label>
-          <Input type="date" value={stats.startDate}
-            onChange={e => onChange({ ...stats, startDate: e.target.value, endDate: addWeeks(e.target.value, defaultWeeks) })}
-            className="h-9" />
+          <Input type="date" value={s.startDate} onChange={e => set({ startDate: e.target.value, endDate: addWeeks(e.target.value, DEFAULT_WEEKS[s.metric]) })} className="h-9" />
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Target end date</label>
-          <Input type="date" value={stats.endDate}
-            onChange={e => onChange({ ...stats, endDate: e.target.value })}
-            className="h-9" />
+          <label className="text-xs font-medium text-muted-foreground">End date</label>
+          <Input type="date" value={s.endDate} onChange={e => set({ endDate: e.target.value })} className="h-9" />
         </div>
       </div>
     </div>
   );
 }
 
-// ── Step 3 — Calorie Target ───────────────────────────────────────────────────
+// ── Step 3: Calorie Target ────────────────────────────────────────────────────
 
-function Step3({ planType, maintenance, targetCals, onTargetChange }:
-  { planType: PlanType; maintenance: number; targetCals: number; onTargetChange: (v: number) => void }) {
+function Step3({ s, maintenance, strategy, onTargetChange }:
+  { s: WizardState; maintenance: number; strategy: CalStrategy; onTargetChange: (v: number) => void }) {
+  const [lo, hi] = calRangeForStrategy(maintenance, strategy);
+  const mid = Math.round((lo + hi) / 2);
+  const effective = s.targetCalories || mid;
 
-  const ranges: Record<PlanType, [number, number]> = {
-    cut:   [maintenance - 700, maintenance - 500],
-    bulk:  [maintenance + 200, maintenance + 300],
-    recomp:[maintenance - 150, maintenance + 150],
-  };
-  const [lo, hi] = ranges[planType];
-
-  const rangeLabelMap: Record<PlanType, string> = {
+  const stratLabel: Record<CalStrategy, string> = {
     cut:   `${lo.toLocaleString()}–${hi.toLocaleString()} kcal (${500}–${700} below maintenance)`,
     bulk:  `${lo.toLocaleString()}–${hi.toLocaleString()} kcal (200–300 above maintenance)`,
     recomp:`${lo.toLocaleString()}–${hi.toLocaleString()} kcal (within ±150 of maintenance)`,
   };
 
-  const mid = Math.round((lo + hi) / 2);
-  if (targetCals === 0) onTargetChange(mid);
-
   return (
     <div className="space-y-5">
       <div className="rounded-xl border bg-card p-4 space-y-2 text-center">
         <p className="text-xs text-muted-foreground">Your recommended daily calorie target</p>
-        <p className="text-4xl font-bold text-primary">{targetCals > 0 ? targetCals.toLocaleString() : mid.toLocaleString()}</p>
+        <p className="text-4xl font-bold text-primary">{effective.toLocaleString()}</p>
         <p className="text-xs text-muted-foreground">kcal / day</p>
       </div>
-
       <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground">Recommended range: {rangeLabelMap[planType]}</label>
-        <input
-          type="range"
-          min={lo - 200}
-          max={hi + 200}
-          step={25}
-          value={targetCals || mid}
-          onChange={e => onTargetChange(Number(e.target.value))}
-          className="w-full accent-primary"
-        />
+        <label className="text-xs font-medium text-muted-foreground">Range: {stratLabel[strategy]}</label>
+        <input type="range" min={lo - 200} max={hi + 200} step={25} value={effective}
+          onChange={e => onTargetChange(Number(e.target.value))} className="w-full accent-primary" />
         <div className="flex justify-between text-[10px] text-muted-foreground">
           <span>{(lo - 200).toLocaleString()}</span>
-          <span className="font-medium text-primary">{lo.toLocaleString()}–{hi.toLocaleString()} kcal recommended</span>
+          <span className="font-medium text-primary">{lo.toLocaleString()}–{hi.toLocaleString()} recommended</span>
           <span>{(hi + 200).toLocaleString()}</span>
         </div>
       </div>
-
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Or enter a custom target</label>
-        <Input
-          type="number"
-          value={targetCals || ""}
-          onChange={e => onTargetChange(Number(e.target.value))}
-          placeholder={String(mid)}
-          className="h-9"
-        />
+        <Input type="number" value={effective || ""} onChange={e => onTargetChange(Number(e.target.value))} placeholder={String(mid)} className="h-9" />
       </div>
-
-      <div className={`rounded-lg px-3 py-2 text-xs text-muted-foreground border ${targetCals < lo ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-700 text-amber-700 dark:text-amber-300" : "bg-secondary/30"}`}>
-        {planType === "cut" && `Deficit: ${(maintenance - (targetCals || mid)).toLocaleString()} kcal/day below maintenance (${maintenance.toLocaleString()} kcal)`}
-        {planType === "bulk" && `Surplus: ${((targetCals || mid) - maintenance).toLocaleString()} kcal/day above maintenance (${maintenance.toLocaleString()} kcal)`}
-        {planType === "recomp" && `Difference: ${Math.abs((targetCals || mid) - maintenance).toLocaleString()} kcal/day ${(targetCals || mid) >= maintenance ? "above" : "below"} maintenance (${maintenance.toLocaleString()} kcal)`}
+      <div className="rounded-lg px-3 py-2 text-xs text-muted-foreground bg-secondary/30 border">
+        {strategy === "cut"   && `Deficit: ${(maintenance - effective).toLocaleString()} kcal/day below maintenance (${maintenance.toLocaleString()} kcal)`}
+        {strategy === "bulk"  && `Surplus: ${(effective - maintenance).toLocaleString()} kcal/day above maintenance (${maintenance.toLocaleString()} kcal)`}
+        {strategy === "recomp"&& `${Math.abs(effective - maintenance).toLocaleString()} kcal/day ${effective >= maintenance ? "above" : "below"} maintenance (${maintenance.toLocaleString()} kcal)`}
       </div>
     </div>
   );
 }
 
-// ── Step 4 — Macros ───────────────────────────────────────────────────────────
+// ── Step 4: Macros ────────────────────────────────────────────────────────────
 
-function Step4({
-  planType, totalCals, bodyweightLbs,
-  proteinPerLb, fatPct,
-  onProteinChange, onFatChange,
-}: {
-  planType: PlanType;
-  totalCals: number;
-  bodyweightLbs: number;
-  proteinPerLb: number;
-  fatPct: number;
-  onProteinChange: (v: number) => void;
-  onFatChange: (v: number) => void;
-}) {
-  const { proteinGrams, fatGrams, carbGrams, proteinCals, fatCals, carbCals } = calcMacros(totalCals, proteinPerLb, fatPct, bodyweightLbs);
-  const carbsNegative = carbCals < 0;
-  const fatTooLow = fatPct < 20;
-
+function Step4({ s, totalCals, weightLbs, onProteinChange, onFatChange }:
+  { s: WizardState; totalCals: number; weightLbs: number; onProteinChange: (v: number) => void; onFatChange: (v: number) => void }) {
+  const { proteinG, fatG, carbG, proteinCals, fatCals, carbCals } = calcMacros(totalCals, s.proteinPerLb, s.fatPct, weightLbs);
+  const carbsNeg = carbCals < 0;
+  const fatLow = s.fatPct < 20;
   const total = proteinCals + fatCals + Math.max(0, carbCals);
   const pPct = total > 0 ? Math.round((proteinCals / total) * 100) : 0;
   const fPct = total > 0 ? Math.round((fatCals / total) * 100) : 0;
   const cPct = total > 0 ? Math.round((Math.max(0, carbCals) / total) * 100) : 0;
 
+  const proteinRec: Record<GoalMetric, string> = {
+    body_weight: "1.0 g/lb recommended",
+    body_fat:    "1.0 g/lb recommended",
+    muscle_mass: "0.8 g/lb recommended",
+    recomp:      "0.9 g/lb recommended",
+  };
+
   return (
     <div className="space-y-5">
-      {/* Macro summary card */}
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <p className="text-xs font-semibold text-muted-foreground">Daily Targets</p>
         <div className="flex items-center justify-around text-center">
-          <div>
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{proteinGrams}g</p>
-            <p className="text-[11px] text-muted-foreground">Protein</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbGrams)}g</p>
-            <p className="text-[11px] text-muted-foreground">Carbs</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">{fatGrams}g</p>
-            <p className="text-[11px] text-muted-foreground">Fat</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{totalCals.toLocaleString()}</p>
-            <p className="text-[11px] text-muted-foreground">kcal</p>
-          </div>
+          {[
+            { val: proteinG,          label: "Protein", color: "text-blue-600 dark:text-blue-400" },
+            { val: Math.max(0, carbG), label: "Carbs",   color: "text-amber-600 dark:text-amber-400" },
+            { val: fatG,              label: "Fat",      color: "text-rose-600 dark:text-rose-400" },
+            { val: totalCals,         label: "kcal",     color: "" },
+          ].map(item => (
+            <div key={item.label}>
+              <p className={`text-2xl font-bold ${item.color}`}>{item.val.toLocaleString()}{item.label !== "kcal" ? "g" : ""}</p>
+              <p className="text-[11px] text-muted-foreground">{item.label}</p>
+            </div>
+          ))}
         </div>
-
-        {/* Macro ratio bar */}
         <div className="h-4 rounded-full overflow-hidden flex">
-          <div className="bg-blue-500 h-full transition-all" style={{ width: `${pPct}%` }} />
-          <div className="bg-amber-500 h-full transition-all" style={{ width: `${cPct}%` }} />
-          <div className="bg-rose-500 h-full transition-all" style={{ width: `${fPct}%` }} />
+          <div className="bg-blue-500 h-full" style={{ width: `${pPct}%` }} />
+          <div className="bg-amber-500 h-full" style={{ width: `${cPct}%` }} />
+          <div className="bg-rose-500 h-full" style={{ width: `${fPct}%` }} />
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground">
           <span className="text-blue-600 dark:text-blue-400 font-medium">P {pPct}%</span>
@@ -413,61 +672,43 @@ function Step4({
         </div>
       </div>
 
-      {/* Protein slider */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium">Protein — {proteinGrams}g ({proteinCals} kcal)</label>
-          <span className="text-xs text-muted-foreground">{proteinPerLb.toFixed(1)} g/lb</span>
+        <div className="flex justify-between">
+          <label className="text-xs font-medium">Protein — {proteinG}g ({proteinCals} kcal)</label>
+          <span className="text-xs text-muted-foreground">{s.proteinPerLb.toFixed(1)} g/lb</span>
         </div>
-        <input
-          type="range" min={0.7} max={1.2} step={0.05}
-          value={proteinPerLb}
-          onChange={e => onProteinChange(Number(e.target.value))}
-          className="w-full accent-blue-500"
-        />
+        <input type="range" min={0.7} max={1.2} step={0.05} value={s.proteinPerLb}
+          onChange={e => onProteinChange(Number(e.target.value))} className="w-full accent-blue-500" />
         <div className="flex justify-between text-[10px] text-muted-foreground">
-          <span>0.7 g/lb</span>
-          <span className="font-medium text-blue-500">
-            {planType === "cut" ? "1.0 g/lb recommended" : planType === "bulk" ? "0.8 g/lb recommended" : "0.9 g/lb recommended"}
-          </span>
-          <span>1.2 g/lb</span>
+          <span>0.7</span><span className="font-medium text-blue-500">{proteinRec[s.metric]}</span><span>1.2 g/lb</span>
         </div>
       </div>
 
-      {/* Fat slider */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium">Fat — {fatGrams}g ({fatCals} kcal)</label>
-          <span className="text-xs text-muted-foreground">{fatPct}% of calories</span>
+        <div className="flex justify-between">
+          <label className="text-xs font-medium">Fat — {fatG}g ({fatCals} kcal)</label>
+          <span className="text-xs text-muted-foreground">{s.fatPct}% of calories</span>
         </div>
-        <input
-          type="range" min={15} max={45} step={1}
-          value={fatPct}
-          onChange={e => onFatChange(Number(e.target.value))}
-          className="w-full accent-rose-500"
-        />
+        <input type="range" min={15} max={45} step={1} value={s.fatPct}
+          onChange={e => onFatChange(Number(e.target.value))} className="w-full accent-rose-500" />
         <div className="flex justify-between text-[10px] text-muted-foreground">
-          <span>15%</span>
-          <span>25% default</span>
-          <span>45%</span>
+          <span>15%</span><span>25% default</span><span>45%</span>
         </div>
-        {fatTooLow && (
+        {fatLow && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
             ⚠️ Going below 20% of calories from fat long-term can negatively affect hormones and health.
           </p>
         )}
       </div>
 
-      {/* Carbs display */}
       <div className="rounded-lg border bg-secondary/20 px-3 py-2.5 space-y-1">
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between">
           <span className="text-xs font-medium">Carbs (auto-calculated)</span>
-          <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{Math.max(0, carbGrams)}g ({Math.max(0, carbCals)} kcal)</span>
+          <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{Math.max(0, carbG)}g</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">Remaining calories after protein and fat are accounted for.</p>
-        {carbsNegative && (
+        {carbsNeg && (
           <p className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1 mt-1">
-            ⚠️ Your protein and fat targets exceed your calorie goal — reduce protein or fat to allow room for carbs.
+            ⚠️ Protein + fat exceed calorie goal. Reduce protein or fat to allow carbs.
           </p>
         )}
       </div>
@@ -475,57 +716,41 @@ function Step4({
   );
 }
 
-// ── Step 5 — Summary ──────────────────────────────────────────────────────────
+// ── Step 5: Summary ───────────────────────────────────────────────────────────
 
-function Step5({ planType, targetCals, proteinGrams, carbGrams, fatGrams, startDate, endDate, maintenance, currentWeight, weightUnit }:
-  { planType: PlanType; targetCals: number; proteinGrams: number; carbGrams: number; fatGrams: number; startDate: string; endDate: string; maintenance: number; currentWeight: number; weightUnit: string }) {
-
-  const weeks = weeksFromDates(startDate, endDate);
-  const deficit = maintenance - targetCals;
+function Step5({ s, totalCals, proteinG, carbG, fatG, maintenance, strategy }:
+  { s: WizardState; totalCals: number; proteinG: number; carbG: number; fatG: number; maintenance: number; strategy: CalStrategy }) {
+  const weeks = weeksFromDates(s.startDate, s.endDate);
+  const deficit = maintenance - totalCals;
   const lbsPerWeek = Math.abs(deficit) / 3500;
   const totalLbs = lbsPerWeek * weeks;
+  const card = GOAL_CARDS.find(c => c.metric === s.metric)!;
+  const badge = metricBadge(s.metric);
 
-  const badge = planTypeBadge(planType);
-
-  const outcomeText = planType === "cut"
-    ? `At a deficit of ${deficit.toLocaleString()} kcal/day, expect roughly ${lbsPerWeek.toFixed(1)} lbs/week of loss. A ${weeks}-week cut could result in ~${totalLbs.toFixed(1)} lbs of fat loss at this pace.`
-    : planType === "bulk"
-    ? `Muscle grows slowly — expect noticeable strength increases within 6–8 weeks and visible size changes after 12+ weeks of consistent training and surplus.`
-    : `Recomposition is slower than cutting or bulking. Most people see noticeable changes in 8–12 weeks, with bigger results over many months.`;
+  const outcomeText =
+    strategy === "cut"
+      ? `At a deficit of ${deficit.toLocaleString()} kcal/day, expect roughly ${lbsPerWeek.toFixed(1)} lbs/week of loss. A ${weeks}-week plan could result in ~${totalLbs.toFixed(1)} lbs of fat loss.`
+      : strategy === "bulk"
+      ? `Muscle grows slowly — expect noticeable strength increases within 6–8 weeks and visible size changes after 12+ weeks of consistent training and surplus.`
+      : `Recomposition is slower than cutting or bulking. Most people see noticeable changes in 8–12 weeks, with bigger results over many months.`;
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border bg-card p-4 space-y-4">
-        {/* Type badge */}
         <div className="flex items-center gap-2">
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.className}`}>{badge.label}</span>
-          <span className="text-xs text-muted-foreground">{weeks} weeks · {new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → {new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+          <span className="text-xs text-muted-foreground">{weeks} weeks · {new Date(s.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} → {new Date(s.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
         </div>
-
-        {/* Calorie target */}
         <div className="flex items-center justify-between border-b pb-3">
           <span className="text-sm font-medium">Daily calories</span>
-          <span className="text-lg font-bold text-primary">{targetCals.toLocaleString()} kcal</span>
+          <span className="text-lg font-bold text-primary">{totalCals.toLocaleString()} kcal</span>
         </div>
-
-        {/* Macros */}
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{proteinGrams}g</p>
-            <p className="text-[11px] text-muted-foreground">Protein</p>
-          </div>
-          <div>
-            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbGrams)}g</p>
-            <p className="text-[11px] text-muted-foreground">Carbs</p>
-          </div>
-          <div>
-            <p className="text-xl font-bold text-rose-600 dark:text-rose-400">{fatGrams}g</p>
-            <p className="text-[11px] text-muted-foreground">Fat</p>
-          </div>
+          <div><p className="text-xl font-bold text-blue-600 dark:text-blue-400">{proteinG}g</p><p className="text-[11px] text-muted-foreground">Protein</p></div>
+          <div><p className="text-xl font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbG)}g</p><p className="text-[11px] text-muted-foreground">Carbs</p></div>
+          <div><p className="text-xl font-bold text-rose-600 dark:text-rose-400">{fatG}g</p><p className="text-[11px] text-muted-foreground">Fat</p></div>
         </div>
       </div>
-
-      {/* Outcome prediction */}
       <div className="rounded-xl border bg-secondary/20 px-4 py-3 text-sm text-muted-foreground leading-relaxed">
         <p className="text-xs font-semibold text-foreground mb-1">Expected outcomes</p>
         {outcomeText}
@@ -534,95 +759,123 @@ function Step5({ planType, targetCals, proteinGrams, carbGrams, fatGrams, startD
   );
 }
 
-// ── Plan Wizard ───────────────────────────────────────────────────────────────
+// ── Plan Wizard Modal ─────────────────────────────────────────────────────────
 
-function PlanWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+interface WizardProps {
+  editing: WorkoutPlan | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(editing ? 2 : 1);
+  const [ws, setWs] = useState<WizardState>(() => editing ? stateFromPlan(editing) : makeDefaultState("body_fat"));
 
-  // Wizard state
-  const [planType, setPlanType] = useState<PlanType>("cut");
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const [stats, setStats] = useState<Stats>({
-    weightUnit: "lbs",
-    currentWeight: "",
-    goalWeight: "",
-    currentBodyFat: "",
-    goalBodyFat: "",
-    activityLevel: "moderate",
-    maintenanceCalories: "",
-    sex: "male",
-    age: "",
-    heightFt: "",
-    heightIn: "",
-    startDate: todayStr,
-    endDate: addWeeks(todayStr, 10),
-  });
+  // Merge partial updates
+  function set(patch: Partial<WizardState>) { setWs(prev => ({ ...prev, ...patch })); }
 
-  const maintenanceNum = parseInt(stats.maintenanceCalories) || 0;
-  const defaultMid: Record<PlanType, number> = {
-    cut:   maintenanceNum - 600,
-    bulk:  maintenanceNum + 250,
-    recomp: maintenanceNum,
-  };
-  const [targetCals, setTargetCals] = useState(0);
+  // Derived values
+  const maintenanceNum = parseInt(ws.maintenanceCalories) || 0;
+  const currentWLbs = ws.weightUnit === "lbs" ? (parseFloat(ws.currentWeight) || 150) : (parseFloat(ws.currentWeight) || 68) * 2.20462;
+  const goalWLbs = ws.weightUnit === "lbs" ? (parseFloat(ws.goalWeight) || 0) : (parseFloat(ws.goalWeight) || 0) * 2.20462;
+  const strategy = getCalStrategy(ws.metric, currentWLbs, goalWLbs);
+  const [lo, hi] = maintenanceNum > 0 ? calRangeForStrategy(maintenanceNum, strategy) : [1800, 2400];
+  const mid = Math.round((lo + hi) / 2);
+  const effectiveCals = ws.targetCalories || mid;
+  const { proteinG, fatG, carbG } = calcMacros(effectiveCals, ws.proteinPerLb, ws.fatPct, currentWLbs);
 
-  const defaultProtein: Record<PlanType, number> = { cut: 1.0, bulk: 0.8, recomp: 0.9 };
-  const [proteinPerLb, setProteinPerLb] = useState(defaultProtein[planType]);
-  const [fatPct, setFatPct] = useState(25);
+  function handleSelectMetric(m: GoalMetric) {
+    setWs(makeDefaultState(m));
+    setStep(2);
+  }
 
-  const bodyweightLbs = stats.weightUnit === "lbs"
-    ? parseFloat(stats.currentWeight) || 150
-    : (parseFloat(stats.currentWeight) || 68) * 2.20462;
-  const goalWeightLbs = stats.goalWeight
-    ? (stats.weightUnit === "lbs" ? parseFloat(stats.goalWeight) : parseFloat(stats.goalWeight) * 2.20462)
-    : bodyweightLbs;
-  const effectiveWeightForProtein = goalWeightLbs || bodyweightLbs;
+  function buildGoalMetricJson(): string {
+    const card = GOAL_CARDS.find(c => c.metric === ws.metric)!;
+    // Legacy compat fields
+    let currentValue = parseFloat(ws.currentWeight) || 0;
+    let targetValue = parseFloat(ws.goalWeight) || 0;
+    let unit = ws.weightUnit;
+    if (ws.metric === "body_fat") {
+      currentValue = parseFloat(ws.currentBodyFat) || 0;
+      targetValue = parseFloat(ws.goalBodyFat) || 0;
+      unit = "%";
+    } else if (ws.metric === "muscle_mass") {
+      currentValue = parseFloat(ws.currentMuscleMass) || 0;
+      targetValue = parseFloat(ws.goalMuscleMass) || 0;
+      unit = ws.weightUnit;
+    } else if (ws.metric === "recomp") {
+      currentValue = parseFloat(ws.currentWeight) || 0;
+      targetValue = parseFloat(ws.currentWeight) || 0;
+      unit = ws.weightUnit;
+    }
 
-  const effectiveTargetCals = targetCals || defaultMid[planType];
-  const { proteinGrams, fatGrams, carbGrams } = calcMacros(effectiveTargetCals, proteinPerLb, fatPct, effectiveWeightForProtein);
+    return JSON.stringify({
+      metric: ws.metric,
+      currentValue, targetValue, unit,
+      // extended
+      weightUnit: ws.weightUnit,
+      currentWeight:    parseFloat(ws.currentWeight)     || null,
+      goalWeight:       parseFloat(ws.goalWeight)        || null,
+      currentBodyFat:   parseFloat(ws.currentBodyFat)    || null,
+      goalBodyFat:      parseFloat(ws.goalBodyFat)       || null,
+      currentMuscleMass:parseFloat(ws.currentMuscleMass) || null,
+      goalMuscleMass:   parseFloat(ws.goalMuscleMass)    || null,
+      activityLevel:    ws.activityLevel,
+      maintenanceCalories: maintenanceNum || null,
+      targetCalories:   effectiveCals,
+      proteinGrams:     proteinG,
+      carbsGrams:       Math.max(0, carbG),
+      fatGrams:         fatG,
+      proteinPerLb:     ws.proteinPerLb,
+      fatPct:           ws.fatPct,
+    });
+  }
+
+  function autoName(): string {
+    const names: Record<GoalMetric, string> = {
+      body_weight: "Body Weight Plan",
+      body_fat:    "Fat Loss Plan",
+      muscle_mass: "Muscle Building Plan",
+      recomp:      "Body Recomposition Plan",
+    };
+    return names[ws.metric];
+  }
+
+  const totalWeeks = weeksFromDates(ws.startDate, ws.endDate);
+  // Auto-generate milestones
+  function buildMilestones() {
+    const checkpoints = [4, 8, 12, totalWeeks].filter(c => c <= totalWeeks && c > 0);
+    return [...new Set(checkpoints)].map(wk => ({ week: wk, description: `Week ${wk} progress check-in` }));
+  }
 
   const saveMut = useMutation({
-    mutationFn: (data: object) => apiRequest("POST", "/api/body-comp-plans", data).then(r => r.json()),
+    mutationFn: (payload: object) =>
+      editing
+        ? apiRequest("PATCH", `/api/workout-plans/${editing.id}`, payload).then(r => r.json())
+        : apiRequest("POST", "/api/workout-plans", payload).then(r => r.json()),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/body-comp-plans"] });
-      toast({ title: "Plan saved!" });
+      qc.invalidateQueries({ queryKey: ["/api/workout-plans"] });
+      toast({ title: editing ? "Plan updated!" : "Plan created!" });
       onSaved();
     },
-    onError: () => toast({ title: "Failed to save plan", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
   function handleSave() {
     saveMut.mutate({
-      planType,
-      weightUnit: stats.weightUnit,
-      currentWeight: parseFloat(stats.currentWeight) || null,
-      goalWeight: parseFloat(stats.goalWeight) || null,
-      currentBodyFat: parseFloat(stats.currentBodyFat) || null,
-      goalBodyFat: parseFloat(stats.goalBodyFat) || null,
-      activityLevel: stats.activityLevel,
-      maintenanceCalories: maintenanceNum || 2000,
-      targetCalories: effectiveTargetCals,
-      proteinGrams,
-      carbsGrams: Math.max(0, carbGrams),
-      fatGrams,
-      proteinPerLb,
-      fatPct,
-      startDate: stats.startDate,
-      endDate: stats.endDate,
-      isActive: true,
+      name: autoName(),
+      description: null,
+      durationWeeks: totalWeeks,
+      scheduleJson: "[]",
+      goalType: "body_composition",
+      goalMetricJson: buildGoalMetricJson(),
+      startDate: ws.startDate,
+      milestonesJson: JSON.stringify(buildMilestones()),
+      isActive: editing ? editing.isActive : false,
+      createdAt: editing ? editing.createdAt : new Date().toISOString(),
     });
-  }
-
-  function handleSelectType(t: PlanType) {
-    setPlanType(t);
-    setProteinPerLb(defaultProtein[t]);
-    setTargetCals(0);
-    // Auto-set end date based on plan type
-    const weeks = t === "cut" ? 10 : t === "bulk" ? 16 : 12;
-    setStats(s => ({ ...s, endDate: addWeeks(s.startDate, weeks) }));
-    setStep(2);
   }
 
   const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Summary"];
@@ -630,81 +883,51 @@ function PlanWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-card border rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
-            <h2 className="font-semibold">Body Composition Plan</h2>
+            <h2 className="font-semibold">{editing ? "Edit" : "New"} Body Composition Plan</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
         </div>
-
-        {/* Progress bar */}
         <div className="h-1 bg-secondary">
           <div className="h-full bg-primary transition-all" style={{ width: `${(step / 5) * 100}%` }} />
         </div>
 
-        {/* Step content */}
         <div className="flex-1 overflow-y-auto p-5">
-          {step === 1 && <Step1 onSelect={handleSelectType} />}
-          {step === 2 && <Step2 planType={planType} stats={stats} onChange={setStats} />}
+          {step === 1 && <Step1 onSelect={handleSelectMetric} />}
+          {step === 2 && <Step2 s={ws} set={set} />}
           {step === 3 && maintenanceNum > 0 && (
-            <Step3
-              planType={planType}
-              maintenance={maintenanceNum}
-              targetCals={effectiveTargetCals}
-              onTargetChange={setTargetCals}
-            />
+            <Step3 s={ws} maintenance={maintenanceNum} strategy={strategy}
+              onTargetChange={v => set({ targetCalories: v })} />
           )}
           {step === 3 && maintenanceNum === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              <Scale size={32} className="mx-auto mb-3 opacity-20" />
-              <p>Please enter your maintenance calories in Step 2 first.</p>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => setStep(2)}>Go back to Stats</Button>
+            <div className="text-center py-10 text-muted-foreground">
+              <Scale size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm">Enter your maintenance calories in Step 2 first.</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => setStep(2)}>← Back to Stats</Button>
             </div>
           )}
           {step === 4 && (
-            <Step4
-              planType={planType}
-              totalCals={effectiveTargetCals}
-              bodyweightLbs={effectiveWeightForProtein}
-              proteinPerLb={proteinPerLb}
-              fatPct={fatPct}
-              onProteinChange={setProteinPerLb}
-              onFatChange={setFatPct}
-            />
+            <Step4 s={ws} totalCals={effectiveCals} weightLbs={currentWLbs}
+              onProteinChange={v => set({ proteinPerLb: v })}
+              onFatChange={v => set({ fatPct: v })} />
           )}
           {step === 5 && (
-            <Step5
-              planType={planType}
-              targetCals={effectiveTargetCals}
-              proteinGrams={proteinGrams}
-              carbGrams={Math.max(0, carbGrams)}
-              fatGrams={fatGrams}
-              startDate={stats.startDate}
-              endDate={stats.endDate}
-              maintenance={maintenanceNum}
-              currentWeight={parseFloat(stats.currentWeight) || 0}
-              weightUnit={stats.weightUnit}
-            />
+            <Step5 s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
+              maintenance={maintenanceNum} strategy={strategy} />
           )}
         </div>
 
-        {/* Footer nav */}
         {step > 1 && (
           <div className="px-5 py-4 border-t flex items-center justify-between gap-3">
-            <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1.5">
-              <ChevronLeft size={14} /> Back
-            </Button>
-            {step < 5 ? (
-              <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">
-                Next <ChevronRight size={14} />
-              </Button>
-            ) : (
-              <Button size="sm" onClick={handleSave} disabled={saveMut.isPending} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
-                <CheckCircle2 size={14} /> Save Plan
-              </Button>
-            )}
+            <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1.5"><ChevronLeft size={14} /> Back</Button>
+            {step < 5
+              ? <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
+              : <Button size="sm" onClick={handleSave} disabled={saveMut.isPending}
+                  className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
+                  <CheckCircle2 size={14} /> {editing ? "Update Plan" : "Save Plan"}
+                </Button>}
           </div>
         )}
       </div>
@@ -726,7 +949,7 @@ function CheckInModal({ planId, onClose }: { planId: number; onClose: () => void
   const saveMut = useMutation({
     mutationFn: (data: object) => apiRequest("POST", `/api/body-comp-plans/${planId}/check-ins`, data).then(r => r.json()),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/body-comp-plans", planId, "check-ins"] });
+      qc.invalidateQueries({ queryKey: ["/api/body-comp-check-ins", planId] });
       toast({ title: "Check-in logged!" });
       onClose();
     },
@@ -751,15 +974,17 @@ function CheckInModal({ planId, onClose }: { planId: number; onClose: () => void
               <Input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="185" className="h-9" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Body fat % <span className="text-muted-foreground/60">optional</span></label>
+              <label className="text-xs font-medium text-muted-foreground">Body fat % <span className="text-muted-foreground/60">opt</span></label>
               <Input type="number" value={bodyFat} onChange={e => setBodyFat(e.target.value)} placeholder="18" className="h-9" />
             </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Notes</label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="How did the week feel? Energy levels, strength changes..." rows={3} className="resize-none" />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Energy levels, strength changes, how the week felt..." rows={3} className="resize-none" />
           </div>
-          <Button className="w-full gap-1.5" onClick={() => saveMut.mutate({ date, weight: parseFloat(weight) || null, bodyFat: parseFloat(bodyFat) || null, notes: notes || null })} disabled={saveMut.isPending}>
+          <Button className="w-full gap-1.5" disabled={saveMut.isPending}
+            onClick={() => saveMut.mutate({ date, weight: parseFloat(weight) || null, bodyFat: parseFloat(bodyFat) || null, notes: notes || null })}>
             <CheckCircle2 size={14} /> Log Check-in
           </Button>
         </div>
@@ -771,42 +996,37 @@ function CheckInModal({ planId, onClose }: { planId: number; onClose: () => void
 // ── Active Plan Card ──────────────────────────────────────────────────────────
 
 function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
-  plan: BodyCompPlan;
-  onEdit: () => void;
-  onEndEarly: () => void;
-  onCheckIn: () => void;
+  plan: WorkoutPlan; onEdit: () => void; onEndEarly: () => void; onCheckIn: () => void;
 }) {
   const { data: checkIns = [] } = useQuery<BodyCompCheckIn[]>({
-    queryKey: ["/api/body-comp-plans", plan.id, "check-ins"],
+    queryKey: ["/api/body-comp-check-ins", plan.id],
     queryFn: () => apiRequest("GET", `/api/body-comp-plans/${plan.id}/check-ins`).then(r => r.json()),
   });
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  const m = parseMetricJson(plan);
   const today = new Date();
-  const start = new Date(plan.startDate);
-  const end = new Date(plan.endDate);
-  const totalWeeks = weeksFromDates(plan.startDate, plan.endDate);
-  const weeksElapsed = Math.min(totalWeeks, Math.max(0, Math.floor((today.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000))));
+  const start = new Date(plan.startDate ?? today);
+  const totalWeeks = plan.durationWeeks;
+  const weeksElapsed = Math.min(totalWeeks, Math.max(0, Math.floor((today.getTime() - start.getTime()) / (7 * 86400000))));
   const weeksRemaining = Math.max(0, totalWeeks - weeksElapsed);
   const progressPct = Math.min(100, Math.round((weeksElapsed / totalWeeks) * 100));
-
-  const badge = planTypeBadge(plan.planType as PlanType);
+  const endDate = plan.startDate ? addWeeks(plan.startDate, totalWeeks) : "";
+  const badge = metricBadge(m?.metric ?? "body_weight");
 
   const deleteCheckIn = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/body-comp-check-ins/${id}`).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/body-comp-plans", plan.id, "check-ins"] }); toast({ title: "Check-in removed" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/body-comp-check-ins", plan.id] }); toast({ title: "Check-in removed" }); },
   });
 
   const latestCheckIn = checkIns[0];
 
   return (
     <div className="bg-card border-2 border-primary rounded-xl overflow-hidden shadow-sm shadow-primary/10">
-      {/* Active banner */}
       <div className="bg-primary text-primary-foreground text-xs font-semibold px-4 py-1.5 flex items-center gap-1.5">
-        <Target size={10} /> Active Plan — {weeksRemaining} week{weeksRemaining !== 1 ? "s" : ""} remaining
+        <Play size={10} fill="currentColor" /> Active Plan — {weeksRemaining} week{weeksRemaining !== 1 ? "s" : ""} remaining
       </div>
-
       <div className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -815,15 +1035,15 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span>
               <span className="text-xs text-muted-foreground">{totalWeeks} weeks</span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {new Date(plan.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} →{" "}
-              {new Date(plan.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-            </p>
+            {plan.startDate && (
+              <p className="text-xs text-muted-foreground">
+                {new Date(plan.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {endDate && ` → ${new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+              </p>
+            )}
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onEndEarly}><X size={13} className="mr-2" />End Plan Early</DropdownMenuItem>
@@ -832,31 +1052,29 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
         </div>
 
         {/* Daily targets */}
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <div className="bg-secondary/30 rounded-lg py-2">
-            <p className="text-sm font-bold text-primary">{plan.targetCalories.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">kcal</p>
+        {m?.targetCalories && (
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { val: m.targetCalories.toLocaleString(), label: "kcal", bg: "bg-secondary/30", color: "text-primary" },
+              { val: `${m.proteinGrams ?? "—"}g`, label: "Protein", bg: "bg-blue-50 dark:bg-blue-950/20", color: "text-blue-600 dark:text-blue-400" },
+              { val: `${m.carbsGrams ?? "—"}g`, label: "Carbs", bg: "bg-amber-50 dark:bg-amber-950/20", color: "text-amber-600 dark:text-amber-400" },
+              { val: `${m.fatGrams ?? "—"}g`, label: "Fat", bg: "bg-rose-50 dark:bg-rose-950/20", color: "text-rose-600 dark:text-rose-400" },
+            ].map(item => (
+              <div key={item.label} className={`${item.bg} rounded-lg py-2`}>
+                <p className={`text-sm font-bold ${item.color}`}>{item.val}</p>
+                <p className="text-[10px] text-muted-foreground">{item.label}</p>
+              </div>
+            ))}
           </div>
-          <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg py-2">
-            <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{plan.proteinGrams}g</p>
-            <p className="text-[10px] text-muted-foreground">Protein</p>
-          </div>
-          <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg py-2">
-            <p className="text-sm font-bold text-amber-600 dark:text-amber-400">{plan.carbsGrams}g</p>
-            <p className="text-[10px] text-muted-foreground">Carbs</p>
-          </div>
-          <div className="bg-rose-50 dark:bg-rose-950/20 rounded-lg py-2">
-            <p className="text-sm font-bold text-rose-600 dark:text-rose-400">{plan.fatGrams}g</p>
-            <p className="text-[10px] text-muted-foreground">Fat</p>
-          </div>
-        </div>
+        )}
 
-        {/* Starting stats snapshot */}
-        {(plan.currentWeight || plan.currentBodyFat) && (
+        {/* Stats snapshot */}
+        {m && (m.currentWeight || m.currentBodyFat) && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground border rounded-lg px-3 py-2">
             <Scale size={12} className="shrink-0" />
-            <span>Start: {plan.currentWeight ? `${plan.currentWeight} ${plan.weightUnit}` : "—"}{plan.currentBodyFat ? ` · ${plan.currentBodyFat}% BF` : ""}</span>
-            {plan.goalWeight && <span className="text-primary font-medium">→ Goal: {plan.goalWeight} {plan.weightUnit}</span>}
+            <span>Start: {m.currentWeight ? `${m.currentWeight} ${m.weightUnit}` : "—"}{m.currentBodyFat ? ` · ${m.currentBodyFat}% BF` : ""}</span>
+            {m.goalWeight && <span className="text-primary font-medium ml-auto">→ Goal: {m.goalWeight} {m.weightUnit}</span>}
+            {m.goalBodyFat && !m.goalWeight && <span className="text-primary font-medium ml-auto">→ Goal: {m.goalBodyFat}% BF</span>}
           </div>
         )}
 
@@ -877,13 +1095,12 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
             <CheckCircle2 size={11} className="text-green-600 shrink-0" />
             <span className="text-muted-foreground">
               Last check-in: {new Date(latestCheckIn.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              {latestCheckIn.weight ? ` · ${latestCheckIn.weight} ${plan.weightUnit}` : ""}
+              {latestCheckIn.weight ? ` · ${latestCheckIn.weight} ${m?.weightUnit ?? "lbs"}` : ""}
               {latestCheckIn.bodyFat ? ` · ${latestCheckIn.bodyFat}% BF` : ""}
             </span>
           </div>
         )}
 
-        {/* Check-in button */}
         <Button size="sm" className="w-full gap-1.5 bg-green-600 hover:bg-green-700 text-white" onClick={onCheckIn}>
           <ClipboardList size={13} /> Log a Check-in
         </Button>
@@ -898,14 +1115,11 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{new Date(ci.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
                     <p className="text-muted-foreground">
-                      {ci.weight ? `${ci.weight} ${plan.weightUnit}` : "—"}
-                      {ci.bodyFat ? ` · ${ci.bodyFat}% BF` : ""}
+                      {ci.weight ? `${ci.weight} ${m?.weightUnit ?? "lbs"}` : "—"}{ci.bodyFat ? ` · ${ci.bodyFat}% BF` : ""}
                     </p>
                     {ci.notes && <p className="text-muted-foreground/70 italic mt-0.5 line-clamp-2">{ci.notes}</p>}
                   </div>
-                  <button onClick={() => deleteCheckIn.mutate(ci.id)} className="text-muted-foreground/40 hover:text-destructive shrink-0">
-                    <X size={12} />
-                  </button>
+                  <button onClick={() => deleteCheckIn.mutate(ci.id)} className="text-muted-foreground/40 hover:text-destructive shrink-0"><X size={12} /></button>
                 </div>
               ))}
             </div>
@@ -918,134 +1132,159 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
 
 // ── Inactive Plan Card ────────────────────────────────────────────────────────
 
-function InactivePlanCard({ plan, onDelete }: { plan: BodyCompPlan; onDelete: () => void }) {
-  const badge = planTypeBadge(plan.planType as PlanType);
-  const totalWeeks = weeksFromDates(plan.startDate, plan.endDate);
+function InactivePlanCard({ plan, onEdit, onDelete }: { plan: WorkoutPlan; onEdit: () => void; onDelete: () => void }) {
+  const m = parseMetricJson(plan);
+  const badge = metricBadge(m?.metric ?? "body_weight");
+  const endDate = plan.startDate ? addWeeks(plan.startDate, plan.durationWeeks) : "";
 
   return (
-    <div className="bg-card border rounded-xl p-4 space-y-3">
+    <div className="bg-card border rounded-xl p-4 space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span>
-            <span className="text-xs text-muted-foreground">{totalWeeks} weeks</span>
+            <span className="text-xs text-muted-foreground">{plan.durationWeeks} weeks</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {new Date(plan.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} →{" "}
-            {new Date(plan.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-          </p>
+          {plan.startDate && (
+            <p className="text-xs text-muted-foreground">
+              {new Date(plan.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              {endDate && ` → ${new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+            </p>
+          )}
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}><Trash2 size={13} className="mr-2" />Delete Plan</DropdownMenuItem>
+            <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      <div className="flex gap-3 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">{plan.targetCalories.toLocaleString()} kcal</span>
-        <span>·</span>
-        <span>{plan.proteinGrams}g P</span>
-        <span>{plan.carbsGrams}g C</span>
-        <span>{plan.fatGrams}g F</span>
-      </div>
+      {m?.targetCalories && (
+        <div className="flex gap-3 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{m.targetCalories.toLocaleString()} kcal</span>
+          <span>·</span>
+          {m.proteinGrams != null && <span>{m.proteinGrams}g P</span>}
+          {m.carbsGrams != null && <span>{m.carbsGrams}g C</span>}
+          {m.fatGrams != null && <span>{m.fatGrams}g F</span>}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Main Section ──────────────────────────────────────────────────────────────
 
-export default function BodyCompositionPlanSection() {
+export default function BodyCompositionPlanSection({
+  externalWizardOpen = false,
+  externalEditingPlan = null,
+  onExternalWizardClose,
+}: BodyCompSectionProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [internalWizardOpen, setInternalWizardOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null);
   const [checkInPlanId, setCheckInPlanId] = useState<number | null>(null);
 
-  const { data: plans = [] } = useQuery<BodyCompPlan[]>({
-    queryKey: ["/api/body-comp-plans"],
-    queryFn: () => apiRequest("GET", "/api/body-comp-plans").then(r => r.json()),
+  // Sync external trigger
+  useEffect(() => {
+    if (externalWizardOpen) {
+      setEditingPlan(externalEditingPlan);
+      setInternalWizardOpen(true);
+    }
+  }, [externalWizardOpen, externalEditingPlan]);
+
+  const wizardOpen = internalWizardOpen;
+
+  function closeWizard() {
+    setInternalWizardOpen(false);
+    setEditingPlan(null);
+    onExternalWizardClose?.();
+  }
+
+  const { data: allPlans = [] } = useQuery<WorkoutPlan[]>({
+    queryKey: ["/api/workout-plans"],
+    queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
   });
 
+  // Filter to body_composition plans only
+  const plans = allPlans.filter(p => p.goalType === "body_composition");
+  const activePlans = plans.filter(p => p.isActive);
+  const inactivePlans = plans.filter(p => !p.isActive);
+
   const deleteMut = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/body-comp-plans/${id}`).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/body-comp-plans"] }); toast({ title: "Plan deleted" }); },
-    onError: () => toast({ title: "Failed to delete plan", variant: "destructive" }),
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-plans/${id}`).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan deleted" }); },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
   });
 
   const endEarlyMut = useMutation({
-    mutationFn: (id: number) => apiRequest("PATCH", `/api/body-comp-plans/${id}`, { isActive: false }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/body-comp-plans"] }); toast({ title: "Plan ended" }); },
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/workout-plans/${id}`, { isActive: false }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan ended" }); },
   });
-
-  const activePlans = plans.filter(p => p.isActive);
-  const inactivePlans = plans.filter(p => !p.isActive);
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">Body Composition Plans</p>
-          <p className="text-xs text-muted-foreground">Goal-setting & macro calculator for fat loss, muscle gain, or recomposition</p>
+          <p className="text-sm font-semibold flex items-center gap-1.5"><Heart size={14} className="text-rose-500" /> Body Composition Plans</p>
+          <p className="text-xs text-muted-foreground">Goal-setting & macro calculator — fat loss, muscle gain, or recomposition</p>
         </div>
-        <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-1.5 shrink-0">
+        <Button size="sm" onClick={() => { setEditingPlan(null); setInternalWizardOpen(true); }} className="gap-1.5 shrink-0">
           <Plus size={13} /> New Plan
         </Button>
       </div>
 
       {/* Active plans */}
-      {activePlans.length > 0 && (
-        <div className="space-y-3">
-          {activePlans.map(plan => (
-            <ActivePlanCard
-              key={plan.id}
-              plan={plan}
-              onEdit={() => {}}
-              onEndEarly={() => endEarlyMut.mutate(plan.id)}
-              onCheckIn={() => setCheckInPlanId(plan.id)}
-            />
-          ))}
-        </div>
-      )}
+      {activePlans.map(plan => (
+        <ActivePlanCard key={plan.id} plan={plan}
+          onEdit={() => { setEditingPlan(plan); setInternalWizardOpen(true); }}
+          onEndEarly={() => endEarlyMut.mutate(plan.id)}
+          onCheckIn={() => setCheckInPlanId(plan.id)} />
+      ))}
 
-      {/* Inactive / past plans */}
+      {/* Past plans */}
       {inactivePlans.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Past Plans</p>
           {inactivePlans.map(plan => (
-            <InactivePlanCard
-              key={plan.id}
-              plan={plan}
-              onDelete={() => deleteMut.mutate(plan.id)}
-            />
+            <InactivePlanCard key={plan.id} plan={plan}
+              onEdit={() => { setEditingPlan(plan); setInternalWizardOpen(true); }}
+              onDelete={() => deleteMut.mutate(plan.id)} />
           ))}
         </div>
       )}
 
       {/* Empty state */}
-      {plans.length === 0 && (
-        <div className="border-2 border-dashed rounded-xl py-12 text-center space-y-3">
+      {plans.length === 0 && !wizardOpen && (
+        <div className="border-2 border-dashed rounded-xl py-10 text-center space-y-3">
           <div className="flex justify-center gap-3 text-muted-foreground opacity-30">
-            <Flame size={28} />
-            <Dumbbell size={28} />
-            <RefreshCw size={28} />
+            <Scale size={26} /><Flame size={26} /><Dumbbell size={26} /><RefreshCw size={26} />
           </div>
           <div>
             <p className="font-medium text-sm">No body composition plans yet</p>
             <p className="text-xs text-muted-foreground mt-1">Create a plan to calculate your daily calorie and macro targets</p>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={() => setWizardOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setEditingPlan(null); setInternalWizardOpen(true); }}>
             <Plus size={13} /> Create Your First Plan
           </Button>
         </div>
       )}
 
-      {/* Modals */}
-      {wizardOpen && <PlanWizard onClose={() => setWizardOpen(false)} onSaved={() => setWizardOpen(false)} />}
-      {checkInPlanId !== null && <CheckInModal planId={checkInPlanId} onClose={() => setCheckInPlanId(null)} />}
+      {/* Wizard modal */}
+      {wizardOpen && (
+        <PlanWizardModal
+          editing={editingPlan}
+          onClose={closeWizard}
+          onSaved={closeWizard}
+        />
+      )}
+
+      {/* Check-in modal */}
+      {checkInPlanId !== null && (
+        <CheckInModal planId={checkInPlanId} onClose={() => setCheckInPlanId(null)} />
+      )}
     </div>
   );
 }
