@@ -19,7 +19,11 @@ import {
   Music2, Plus, Heart, ChevronDown, ChevronRight,
   Trash2, Pencil, Search, Music, Upload, Download, HelpCircle, Loader2, Users, Mic2,
   Send, Check, X, Inbox, CornerUpRight, Radio, ListMusic, ChevronUp, Share2,
+  MoreHorizontal, BookOpen, PlayCircle, Youtube, Clock, Headphones, Star,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { MusicCollectionWithItems, MusicCollectionItemWithData } from "@shared/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -90,6 +94,27 @@ function StarRating({
 
 // ── Song row ──────────────────────────────────────────────────────────────────
 
+const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string; next: string }> = {
+  want_to_listen: {
+    label: "Want to Listen",
+    icon: <Clock size={10} />,
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+    next: "listening",
+  },
+  listening: {
+    label: "Listening",
+    icon: <Headphones size={10} />,
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+    next: "listened",
+  },
+  listened: {
+    label: "Listened ✓",
+    icon: <Check size={10} />,
+    className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800",
+    next: "want_to_listen",
+  },
+};
+
 function SongRow({
   song,
   artistName,
@@ -107,48 +132,66 @@ function SongRow({
   onRecommend?: (songTitle: string, artistName: string) => void;
   onOpenYouTube?: (query: string) => void;
 }) {
+  const statusCfg = STATUS_CONFIG[song.status] ?? STATUS_CONFIG.want_to_listen;
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
+    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
+      {/* Song info */}
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate block">{song.title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium truncate">{song.title}</span>
+          {song.isFavorite && <Heart size={10} className="text-pink-500 shrink-0" fill="currentColor" />}
+        </div>
         {song.album && <span className="text-xs text-muted-foreground truncate block">{song.album}{song.year ? ` · ${song.year}` : ""}</span>}
       </div>
 
+      {/* Genre badge (desktop) */}
       {song.genre && (
         <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">{song.genre.split(",")[0]}</Badge>
       )}
 
-      <StarRating value={song.rating} readonly />
-
-      <Select value={song.status} onValueChange={(v) => onStatusChange(song.id, v)}>
-        <SelectTrigger className="h-6 w-[110px] text-[11px] shrink-0">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(SONG_STATUS_LABELS).map(([k, v]) => (
-            <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        {onOpenYouTube && artistName && (
-          <button onClick={() => onOpenYouTube(`${artistName} ${song.title}`)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-500 transition-colors" title="Find on YouTube">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-          </button>
-        )}
-        {onRecommend && artistName && (
-          <button onClick={() => onRecommend(song.title, artistName)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend to friend">
-            <Send className="h-3 w-3" />
-          </button>
-        )}
-        <button onClick={() => onEdit(song)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button onClick={() => onDelete(song.id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors">
-          <Trash2 className="h-3 w-3" />
-        </button>
+      {/* Star rating (desktop) */}
+      <div className="hidden sm:block">
+        <StarRating value={song.rating} readonly />
       </div>
+
+      {/* Clickable status pill — click to cycle through statuses */}
+      <button
+        title={`Status: ${statusCfg.label} — click to change`}
+        onClick={() => onStatusChange(song.id, statusCfg.next)}
+        className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 transition-all hover:opacity-80 ${statusCfg.className}`}
+      >
+        {statusCfg.icon}
+        <span className="hidden sm:inline">{statusCfg.label}</span>
+      </button>
+
+      {/* Actions dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 shrink-0">
+            <MoreHorizontal size={13} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="text-sm w-44">
+          {onOpenYouTube && artistName && (
+            <DropdownMenuItem onClick={() => onOpenYouTube(`${artistName} ${song.title}`)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="mr-2 text-red-500"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+              Find on YouTube
+            </DropdownMenuItem>
+          )}
+          {onRecommend && artistName && (
+            <DropdownMenuItem onClick={() => onRecommend(song.title, artistName)}>
+              <Send size={13} className="mr-2" /> Recommend to Friend
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => onEdit(song)}>
+            <Pencil size={13} className="mr-2" /> Edit Details
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onDelete(song.id)} className="text-destructive focus:text-destructive">
+            <Trash2 size={13} className="mr-2" /> Remove Song
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -507,32 +550,54 @@ function ArtistCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Favorite toggle */}
           <button
             onClick={() => onToggleArtistFav(artist)}
-            className={`p-1.5 rounded transition-colors ${artist.isFavorite ? "text-pink-500" : "text-muted-foreground/40 hover:text-pink-400"}`}
+            title={artist.isFavorite ? "Remove from favorites" : "Add to favorites"}
+            className={`p-1.5 rounded-lg transition-colors ${artist.isFavorite ? "text-pink-500 bg-pink-50 dark:bg-pink-950/30" : "text-muted-foreground/40 hover:text-pink-400 hover:bg-muted"}`}
           >
             <Heart className="h-4 w-4" fill={artist.isFavorite ? "currentColor" : "none"} />
           </button>
-          {onRecommendArtist && (
-            <button onClick={() => onRecommendArtist(artist.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Recommend artist to friend">
-              <Send className="h-4 w-4" />
-            </button>
-          )}
-          {onOpenSpotify && (
-            <button onClick={() => onOpenSpotify(artist.name)} className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-500 transition-colors" title="Find on YouTube">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-            </button>
-          )}
-          <button onClick={() => onAddSong(artist.id, artist.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Add song">
-            <Plus className="h-4 w-4" />
+
+          {/* Add Song — primary action, always visible */}
+          <button
+            onClick={() => onAddSong(artist.id, artist.name)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+            title="Add a song for this artist"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Add Song</span>
           </button>
-          <button onClick={() => onEditArtist(artist)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button onClick={() => onDeleteArtist(artist.id)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors">
-            <Trash2 className="h-4 w-4" />
-          </button>
+
+          {/* More actions dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="text-sm w-48">
+              {onOpenSpotify && (
+                <DropdownMenuItem onClick={() => onOpenSpotify(artist.name)}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="mr-2 text-red-500"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                  Watch on YouTube
+                </DropdownMenuItem>
+              )}
+              {onRecommendArtist && (
+                <DropdownMenuItem onClick={() => onRecommendArtist(artist.name)}>
+                  <Send size={13} className="mr-2" /> Recommend to Friend
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onEditArtist(artist)}>
+                <Pencil size={13} className="mr-2" /> Edit Artist
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDeleteArtist(artist.id)} className="text-destructive focus:text-destructive">
+                <Trash2 size={13} className="mr-2" /> Remove Artist
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -540,24 +605,36 @@ function ArtistCard({
       {expanded && (
         <div className="border-t">
           {artist.songs.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-muted-foreground italic flex items-center gap-2">
-              <Music className="h-3.5 w-3.5" />
-              No songs yet — click + to add one
-            </div>
+            <button
+              onClick={() => onAddSong(artist.id, artist.name)}
+              className="w-full px-4 py-4 text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted/30 transition-colors group"
+            >
+              <Plus className="h-3.5 w-3.5 opacity-40 group-hover:opacity-70" />
+              <span className="italic">No songs yet — click to add one</span>
+            </button>
           ) : (
-            <div className="py-1">
-              {artist.songs.map((s) => (
-                <SongRow
-                  key={s.id}
-                  song={s}
-                  artistName={artist.name}
-                  onEdit={onEditSong}
-                  onDelete={onDeleteSong}
-                  onStatusChange={onSongStatusChange}
-                  onRecommend={onRecommendSong}
-                  onOpenYouTube={onOpenYouTube}
-                />
-              ))}
+            <div>
+              {/* Song list column headers */}
+              <div className="flex items-center gap-2.5 px-3 py-1.5 border-b bg-muted/20">
+                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Song</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hidden sm:block w-14 text-center">Rating</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-24 text-center">Status</span>
+                <span className="w-5" />
+              </div>
+              <div className="py-1">
+                {artist.songs.map((s) => (
+                  <SongRow
+                    key={s.id}
+                    song={s}
+                    artistName={artist.name}
+                    onEdit={onEditSong}
+                    onDelete={onDeleteSong}
+                    onStatusChange={onSongStatusChange}
+                    onRecommend={onRecommendSong}
+                    onOpenYouTube={onOpenYouTube}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -2152,87 +2229,108 @@ export default function MusicPage() {
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
             <Music2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
             <h1 className="text-xl font-semibold">Music</h1>
             <p className="text-xs text-muted-foreground">
-              {artists.length} {artists.length === 1 ? "artist" : "artists"} · {allSongs.length} songs
+              {artists.length} {artists.length === 1 ? "artist" : "artists"} · {allSongs.length} songs · {allSongs.filter(s => s.status === "listened").length} listened
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* Last.fm search to add music */}
           <Button size="sm" variant="outline" onClick={() => setLastfmOpen(true)} className="gap-1.5">
-            <Search className="h-4 w-4" /> Search
+            <Search className="h-3.5 w-3.5" /> Find Music
           </Button>
+          {/* Primary: add artist */}
           <Button size="sm" onClick={openAddArtist} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add Artist
+            <Plus className="h-3.5 w-3.5" /> Add Artist
           </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-            <Upload className="h-4 w-4" /> Upload CSV
-          </Button>
+          {/* Import/Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1 px-2.5">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => csvRef.current?.click()}>
+                <Upload size={13} className="mr-2" /> Import CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={downloadCsvTemplate}>
+                <Download size={13} className="mr-2" /> Download CSV Template
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCsvInfoOpen(true)}>
+                <HelpCircle size={13} className="mr-2" /> CSV Format Guide
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-            <Download className="h-4 w-4" /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-            <HelpCircle className="h-4 w-4" /> CSV Format
-          </Button>
         </div>
       </div>
 
-      {/* Search + Genre filter */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search artists or songs…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
+      {/* Search + Genre filter — shown on library tabs */}
+      {(tab === "artists" || tab === "want" || tab === "favorites") && (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search artists or songs…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          {allGenres.length > 0 && (
+            <Select value={genreFilter ?? "__all__"} onValueChange={(v) => setGenreFilter(v === "__all__" ? null : v)}>
+              <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectValue placeholder="All genres" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All genres</SelectItem>
+                {allGenres.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
-        {allGenres.length > 0 && (
-          <Select value={genreFilter ?? "__all__"} onValueChange={(v) => setGenreFilter(v === "__all__" ? null : v)}>
-            <SelectTrigger className="h-8 w-[130px] text-xs">
-              <SelectValue placeholder="All genres" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All genres</SelectItem>
-              {allGenres.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+      )}
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-        <TabsList className="mb-4 h-8 text-xs w-max sm:w-auto flex-nowrap">
-          <TabsTrigger value="artists" className="text-xs">
-            Artists ({filteredArtists.length})
-          </TabsTrigger>
-          <TabsTrigger value="want" className="text-xs">
-            <span className="hidden sm:inline">Want to Listen</span><span className="sm:hidden">Want</span> ({wantToListen.length})
-          </TabsTrigger>
-          <TabsTrigger value="favorites" className="text-xs">
-            Favorites ({favoriteArtists.length})
-          </TabsTrigger>
-          <TabsTrigger value="recommendations" className="text-xs">
-            <span className="hidden sm:inline">Recommendations</span><span className="sm:hidden">Recs</span>
-          </TabsTrigger>
-          <TabsTrigger value="spotify" className="text-xs flex items-center gap-1">
-            <Radio size={11} />
-            Discover
-          </TabsTrigger>
-          <TabsTrigger value="collections" className="text-xs flex items-center gap-1">
-            <ListMusic size={11} />
-            <span className="hidden sm:inline">Collections</span><span className="sm:hidden">Lists</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 mb-1">
+          <TabsList className="mb-3 h-9 text-xs w-max flex-nowrap gap-0.5">
+            <TabsTrigger value="artists" className="text-xs flex items-center gap-1.5 px-3">
+              <Music2 size={11} />
+              <span>Library</span>
+              {filteredArtists.length > 0 && <span className="text-[10px] opacity-60">({filteredArtists.length})</span>}
+            </TabsTrigger>
+            <TabsTrigger value="want" className="text-xs flex items-center gap-1.5 px-3">
+              <Clock size={11} />
+              <span className="hidden sm:inline">Queue</span><span className="sm:hidden">Queue</span>
+              {wantToListen.length > 0 && <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">{wantToListen.length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="favorites" className="text-xs flex items-center gap-1.5 px-3">
+              <Heart size={11} />
+              <span>Favorites</span>
+              {favoriteArtists.length > 0 && <span className="text-[10px] opacity-60">({favoriteArtists.length})</span>}
+            </TabsTrigger>
+            <TabsTrigger value="recommendations" className="text-xs flex items-center gap-1.5 px-3">
+              <Inbox size={11} />
+              <span className="hidden sm:inline">Shared</span><span className="sm:hidden">Shared</span>
+            </TabsTrigger>
+            <TabsTrigger value="spotify" className="text-xs flex items-center gap-1.5 px-3">
+              <Radio size={11} />
+              <span>Discover</span>
+            </TabsTrigger>
+            <TabsTrigger value="collections" className="text-xs flex items-center gap-1.5 px-3">
+              <ListMusic size={11} />
+              <span className="hidden sm:inline">Collections</span><span className="sm:hidden">Lists</span>
+            </TabsTrigger>
+          </TabsList>
         </div>
 
         {/* Artists tab */}
@@ -2240,17 +2338,44 @@ export default function MusicPage() {
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground text-sm">Loading…</div>
           ) : filteredArtists.length === 0 ? (
-            <div className="text-center py-16">
-              <Music2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                {artists.length === 0 ? "No artists yet — add one to get started" : "No artists match your search"}
-              </p>
-              {artists.length === 0 && (
-                <Button size="sm" variant="outline" className="mt-3" onClick={openAddArtist}>
-                  <Plus className="h-4 w-4 mr-1" /> Add your first artist
-                </Button>
-              )}
-            </div>
+            artists.length === 0 ? (
+              /* First-time onboarding empty state */
+              <div className="space-y-4">
+                <div className="text-center py-10 border-2 border-dashed rounded-2xl">
+                  <Music2 className="h-12 w-12 text-violet-400/50 mx-auto mb-3" />
+                  <h3 className="font-semibold text-base mb-1">Build your music library</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-5">
+                    Track artists and songs you love, want to listen to, or are currently exploring.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <Button onClick={openAddArtist} className="gap-1.5">
+                      <Plus size={14} /> Add an Artist
+                    </Button>
+                    <Button variant="outline" onClick={() => setLastfmOpen(true)} className="gap-1.5">
+                      <Search size={14} /> Search Last.fm
+                    </Button>
+                  </div>
+                </div>
+                {/* How it works */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { icon: <Plus size={16} className="text-violet-500" />, title: "Add Artists", desc: "Search Last.fm or add manually. Artists hold all their songs." },
+                    { icon: <Clock size={16} className="text-amber-500" />, title: "Track Status", desc: "Mark songs as Want to Listen, Listening, or Listened." },
+                    { icon: <Heart size={16} className="text-pink-500" />, title: "Favorites & Share", desc: "Heart your favorites and recommend music to friends." },
+                  ].map(({ icon, title, desc }) => (
+                    <div key={title} className="p-3.5 rounded-xl border bg-card text-center">
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center mx-auto mb-2">{icon}</div>
+                      <p className="text-sm font-medium mb-1">{title}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground text-sm">
+                No artists match your search
+              </div>
+            )
           ) : (
             <div className="space-y-3">
               {filteredArtists.map((a) => (
@@ -2274,33 +2399,43 @@ export default function MusicPage() {
           )}
         </TabsContent>
 
-        {/* Want to Listen tab */}
+        {/* Want to Listen / Queue tab */}
         <TabsContent value="want">
           {wantToListen.length === 0 ? (
-            <div className="text-center py-16">
-              <Music className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No songs in your "Want to Listen" queue</p>
+            <div className="text-center py-16 border-2 border-dashed rounded-2xl">
+              <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm font-medium mb-1">Your queue is empty</p>
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                Songs marked "Want to Listen" on any artist will show up here. Set a song's status to add it to your queue.
+              </p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {wantToListen.map((s) => (
-                <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/40 group transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium">{s.title}</span>
-                    <span className="text-xs text-muted-foreground ml-2">{(s as any).artistName}</span>
-                    {s.album && <span className="text-xs text-muted-foreground block">{s.album}</span>}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-muted-foreground">{wantToListen.length} song{wantToListen.length !== 1 ? "s" : ""} in your queue</p>
+                <p className="text-xs text-muted-foreground">Click a song's status pill to update it</p>
+              </div>
+              <div className="border rounded-xl overflow-hidden divide-y">
+                {wantToListen.map((s, i) => (
+                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 group transition-colors">
+                    <span className="text-xs text-muted-foreground w-5 shrink-0 text-center">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{s.title}</span>
+                      <span className="text-xs text-muted-foreground ml-2">{(s as any).artistName}</span>
+                      {s.album && <span className="text-xs text-muted-foreground block">{s.album}</span>}
+                    </div>
+                    {s.genre && <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">{s.genre.split(",")[0]}</Badge>}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[11px] shrink-0 gap-1 border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/30"
+                      onClick={() => updateSong.mutate({ id: s.id, d: { status: "listened" } })}
+                    >
+                      <Check size={10} /> Listened
+                    </Button>
                   </div>
-                  {s.genre && <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">{s.genre.split(",")[0]}</Badge>}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[11px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => updateSong.mutate({ id: s.id, d: { status: "listened" } })}
-                  >
-                    Mark listened
-                  </Button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </TabsContent>
@@ -2308,9 +2443,12 @@ export default function MusicPage() {
         {/* Favorites tab — shows favorited artists grouped by genre */}
         <TabsContent value="favorites">
           {favoriteArtists.length === 0 ? (
-            <div className="text-center py-16">
-              <Heart className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No favorite artists yet — heart an artist to add them here</p>
+            <div className="text-center py-16 border-2 border-dashed rounded-2xl">
+              <Heart className="h-10 w-10 text-pink-300/50 mx-auto mb-3" />
+              <p className="text-sm font-medium mb-1">No favorite artists yet</p>
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                Tap the <Heart size={11} className="inline text-pink-400" fill="currentColor" /> heart icon on any artist in your Library to add them here, grouped by genre.
+              </p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -2346,11 +2484,29 @@ export default function MusicPage() {
 
         {/* Recommendations tab */}
         <TabsContent value="recommendations">
+          <div className="mb-4 p-3.5 rounded-xl bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30 flex items-start gap-3">
+            <Inbox size={16} className="text-violet-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-violet-900 dark:text-violet-200">Music Recommendations</p>
+              <p className="text-xs text-violet-700/70 dark:text-violet-300/70 mt-0.5">
+                Send and receive music recommendations with friends. Use the <Send size={10} className="inline" /> icon on any artist or song to recommend it.
+              </p>
+            </div>
+          </div>
           <MusicRecommendationsTab artists={artists} onRecommendOpen={openRecommend} />
         </TabsContent>
 
         {/* Discover tab */}
         <TabsContent value="spotify">
+          <div className="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 flex items-start gap-3">
+            <Radio size={16} className="text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-900 dark:text-red-200">Discover Music on YouTube</p>
+              <p className="text-xs text-red-700/70 dark:text-red-300/70 mt-0.5">
+                Search for any artist, song, or album to watch videos. Click <Plus size={10} className="inline" /> on a result to save it to your library.
+              </p>
+            </div>
+          </div>
           <LastFmTab initialArtistName={spotifyArtistName} allArtists={artists} />
         </TabsContent>
 
