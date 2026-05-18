@@ -1200,6 +1200,12 @@ Return exactly this structure:
       res.status(201).json(entry);
     } catch (e) { handleError(res, e); }
   });
+  app.patch("/api/nutrition/food-log/:id", requireAuth, async (req, res) => {
+    try {
+      const entry = await storage.updateFoodLogEntry(+req.params.id, req.body);
+      entry ? res.json(entry) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
   app.delete("/api/nutrition/food-log/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteFoodLogEntry(+req.params.id))

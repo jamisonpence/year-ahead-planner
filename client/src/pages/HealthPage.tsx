@@ -1822,6 +1822,31 @@ function NutritionTab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] }); toast({ title: "Entry removed" }); },
   });
 
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ foodName: "", quantity: "1", mealType: "snack", calories: "", protein: "", carbs: "", fat: "" });
+  function openEditEntry(e: FoodLogEntry) {
+    setEditingEntryId(e.id);
+    setEditForm({
+      foodName: e.foodName,
+      quantity: String(e.quantity),
+      mealType: e.mealType || "snack",
+      calories: String(e.calories),
+      protein: String(e.protein),
+      carbs: String(e.carbs),
+      fat: String(e.fat),
+    });
+  }
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) =>
+      apiRequest("PATCH", `/api/nutrition/food-log/${id}`, data).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+      setEditingEntryId(null);
+      toast({ title: "Entry updated" });
+    },
+  });
+
   const weeklyByDate = weeklyLog.reduce((acc: Record<string, number>, e) => {
     const key = e.date || todayStr;
     acc[key] = (acc[key] || 0) + Number(e.calories) * Number(e.quantity);
@@ -1943,17 +1968,95 @@ function NutritionTab() {
                   <span className="text-xs text-muted-foreground">{Math.round(mealCals)} kcal</span>
                 </div>
                 {entries.map(e => (
-                  <div key={e.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 border">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{e.foodName}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {e.quantity}× {e.servingSize}{e.servingUnit} · P {Math.round(Number(e.protein) * Number(e.quantity))}g · C {Math.round(Number(e.carbs) * Number(e.quantity))}g · F {Math.round(Number(e.fat) * Number(e.quantity))}g
-                      </p>
-                    </div>
-                    <span className="text-sm font-semibold shrink-0">{Math.round(Number(e.calories) * Number(e.quantity))}</span>
-                    <button onClick={() => deleteMut.mutate(e.id)} className="text-muted-foreground hover:text-destructive shrink-0">
-                      <Trash2 size={13} />
-                    </button>
+                  <div key={e.id} className="rounded-lg bg-secondary/30 border overflow-hidden">
+                    {editingEntryId === e.id ? (
+                      /* ── Inline edit form ── */
+                      <div className="px-3 py-2.5 space-y-2">
+                        <input
+                          className="w-full text-sm border rounded-md px-2 py-1 bg-background"
+                          value={editForm.foodName}
+                          onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
+                          placeholder="Food name"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium">Quantity</label>
+                            <input
+                              type="number" min="0.1" step="0.1"
+                              className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                              value={editForm.quantity}
+                              onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground font-medium">Meal</label>
+                            <select
+                              className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                              value={editForm.mealType}
+                              onChange={ev => setEditForm(f => ({ ...f, mealType: ev.target.value }))}
+                            >
+                              <option value="breakfast">Breakfast</option>
+                              <option value="lunch">Lunch</option>
+                              <option value="dinner">Dinner</option>
+                              <option value="snack">Snack</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {(["calories","protein","carbs","fat"] as const).map(field => (
+                            <div key={field}>
+                              <label className="text-[10px] text-muted-foreground font-medium capitalize">{field === "calories" ? "kcal" : field}</label>
+                              <input
+                                type="number" min="0" step="1"
+                                className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                                value={editForm[field]}
+                                onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 pt-0.5">
+                          <button
+                            onClick={() => updateMut.mutate({ id: e.id, data: {
+                              foodName: editForm.foodName.trim(),
+                              quantity: parseFloat(editForm.quantity) || 1,
+                              mealType: editForm.mealType,
+                              calories: parseFloat(editForm.calories) || 0,
+                              protein: parseFloat(editForm.protein) || 0,
+                              carbs: parseFloat(editForm.carbs) || 0,
+                              fat: parseFloat(editForm.fat) || 0,
+                            }})}
+                            disabled={updateMut.isPending || !editForm.foodName.trim()}
+                            className="flex-1 text-xs font-semibold py-1.5 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+                          >
+                            {updateMut.isPending ? "Saving…" : "Save"}
+                          </button>
+                          <button
+                            onClick={() => setEditingEntryId(null)}
+                            className="flex-1 text-xs font-medium py-1.5 rounded-md bg-secondary text-secondary-foreground"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Normal row ── */
+                      <div className="flex items-center gap-2 px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{e.foodName}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {e.quantity}× {e.servingSize}{e.servingUnit} · P {Math.round(Number(e.protein) * Number(e.quantity))}g · C {Math.round(Number(e.carbs) * Number(e.quantity))}g · F {Math.round(Number(e.fat) * Number(e.quantity))}g
+                          </p>
+                        </div>
+                        <span className="text-sm font-semibold shrink-0">{Math.round(Number(e.calories) * Number(e.quantity))}</span>
+                        <button onClick={() => openEditEntry(e)} className="text-muted-foreground hover:text-primary shrink-0">
+                          <Pencil size={13} />
+                        </button>
+                        <button onClick={() => deleteMut.mutate(e.id)} className="text-muted-foreground hover:text-destructive shrink-0">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

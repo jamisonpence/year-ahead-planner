@@ -4844,6 +4844,10 @@ export const storage: IStorage = {
     const r = await db.delete(foodLogEntries).where(eq(foodLogEntries.id, id)).returning();
     return r.length > 0;
   },
+  async updateFoodLogEntry(id: number, data: Partial<InsertFoodLogEntry>): Promise<FoodLogEntry | null> {
+    const [r] = await db.update(foodLogEntries).set(data).where(eq(foodLogEntries.id, id)).returning();
+    return r ?? null;
+  },
   async getFoodLogForWeek(userId: number, dates: string[]): Promise<FoodLogEntry[]> {
     if (dates.length === 0) return [];
     return db.select().from(foodLogEntries)
