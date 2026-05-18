@@ -37,7 +37,10 @@ import {
   insertHealthMetricSchema,
   insertSleepLogSchema,
   insertCareProviderSchema,
+  insertFoodLogSchema,
+  insertNutritionGoalSchema,
 } from "@shared/schema";
+import type { FoodLogEntry, WaterLog, NutritionGoal } from "@shared/schema";
 import { z } from "zod";
 
 function handleError(res: any, e: unknown) {
@@ -1014,6 +1017,175 @@ Return exactly this structure:
   });
   app.delete("/api/recipes/:id", async (req, res) => {
     (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+  });
+
+  // ── USDA Nutrition search ────────────────────────────────────────────────────
+  app.get("/api/nutrition/usda-search", requireAuth, async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      if (!query?.trim()) return res.json({ foods: [] });
+      const apiKey = process.env.USDA_API_KEY;
+      if (!apiKey) return res.json({ foods: [] });
+      const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&dataType=Foundation,SR%20Legacy&pageSize=5&api_key=${apiKey}`;
+      const r = await fetch(url);
+      const data = await r.json() as any;
+      const foods = (data.foods || []).slice(0, 5).map((f: any) => ({
+        fdcId: f.fdcId,
+        description: f.description,
+        brandOwner: f.brandOwner,
+        servingSize: f.servingSize || 100,
+        servingUnit: f.servingSizeUnit || "g",
+        nutrients: {
+          calories: f.foodNutrients?.find((n: any) => n.nutrientId === 1008)?.value || 0,
+          protein:  f.foodNutrients?.find((n: any) => n.nutrientId === 1003)?.value || 0,
+          carbs:    f.foodNutrients?.find((n: any) => n.nutrientId === 1005)?.value || 0,
+          fat:      f.foodNutrients?.find((n: any) => n.nutrientId === 1004)?.value || 0,
+          fiber:    f.foodNutrients?.find((n: any) => n.nutrientId === 1079)?.value || 0,
+          sugar:    f.foodNutrients?.find((n: any) => n.nutrientId === 2000)?.value || 0,
+          sodium:   f.foodNutrients?.find((n: any) => n.nutrientId === 1093)?.value || 0,
+        },
+      }));
+      res.json({ foods });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Open Food Facts barcode lookup
+  app.get("/api/nutrition/barcode/:barcode", requireAuth, async (req, res) => {
+    try {
+      const { barcode } = req.params;
+      const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await r.json() as any;
+      if (data.status !== 1 || !data.product) return res.json({ found: false });
+      const p = data.product;
+      const n = p.nutriments || {};
+      res.json({
+        found: true,
+        name: p.product_name || "Unknown",
+        brand: p.brands || "",
+        nutriScore: p.nutriscore_grade || null,
+        servingSize: parseFloat(p.serving_quantity) || 100,
+        servingUnit: "g",
+        nutrients: {
+          calories: n["energy-kcal_serving"] || n["energy-kcal_100g"] || 0,
+          protein:  n.proteins_serving  || n.proteins_100g  || 0,
+          carbs:    n.carbohydrates_serving || n.carbohydrates_100g || 0,
+          fat:      n.fat_serving  || n.fat_100g  || 0,
+          fiber:    n.fiber_serving || n.fiber_100g || 0,
+          sugar:    n.sugars_serving || n.sugars_100g || 0,
+          sodium:   n.sodium_serving || n.sodium_100g || 0,
+        },
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Recipe nutrition compute (called from frontend "Estimate" button)
+  app.post("/api/nutrition/recipe-compute", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.USDA_API_KEY;
+      if (!apiKey) return res.json({ nutrition: null });
+      const { ingredients, servings } = req.body as { ingredients: { name: string; qty: string }[]; servings: number };
+      const srv = Math.max(1, servings || 4);
+      let totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 };
+      let matched = 0;
+      const total = (ingredients || []).length;
+      for (const ing of (ingredients || [])) {
+        try {
+          const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(ing.name)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${apiKey}`;
+          const r = await fetch(url);
+          const data = await r.json() as any;
+          const food = data.foods?.[0];
+          if (!food) continue;
+          const get = (id: number) => (food.foodNutrients?.find((n: any) => n.nutrientId === id)?.value || 0);
+          totals.calories += get(1008);
+          totals.protein  += get(1003);
+          totals.carbs    += get(1005);
+          totals.fat      += get(1004);
+          totals.fiber    += get(1079);
+          totals.sugar    += get(2000);
+          totals.sodium   += get(1093);
+          matched++;
+        } catch { /* skip */ }
+      }
+      const partial = matched < total;
+      res.json({
+        nutrition: {
+          calories: Math.round(totals.calories / srv),
+          protein:  Math.round(totals.protein  / srv * 10) / 10,
+          carbs:    Math.round(totals.carbs    / srv * 10) / 10,
+          fat:      Math.round(totals.fat      / srv * 10) / 10,
+          fiber:    Math.round(totals.fiber    / srv * 10) / 10,
+          sugar:    Math.round(totals.sugar    / srv * 10) / 10,
+          sodium:   Math.round(totals.sodium   / srv * 10) / 10,
+          servings: srv, partial,
+        }
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Food Log ─────────────────────────────────────────────────────────────────
+  app.get("/api/nutrition/food-log", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      res.json(await storage.getFoodLogForDate(uid, date));
+    } catch (e) { handleError(res, e); }
+  });
+  app.get("/api/nutrition/food-log/week", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const dates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        return d.toISOString().slice(0, 10);
+      });
+      res.json(await storage.getFoodLogForWeek(uid, dates));
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/nutrition/food-log", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const entry = await storage.createFoodLogEntry(insertFoodLogSchema.parse({ ...req.body, userId: uid }));
+      res.status(201).json(entry);
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/nutrition/food-log/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteFoodLogEntry(+req.params.id))
+        ? res.json({ ok: true })
+        : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Water Log ────────────────────────────────────────────────────────────────
+  app.get("/api/nutrition/water-log", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const log = await storage.getWaterLog(uid, date);
+      res.json({ glasses: log?.glasses ?? 0 });
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/nutrition/water-log", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { date, glasses } = req.body;
+      res.json(await storage.upsertWaterLog(uid, date, Number(glasses)));
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Nutrition Goals ───────────────────────────────────────────────────────────
+  app.get("/api/nutrition/goals", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const goals = await storage.getNutritionGoals(uid);
+      res.json(goals ?? { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 });
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/nutrition/goals", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { calories, protein, carbs, fat, waterGlasses } = req.body;
+      res.json(await storage.upsertNutritionGoals(uid, { calories, protein, carbs, fat, waterGlasses }));
+    } catch (e) { handleError(res, e); }
   });
 
   // ── Meal Bundles ────────────────────────────────────────────────────────────

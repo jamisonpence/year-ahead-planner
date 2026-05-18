@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType, RecipeShareWithUser, PublicUser, CustomGroceryItem } from "@shared/schema";
+import type { Recipe, InsertRecipe, MealBundle, InsertMealBundle, WeekPlan, GroceryCheck, RecipeIngredient, ComponentType, RecipeShareWithUser, PublicUser, CustomGroceryItem, NutritionSummary } from "@shared/schema";
+import { Loader2 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -862,6 +863,91 @@ function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, onShare, isO
   );
 }
 
+// ── RecipeNutritionCard ────────────────────────────────────────────────────────
+function RecipeNutritionCard({ recipe, onRefresh }: { recipe: Recipe; onRefresh: () => void }) {
+  const [computing, setComputing] = useState(false);
+  const { toast } = useToast();
+
+  const nutrition: NutritionSummary | null = (() => {
+    try { return recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch { return null; }
+  })();
+
+  async function computeNutrition() {
+    setComputing(true);
+    try {
+      const ingredients = JSON.parse(recipe.ingredientsJson || "[]");
+      const servings = (recipe as any).servings || 4;
+      const r = await apiRequest("POST", "/api/nutrition/recipe-compute", { ingredients, servings });
+      const data = await r.json();
+      if (data.nutrition) {
+        await apiRequest("PATCH", `/api/recipes/${recipe.id}`, { nutritionData: JSON.stringify(data.nutrition) });
+        onRefresh();
+        toast({ title: "Nutrition estimated" });
+      } else {
+        toast({ title: "Could not estimate — check that USDA_API_KEY is set", variant: "destructive" });
+      }
+    } catch { toast({ title: "Estimation failed", variant: "destructive" }); }
+    setComputing(false);
+  }
+
+  if (!nutrition) {
+    return (
+      <div className="mt-3 p-3 rounded-xl border bg-secondary/20 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Nutrition not yet estimated</p>
+        <Button size="sm" variant="outline" onClick={computeNutrition} disabled={computing} className="h-7 text-xs">
+          {computing && <Loader2 size={12} className="animate-spin mr-1" />}
+          Estimate Nutrition
+        </Button>
+      </div>
+    );
+  }
+
+  const macroTotal = nutrition.protein + nutrition.carbs + nutrition.fat;
+  const protPct = macroTotal > 0 ? (nutrition.protein / macroTotal) * 100 : 33;
+  const carbPct = macroTotal > 0 ? (nutrition.carbs / macroTotal) * 100 : 34;
+  const fatPct  = macroTotal > 0 ? (nutrition.fat  / macroTotal) * 100 : 33;
+
+  return (
+    <div className="mt-3 rounded-xl border bg-card p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold">Nutrition</p>
+        <span className="text-[10px] text-muted-foreground">per serving ({nutrition.servings} servings)</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-bold">{nutrition.calories}</span>
+        <span className="text-xs text-muted-foreground">kcal</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 text-center">
+        {[
+          { label: "Protein", val: nutrition.protein, color: "text-blue-500" },
+          { label: "Carbs",   val: nutrition.carbs,   color: "text-amber-500" },
+          { label: "Fat",     val: nutrition.fat,     color: "text-rose-500" },
+          { label: "Fiber",   val: nutrition.fiber,   color: "text-emerald-500" },
+        ].map(m => (
+          <div key={m.label} className="rounded-lg bg-secondary/40 p-1.5">
+            <p className={`text-sm font-bold ${m.color}`}>{m.val}g</p>
+            <p className="text-[9px] text-muted-foreground">{m.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="h-2 rounded-full overflow-hidden flex">
+        <div className="bg-blue-500 h-full" style={{ width: `${protPct}%` }} />
+        <div className="bg-amber-500 h-full" style={{ width: `${carbPct}%` }} />
+        <div className="bg-rose-500 h-full" style={{ width: `${fatPct}%` }} />
+      </div>
+      <div className="flex gap-3 text-[9px] text-muted-foreground">
+        <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full inline-block" />Protein</span>
+        <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block" />Carbs</span>
+        <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 bg-rose-500 rounded-full inline-block" />Fat</span>
+      </div>
+      {nutrition.partial && (
+        <p className="text-[10px] text-amber-600 dark:text-amber-400">⚠ Partial estimate — some ingredients could not be matched</p>
+      )}
+      <p className="text-[9px] text-muted-foreground">Nutrition data is estimated and may vary.</p>
+    </div>
+  );
+}
+
 // ── Recipe Detail ─────────────────────────────────────────────────────────────
 function RecipeDetail({ recipe, onClose, onAddToWeek }: {
   recipe: Recipe; onClose: () => void; onAddToWeek: (r: Recipe) => void;
@@ -922,6 +1008,7 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
               <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{recipe.instructions}</p>
             </div>
           )}
+          <RecipeNutritionCard recipe={recipe} onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/recipes"] })} />
           <div className="flex gap-2">
             <Button onClick={() => { onAddToWeek(recipe); onClose(); }} variant="outline" className="flex-1 gap-1.5">
               <CalendarDays size={14} /> Add to Week

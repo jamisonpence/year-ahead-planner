@@ -4,12 +4,15 @@ import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-f
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
-  Users,
+  Users, UtensilsCrossed, Search, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input as UIInput } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select as UISelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -848,6 +851,428 @@ function CareTeamTab() {
   );
 }
 
+// ── FoodSearchAdd ──────────────────────────────────────────────────────────
+function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void }) {
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [mealType, setMealType] = useState("snack");
+  const [qty, setQty] = useState(1);
+  const [adding, setAdding] = useState(false);
+
+  async function doSearch() {
+    if (!query.trim()) return;
+    setSearching(true);
+    try {
+      const r = await apiRequest("GET", `/api/nutrition/usda-search?q=${encodeURIComponent(query)}`);
+      const data = await r.json();
+      setResults(data.foods || []);
+    } catch { toast({ title: "Search failed", variant: "destructive" }); }
+    setSearching(false);
+  }
+
+  async function addFood() {
+    if (!selected) return;
+    setAdding(true);
+    try {
+      await apiRequest("POST", "/api/nutrition/food-log", {
+        foodName: selected.description,
+        usdaFoodId: String(selected.fdcId),
+        servingSize: selected.servingSize,
+        servingUnit: selected.servingUnit,
+        quantity: qty,
+        mealType,
+        date,
+        calories: selected.nutrients.calories,
+        protein:  selected.nutrients.protein,
+        carbs:    selected.nutrients.carbs,
+        fat:      selected.nutrients.fat,
+        fiber:    selected.nutrients.fiber,
+        sugar:    selected.nutrients.sugar,
+        sodium:   selected.nutrients.sodium,
+      });
+      setSelected(null); setQuery(""); setResults([]); setQty(1);
+      onAdded();
+      toast({ title: "Food logged" });
+    } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
+    setAdding(false);
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-3 space-y-2">
+      <p className="text-xs font-semibold">Add Food</p>
+      <div className="flex gap-2">
+        <UIInput
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && doSearch()}
+          placeholder="Search food (e.g. chicken breast, apple)"
+          className="flex-1 h-8 text-sm"
+        />
+        <Button size="sm" variant="outline" onClick={doSearch} disabled={searching} className="h-8 shrink-0">
+          {searching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+        </Button>
+      </div>
+
+      {results.length > 0 && !selected && (
+        <div className="space-y-1 max-h-48 overflow-y-auto border rounded-lg p-1">
+          {results.map((f: any) => (
+            <button key={f.fdcId} onClick={() => setSelected(f)}
+              className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+              <p className="text-xs font-medium truncate">{f.description}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {Math.round(f.nutrients.calories)} kcal · P {Math.round(f.nutrients.protein)}g · C {Math.round(f.nutrients.carbs)}g · F {Math.round(f.nutrients.fat)}g
+                {" "}per {f.servingSize}{f.servingUnit}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selected && (
+        <div className="space-y-2 pt-2 border-t">
+          <p className="text-xs font-medium">{selected.description}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-0.5">Meal</p>
+              <UISelect value={mealType} onValueChange={setMealType}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["breakfast","lunch","dinner","snack"].map(m => (
+                    <SelectItem key={m} value={m} className="capitalize">{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </UISelect>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-0.5">Servings</p>
+              <UIInput type="number" value={qty} min={0.25} step={0.25}
+                onChange={e => setQty(parseFloat(e.target.value) || 1)} className="h-7 text-xs" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            = {Math.round(selected.nutrients.calories * qty)} kcal ·
+            P {Math.round(selected.nutrients.protein * qty)}g ·
+            C {Math.round(selected.nutrients.carbs * qty)}g ·
+            F {Math.round(selected.nutrients.fat * qty)}g
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={addFood} disabled={adding} className="flex-1 h-7 text-xs">
+              {adding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setSelected(null); setResults([]); }} className="h-7 text-xs">Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GoalsEditor ──────────────────────────────────────────────────────────────
+function GoalsEditor({ goals, onSave }: { goals: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }; onSave: (d: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }) => Promise<void> }) {
+  const [cals,  setCals]  = useState(String(goals.calories));
+  const [prot,  setProt]  = useState(String(goals.protein));
+  const [carb,  setCarb]  = useState(String(goals.carbs));
+  const [fat,   setFat]   = useState(String(goals.fat));
+  const [water, setWater] = useState(String(goals.waterGlasses));
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-3 max-w-sm">
+      <p className="text-sm font-semibold">Daily Nutrition Goals</p>
+      {[
+        { label: "Calories (kcal)", val: cals, set: setCals },
+        { label: "Protein (g)",     val: prot, set: setProt },
+        { label: "Carbs (g)",       val: carb, set: setCarb },
+        { label: "Fat (g)",         val: fat,  set: setFat  },
+        { label: "Water (glasses)", val: water, set: setWater },
+      ].map(f => (
+        <div key={f.label} className="space-y-1">
+          <Label className="text-xs">{f.label}</Label>
+          <UIInput type="number" value={f.val} onChange={e => f.set(e.target.value)} className="h-8 text-sm" />
+        </div>
+      ))}
+      <Button size="sm" disabled={saving} className="w-full" onClick={async () => {
+        setSaving(true);
+        await onSave({ calories: +cals, protein: +prot, carbs: +carb, fat: +fat, waterGlasses: +water });
+        setSaving(false);
+      }}>
+        {saving ? <Loader2 size={13} className="animate-spin mr-1" /> : null}Save Goals
+      </Button>
+      <p className="text-[10px] text-muted-foreground">Defaults based on a 2,000 kcal diet. Customize to match your goals.</p>
+    </div>
+  );
+}
+
+// ── WeeklyNutritionView ──────────────────────────────────────────────────────
+function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
+  weekDays: string[];
+  weeklyByDate: Record<string, number>;
+  goals: { calories: number; protein: number; carbs: number; fat: number };
+  weeklyLog: FoodLogEntry[];
+}) {
+  const maxCal = Math.max(...weekDays.map(d => weeklyByDate[d] || 0), goals.calories, 1);
+  const daysWithData = weekDays.filter(d => (weeklyByDate[d] || 0) > 0);
+  const avg = {
+    calories: daysWithData.length ? daysWithData.reduce((s, d) => s + (weeklyByDate[d] || 0), 0) / daysWithData.length : 0,
+    protein:  weeklyLog.reduce((s, e) => s + Number(e.protein) * Number(e.quantity), 0) / 7,
+    carbs:    weeklyLog.reduce((s, e) => s + Number(e.carbs)   * Number(e.quantity), 0) / 7,
+    fat:      weeklyLog.reduce((s, e) => s + Number(e.fat)     * Number(e.quantity), 0) / 7,
+  };
+  const bestDay = daysWithData.length ? daysWithData.reduce((best, d) => {
+    return Math.abs((weeklyByDate[d] || 0) - goals.calories) < Math.abs((weeklyByDate[best] || 0) - goals.calories) ? d : best;
+  }, daysWithData[0]) : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold mb-3">Calorie Intake — Last 7 Days</p>
+        <div className="flex items-end gap-1.5" style={{ height: "96px" }}>
+          {weekDays.map(d => {
+            const cal = weeklyByDate[d] || 0;
+            const pct = (cal / maxCal) * 100;
+            const onTarget = cal > 0 && Math.abs(cal - goals.calories) / goals.calories < 0.15;
+            const over = cal > goals.calories * 1.15;
+            return (
+              <div key={d} className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="w-full flex items-end" style={{ height: "80px" }}>
+                  <div
+                    className={`w-full rounded-t transition-all ${cal === 0 ? "bg-secondary/30" : onTarget ? "bg-emerald-500" : over ? "bg-rose-400" : "bg-primary/60"}`}
+                    style={{ height: cal === 0 ? "4px" : `${Math.max(4, pct)}%` }}
+                  />
+                </div>
+                <p className="text-[8px] text-muted-foreground">
+                  {new Date(d + "T12:00:00").toLocaleDateString("en", { weekday: "narrow" })}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground flex-wrap">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />On target</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />Over goal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary/60 inline-block" />Under goal</span>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4 space-y-2">
+        <p className="text-xs font-semibold">7-Day Averages</p>
+        {[
+          { label: "Calories", val: Math.round(avg.calories), unit: "kcal", goal: goals.calories },
+          { label: "Protein",  val: Math.round(avg.protein),  unit: "g",    goal: goals.protein },
+          { label: "Carbs",    val: Math.round(avg.carbs),    unit: "g",    goal: goals.carbs },
+          { label: "Fat",      val: Math.round(avg.fat),      unit: "g",    goal: goals.fat },
+        ].map(m => (
+          <div key={m.label} className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">{m.label}</span>
+            <span className="text-xs font-medium">{m.val} {m.unit} <span className="text-muted-foreground font-normal">/ {m.goal}</span></span>
+          </div>
+        ))}
+        {bestDay && (
+          <p className="text-[10px] text-muted-foreground pt-1 border-t">
+            Best day: {new Date(bestDay + "T12:00:00").toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" })}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── NutritionTab ─────────────────────────────────────────────────────────────
+function NutritionTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [activeSection, setActiveSection] = useState<"log" | "goals" | "weekly">("log");
+
+  const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
+    queryKey: ["/api/nutrition/food-log", selectedDate],
+    queryFn: () => apiRequest("GET", `/api/nutrition/food-log?date=${selectedDate}`).then(r => r.json()),
+  });
+  const { data: goalsData } = useQuery<{ calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }>({
+    queryKey: ["/api/nutrition/goals"],
+    queryFn: () => apiRequest("GET", "/api/nutrition/goals").then(r => r.json()),
+  });
+  const { data: waterData } = useQuery<{ glasses: number }>({
+    queryKey: ["/api/nutrition/water-log", selectedDate],
+    queryFn: () => apiRequest("GET", `/api/nutrition/water-log?date=${selectedDate}`).then(r => r.json()),
+  });
+  const { data: weeklyLog = [] } = useQuery<FoodLogEntry[]>({
+    queryKey: ["/api/nutrition/food-log/week"],
+    queryFn: () => apiRequest("GET", "/api/nutrition/food-log/week").then(r => r.json()),
+  });
+
+  const g = goalsData ?? { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 };
+  const waterGlasses = waterData?.glasses ?? 0;
+
+  const totals = foodLog.reduce((acc, e) => ({
+    calories: acc.calories + Number(e.calories) * Number(e.quantity),
+    protein:  acc.protein  + Number(e.protein)  * Number(e.quantity),
+    carbs:    acc.carbs    + Number(e.carbs)     * Number(e.quantity),
+    fat:      acc.fat      + Number(e.fat)       * Number(e.quantity),
+  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+
+  const calPct = Math.min(100, g.calories > 0 ? (totals.calories / g.calories) * 100 : 0);
+
+  const waterMut = useMutation({
+    mutationFn: (glasses: number) => apiRequest("POST", "/api/nutrition/water-log", { date: selectedDate, glasses }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/nutrition/water-log", selectedDate] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/nutrition/food-log/${id}`).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] }); toast({ title: "Entry removed" }); },
+  });
+
+  const weeklyByDate = weeklyLog.reduce((acc: Record<string, number>, e) => {
+    const key = e.date || todayStr;
+    acc[key] = (acc[key] || 0) + Number(e.calories) * Number(e.quantity);
+    return acc;
+  }, {});
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().slice(0, 10);
+  });
+
+  const circumference = 2 * Math.PI * 32;
+
+  return (
+    <div className="space-y-5">
+      {/* Section nav */}
+      <div className="flex gap-2 flex-wrap">
+        {(["log", "goals", "weekly"] as const).map(s => (
+          <button key={s} onClick={() => setActiveSection(s)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}>
+            {s === "log" ? "Food Log" : s === "goals" ? "Goals" : "Weekly"}
+          </button>
+        ))}
+      </div>
+
+      {activeSection === "log" && (
+        <div className="space-y-4">
+          {/* Date selector */}
+          <div className="flex items-center gap-2">
+            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+              className="text-sm border rounded-lg px-2 py-1 bg-background" />
+            {selectedDate !== todayStr && (
+              <button onClick={() => setSelectedDate(todayStr)} className="text-xs text-primary hover:underline">Today</button>
+            )}
+          </div>
+
+          {/* Daily summary */}
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-4">
+              {/* Circular calorie gauge */}
+              <div className="relative w-20 h-20 shrink-0">
+                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="32" fill="none" stroke="currentColor" strokeOpacity="0.1" strokeWidth="8" />
+                  <circle cx="40" cy="40" r="32" fill="none" stroke="hsl(var(--primary))" strokeWidth="8"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference * (1 - calPct / 100)}
+                    strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-base font-bold leading-none">{Math.round(totals.calories)}</span>
+                  <span className="text-[9px] text-muted-foreground">/ {g.calories}</span>
+                </div>
+              </div>
+              {/* Macro bars */}
+              <div className="flex-1 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Today's Macros</p>
+                {[
+                  { label: "Protein", val: totals.protein, goal: g.protein, color: "bg-blue-500" },
+                  { label: "Carbs",   val: totals.carbs,   goal: g.carbs,   color: "bg-amber-500" },
+                  { label: "Fat",     val: totals.fat,     goal: g.fat,     color: "bg-rose-500" },
+                ].map(m => (
+                  <div key={m.label} className="space-y-0.5">
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>{m.label}</span>
+                      <span>{Math.round(m.val)}g / {m.goal}g</span>
+                    </div>
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div className={`h-full ${m.color} rounded-full transition-all`}
+                        style={{ width: `${Math.min(100, m.goal > 0 ? (m.val / m.goal) * 100 : 0)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Water tracker */}
+          <div className="rounded-xl border bg-card p-3">
+            <p className="text-xs font-semibold mb-2">💧 Water — {waterGlasses} of {g.waterGlasses} glasses</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {Array.from({ length: g.waterGlasses }, (_, i) => (
+                <button key={i}
+                  onClick={() => waterMut.mutate(i < waterGlasses ? i : i + 1)}
+                  className={`text-lg transition-all ${i < waterGlasses ? "opacity-100" : "opacity-25 hover:opacity-60"}`}>
+                  🥤
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Food search */}
+          <FoodSearchAdd date={selectedDate} onAdded={() => {
+            qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+            qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+          }} />
+
+          {/* Meal groups */}
+          {(["breakfast","lunch","dinner","snack"] as const).map(meal => {
+            const entries = foodLog.filter(e => e.mealType === meal);
+            if (entries.length === 0) return null;
+            const mealCals = entries.reduce((s, e) => s + Number(e.calories) * Number(e.quantity), 0);
+            return (
+              <div key={meal} className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold capitalize text-muted-foreground">{meal}</p>
+                  <span className="text-xs text-muted-foreground">{Math.round(mealCals)} kcal</span>
+                </div>
+                {entries.map(e => (
+                  <div key={e.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 border">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{e.foodName}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {e.quantity}× {e.servingSize}{e.servingUnit} · P {Math.round(Number(e.protein) * Number(e.quantity))}g · C {Math.round(Number(e.carbs) * Number(e.quantity))}g · F {Math.round(Number(e.fat) * Number(e.quantity))}g
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold shrink-0">{Math.round(Number(e.calories) * Number(e.quantity))}</span>
+                    <button onClick={() => deleteMut.mutate(e.id)} className="text-muted-foreground hover:text-destructive shrink-0">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+          {foodLog.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground text-sm">No food logged yet. Use the search above to add meals.</div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "goals" && (
+        <GoalsEditor goals={g} onSave={async (data) => {
+          await apiRequest("PATCH", "/api/nutrition/goals", data);
+          qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
+          toast({ title: "Goals saved" });
+        }} />
+      )}
+
+      {activeSection === "weekly" && (
+        <WeeklyNutritionView weekDays={weekDays} weeklyByDate={weeklyByDate} goals={g} weeklyLog={weeklyLog} />
+      )}
+    </div>
+  );
+}
+
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -855,6 +1280,7 @@ const TABS = [
   { id: "metrics",     label: "Health Metrics", icon: TrendingUp  },
   { id: "sleep",       label: "Sleep",          icon: Moon        },
   { id: "care_team",   label: "Care Team",      icon: Stethoscope },
+  { id: "nutrition",   label: "Nutrition",      icon: UtensilsCrossed },
 ];
 
 export default function HealthPage() {
@@ -922,6 +1348,7 @@ export default function HealthPage() {
       {activeTab === "metrics"     && <MetricsTab />}
       {activeTab === "sleep"       && <SleepTab />}
       {activeTab === "care_team"   && <CareTeamTab />}
+      {activeTab === "nutrition"   && <NutritionTab />}
     </div>
   );
 }

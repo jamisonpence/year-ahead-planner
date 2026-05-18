@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -53,8 +53,13 @@ import type {
   InsertFaithPractice, FaithPractice,
   InsertSermon, Sermon,
   InsertPrayerItem, PrayerItem,
+  InsertFoodLogEntry, FoodLogEntry,
+  InsertWaterLog, WaterLog,
+  InsertNutritionGoal, NutritionGoal,
+  insertFoodLogSchema,
+  insertNutritionGoalSchema,
 } from "@shared/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || "postgresql://localhost/planner" });
 const db = drizzle(pool);
@@ -210,6 +215,8 @@ export async function initializeStorage() {
   `);
   // Migrations for recipes table
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS component_type TEXT`);
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS nutrition_data TEXT`);
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS meal_bundles (
@@ -1254,6 +1261,49 @@ export async function initializeStorage() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(user_id, source, external_id)
     );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS food_log_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      food_name TEXT NOT NULL,
+      usda_food_id TEXT,
+      barcode TEXT,
+      serving_size REAL NOT NULL DEFAULT 1,
+      serving_unit TEXT NOT NULL DEFAULT 'serving',
+      quantity REAL NOT NULL DEFAULT 1,
+      meal_type TEXT NOT NULL DEFAULT 'snack',
+      date TEXT NOT NULL,
+      calories REAL NOT NULL DEFAULT 0,
+      protein REAL NOT NULL DEFAULT 0,
+      carbs REAL NOT NULL DEFAULT 0,
+      fat REAL NOT NULL DEFAULT 0,
+      fiber REAL NOT NULL DEFAULT 0,
+      sugar REAL NOT NULL DEFAULT 0,
+      sodium REAL NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS water_logs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      glasses INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(user_id, date)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS nutrition_goals (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE,
+      calories INTEGER NOT NULL DEFAULT 2000,
+      protein INTEGER NOT NULL DEFAULT 150,
+      carbs INTEGER NOT NULL DEFAULT 250,
+      fat INTEGER NOT NULL DEFAULT 65,
+      water_glasses INTEGER NOT NULL DEFAULT 8
+    )
   `);
 }
 
@@ -4703,6 +4753,58 @@ export const storage: IStorage = {
       `UPDATE saved_events SET status = $1, notes = COALESCE($2, notes) WHERE id = $3 AND user_id = $4`,
       [status, notes ?? null, id, userId]
     );
+  },
+
+  // ── Food Log ────────────────────────────────────────────────────────────────
+  async getFoodLogForDate(userId: number, date: string): Promise<FoodLogEntry[]> {
+    return db.select().from(foodLogEntries)
+      .where(and(eq(foodLogEntries.userId, userId), eq(foodLogEntries.date, date)))
+      .orderBy(foodLogEntries.createdAt);
+  },
+  async createFoodLogEntry(data: InsertFoodLogEntry): Promise<FoodLogEntry> {
+    const [r] = await db.insert(foodLogEntries).values(data).returning();
+    return r;
+  },
+  async deleteFoodLogEntry(id: number): Promise<boolean> {
+    const r = await db.delete(foodLogEntries).where(eq(foodLogEntries.id, id)).returning();
+    return r.length > 0;
+  },
+  async getFoodLogForWeek(userId: number, dates: string[]): Promise<FoodLogEntry[]> {
+    if (dates.length === 0) return [];
+    return db.select().from(foodLogEntries)
+      .where(and(eq(foodLogEntries.userId, userId), inArray(foodLogEntries.date, dates)));
+  },
+
+  // ── Water Log ───────────────────────────────────────────────────────────────
+  async getWaterLog(userId: number, date: string): Promise<WaterLog | null> {
+    const [r] = await db.select().from(waterLogs)
+      .where(and(eq(waterLogs.userId, userId), eq(waterLogs.date, date)));
+    return r ?? null;
+  },
+  async upsertWaterLog(userId: number, date: string, glasses: number): Promise<WaterLog> {
+    const existing = await storage.getWaterLog(userId, date);
+    if (existing) {
+      const [r] = await db.update(waterLogs).set({ glasses }).where(eq(waterLogs.id, existing.id)).returning();
+      return r;
+    }
+    const [r] = await db.insert(waterLogs).values({ userId, date, glasses }).returning();
+    return r;
+  },
+
+  // ── Nutrition Goals ──────────────────────────────────────────────────────────
+  async getNutritionGoals(userId: number): Promise<NutritionGoal | null> {
+    const [r] = await db.select().from(nutritionGoals).where(eq(nutritionGoals.userId, userId));
+    return r ?? null;
+  },
+  async upsertNutritionGoals(userId: number, data: Partial<Omit<NutritionGoal, 'id' | 'userId'>>): Promise<NutritionGoal> {
+    const existing = await storage.getNutritionGoals(userId);
+    if (existing) {
+      const [r] = await db.update(nutritionGoals).set(data).where(eq(nutritionGoals.userId, userId)).returning();
+      return r;
+    }
+    const defaults = { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 };
+    const [r] = await db.insert(nutritionGoals).values({ userId, ...defaults, ...data }).returning();
+    return r;
   },
 };
 

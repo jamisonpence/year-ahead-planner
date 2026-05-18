@@ -175,6 +175,8 @@ export const recipes = pgTable("recipes", {
   ingredientsJson: text("ingredients_json").notNull().default("[]"),
   instructions: text("instructions"),
   imageUrl: text("image_url"),
+  nutritionData: text("nutrition_data"),
+  servings: integer("servings"),
 });
 
 // ── Meal Bundles ─────────────────────────────────────────────────────────────
@@ -1546,3 +1548,57 @@ export const activityComments = pgTable("activity_comments", {
   createdAt:  timestamp("created_at").defaultNow(),
 });
 export type ActivityComment = typeof activityComments.$inferSelect;
+
+// ── Nutrition / Food Log ──────────────────────────────────────────────────────
+export const foodLogEntries = pgTable("food_log_entries", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").notNull(),
+  foodName:    text("food_name").notNull(),
+  usdaFoodId:  text("usda_food_id"),
+  barcode:     text("barcode"),
+  servingSize: real("serving_size").notNull().default(1),
+  servingUnit: text("serving_unit").notNull().default("serving"),
+  quantity:    real("quantity").notNull().default(1),
+  mealType:    text("meal_type").notNull().default("snack"),
+  date:        text("date").notNull(),
+  calories:    real("calories").notNull().default(0),
+  protein:     real("protein").notNull().default(0),
+  carbs:       real("carbs").notNull().default(0),
+  fat:         real("fat").notNull().default(0),
+  fiber:       real("fiber").notNull().default(0),
+  sugar:       real("sugar").notNull().default(0),
+  sodium:      real("sodium").notNull().default(0),
+  createdAt:   timestamp("created_at").defaultNow(),
+});
+export const insertFoodLogSchema = createInsertSchema(foodLogEntries).omit({ id: true, createdAt: true });
+export type InsertFoodLogEntry = z.infer<typeof insertFoodLogSchema>;
+export type FoodLogEntry = typeof foodLogEntries.$inferSelect;
+
+export const waterLogs = pgTable("water_logs", {
+  id:      serial("id").primaryKey(),
+  userId:  integer("user_id").notNull(),
+  date:    text("date").notNull(),
+  glasses: integer("glasses").notNull().default(0),
+});
+export const insertWaterLogSchema = createInsertSchema(waterLogs).omit({ id: true });
+export type InsertWaterLog = z.infer<typeof insertWaterLogSchema>;
+export type WaterLog = typeof waterLogs.$inferSelect;
+
+export const nutritionGoals = pgTable("nutrition_goals", {
+  id:           serial("id").primaryKey(),
+  userId:       integer("user_id").notNull().unique(),
+  calories:     integer("calories").notNull().default(2000),
+  protein:      integer("protein").notNull().default(150),
+  carbs:        integer("carbs").notNull().default(250),
+  fat:          integer("fat").notNull().default(65),
+  waterGlasses: integer("water_glasses").notNull().default(8),
+});
+export const insertNutritionGoalSchema = createInsertSchema(nutritionGoals).omit({ id: true });
+export type InsertNutritionGoal = z.infer<typeof insertNutritionGoalSchema>;
+export type NutritionGoal = typeof nutritionGoals.$inferSelect;
+
+export type NutritionSummary = {
+  calories: number; protein: number; carbs: number; fat: number;
+  fiber: number; sugar: number; sodium: number;
+  servings: number; partial?: boolean;
+};
