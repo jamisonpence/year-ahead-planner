@@ -4849,6 +4849,20 @@ export const storage: IStorage = {
     return db.select().from(foodLogEntries)
       .where(and(eq(foodLogEntries.userId, userId), inArray(foodLogEntries.date, dates)));
   },
+  async getFoodLogHistory(userId: number): Promise<FoodLogEntry[]> {
+    // Fetch recent entries and deduplicate by foodName (case-insensitive), most recent first
+    const entries = await db.select().from(foodLogEntries)
+      .where(eq(foodLogEntries.userId, userId))
+      .orderBy(desc(foodLogEntries.createdAt))
+      .limit(500);
+    const seen = new Set<string>();
+    return entries.filter(e => {
+      const key = e.foodName.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 50);
+  },
 
   // ── Water Log ───────────────────────────────────────────────────────────────
   async getWaterLog(userId: number, date: string): Promise<WaterLog | null> {

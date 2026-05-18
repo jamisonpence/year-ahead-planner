@@ -1177,6 +1177,12 @@ Return exactly this structure:
       res.json(await storage.getFoodLogForDate(uid, date));
     } catch (e) { handleError(res, e); }
   });
+  app.get("/api/nutrition/food-log/history", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getFoodLogHistory(uid));
+    } catch (e) { handleError(res, e); }
+  });
   app.get("/api/nutrition/food-log/week", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;

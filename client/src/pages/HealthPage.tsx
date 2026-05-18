@@ -900,6 +900,17 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [searchQty, setSearchQty] = useState(1);
   const [adding, setAdding] = useState(false);
 
+  // ── Recent/saved foods ─────────────────────────────────────────────────
+  const [recentSelected, setRecentSelected] = useState<FoodLogEntry | null>(null);
+  const [recentMeal, setRecentMeal] = useState("snack");
+  const [recentQty, setRecentQty] = useState(1);
+  const [recentAdding, setRecentAdding] = useState(false);
+
+  const { data: foodHistory = [] } = useQuery<FoodLogEntry[]>({
+    queryKey: ["/api/nutrition/food-log/history"],
+    queryFn: () => apiRequest("GET", "/api/nutrition/food-log/history").then(r => r.json()),
+  });
+
   // ── Quick Add tab state ────────────────────────────────────────────────
   const [qaName, setQaName] = useState("");
   const [qaServingSize, setQaServingSize] = useState("1");
@@ -1025,6 +1036,34 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
     setAdding(false);
   }
 
+  // ── Recent food re-log handler ─────────────────────────────────────────
+  async function addRecentFood() {
+    if (!recentSelected) return;
+    setRecentAdding(true);
+    try {
+      await apiRequest("POST", "/api/nutrition/food-log", {
+        foodName:    recentSelected.foodName,
+        usdaFoodId:  recentSelected.usdaFoodId,
+        servingSize: recentSelected.servingSize,
+        servingUnit: recentSelected.servingUnit,
+        quantity:    recentQty,
+        mealType:    recentMeal,
+        date,
+        calories:    recentSelected.calories,
+        protein:     recentSelected.protein,
+        carbs:       recentSelected.carbs,
+        fat:         recentSelected.fat,
+        fiber:       recentSelected.fiber,
+        sugar:       recentSelected.sugar,
+        sodium:      recentSelected.sodium,
+      });
+      setRecentSelected(null); setRecentQty(1);
+      onAdded();
+      toast({ title: `${recentSelected.foodName} logged` });
+    } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
+    setRecentAdding(false);
+  }
+
   // ── Quick Add handler ──────────────────────────────────────────────────
   async function addQuickFood() {
     if (!qaName.trim() || !qaCals) return;
@@ -1143,7 +1182,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
           <div className="flex gap-2">
             <UIInput
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => { setQuery(e.target.value); if (!e.target.value) { setResults([]); setSelected(null); } }}
               onKeyDown={e => e.key === "Enter" && doSearch()}
               placeholder="Search USDA database (e.g. chicken breast)"
               className="flex-1 h-8 text-sm"
@@ -1153,6 +1192,57 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
             </Button>
           </div>
 
+          {/* Recent foods — shown when query is empty and no item selected */}
+          {!query && !selected && !recentSelected && foodHistory.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Recently logged</p>
+              <div className="space-y-1 max-h-52 overflow-y-auto">
+                {foodHistory.map(item => (
+                  <button key={item.id} onClick={() => { setRecentSelected(item); setRecentMeal("snack"); setRecentQty(1); }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-secondary/60 border border-transparent hover:border-border transition-all group">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{item.foodName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {Math.round(Number(item.calories))} kcal · P {Math.round(Number(item.protein))}g · C {Math.round(Number(item.carbs))}g · F {Math.round(Number(item.fat))}g
+                          {item.servingSize ? ` per ${item.servingSize}${item.servingUnit}` : ""}
+                        </p>
+                      </div>
+                      <Plus size={13} className="text-muted-foreground/40 group-hover:text-primary shrink-0 transition-colors" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Confirm re-log for recent item */}
+          {recentSelected && (
+            <div className="space-y-2 border rounded-xl p-3 bg-primary/5 border-primary/20">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold truncate flex-1">{recentSelected.foodName}</p>
+                <button onClick={() => setRecentSelected(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X size={13} /></button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {Math.round(Number(recentSelected.calories))} kcal · P {Math.round(Number(recentSelected.protein))}g · C {Math.round(Number(recentSelected.carbs))}g · F {Math.round(Number(recentSelected.fat))}g per serving
+              </p>
+              <MealServingRow mealType={recentMeal} setMealType={setRecentMeal} qty={recentQty} setQty={setRecentQty} />
+              <MacroPreview
+                cal={Number(recentSelected.calories) * recentQty}
+                p={Number(recentSelected.protein) * recentQty}
+                c={Number(recentSelected.carbs) * recentQty}
+                f={Number(recentSelected.fat) * recentQty}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addRecentFood} disabled={recentAdding} className="flex-1 h-7 text-xs">
+                  {recentAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRecentSelected(null)} className="h-7 text-xs">Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* USDA search results */}
           {results.length > 0 && !selected && (
             <div className="space-y-1 max-h-48 overflow-y-auto border rounded-lg p-1">
               {results.map((f: any) => (
