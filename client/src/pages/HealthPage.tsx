@@ -4,7 +4,7 @@ import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-f
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
-  Users, UtensilsCrossed, Search, Loader2,
+  Users, UtensilsCrossed, Search, Loader2, Heart, Target, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input as UIInput } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select as UISelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal, WorkoutPlan } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -1081,6 +1081,80 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
   );
 }
 
+// ── BodyCompGoalCard ──────────────────────────────────────────────────────────
+function BodyCompGoalCard({
+  plan,
+  metric,
+}: {
+  plan: WorkoutPlan;
+  metric: { metric: string; currentValue: string; targetValue: string; unit: string };
+}) {
+  const metricLabels: Record<string, string> = {
+    weight: "Body Weight",
+    body_fat: "Body Fat %",
+    muscle_mass: "Muscle Mass",
+  };
+  const label = metricLabels[metric.metric] ?? metric.metric;
+  const current = parseFloat(metric.currentValue);
+  const target  = parseFloat(metric.targetValue);
+  const unit    = metric.unit;
+
+  // Progress: how far from current toward target (clamped 0–100%)
+  let progressPct = 0;
+  if (!isNaN(current) && !isNaN(target) && current !== target) {
+    // Works for both "lose weight" (target < current) and "gain muscle" (target > current)
+    progressPct = Math.min(100, Math.max(0,
+      Math.abs(current - target) > 0
+        ? ((current - target) / (current - target)) * 0  // placeholder — starts at 0 since we only have start values
+        : 0
+    ));
+  }
+
+  // Direction label
+  const losing = !isNaN(current) && !isNaN(target) && target < current;
+  const gaining = !isNaN(current) && !isNaN(target) && target > current;
+  const dirLabel = losing ? "↓ lose" : gaining ? "↑ gain" : "→ maintain";
+
+  return (
+    <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Heart size={13} className="text-green-600 dark:text-green-400" />
+          <p className="text-xs font-semibold text-green-700 dark:text-green-300">Body Composition Goal</p>
+        </div>
+        <span className="text-[10px] text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/40 px-2 py-0.5 rounded-full font-medium">
+          {plan.name}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="flex-1 space-y-1">
+          <p className="text-[10px] text-muted-foreground font-medium">{label}</p>
+          <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+            {!isNaN(current) ? (
+              <>
+                <span>{current} {unit}</span>
+                <ArrowRight size={12} className="text-muted-foreground" />
+                <span className="text-green-600 dark:text-green-400">{target} {unit}</span>
+                <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                  ({dirLabel} {Math.abs(target - current).toFixed(1)} {unit})
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground text-xs">No values set</span>
+            )}
+          </div>
+        </div>
+        <Target size={20} className="text-green-500 shrink-0 opacity-60" />
+      </div>
+
+      <p className="text-[10px] text-green-600/70 dark:text-green-400/70 flex items-center gap-1">
+        <span>Linked from your active workout plan · Log food below to track progress</span>
+      </p>
+    </div>
+  );
+}
+
 // ── NutritionTab ─────────────────────────────────────────────────────────────
 function NutritionTab() {
   const { toast } = useToast();
@@ -1105,6 +1179,18 @@ function NutritionTab() {
     queryKey: ["/api/nutrition/food-log/week"],
     queryFn: () => apiRequest("GET", "/api/nutrition/food-log/week").then(r => r.json()),
   });
+  const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({
+    queryKey: ["/api/workout-plans"],
+    queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
+  });
+
+  // Find the active body composition plan (if any)
+  const activeBodyCompPlan = workoutPlans.find(
+    p => p.isActive && p.goalType === "body_composition"
+  ) ?? null;
+  const bodyCompMetric: { metric: string; currentValue: string; targetValue: string; unit: string } | null = (() => {
+    try { return activeBodyCompPlan?.goalMetricJson ? JSON.parse(activeBodyCompPlan.goalMetricJson) : null; } catch { return null; }
+  })();
 
   const g = goalsData ?? { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 };
   const waterGlasses = waterData?.glasses ?? 0;
@@ -1155,6 +1241,11 @@ function NutritionTab() {
 
       {activeSection === "log" && (
         <div className="space-y-4">
+          {/* Body Composition Goal card — shown when an active body_composition workout plan exists */}
+          {activeBodyCompPlan && bodyCompMetric && (
+            <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
+          )}
+
           {/* Date selector */}
           <div className="flex items-center gap-2">
             <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}

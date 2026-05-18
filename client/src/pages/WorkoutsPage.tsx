@@ -8,7 +8,7 @@ import {
   LayoutTemplate, ClipboardList, Zap, Package, Search, Loader2,
   Sparkles, ChevronRight, CheckCircle2, X, Info, ExternalLink,
   CalendarDays, Share2, Users, Send, CheckCheck, Trophy, Target,
-  TrendingUp, Heart, Play, CheckSquare,
+  TrendingUp, Heart, Play, CheckSquare, UtensilsCrossed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2721,12 +2721,24 @@ export default function WorkoutsPage() {
                         </div>
                       )}
                       {goalMetric && plan.goalType === "body_composition" && (
-                        <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-                          <Heart size={13} className="text-green-500 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-green-700 dark:text-green-300">{goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
-                            <p className="text-xs text-muted-foreground">{goalMetric.currentValue} → {goalMetric.targetValue} {goalMetric.unit}</p>
+                        <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Heart size={13} className="text-green-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-green-700 dark:text-green-300">{goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
+                              <p className="text-xs text-muted-foreground">{goalMetric.currentValue} → {goalMetric.targetValue} {goalMetric.unit}</p>
+                            </div>
                           </div>
+                          {plan.isActive && (
+                            <button
+                              onClick={() => setLocation("/health")}
+                              className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-green-700 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 rounded-md px-2 py-1.5 transition-colors"
+                            >
+                              <UtensilsCrossed size={11} />
+                              Track nutrition in Health tab
+                              <ChevronRight size={11} />
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -3027,13 +3039,23 @@ export default function WorkoutsPage() {
                   )}
 
                   {goalMetric && plan.goalType === "body_composition" && (
-                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 space-y-2">
                       <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5 mb-1"><Heart size={11} /> {goalMetric.metric === "weight" ? "Body Weight" : goalMetric.metric === "body_fat" ? "Body Fat %" : "Muscle Mass"}</p>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold">{goalMetric.currentValue}{goalMetric.unit}</span>
                         <span className="text-xs text-muted-foreground">→</span>
                         <span className="text-sm font-bold text-green-600 dark:text-green-400">{goalMetric.targetValue}{goalMetric.unit}</span>
                       </div>
+                      {plan.isActive && (
+                        <button
+                          onClick={() => setLocation("/health")}
+                          className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-green-700 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 rounded-md px-2 py-1.5 transition-colors"
+                        >
+                          <UtensilsCrossed size={11} />
+                          Track nutrition in Health tab
+                          <ChevronRight size={11} />
+                        </button>
+                      )}
                     </div>
                   )}
 
