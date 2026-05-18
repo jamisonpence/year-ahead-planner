@@ -1230,6 +1230,9 @@ export async function initializeStorage() {
     );
   `);
 
+  // Add sides column to political_debates if it doesn't exist yet
+  await pool.query(`ALTER TABLE political_debates ADD COLUMN IF NOT EXISTS sides TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS saved_events (
       id SERIAL PRIMARY KEY,
