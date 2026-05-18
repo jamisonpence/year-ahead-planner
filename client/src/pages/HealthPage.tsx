@@ -1767,12 +1767,41 @@ function NutritionTab() {
 
   // Find a body composition plan — prefer active, fall back to most recent
   const bodyCompPlans = workoutPlans.filter(p => p.goalType === "body_composition");
-  const activeBodyCompPlan = bodyCompPlans.find(p => p.isActive) ?? bodyCompPlans[0] ?? null;
-  const bodyCompMetric: { metric: string; currentValue: number | string; targetValue: number | string; unit: string } | null = (() => {
+  const activeBodyCompPlan = bodyCompPlans.find(p => p.isActive) ?? null;
+  const bodyCompMetric: Record<string, any> | null = (() => {
     try { return activeBodyCompPlan?.goalMetricJson ? JSON.parse(activeBodyCompPlan.goalMetricJson) : null; } catch { return null; }
   })();
 
+  // Macro targets suggested by the active plan (only when it has full nutrition data)
+  const planTargets = (bodyCompMetric?.targetCalories && bodyCompMetric?.proteinGrams != null)
+    ? {
+        calories: Math.round(bodyCompMetric.targetCalories as number),
+        protein:  Math.round(bodyCompMetric.proteinGrams  as number),
+        carbs:    Math.round(bodyCompMetric.carbsGrams    as number),
+        fat:      Math.round(bodyCompMetric.fatGrams      as number),
+      }
+    : null;
+
   const g = goalsData ?? { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 };
+
+  // True when the stored goals already match the active plan targets
+  const goalsMatchPlan = planTargets != null && goalsData != null &&
+    goalsData.calories === planTargets.calories &&
+    goalsData.protein  === planTargets.protein  &&
+    goalsData.carbs    === planTargets.carbs    &&
+    goalsData.fat      === planTargets.fat;
+
+  const syncGoalsMut = useMutation({
+    mutationFn: () => apiRequest("PATCH", "/api/nutrition/goals", {
+      ...planTargets,
+      waterGlasses: g.waterGlasses,
+    }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
+      toast({ title: "Goals synced from active plan" });
+    },
+    onError: () => toast({ title: "Failed to sync goals", variant: "destructive" }),
+  });
   const waterGlasses = waterData?.glasses ?? 0;
 
   const totals = foodLog.reduce((acc, e) => ({
@@ -1854,7 +1883,14 @@ function NutritionTab() {
               </div>
               {/* Macro bars */}
               <div className="flex-1 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Today's Macros</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs font-medium text-muted-foreground">Today's Macros</p>
+                  {goalsMatchPlan && (
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700">
+                      From plan
+                    </span>
+                  )}
+                </div>
                 {[
                   { label: "Protein", val: totals.protein, goal: g.protein, color: "bg-blue-500" },
                   { label: "Carbs",   val: totals.carbs,   goal: g.carbs,   color: "bg-amber-500" },
@@ -1930,11 +1966,60 @@ function NutritionTab() {
       )}
 
       {activeSection === "goals" && (
-        <GoalsEditor goals={g} onSave={async (data) => {
-          await apiRequest("PATCH", "/api/nutrition/goals", data);
-          qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
-          toast({ title: "Goals saved" });
-        }} />
+        <div className="space-y-3">
+          {/* Active plan sync banner */}
+          {planTargets && (
+            <div className={`rounded-xl border p-3 space-y-2.5 ${
+              goalsMatchPlan
+                ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                : "bg-primary/5 border-primary/30"
+            }`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Heart size={13} className={goalsMatchPlan ? "text-green-600 dark:text-green-400" : "text-primary"} />
+                  <p className={`text-xs font-semibold ${goalsMatchPlan ? "text-green-700 dark:text-green-300" : "text-primary"}`}>
+                    {goalsMatchPlan ? "Goals synced with active plan" : "Active plan suggests updated targets"}
+                  </p>
+                </div>
+                {goalsMatchPlan && <Check size={14} className="text-green-600 dark:text-green-400 shrink-0" />}
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">
+                {activeBodyCompPlan!.name}
+              </p>
+              <div className="grid grid-cols-4 gap-1.5 text-center">
+                {[
+                  { label: "Calories", val: planTargets.calories, unit: "kcal", color: "text-primary" },
+                  { label: "Protein",  val: planTargets.protein,  unit: "g",    color: "text-blue-600 dark:text-blue-400" },
+                  { label: "Carbs",    val: planTargets.carbs,    unit: "g",    color: "text-amber-600 dark:text-amber-400" },
+                  { label: "Fat",      val: planTargets.fat,      unit: "g",    color: "text-rose-600 dark:text-rose-400" },
+                ].map(item => (
+                  <div key={item.label} className="bg-background/60 rounded-lg py-1.5">
+                    <p className={`text-sm font-bold ${item.color}`}>{item.val}<span className="text-[9px] font-normal ml-0.5">{item.unit}</span></p>
+                    <p className="text-[9px] text-muted-foreground">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+              {!goalsMatchPlan && (
+                <Button
+                  size="sm"
+                  className="w-full h-8 gap-1.5 text-xs"
+                  onClick={() => syncGoalsMut.mutate()}
+                  disabled={syncGoalsMut.isPending}
+                >
+                  {syncGoalsMut.isPending
+                    ? <Loader2 size={12} className="animate-spin" />
+                    : <ArrowRight size={12} />}
+                  Apply Plan Targets to My Goals
+                </Button>
+              )}
+            </div>
+          )}
+          <GoalsEditor goals={g} onSave={async (data) => {
+            await apiRequest("PATCH", "/api/nutrition/goals", data);
+            qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
+            toast({ title: "Goals saved" });
+          }} />
+        </div>
       )}
 
       {activeSection === "plans" && (
