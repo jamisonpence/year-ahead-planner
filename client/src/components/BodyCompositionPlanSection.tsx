@@ -995,8 +995,8 @@ function CheckInModal({ planId, onClose }: { planId: number; onClose: () => void
 
 // ── Active Plan Card ──────────────────────────────────────────────────────────
 
-function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
-  plan: WorkoutPlan; onEdit: () => void; onEndEarly: () => void; onCheckIn: () => void;
+function ActivePlanCard({ plan, onEdit, onDeactivate, onCheckIn }: {
+  plan: WorkoutPlan; onEdit: () => void; onDeactivate: () => void; onCheckIn: () => void;
 }) {
   const { data: checkIns = [] } = useQuery<BodyCompCheckIn[]>({
     queryKey: ["/api/body-comp-check-ins", plan.id],
@@ -1046,7 +1046,7 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" />Edit Plan</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onEndEarly}><X size={13} className="mr-2" />End Plan Early</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDeactivate}><X size={13} className="mr-2" />Deactivate Plan</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1101,9 +1101,19 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
           </div>
         )}
 
-        <Button size="sm" className="w-full gap-1.5 bg-green-600 hover:bg-green-700 text-white" onClick={onCheckIn}>
-          <ClipboardList size={13} /> Log a Check-in
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700 text-white" onClick={onCheckIn}>
+            <ClipboardList size={13} /> Log a Check-in
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-primary border-primary/40 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+            onClick={onDeactivate}
+          >
+            <CheckCircle2 size={12} /> Active
+          </Button>
+        </div>
 
         {/* Check-in history */}
         {checkIns.length > 0 && (
@@ -1132,19 +1142,22 @@ function ActivePlanCard({ plan, onEdit, onEndEarly, onCheckIn }: {
 
 // ── Inactive Plan Card ────────────────────────────────────────────────────────
 
-function InactivePlanCard({ plan, onEdit, onDelete }: { plan: WorkoutPlan; onEdit: () => void; onDelete: () => void }) {
+function InactivePlanCard({ plan, onEdit, onDelete, onActivate }: {
+  plan: WorkoutPlan; onEdit: () => void; onDelete: () => void; onActivate: () => void;
+}) {
   const m = parseMetricJson(plan);
   const badge = metricBadge(m?.metric ?? "body_weight");
   const endDate = plan.startDate ? addWeeks(plan.startDate, plan.durationWeeks) : "";
 
   return (
-    <div className="bg-card border rounded-xl p-4 space-y-2">
+    <div className="bg-card border rounded-xl p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span>
             <span className="text-xs text-muted-foreground">{plan.durationWeeks} weeks</span>
           </div>
+          <p className="text-sm font-semibold">{plan.name}</p>
           {plan.startDate && (
             <p className="text-xs text-muted-foreground">
               {new Date(plan.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -1169,6 +1182,12 @@ function InactivePlanCard({ plan, onEdit, onDelete }: { plan: WorkoutPlan; onEdi
           {m.fatGrams != null && <span>{m.fatGrams}g F</span>}
         </div>
       )}
+      {/* Activate button */}
+      <div className="pt-1 border-t">
+        <Button size="sm" className="w-full gap-1.5" onClick={onActivate}>
+          <Play size={12} /> Set as Active Plan
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1218,9 +1237,16 @@ export default function BodyCompositionPlanSection({
     onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
   });
 
-  const endEarlyMut = useMutation({
+  const activateMut = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/workout-plans/${id}/activate`).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan activated!" }); },
+    onError: () => toast({ title: "Failed to activate plan", variant: "destructive" }),
+  });
+
+  const deactivateMut = useMutation({
     mutationFn: (id: number) => apiRequest("PATCH", `/api/workout-plans/${id}`, { isActive: false }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan ended" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan deactivated" }); },
+    onError: () => toast({ title: "Failed to deactivate plan", variant: "destructive" }),
   });
 
   return (
@@ -1240,7 +1266,7 @@ export default function BodyCompositionPlanSection({
       {activePlans.map(plan => (
         <ActivePlanCard key={plan.id} plan={plan}
           onEdit={() => { setEditingPlan(plan); setInternalWizardOpen(true); }}
-          onEndEarly={() => endEarlyMut.mutate(plan.id)}
+          onDeactivate={() => deactivateMut.mutate(plan.id)}
           onCheckIn={() => setCheckInPlanId(plan.id)} />
       ))}
 
@@ -1251,7 +1277,8 @@ export default function BodyCompositionPlanSection({
           {inactivePlans.map(plan => (
             <InactivePlanCard key={plan.id} plan={plan}
               onEdit={() => { setEditingPlan(plan); setInternalWizardOpen(true); }}
-              onDelete={() => deleteMut.mutate(plan.id)} />
+              onDelete={() => deleteMut.mutate(plan.id)}
+              onActivate={() => activateMut.mutate(plan.id)} />
           ))}
         </div>
       )}
