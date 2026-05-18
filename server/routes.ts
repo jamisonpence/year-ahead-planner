@@ -4,6 +4,7 @@ import { createServer } from "http";
 import { storage } from "./storage";
 import { passport } from "./auth";
 import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
+import { fatSecretSearch, fatSecretGetFood, fatSecretConfigured } from "./fatsecret";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1094,6 +1095,23 @@ Return exactly this structure:
         },
       }));
       res.json({ foods });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── FatSecret restaurant / branded food search ───────────────────────────
+  app.get("/api/nutrition/fatsecret-search", requireAuth, async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      if (!query?.trim()) return res.json({ foods: [], configured: fatSecretConfigured() });
+      const foods = await fatSecretSearch(query.trim(), 12);
+      res.json({ foods: foods ?? [], configured: fatSecretConfigured() });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/nutrition/fatsecret-food/:id", requireAuth, async (req, res) => {
+    try {
+      const food = await fatSecretGetFood(req.params.id);
+      food ? res.json(food) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 

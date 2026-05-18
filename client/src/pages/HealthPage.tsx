@@ -892,6 +892,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [mode, setMode] = useState<"search" | "quick" | "recipes">("search");
 
   // ── Search tab state ───────────────────────────────────────────────────
+  const [searchSource, setSearchSource] = useState<"usda" | "restaurant">("usda");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
@@ -899,6 +900,15 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [searchMeal, setSearchMeal] = useState("snack");
   const [searchQty, setSearchQty] = useState(1);
   const [adding, setAdding] = useState(false);
+
+  // FatSecret (restaurant) sub-state
+  const [fsResults, setFsResults] = useState<any[]>([]);
+  const [fsFood, setFsFood] = useState<any | null>(null);   // full food detail with servings
+  const [fsServingIdx, setFsServingIdx] = useState(0);
+  const [fsMeal, setFsMeal] = useState("snack");
+  const [fsQty, setFsQty] = useState(1);
+  const [fsAdding, setFsAdding] = useState(false);
+  const [fsLoading, setFsLoading] = useState(false);
 
   // ── Recent/saved foods ─────────────────────────────────────────────────
   const [recentSelected, setRecentSelected] = useState<FoodLogEntry | null>(null);
@@ -1001,12 +1011,64 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   async function doSearch() {
     if (!query.trim()) return;
     setSearching(true);
-    try {
-      const r = await apiRequest("GET", `/api/nutrition/usda-search?q=${encodeURIComponent(query)}`);
-      const data = await r.json();
-      setResults(data.foods || []);
-    } catch { toast({ title: "Search failed", variant: "destructive" }); }
+    if (searchSource === "usda") {
+      try {
+        const r = await apiRequest("GET", `/api/nutrition/usda-search?q=${encodeURIComponent(query)}`);
+        const data = await r.json();
+        setResults(data.foods || []);
+      } catch { toast({ title: "Search failed", variant: "destructive" }); }
+    } else {
+      try {
+        const r = await apiRequest("GET", `/api/nutrition/fatsecret-search?q=${encodeURIComponent(query)}`);
+        const data = await r.json();
+        if (!data.configured) {
+          toast({ title: "FatSecret not configured", description: "Add FATSECRET_CLIENT_ID and FATSECRET_CLIENT_SECRET to your environment variables.", variant: "destructive" });
+        }
+        setFsResults(data.foods || []);
+      } catch { toast({ title: "Search failed", variant: "destructive" }); }
+    }
     setSearching(false);
+  }
+
+  async function selectFsFood(foodId: string) {
+    setFsLoading(true);
+    setFsFood(null);
+    try {
+      const r = await apiRequest("GET", `/api/nutrition/fatsecret-food/${foodId}`);
+      const data = await r.json();
+      setFsFood(data);
+      setFsServingIdx(0);
+      setFsMeal("snack");
+      setFsQty(1);
+    } catch { toast({ title: "Could not load food details", variant: "destructive" }); }
+    setFsLoading(false);
+  }
+
+  async function addFsFood() {
+    if (!fsFood || !fsFood.servings?.length) return;
+    const serving = fsFood.servings[fsServingIdx];
+    setFsAdding(true);
+    try {
+      await apiRequest("POST", "/api/nutrition/food-log", {
+        foodName:    fsFood.brandName ? `${fsFood.brandName} — ${fsFood.foodName}` : fsFood.foodName,
+        servingSize: 1,
+        servingUnit: serving.servingDescription,
+        quantity:    fsQty,
+        mealType:    fsMeal,
+        date,
+        calories:    serving.calories,
+        protein:     serving.protein,
+        carbs:       serving.carbs,
+        fat:         serving.fat,
+        fiber:       serving.fiber,
+        sugar:       serving.sugar,
+        sodium:      serving.sodium,
+      });
+      setFsFood(null); setFsResults([]); setQuery(""); setFsQty(1);
+      onAdded();
+      toast({ title: "Food logged" });
+    } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
+    setFsAdding(false);
   }
 
   async function addSearchFood() {
@@ -1180,12 +1242,27 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
       {/* ── SEARCH TAB ─────────────────────────────────────────────── */}
       {mode === "search" && (
         <div className="space-y-2">
+          {/* Source toggle */}
+          <div className="flex rounded-lg border overflow-hidden text-xs font-medium">
+            <button
+              onClick={() => { setSearchSource("usda"); setFsResults([]); setFsFood(null); setResults([]); setSelected(null); }}
+              className={`flex-1 py-1.5 transition-colors ${searchSource === "usda" ? "bg-foreground text-background" : "bg-transparent text-muted-foreground hover:bg-secondary/60"}`}
+            >🥗 USDA Foods</button>
+            <button
+              onClick={() => { setSearchSource("restaurant"); setResults([]); setSelected(null); setFsResults([]); setFsFood(null); }}
+              className={`flex-1 py-1.5 transition-colors ${searchSource === "restaurant" ? "bg-foreground text-background" : "bg-transparent text-muted-foreground hover:bg-secondary/60"}`}
+            >🍔 Restaurants</button>
+          </div>
+
           <div className="flex gap-2">
             <UIInput
               value={query}
-              onChange={e => { setQuery(e.target.value); if (!e.target.value) { setResults([]); setSelected(null); } }}
+              onChange={e => {
+                setQuery(e.target.value);
+                if (!e.target.value) { setResults([]); setSelected(null); setFsResults([]); setFsFood(null); }
+              }}
               onKeyDown={e => e.key === "Enter" && doSearch()}
-              placeholder="Search USDA database (e.g. chicken breast)"
+              placeholder={searchSource === "restaurant" ? "e.g. McDonald's cheeseburger, Chipotle bowl…" : "Search USDA database (e.g. chicken breast)"}
               className="flex-1 h-8 text-sm"
             />
             <Button size="sm" variant="outline" onClick={doSearch} disabled={searching} className="h-8 shrink-0">
@@ -1274,6 +1351,89 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
                   {adding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setSelected(null); setResults([]); }} className="h-7 text-xs">Back</Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── FatSecret (restaurant) results ── */}
+          {searchSource === "restaurant" && fsResults.length > 0 && !fsFood && !fsLoading && (
+            <div className="space-y-1 max-h-52 overflow-y-auto border rounded-lg p-1">
+              {fsResults.map((f: any) => (
+                <button key={f.foodId} onClick={() => selectFsFood(f.foodId)}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                  {f.brandName && (
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wide leading-tight">{f.brandName}</p>
+                  )}
+                  <p className="text-xs font-medium truncate">{f.foodName}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{f.foodDescription}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {searchSource === "restaurant" && fsLoading && (
+            <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
+              <Loader2 size={13} className="animate-spin" />
+              <span className="text-xs">Loading nutrition…</span>
+            </div>
+          )}
+
+          {/* ── FatSecret food detail: serving picker ── */}
+          {searchSource === "restaurant" && fsFood && !fsLoading && (
+            <div className="space-y-2.5 border rounded-xl p-3 bg-primary/5 border-primary/20">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  {fsFood.brandName && (
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">{fsFood.brandName}</p>
+                  )}
+                  <p className="text-xs font-semibold truncate">{fsFood.foodName}</p>
+                </div>
+                <button onClick={() => { setFsFood(null); }} className="text-muted-foreground hover:text-foreground shrink-0"><X size={13} /></button>
+              </div>
+
+              {/* Serving size picker */}
+              {fsFood.servings?.length > 1 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Serving size</p>
+                  <div className="grid gap-1 max-h-36 overflow-y-auto">
+                    {fsFood.servings.map((s: any, i: number) => (
+                      <button
+                        key={s.servingId}
+                        onClick={() => setFsServingIdx(i)}
+                        className={`text-left px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
+                          fsServingIdx === i
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background hover:bg-secondary/60 border-border"
+                        }`}
+                      >
+                        <span className="font-medium">{s.servingDescription}</span>
+                        <span className={`ml-2 text-[10px] ${fsServingIdx === i ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                          {Math.round(s.calories)} kcal
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Macro summary for selected serving */}
+              {fsFood.servings?.[fsServingIdx] && (
+                <MacroPreview
+                  cal={fsFood.servings[fsServingIdx].calories * fsQty}
+                  p={fsFood.servings[fsServingIdx].protein   * fsQty}
+                  c={fsFood.servings[fsServingIdx].carbs     * fsQty}
+                  f={fsFood.servings[fsServingIdx].fat       * fsQty}
+                />
+              )}
+
+              <MealServingRow mealType={fsMeal} setMealType={setFsMeal} qty={fsQty} setQty={setFsQty} />
+
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addFsFood} disabled={fsAdding || !fsFood.servings?.length} className="flex-1 h-7 text-xs">
+                  {fsAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setFsFood(null); }} className="h-7 text-xs">Back</Button>
               </div>
             </div>
           )}
