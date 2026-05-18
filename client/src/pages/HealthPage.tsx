@@ -1088,6 +1088,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
         carbs,
         fat,
         fiber: 0, sugar: 0, sodium: 0,
+        ingredientsJson: qaIngredients.length > 0 ? JSON.stringify(qaIngredients) : undefined,
       });
 
       // Optionally save as recipe
@@ -1824,6 +1825,53 @@ function NutritionTab() {
 
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ foodName: "", quantity: "1", mealType: "snack", calories: "", protein: "", carbs: "", fat: "" });
+
+  // Edit ingredient state (mirrors Quick Add ingredient builder)
+  type EditIngredient = {
+    id: number; name: string;
+    servingSize: number; servingUnit: string;
+    qty: number;
+    nutrients: { calories: number; protein: number; carbs: number; fat: number; fiber: number; sugar: number; sodium: number };
+  };
+  const [editIngredients, setEditIngredients] = useState<EditIngredient[]>([]);
+  const [editIngQuery, setEditIngQuery] = useState("");
+  const [editIngResults, setEditIngResults] = useState<any[]>([]);
+  const [editIngSearching, setEditIngSearching] = useState(false);
+  const [editIngPending, setEditIngPending] = useState<any | null>(null);
+  const [editIngPendingQty, setEditIngPendingQty] = useState(1);
+
+  // Auto-recompute macros when editIngredients changes
+  useEffect(() => {
+    if (editIngredients.length === 0) return;
+    const totals = editIngredients.reduce(
+      (acc, ing) => ({
+        calories: acc.calories + ing.nutrients.calories * ing.qty,
+        protein:  acc.protein  + ing.nutrients.protein  * ing.qty,
+        carbs:    acc.carbs    + ing.nutrients.carbs     * ing.qty,
+        fat:      acc.fat      + ing.nutrients.fat       * ing.qty,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+    setEditForm(f => ({
+      ...f,
+      calories: String(Math.round(totals.calories)),
+      protein:  String(Math.round(totals.protein)),
+      carbs:    String(Math.round(totals.carbs)),
+      fat:      String(Math.round(totals.fat)),
+    }));
+  }, [editIngredients]);
+
+  async function doEditIngSearch() {
+    if (!editIngQuery.trim()) return;
+    setEditIngSearching(true);
+    try {
+      const r = await apiRequest("GET", `/api/nutrition/usda-search?q=${encodeURIComponent(editIngQuery)}`);
+      const d = await r.json();
+      setEditIngResults((d.foods || []).slice(0, 8));
+    } catch { /* ignore */ }
+    setEditIngSearching(false);
+  }
+
   function openEditEntry(e: FoodLogEntry) {
     setEditingEntryId(e.id);
     setEditForm({
@@ -1835,7 +1883,14 @@ function NutritionTab() {
       carbs: String(e.carbs),
       fat: String(e.fat),
     });
+    // Restore saved ingredients (if any)
+    try {
+      const ings = (e as any).ingredientsJson ? JSON.parse((e as any).ingredientsJson) : [];
+      setEditIngredients(Array.isArray(ings) ? ings : []);
+    } catch { setEditIngredients([]); }
+    setEditIngQuery(""); setEditIngResults([]); setEditIngPending(null); setEditIngPendingQty(1);
   }
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) =>
       apiRequest("PATCH", `/api/nutrition/food-log/${id}`, data).then(r => r.json()),
@@ -1971,13 +2026,15 @@ function NutritionTab() {
                   <div key={e.id} className="rounded-lg bg-secondary/30 border overflow-hidden">
                     {editingEntryId === e.id ? (
                       /* ── Inline edit form ── */
-                      <div className="px-3 py-2.5 space-y-2">
+                      <div className="px-3 py-2.5 space-y-2.5">
+                        {/* Name */}
                         <input
                           className="w-full text-sm border rounded-md px-2 py-1 bg-background"
                           value={editForm.foodName}
                           onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
                           placeholder="Food name"
                         />
+                        {/* Quantity + Meal */}
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-[10px] text-muted-foreground font-medium">Quantity</label>
@@ -2002,6 +2059,106 @@ function NutritionTab() {
                             </select>
                           </div>
                         </div>
+
+                        {/* ── Ingredient editor ── */}
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ingredients</p>
+
+                          {/* Current ingredient list */}
+                          {editIngredients.map((ing, idx) => (
+                            <div key={ing.id} className="flex items-center gap-1.5 bg-secondary/40 rounded-md px-2 py-1">
+                              <span className="flex-1 text-xs truncate">{ing.name}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: Math.max(0.25, +(x.qty - 0.5).toFixed(2)) } : x))}
+                                  className="w-5 h-5 rounded text-xs bg-secondary hover:bg-secondary/80 flex items-center justify-center"
+                                >−</button>
+                                <span className="text-xs w-8 text-center">{ing.qty}×</span>
+                                <button
+                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: +(x.qty + 0.5).toFixed(2) } : x))}
+                                  className="w-5 h-5 rounded text-xs bg-secondary hover:bg-secondary/80 flex items-center justify-center"
+                                >+</button>
+                              </div>
+                              <button
+                                onClick={() => setEditIngredients(arr => arr.filter((_, i) => i !== idx))}
+                                className="text-muted-foreground hover:text-destructive shrink-0"
+                              ><X size={11} /></button>
+                            </div>
+                          ))}
+
+                          {/* Add ingredient via USDA search */}
+                          {editIngPending ? (
+                            <div className="bg-secondary/30 rounded-md p-2 space-y-1.5">
+                              <p className="text-xs font-medium truncate">{editIngPending.description}</p>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[10px] text-muted-foreground">Servings:</label>
+                                <input
+                                  type="number" min="0.25" step="0.25"
+                                  value={editIngPendingQty}
+                                  onChange={ev => setEditIngPendingQty(parseFloat(ev.target.value) || 1)}
+                                  className="w-16 text-xs border rounded px-1.5 py-0.5 bg-background"
+                                />
+                                <button
+                                  onClick={() => {
+                                    const n = editIngPending.foodNutrients || [];
+                                    const get = (id: number) => (n.find((x: any) => x.nutrientId === id)?.value || 0);
+                                    setEditIngredients(arr => [...arr, {
+                                      id: editIngPending.fdcId,
+                                      name: editIngPending.description,
+                                      servingSize: editIngPending.servingSize || 100,
+                                      servingUnit: editIngPending.servingUnit || "g",
+                                      qty: editIngPendingQty,
+                                      nutrients: {
+                                        calories: get(1008), protein: get(1003), carbs: get(1005),
+                                        fat: get(1004), fiber: get(1079), sugar: get(2000), sodium: get(1093),
+                                      },
+                                    }]);
+                                    setEditIngPending(null); setEditIngPendingQty(1); setEditIngQuery(""); setEditIngResults([]);
+                                  }}
+                                  className="flex-1 text-xs font-medium py-0.5 rounded bg-primary text-primary-foreground"
+                                >Add</button>
+                                <button onClick={() => setEditIngPending(null)} className="text-muted-foreground"><X size={11} /></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1.5">
+                              <input
+                                className="flex-1 text-xs border rounded-md px-2 py-1 bg-background"
+                                placeholder="Search ingredient (USDA)…"
+                                value={editIngQuery}
+                                onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
+                                onKeyDown={ev => ev.key === "Enter" && doEditIngSearch()}
+                              />
+                              <button
+                                onClick={doEditIngSearch}
+                                disabled={editIngSearching}
+                                className="text-xs px-2 py-1 rounded-md bg-secondary text-foreground shrink-0"
+                              >{editIngSearching ? "…" : "Search"}</button>
+                            </div>
+                          )}
+
+                          {/* USDA results */}
+                          {editIngResults.length > 0 && !editIngPending && (
+                            <div className="border rounded-md overflow-hidden divide-y max-h-36 overflow-y-auto">
+                              {editIngResults.map((item: any) => (
+                                <button
+                                  key={item.fdcId}
+                                  onClick={() => { setEditIngPending(item); setEditIngPendingQty(1); }}
+                                  className="w-full text-left px-2 py-1.5 hover:bg-secondary/40 text-xs"
+                                >
+                                  <span className="font-medium truncate block">{item.description}</span>
+                                  {item.brandName && <span className="text-muted-foreground text-[10px]">{item.brandName}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {editIngredients.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground italic">Macros auto-calculated from ingredients below</p>
+                          )}
+                        </div>
+
+                        {/* Macro fields */}
                         <div className="grid grid-cols-4 gap-1.5">
                           {(["calories","protein","carbs","fat"] as const).map(field => (
                             <div key={field}>
@@ -2015,6 +2172,8 @@ function NutritionTab() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Actions */}
                         <div className="flex gap-2 pt-0.5">
                           <button
                             onClick={() => updateMut.mutate({ id: e.id, data: {
@@ -2025,6 +2184,7 @@ function NutritionTab() {
                               protein: parseFloat(editForm.protein) || 0,
                               carbs: parseFloat(editForm.carbs) || 0,
                               fat: parseFloat(editForm.fat) || 0,
+                              ingredientsJson: editIngredients.length > 0 ? JSON.stringify(editIngredients) : null,
                             }})}
                             disabled={updateMut.isPending || !editForm.foodName.trim()}
                             className="flex-1 text-xs font-semibold py-1.5 rounded-md bg-primary text-primary-foreground disabled:opacity-50"

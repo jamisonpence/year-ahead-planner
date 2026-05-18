@@ -1614,8 +1614,9 @@ export const foodLogEntries = pgTable("food_log_entries", {
   fat:         real("fat").notNull().default(0),
   fiber:       real("fiber").notNull().default(0),
   sugar:       real("sugar").notNull().default(0),
-  sodium:      real("sodium").notNull().default(0),
-  createdAt:   timestamp("created_at").defaultNow(),
+  sodium:           real("sodium").notNull().default(0),
+  ingredientsJson:  text("ingredients_json"),
+  createdAt:        timestamp("created_at").defaultNow(),
 });
 export const insertFoodLogSchema = createInsertSchema(foodLogEntries).omit({ id: true, createdAt: true });
 export type InsertFoodLogEntry = z.infer<typeof insertFoodLogSchema>;

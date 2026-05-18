@@ -1286,6 +1286,8 @@ export async function initializeStorage() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE food_log_entries ADD COLUMN IF NOT EXISTS ingredients_json TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS water_logs (
       id SERIAL PRIMARY KEY,
