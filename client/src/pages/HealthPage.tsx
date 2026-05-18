@@ -2026,77 +2026,90 @@ function NutritionTab() {
                   <div key={e.id} className="rounded-lg bg-secondary/30 border overflow-hidden">
                     {editingEntryId === e.id ? (
                       /* ── Inline edit form ── */
-                      <div className="px-3 py-2.5 space-y-2.5">
-                        {/* Name */}
-                        <input
-                          className="w-full text-sm border rounded-md px-2 py-1 bg-background"
-                          value={editForm.foodName}
-                          onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
-                          placeholder="Food name"
-                        />
-                        {/* Quantity + Meal */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground font-medium">Quantity</label>
-                            <input
-                              type="number" min="0.1" step="0.1"
-                              className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
-                              value={editForm.quantity}
-                              onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground font-medium">Meal</label>
-                            <select
-                              className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
-                              value={editForm.mealType}
-                              onChange={ev => setEditForm(f => ({ ...f, mealType: ev.target.value }))}
-                            >
-                              <option value="breakfast">Breakfast</option>
-                              <option value="lunch">Lunch</option>
-                              <option value="dinner">Dinner</option>
-                              <option value="snack">Snack</option>
-                            </select>
-                          </div>
+                      <div className="px-3 py-3 space-y-3">
+
+                        {/* Row 1: name + meal inline */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            className="flex-1 text-sm font-medium border rounded-md px-2 py-1.5 bg-background"
+                            value={editForm.foodName}
+                            onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
+                            placeholder="Food name"
+                          />
+                          <select
+                            className="text-xs border rounded-md px-2 py-1.5 bg-background shrink-0"
+                            value={editForm.mealType}
+                            onChange={ev => setEditForm(f => ({ ...f, mealType: ev.target.value }))}
+                          >
+                            <option value="breakfast">Breakfast</option>
+                            <option value="lunch">Lunch</option>
+                            <option value="dinner">Dinner</option>
+                            <option value="snack">Snack</option>
+                          </select>
                         </div>
 
-                        {/* ── Ingredient editor ── */}
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ingredients</p>
+                        {/* ── Ingredients (main focus) ── */}
+                        <div className="rounded-lg border bg-background overflow-hidden">
+                          {/* Header */}
+                          <div className="flex items-center justify-between px-3 py-2 border-b bg-secondary/20">
+                            <p className="text-xs font-semibold">Ingredients</p>
+                            {editIngredients.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground">{editIngredients.length} item{editIngredients.length !== 1 ? "s" : ""}</span>
+                            )}
+                          </div>
 
-                          {/* Current ingredient list */}
+                          {/* Ingredient rows */}
+                          {editIngredients.length === 0 && !editIngPending && editIngResults.length === 0 && (
+                            <p className="text-xs text-muted-foreground text-center py-3 px-3">No ingredients saved — add some below or edit macros manually.</p>
+                          )}
                           {editIngredients.map((ing, idx) => (
-                            <div key={ing.id} className="flex items-center gap-1.5 bg-secondary/40 rounded-md px-2 py-1">
-                              <span className="flex-1 text-xs truncate">{ing.name}</span>
+                            <div key={`${ing.id}-${idx}`} className="flex items-center gap-2 px-3 py-2.5 border-b last:border-b-0">
+                              {/* Name + macro contribution */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{ing.name}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {Math.round(ing.nutrients.calories * ing.qty)} kcal · P {Math.round(ing.nutrients.protein * ing.qty)}g · C {Math.round(ing.nutrients.carbs * ing.qty)}g · F {Math.round(ing.nutrients.fat * ing.qty)}g
+                                </p>
+                              </div>
+                              {/* Qty stepper */}
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
-                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: Math.max(0.25, +(x.qty - 0.5).toFixed(2)) } : x))}
-                                  className="w-5 h-5 rounded text-xs bg-secondary hover:bg-secondary/80 flex items-center justify-center"
+                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: Math.max(0.25, parseFloat((x.qty - 0.5).toFixed(2))) } : x))}
+                                  className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
                                 >−</button>
-                                <span className="text-xs w-8 text-center">{ing.qty}×</span>
+                                <input
+                                  type="number" min="0.25" step="0.25"
+                                  value={ing.qty}
+                                  onChange={ev => {
+                                    const v = parseFloat(ev.target.value);
+                                    if (!isNaN(v) && v > 0) setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: v } : x));
+                                  }}
+                                  className="w-12 text-xs text-center border rounded-md px-1 py-1 bg-background"
+                                />
                                 <button
-                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: +(x.qty + 0.5).toFixed(2) } : x))}
-                                  className="w-5 h-5 rounded text-xs bg-secondary hover:bg-secondary/80 flex items-center justify-center"
+                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: parseFloat((x.qty + 0.5).toFixed(2)) } : x))}
+                                  className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
                                 >+</button>
                               </div>
+                              {/* Remove */}
                               <button
                                 onClick={() => setEditIngredients(arr => arr.filter((_, i) => i !== idx))}
-                                className="text-muted-foreground hover:text-destructive shrink-0"
-                              ><X size={11} /></button>
+                                className="text-muted-foreground hover:text-destructive shrink-0 p-0.5"
+                              ><X size={13} /></button>
                             </div>
                           ))}
 
-                          {/* Add ingredient via USDA search */}
-                          {editIngPending ? (
-                            <div className="bg-secondary/30 rounded-md p-2 space-y-1.5">
-                              <p className="text-xs font-medium truncate">{editIngPending.description}</p>
+                          {/* Confirm pending ingredient */}
+                          {editIngPending && (
+                            <div className="px-3 py-2.5 border-t bg-primary/5 space-y-2">
+                              <p className="text-xs font-medium truncate text-primary">{editIngPending.description}</p>
                               <div className="flex items-center gap-2">
-                                <label className="text-[10px] text-muted-foreground">Servings:</label>
+                                <label className="text-[10px] text-muted-foreground shrink-0">Servings:</label>
                                 <input
                                   type="number" min="0.25" step="0.25"
                                   value={editIngPendingQty}
                                   onChange={ev => setEditIngPendingQty(parseFloat(ev.target.value) || 1)}
-                                  className="w-16 text-xs border rounded px-1.5 py-0.5 bg-background"
+                                  className="w-16 text-xs border rounded-md px-2 py-1 bg-background"
                                 />
                                 <button
                                   onClick={() => {
@@ -2115,88 +2128,112 @@ function NutritionTab() {
                                     }]);
                                     setEditIngPending(null); setEditIngPendingQty(1); setEditIngQuery(""); setEditIngResults([]);
                                   }}
-                                  className="flex-1 text-xs font-medium py-0.5 rounded bg-primary text-primary-foreground"
+                                  className="flex-1 text-xs font-semibold py-1 rounded-md bg-primary text-primary-foreground"
                                 >Add</button>
-                                <button onClick={() => setEditIngPending(null)} className="text-muted-foreground"><X size={11} /></button>
+                                <button onClick={() => setEditIngPending(null)} className="text-muted-foreground p-0.5"><X size={13} /></button>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="flex gap-1.5">
-                              <input
-                                className="flex-1 text-xs border rounded-md px-2 py-1 bg-background"
-                                placeholder="Search ingredient (USDA)…"
-                                value={editIngQuery}
-                                onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
-                                onKeyDown={ev => ev.key === "Enter" && doEditIngSearch()}
-                              />
-                              <button
-                                onClick={doEditIngSearch}
-                                disabled={editIngSearching}
-                                className="text-xs px-2 py-1 rounded-md bg-secondary text-foreground shrink-0"
-                              >{editIngSearching ? "…" : "Search"}</button>
                             </div>
                           )}
 
-                          {/* USDA results */}
+                          {/* USDA search results */}
                           {editIngResults.length > 0 && !editIngPending && (
-                            <div className="border rounded-md overflow-hidden divide-y max-h-36 overflow-y-auto">
+                            <div className="border-t divide-y max-h-40 overflow-y-auto">
                               {editIngResults.map((item: any) => (
                                 <button
                                   key={item.fdcId}
                                   onClick={() => { setEditIngPending(item); setEditIngPendingQty(1); }}
-                                  className="w-full text-left px-2 py-1.5 hover:bg-secondary/40 text-xs"
+                                  className="w-full text-left px-3 py-2 hover:bg-secondary/40 text-xs"
                                 >
-                                  <span className="font-medium truncate block">{item.description}</span>
+                                  <span className="font-medium block truncate">{item.description}</span>
                                   {item.brandName && <span className="text-muted-foreground text-[10px]">{item.brandName}</span>}
                                 </button>
                               ))}
                             </div>
                           )}
 
-                          {editIngredients.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground italic">Macros auto-calculated from ingredients below</p>
+                          {/* Add ingredient search bar */}
+                          {!editIngPending && (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border-t bg-secondary/10">
+                              <input
+                                className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background"
+                                placeholder="+ Search to add ingredient (USDA)…"
+                                value={editIngQuery}
+                                onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
+                                onKeyDown={ev => ev.key === "Enter" && doEditIngSearch()}
+                              />
+                              <button
+                                onClick={doEditIngSearch}
+                                disabled={editIngSearching || !editIngQuery.trim()}
+                                className="text-xs px-2.5 py-1.5 rounded-md bg-secondary text-foreground shrink-0 disabled:opacity-40"
+                              >{editIngSearching ? "…" : "Search"}</button>
+                            </div>
                           )}
                         </div>
 
-                        {/* Macro fields */}
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {(["calories","protein","carbs","fat"] as const).map(field => (
-                            <div key={field}>
-                              <label className="text-[10px] text-muted-foreground font-medium capitalize">{field === "calories" ? "kcal" : field}</label>
-                              <input
-                                type="number" min="0" step="1"
-                                className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
-                                value={editForm[field]}
-                                onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
-                              />
-                            </div>
-                          ))}
+                        {/* Macros — auto-calculated summary when ingredients present, editable when not */}
+                        {editIngredients.length > 0 ? (
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {([
+                              { key: "calories", label: "kcal", val: editForm.calories },
+                              { key: "protein",  label: "prot", val: editForm.protein  },
+                              { key: "carbs",    label: "carbs", val: editForm.carbs   },
+                              { key: "fat",      label: "fat",  val: editForm.fat      },
+                            ] as const).map(({ key, label, val }) => (
+                              <div key={key} className="text-center rounded-md bg-secondary/30 py-1.5 px-1">
+                                <p className="text-sm font-bold">{Math.round(parseFloat(val) || 0)}</p>
+                                <p className="text-[10px] text-muted-foreground">{label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {(["calories","protein","carbs","fat"] as const).map(field => (
+                              <div key={field}>
+                                <label className="text-[10px] text-muted-foreground font-medium">{field === "calories" ? "kcal" : field}</label>
+                                <input
+                                  type="number" min="0" step="1"
+                                  className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                                  value={editForm[field]}
+                                  onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Serving quantity */}
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-muted-foreground shrink-0">Servings logged:</label>
+                          <input
+                            type="number" min="0.1" step="0.1"
+                            className="w-20 text-sm border rounded-md px-2 py-1 bg-background"
+                            value={editForm.quantity}
+                            onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
+                          />
                         </div>
 
                         {/* Actions */}
-                        <div className="flex gap-2 pt-0.5">
+                        <div className="flex gap-2">
                           <button
                             onClick={() => updateMut.mutate({ id: e.id, data: {
                               foodName: editForm.foodName.trim(),
                               quantity: parseFloat(editForm.quantity) || 1,
                               mealType: editForm.mealType,
                               calories: parseFloat(editForm.calories) || 0,
-                              protein: parseFloat(editForm.protein) || 0,
-                              carbs: parseFloat(editForm.carbs) || 0,
-                              fat: parseFloat(editForm.fat) || 0,
+                              protein:  parseFloat(editForm.protein)  || 0,
+                              carbs:    parseFloat(editForm.carbs)    || 0,
+                              fat:      parseFloat(editForm.fat)      || 0,
                               ingredientsJson: editIngredients.length > 0 ? JSON.stringify(editIngredients) : null,
                             }})}
                             disabled={updateMut.isPending || !editForm.foodName.trim()}
-                            className="flex-1 text-xs font-semibold py-1.5 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+                            className="flex-1 text-xs font-semibold py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
                           >
-                            {updateMut.isPending ? "Saving…" : "Save"}
+                            {updateMut.isPending ? "Saving…" : "Save changes"}
                           </button>
                           <button
                             onClick={() => setEditingEntryId(null)}
-                            className="flex-1 text-xs font-medium py-1.5 rounded-md bg-secondary text-secondary-foreground"
-                          >
-                            Cancel
-                          </button>
+                            className="flex-1 text-xs font-medium py-2 rounded-md bg-secondary text-secondary-foreground"
+                          >Cancel</button>
                         </div>
                       </div>
                     ) : (
