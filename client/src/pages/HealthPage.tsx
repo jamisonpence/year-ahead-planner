@@ -1087,69 +1087,66 @@ function BodyCompGoalCard({
   metric,
 }: {
   plan: WorkoutPlan;
-  metric: { metric: string; currentValue: string; targetValue: string; unit: string };
+  metric: { metric: string; currentValue: number | string; targetValue: number | string; unit: string };
 }) {
   const metricLabels: Record<string, string> = {
     weight: "Body Weight",
     body_fat: "Body Fat %",
     muscle_mass: "Muscle Mass",
   };
-  const label = metricLabels[metric.metric] ?? metric.metric;
-  const current = parseFloat(metric.currentValue);
-  const target  = parseFloat(metric.targetValue);
+  const label   = metricLabels[metric.metric] ?? metric.metric;
+  const current = parseFloat(String(metric.currentValue));
+  const target  = parseFloat(String(metric.targetValue));
   const unit    = metric.unit;
 
-  // Progress: how far from current toward target (clamped 0–100%)
-  let progressPct = 0;
-  if (!isNaN(current) && !isNaN(target) && current !== target) {
-    // Works for both "lose weight" (target < current) and "gain muscle" (target > current)
-    progressPct = Math.min(100, Math.max(0,
-      Math.abs(current - target) > 0
-        ? ((current - target) / (current - target)) * 0  // placeholder — starts at 0 since we only have start values
-        : 0
-    ));
-  }
-
-  // Direction label
-  const losing = !isNaN(current) && !isNaN(target) && target < current;
-  const gaining = !isNaN(current) && !isNaN(target) && target > current;
-  const dirLabel = losing ? "↓ lose" : gaining ? "↑ gain" : "→ maintain";
+  const hasValues = !isNaN(current) && !isNaN(target) && current > 0;
+  const diff = hasValues ? Math.abs(target - current) : 0;
+  const losing  = hasValues && target < current;
+  const gaining = hasValues && target > current;
+  const dirLabel = losing ? `↓ lose ${diff.toFixed(1)} ${unit}` : gaining ? `↑ gain ${diff.toFixed(1)} ${unit}` : "→ maintain";
 
   return (
-    <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-3 space-y-2">
-      <div className="flex items-center justify-between">
+    <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-3 space-y-2.5">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <Heart size={13} className="text-green-600 dark:text-green-400" />
+          <Heart size={13} className="text-green-600 dark:text-green-400 shrink-0" />
           <p className="text-xs font-semibold text-green-700 dark:text-green-300">Body Composition Goal</p>
         </div>
-        <span className="text-[10px] text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/40 px-2 py-0.5 rounded-full font-medium">
-          {plan.name}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="flex-1 space-y-1">
-          <p className="text-[10px] text-muted-foreground font-medium">{label}</p>
-          <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            {!isNaN(current) ? (
-              <>
-                <span>{current} {unit}</span>
-                <ArrowRight size={12} className="text-muted-foreground" />
-                <span className="text-green-600 dark:text-green-400">{target} {unit}</span>
-                <span className="text-[10px] font-normal text-muted-foreground ml-1">
-                  ({dirLabel} {Math.abs(target - current).toFixed(1)} {unit})
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground text-xs">No values set</span>
-            )}
-          </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {plan.isActive ? (
+            <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-full">Active</span>
+          ) : (
+            <span className="text-[10px] font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Not active</span>
+          )}
         </div>
-        <Target size={20} className="text-green-500 shrink-0 opacity-60" />
       </div>
 
-      <p className="text-[10px] text-green-600/70 dark:text-green-400/70 flex items-center gap-1">
-        <span>Linked from your active workout plan · Log food below to track progress</span>
+      {/* Plan name */}
+      <p className="text-[11px] text-muted-foreground">{plan.name}</p>
+
+      {/* Goal values */}
+      <div className="flex items-center gap-3">
+        <Target size={16} className="text-green-500 shrink-0" />
+        <div className="flex-1 space-y-0.5">
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+          {hasValues ? (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-bold">{current} {unit}</span>
+              <ArrowRight size={11} className="text-muted-foreground shrink-0" />
+              <span className="text-sm font-bold text-green-600 dark:text-green-400">{target} {unit}</span>
+              <span className="text-[10px] text-muted-foreground">({dirLabel})</span>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No target values set — edit the plan in Workouts to add them</p>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[10px] text-green-600/70 dark:text-green-400/70">
+        {plan.isActive
+          ? "Linked from your active workout plan · Log food below to support your goal"
+          : "Activate this plan in Workouts to mark it as your current program"}
       </p>
     </div>
   );
@@ -1184,11 +1181,10 @@ function NutritionTab() {
     queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
   });
 
-  // Find the active body composition plan (if any)
-  const activeBodyCompPlan = workoutPlans.find(
-    p => p.isActive && p.goalType === "body_composition"
-  ) ?? null;
-  const bodyCompMetric: { metric: string; currentValue: string; targetValue: string; unit: string } | null = (() => {
+  // Find a body composition plan — prefer active, fall back to most recent
+  const bodyCompPlans = workoutPlans.filter(p => p.goalType === "body_composition");
+  const activeBodyCompPlan = bodyCompPlans.find(p => p.isActive) ?? bodyCompPlans[0] ?? null;
+  const bodyCompMetric: { metric: string; currentValue: number | string; targetValue: number | string; unit: string } | null = (() => {
     try { return activeBodyCompPlan?.goalMetricJson ? JSON.parse(activeBodyCompPlan.goalMetricJson) : null; } catch { return null; }
   })();
 
