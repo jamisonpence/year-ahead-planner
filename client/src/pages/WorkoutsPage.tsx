@@ -2227,6 +2227,7 @@ function ShareWorkoutModal({ open, onClose, shareType, contentJson, itemName }: 
 
 export default function WorkoutsPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"active" | "logs" | "templates" | "plans" | "shared" | "equipment">("plans");
   const [logModal, setLogModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
