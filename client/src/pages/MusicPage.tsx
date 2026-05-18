@@ -94,33 +94,11 @@ function StarRating({
 
 // ── Song row ──────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string; next: string }> = {
-  want_to_listen: {
-    label: "Want to Listen",
-    icon: <Clock size={10} />,
-    className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-    next: "listening",
-  },
-  listening: {
-    label: "Listening",
-    icon: <Headphones size={10} />,
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800",
-    next: "listened",
-  },
-  listened: {
-    label: "Listened ✓",
-    icon: <Check size={10} />,
-    className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800",
-    next: "want_to_listen",
-  },
-};
-
 function SongRow({
   song,
   artistName,
   onEdit,
   onDelete,
-  onStatusChange,
   onRecommend,
   onOpenYouTube,
 }: {
@@ -128,17 +106,34 @@ function SongRow({
   artistName?: string;
   onEdit: (s: MusicSong) => void;
   onDelete: (id: number) => void;
-  onStatusChange: (id: number, status: string) => void;
   onRecommend?: (songTitle: string, artistName: string) => void;
   onOpenYouTube?: (query: string) => void;
 }) {
-  const statusCfg = STATUS_CONFIG[song.status] ?? STATUS_CONFIG.want_to_listen;
+  const canPlay = !!(onOpenYouTube && artistName);
   return (
     <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-muted/40 group transition-colors">
+      {/* Play button — primary action */}
+      {canPlay ? (
+        <button
+          onClick={() => onOpenYouTube!(`${artistName} ${song.title}`)}
+          title="Listen on YouTube"
+          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-muted-foreground/40 group-hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+        >
+          <PlayCircle size={18} />
+        </button>
+      ) : (
+        <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-muted-foreground/20">
+          <Music size={13} />
+        </div>
+      )}
+
       {/* Song info */}
-      <div className="flex-1 min-w-0">
+      <div
+        className={`flex-1 min-w-0 ${canPlay ? "cursor-pointer" : ""}`}
+        onClick={canPlay ? () => onOpenYouTube!(`${artistName} ${song.title}`) : undefined}
+      >
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium truncate">{song.title}</span>
+          <span className={`text-sm font-medium truncate ${canPlay ? "group-hover:text-primary transition-colors" : ""}`}>{song.title}</span>
           {song.isFavorite && <Heart size={10} className="text-pink-500 shrink-0" fill="currentColor" />}
         </div>
         {song.album && <span className="text-xs text-muted-foreground truncate block">{song.album}{song.year ? ` · ${song.year}` : ""}</span>}
@@ -154,16 +149,6 @@ function SongRow({
         <StarRating value={song.rating} readonly />
       </div>
 
-      {/* Clickable status pill — click to cycle through statuses */}
-      <button
-        title={`Status: ${statusCfg.label} — click to change`}
-        onClick={() => onStatusChange(song.id, statusCfg.next)}
-        className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 transition-all hover:opacity-80 ${statusCfg.className}`}
-      >
-        {statusCfg.icon}
-        <span className="hidden sm:inline">{statusCfg.label}</span>
-      </button>
-
       {/* Actions dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -172,10 +157,10 @@ function SongRow({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="text-sm w-44">
-          {onOpenYouTube && artistName && (
-            <DropdownMenuItem onClick={() => onOpenYouTube(`${artistName} ${song.title}`)}>
+          {canPlay && (
+            <DropdownMenuItem onClick={() => onOpenYouTube!(`${artistName} ${song.title}`)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="mr-2 text-red-500"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-              Find on YouTube
+              Listen on YouTube
             </DropdownMenuItem>
           )}
           {onRecommend && artistName && (
@@ -492,7 +477,6 @@ function ArtistCard({
   onAddSong,
   onEditSong,
   onDeleteSong,
-  onSongStatusChange,
   onRecommendArtist,
   onRecommendSong,
   onOpenSpotify,
@@ -505,7 +489,6 @@ function ArtistCard({
   onAddSong: (artistId: number, artistName: string) => void;
   onEditSong: (s: MusicSong) => void;
   onDeleteSong: (id: number) => void;
-  onSongStatusChange: (id: number, status: string) => void;
   onRecommendArtist?: (artistName: string) => void;
   onRecommendSong?: (songTitle: string, artistName: string) => void;
   onOpenSpotify?: (artistName: string) => void;
@@ -545,8 +528,6 @@ function ArtistCard({
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {artist.songs.length} {artist.songs.length === 1 ? "song" : "songs"}
-            {" · "}
-            {artist.songs.filter((s) => s.status === "listened").length} listened
           </div>
         </div>
 
@@ -616,9 +597,9 @@ function ArtistCard({
             <div>
               {/* Song list column headers */}
               <div className="flex items-center gap-2.5 px-3 py-1.5 border-b bg-muted/20">
+                <span className="w-7 shrink-0" />
                 <span className="flex-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Song</span>
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hidden sm:block w-14 text-center">Rating</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-24 text-center">Status</span>
                 <span className="w-5" />
               </div>
               <div className="py-1">
@@ -629,7 +610,6 @@ function ArtistCard({
                     artistName={artist.name}
                     onEdit={onEditSong}
                     onDelete={onDeleteSong}
-                    onStatusChange={onSongStatusChange}
                     onRecommend={onRecommendSong}
                     onOpenYouTube={onOpenYouTube}
                   />
@@ -2237,7 +2217,7 @@ export default function MusicPage() {
           <div>
             <h1 className="text-xl font-semibold">Music</h1>
             <p className="text-xs text-muted-foreground">
-              {artists.length} {artists.length === 1 ? "artist" : "artists"} · {allSongs.length} songs · {allSongs.filter(s => s.status === "listened").length} listened
+              {artists.length} {artists.length === 1 ? "artist" : "artists"} · {allSongs.length} songs
             </p>
           </div>
         </div>
@@ -2274,7 +2254,7 @@ export default function MusicPage() {
       </div>
 
       {/* Search + Genre filter — shown on library tabs */}
-      {(tab === "artists" || tab === "want" || tab === "favorites") && (
+      {(tab === "artists" || tab === "favorites") && (
         <div className="flex gap-2 mb-4 flex-wrap">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -2308,11 +2288,6 @@ export default function MusicPage() {
               <span>Library</span>
               {filteredArtists.length > 0 && <span className="text-[10px] opacity-60">({filteredArtists.length})</span>}
             </TabsTrigger>
-            <TabsTrigger value="want" className="text-xs flex items-center gap-1.5 px-3">
-              <Clock size={11} />
-              <span className="hidden sm:inline">Queue</span><span className="sm:hidden">Queue</span>
-              {wantToListen.length > 0 && <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">{wantToListen.length}</span>}
-            </TabsTrigger>
             <TabsTrigger value="favorites" className="text-xs flex items-center gap-1.5 px-3">
               <Heart size={11} />
               <span>Favorites</span>
@@ -2328,7 +2303,7 @@ export default function MusicPage() {
             </TabsTrigger>
             <TabsTrigger value="collections" className="text-xs flex items-center gap-1.5 px-3">
               <ListMusic size={11} />
-              <span className="hidden sm:inline">Collections</span><span className="sm:hidden">Lists</span>
+              Playlists
             </TabsTrigger>
           </TabsList>
         </div>
@@ -2345,7 +2320,7 @@ export default function MusicPage() {
                   <Music2 className="h-12 w-12 text-violet-400/50 mx-auto mb-3" />
                   <h3 className="font-semibold text-base mb-1">Build your music library</h3>
                   <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-5">
-                    Track artists and songs you love, want to listen to, or are currently exploring.
+                    Track artists and songs you love. Click any song to listen on YouTube.
                   </p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
                     <Button onClick={openAddArtist} className="gap-1.5">
@@ -2360,7 +2335,7 @@ export default function MusicPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { icon: <Plus size={16} className="text-violet-500" />, title: "Add Artists", desc: "Search Last.fm or add manually. Artists hold all their songs." },
-                    { icon: <Clock size={16} className="text-amber-500" />, title: "Track Status", desc: "Mark songs as Want to Listen, Listening, or Listened." },
+                    { icon: <PlayCircle size={16} className="text-red-500" />, title: "Listen Anywhere", desc: "Click any song to watch it on YouTube directly." },
                     { icon: <Heart size={16} className="text-pink-500" />, title: "Favorites & Share", desc: "Heart your favorites and recommend music to friends." },
                   ].map(({ icon, title, desc }) => (
                     <div key={title} className="p-3.5 rounded-xl border bg-card text-center">
@@ -2388,54 +2363,12 @@ export default function MusicPage() {
                   onAddSong={openAddSong}
                   onEditSong={openEditSong}
                   onDeleteSong={(id) => deleteSong.mutate(id)}
-                  onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
                   onRecommendArtist={(name) => openRecommend("artist", name)}
                   onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                   onOpenSpotify={(name) => { setSpotifyArtistName(name); setTab("spotify"); }}
                   onOpenYouTube={(q) => { setSpotifyArtistName(q); setTab("spotify"); }}
                 />
               ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Want to Listen / Queue tab */}
-        <TabsContent value="want">
-          {wantToListen.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed rounded-2xl">
-              <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm font-medium mb-1">Your queue is empty</p>
-              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                Songs marked "Want to Listen" on any artist will show up here. Set a song's status to add it to your queue.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-muted-foreground">{wantToListen.length} song{wantToListen.length !== 1 ? "s" : ""} in your queue</p>
-                <p className="text-xs text-muted-foreground">Click a song's status pill to update it</p>
-              </div>
-              <div className="border rounded-xl overflow-hidden divide-y">
-                {wantToListen.map((s, i) => (
-                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 group transition-colors">
-                    <span className="text-xs text-muted-foreground w-5 shrink-0 text-center">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium">{s.title}</span>
-                      <span className="text-xs text-muted-foreground ml-2">{(s as any).artistName}</span>
-                      {s.album && <span className="text-xs text-muted-foreground block">{s.album}</span>}
-                    </div>
-                    {s.genre && <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">{s.genre.split(",")[0]}</Badge>}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[11px] shrink-0 gap-1 border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/30"
-                      onClick={() => updateSong.mutate({ id: s.id, d: { status: "listened" } })}
-                    >
-                      <Check size={10} /> Listened
-                    </Button>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </TabsContent>
@@ -2470,7 +2403,6 @@ export default function MusicPage() {
                         onAddSong={openAddSong}
                         onEditSong={openEditSong}
                         onDeleteSong={(id) => deleteSong.mutate(id)}
-                        onSongStatusChange={(id, status) => updateSong.mutate({ id, d: { status } })}
                         onRecommendArtist={(name) => openRecommend("artist", name)}
                         onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                       />
