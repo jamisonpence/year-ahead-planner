@@ -101,6 +101,7 @@ function SongRow({
   onDelete,
   onRecommend,
   onOpenYouTube,
+  onAddToPlaylist,
 }: {
   song: MusicSong;
   artistName?: string;
@@ -108,6 +109,7 @@ function SongRow({
   onDelete: (id: number) => void;
   onRecommend?: (songTitle: string, artistName: string) => void;
   onOpenYouTube?: (query: string) => void;
+  onAddToPlaylist?: (song: MusicSong, artistName: string) => void;
 }) {
   const canPlay = !!(onOpenYouTube && artistName);
   return (
@@ -161,6 +163,11 @@ function SongRow({
             <DropdownMenuItem onClick={() => onOpenYouTube!(`${artistName} ${song.title}`)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="mr-2 text-red-500"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
               Listen on YouTube
+            </DropdownMenuItem>
+          )}
+          {onAddToPlaylist && artistName && (
+            <DropdownMenuItem onClick={() => onAddToPlaylist(song, artistName)}>
+              <ListMusic size={13} className="mr-2" /> Add to Playlist
             </DropdownMenuItem>
           )}
           {onRecommend && artistName && (
@@ -481,6 +488,7 @@ function ArtistCard({
   onRecommendSong,
   onOpenSpotify,
   onOpenYouTube,
+  onAddToPlaylist,
 }: {
   artist: MusicArtistWithSongs;
   onEditArtist: (a: MusicArtistWithSongs) => void;
@@ -493,6 +501,7 @@ function ArtistCard({
   onRecommendSong?: (songTitle: string, artistName: string) => void;
   onOpenSpotify?: (artistName: string) => void;
   onOpenYouTube?: (query: string) => void;
+  onAddToPlaylist?: (song: MusicSong, artistName: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const accent = artist.accentColor ?? "#6366f1";
@@ -612,6 +621,7 @@ function ArtistCard({
                     onDelete={onDeleteSong}
                     onRecommend={onRecommendSong}
                     onOpenYouTube={onOpenYouTube}
+                    onAddToPlaylist={onAddToPlaylist}
                   />
                 ))}
               </div>
@@ -1565,6 +1575,133 @@ function ItemPickerModal({
   );
 }
 
+// ── Playlist Player ───────────────────────────────────────────────────────────
+type PlaySong = { title: string; artistName: string };
+
+function PlaylistPlayer({ songs, onClose }: { songs: PlaySong[]; onClose: () => void }) {
+  const { toast } = useToast();
+  const [idx, setIdx] = useState(0);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
+
+  const current = songs[idx];
+
+  useEffect(() => {
+    if (!current) return;
+    setVideoId(null);
+    setLoading(true);
+    setNotConfigured(false);
+    fetch(`/api/youtube/search?q=${encodeURIComponent(`${current.artistName} ${current.title}`)}`)
+      .then(async r => {
+        if (r.status === 503) { setNotConfigured(true); return; }
+        if (!r.ok) return;
+        const vids = await r.json() as { videoId: string; title: string }[];
+        if (vids.length > 0) setVideoId(vids[0].videoId);
+      })
+      .catch(() => toast({ title: "YouTube search failed", variant: "destructive" }))
+      .finally(() => setLoading(false));
+  }, [idx, current?.title, current?.artistName]);
+
+  if (notConfigured) return (
+    <div className="border rounded-xl p-4 text-center text-sm text-muted-foreground">
+      YouTube API key not configured — add <code className="bg-secondary px-1 rounded">YOUTUBE_API_KEY</code> to Railway environment variables.
+    </div>
+  );
+
+  return (
+    <div className="border rounded-xl overflow-hidden bg-card">
+      {/* Player header */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-muted/30">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate">{current?.title}</p>
+          <p className="text-xs text-muted-foreground truncate">{current?.artistName}</p>
+        </div>
+        <span className="text-xs text-muted-foreground shrink-0">{idx + 1} / {songs.length}</span>
+        <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* YouTube embed */}
+      <div style={{ aspectRatio: "16/9" }} className="bg-black relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 size={28} className="animate-spin text-white/40" />
+          </div>
+        )}
+        {videoId && (
+          <iframe
+            key={videoId}
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
+            width="100%" height="100%"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ display: "block", border: "none" }}
+          />
+        )}
+        {!loading && !videoId && (
+          <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">No video found</div>
+        )}
+      </div>
+
+      {/* Navigation controls */}
+      <div className="flex items-center gap-2 px-4 py-3 border-t">
+        <button
+          onClick={() => setIdx(i => Math.max(0, i - 1))}
+          disabled={idx === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-30 hover:bg-muted transition-colors"
+        >
+          <ChevronRight size={13} className="rotate-180" /> Previous
+        </button>
+        <div className="flex-1 flex gap-1 overflow-x-auto py-0.5">
+          {songs.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => setIdx(i)}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                i === idx ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setIdx(i => Math.min(songs.length - 1, i + 1))}
+          disabled={idx === songs.length - 1}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-30 hover:bg-muted transition-colors"
+        >
+          Next <ChevronRight size={13} />
+        </button>
+      </div>
+
+      {/* Song list */}
+      <div className="border-t divide-y max-h-52 overflow-y-auto">
+        {songs.map((s, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setIdx(i)}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === idx ? "bg-primary/8 border-l-2 border-primary" : "hover:bg-muted/40"}`}
+          >
+            <span className={`text-xs w-5 text-center shrink-0 font-medium ${i === idx ? "text-primary" : "text-muted-foreground"}`}>{i + 1}</span>
+            {i === idx ? (
+              <Headphones size={12} className="text-primary shrink-0" />
+            ) : (
+              <PlayCircle size={12} className="text-muted-foreground/40 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm truncate ${i === idx ? "font-semibold text-primary" : "font-medium"}`}>{s.title}</p>
+              <p className="text-xs text-muted-foreground truncate">{s.artistName}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Single collection detail view
 function CollectionDetail({
   collection,
@@ -1586,15 +1723,24 @@ function CollectionDetail({
   onMoveItem: (itemId: number, direction: "up" | "down") => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
   const existingItemIds = useMemo(() => ({
     songs: new Set(collection.items.filter((i) => i.itemType === "song").map((i) => i.songId!).filter(Boolean)),
     artists: new Set(collection.items.filter((i) => i.itemType === "artist").map((i) => i.artistId!).filter(Boolean)),
   }), [collection.items]);
 
+  // Build playable songs list (songs only, not artists)
+  const playSongs: PlaySong[] = useMemo(() =>
+    collection.items
+      .filter(i => i.itemType === "song" && i.song)
+      .map(i => ({ title: i.song!.title, artistName: i.song!.artistName })),
+    [collection.items]
+  );
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           onClick={onBack}
           className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 text-sm"
@@ -1602,58 +1748,71 @@ function CollectionDetail({
           <ChevronRight size={14} className="rotate-180" /> Back
         </button>
         <div className="flex-1" />
+        {playSongs.length > 0 && (
+          <Button size="sm" onClick={() => setPlayerOpen(p => !p)} className="gap-1.5 h-8 text-xs">
+            {playerOpen ? <X size={13} /> : <PlayCircle size={13} />}
+            {playerOpen ? "Close Player" : `Play All (${playSongs.length})`}
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)} className="gap-1.5 h-8 text-xs">
-          <Plus size={13} /> Add Item
+          <Plus size={13} /> Add Song
         </Button>
-        <Button size="sm" variant="outline" onClick={onEdit} className="h-8 text-xs gap-1.5">
-          <Pencil size={13} /> Edit
-        </Button>
-        <Button size="sm" variant="outline" onClick={onDelete} className="h-8 text-xs gap-1.5 text-red-500 hover:text-red-600 hover:border-red-300">
-          <Trash2 size={13} /> Delete
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 px-2">
+              <MoreHorizontal size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" /> Edit Playlist</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive"><Trash2 size={13} className="mr-2" /> Delete Playlist</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Collection header card */}
       <div className="rounded-xl overflow-hidden border bg-card">
         <div className="h-2 w-full" style={{ background: collection.coverColor }} />
         <div className="flex items-center gap-4 p-4">
-          <div
-            className="h-14 w-14 rounded-xl flex items-center justify-center text-2xl shrink-0 shadow-sm"
-            style={{ background: collection.coverColor }}
-          >
+          <div className="h-14 w-14 rounded-xl flex items-center justify-center text-2xl shrink-0 shadow-sm" style={{ background: collection.coverColor }}>
             {collection.coverEmoji}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-base">{collection.name}</h2>
               {collection.sharedWithFriends && (
-                <Badge variant="secondary" className="text-[10px] gap-1">
-                  <Share2 size={9} /> Shared
-                </Badge>
+                <Badge variant="secondary" className="text-[10px] gap-1"><Share2 size={9} /> Shared</Badge>
               )}
             </div>
-            {collection.description && (
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">{collection.items.length} {collection.items.length === 1 ? "item" : "items"}</p>
+            {collection.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>}
+            <p className="text-xs text-muted-foreground mt-1">
+              {collection.items.filter(i => i.itemType === "song").length} songs
+              {collection.items.filter(i => i.itemType === "artist").length > 0 && ` · ${collection.items.filter(i => i.itemType === "artist").length} artists`}
+            </p>
           </div>
         </div>
       </div>
+
+      {/* Inline player */}
+      {playerOpen && playSongs.length > 0 && (
+        <PlaylistPlayer songs={playSongs} onClose={() => setPlayerOpen(false)} />
+      )}
 
       {/* Items list */}
       {collection.items.length === 0 ? (
         <div className="text-center py-12 border rounded-xl border-dashed">
           <ListMusic size={28} className="text-muted-foreground/30 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No items yet</p>
+          <p className="text-sm text-muted-foreground">No songs yet</p>
           <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => setPickerOpen(true)}>
-            <Plus size={13} /> Add songs or artists
+            <Plus size={13} /> Add songs from Library
           </Button>
         </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="border rounded-xl overflow-hidden divide-y">
           {collection.items.map((item, idx) => (
-            <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card group hover:bg-muted/30 transition-colors">
-              <span className="text-xs text-muted-foreground w-5 text-center shrink-0">{idx + 1}</span>
+            <div key={item.id} className={`flex items-center gap-3 p-3 bg-card group hover:bg-muted/30 transition-colors`}>
+              <span className="text-xs text-muted-foreground w-5 text-center shrink-0 font-medium">{idx + 1}</span>
               {item.itemType === "song" && item.song ? (
                 <>
                   <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
@@ -1666,10 +1825,7 @@ function CollectionDetail({
                 </>
               ) : item.itemType === "artist" && item.artist ? (
                 <>
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-                    style={{ background: item.artist.accentColor ?? "#6366f1" }}
-                  >
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ background: item.artist.accentColor ?? "#6366f1" }}>
                     {item.artist.name[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1681,29 +1837,9 @@ function CollectionDetail({
                 <div className="flex-1 text-xs text-muted-foreground italic">Unknown item</div>
               )}
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button
-                  disabled={idx === 0}
-                  onClick={() => onMoveItem(item.id, "up")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
-                  title="Move up"
-                >
-                  <ChevronUp size={13} />
-                </button>
-                <button
-                  disabled={idx === collection.items.length - 1}
-                  onClick={() => onMoveItem(item.id, "down")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
-                  title="Move down"
-                >
-                  <ChevronDown size={13} />
-                </button>
-                <button
-                  onClick={() => onRemoveItem(item.id)}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
-                  title="Remove"
-                >
-                  <X size={13} />
-                </button>
+                <button disabled={idx === 0} onClick={() => onMoveItem(item.id, "up")} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors" title="Move up"><ChevronUp size={13} /></button>
+                <button disabled={idx === collection.items.length - 1} onClick={() => onMoveItem(item.id, "down")} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors" title="Move down"><ChevronDown size={13} /></button>
+                <button onClick={() => onRemoveItem(item.id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors" title="Remove"><X size={13} /></button>
               </div>
             </div>
           ))}
@@ -1715,16 +1851,86 @@ function CollectionDetail({
         onClose={() => setPickerOpen(false)}
         artists={artists}
         existingItemIds={existingItemIds}
-        onAdd={(itemType, songId, artistId) => {
-          onAddItem(itemType, songId, artistId);
-          // keep picker open so user can add multiple
-        }}
+        onAdd={(itemType, songId, artistId) => { onAddItem(itemType, songId, artistId); }}
       />
     </div>
   );
 }
 
-// Collections tab main component
+// Favorites "playlist" detail — shows all favorited songs
+function FavoritesDetail({ artists, onBack }: { artists: MusicArtistWithSongs[]; onBack: () => void }) {
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const favSongs: (MusicSong & { artistName: string })[] = useMemo(() =>
+    artists.flatMap(a => a.songs.filter(s => s.isFavorite).map(s => ({ ...s, artistName: a.name }))),
+    [artists]
+  );
+  const playSongs: PlaySong[] = favSongs.map(s => ({ title: s.title, artistName: s.artistName }));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 text-sm">
+          <ChevronRight size={14} className="rotate-180" /> Back
+        </button>
+        <div className="flex-1" />
+        {playSongs.length > 0 && (
+          <Button size="sm" onClick={() => setPlayerOpen(p => !p)} className="gap-1.5 h-8 text-xs">
+            {playerOpen ? <X size={13} /> : <PlayCircle size={13} />}
+            {playerOpen ? "Close Player" : `Play All (${playSongs.length})`}
+          </Button>
+        )}
+      </div>
+
+      {/* Header card */}
+      <div className="rounded-xl overflow-hidden border bg-card">
+        <div className="h-2 w-full bg-gradient-to-r from-pink-400 to-rose-500" />
+        <div className="flex items-center gap-4 p-4">
+          <div className="h-14 w-14 rounded-xl flex items-center justify-center text-2xl shrink-0 shadow-sm bg-gradient-to-br from-pink-400 to-rose-500">
+            ❤️
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-semibold text-base">Favorites</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Songs you've hearted across your library</p>
+            <p className="text-xs text-muted-foreground mt-1">{favSongs.length} {favSongs.length === 1 ? "song" : "songs"}</p>
+          </div>
+        </div>
+      </div>
+
+      {playerOpen && playSongs.length > 0 && (
+        <PlaylistPlayer songs={playSongs} onClose={() => setPlayerOpen(false)} />
+      )}
+
+      {favSongs.length === 0 ? (
+        <div className="text-center py-12 border-2 border-dashed rounded-2xl">
+          <Heart className="h-10 w-10 text-pink-300/50 mx-auto mb-3" />
+          <p className="text-sm font-medium mb-1">No favorites yet</p>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+            Tap the <Heart size={11} className="inline text-pink-400" fill="currentColor" /> heart on any song in your Library to add it here.
+          </p>
+        </div>
+      ) : (
+        <div className="border rounded-xl overflow-hidden divide-y">
+          {favSongs.map((s, idx) => (
+            <div key={s.id} className="flex items-center gap-3 p-3 bg-card group hover:bg-muted/30 transition-colors">
+              <span className="text-xs text-muted-foreground w-5 text-center shrink-0 font-medium">{idx + 1}</span>
+              <div className="w-8 h-8 rounded-full bg-pink-500/10 flex items-center justify-center shrink-0">
+                <Heart size={13} className="text-pink-500" fill="currentColor" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{s.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{s.artistName}</p>
+              </div>
+              {s.genre && <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex">{s.genre.split(",")[0]}</Badge>}
+              <StarRating value={s.rating} readonly />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Playlists tab — Favorites (built-in) + user playlists
 function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1738,17 +1944,17 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
 
   const createMut = useMutation({
     mutationFn: (d: any) => apiRequest("POST", "/api/music/collections", d),
-    onSuccess: () => { invalidate(); setFormOpen(false); toast({ title: "Collection created" }); },
-    onError: () => toast({ title: "Failed to create collection", variant: "destructive" }),
+    onSuccess: () => { invalidate(); setFormOpen(false); toast({ title: "Playlist created" }); },
+    onError: () => toast({ title: "Failed to create playlist", variant: "destructive" }),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/music/collections/${id}`, d),
     onSuccess: () => { invalidate(); setFormOpen(false); },
-    onError: () => toast({ title: "Failed to update collection", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to update playlist", variant: "destructive" }),
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/music/collections/${id}`),
-    onSuccess: () => { invalidate(); setSelectedId(null); toast({ title: "Collection deleted" }); },
+    onSuccess: () => { invalidate(); setSelectedId(null); toast({ title: "Playlist deleted" }); },
   });
   const addItemMut = useMutation({
     mutationFn: ({ colId, itemType, songId, artistId }: any) =>
@@ -1767,19 +1973,22 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingCol, setEditingCol] = useState<MusicCollectionWithItems | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // "favorites" is the special built-in playlist; a number means a user playlist id
+  const [selectedId, setSelectedId] = useState<number | "favorites" | null>(null);
 
-  const selectedCollection = collections.find((c) => c.id === selectedId) ?? null;
+  const selectedCollection = typeof selectedId === "number" ? (collections.find((c) => c.id === selectedId) ?? null) : null;
+
+  const favSongCount = useMemo(() =>
+    artists.flatMap(a => a.songs.filter(s => s.isFavorite)).length,
+    [artists]
+  );
 
   function openCreate() { setEditingCol(null); setFormOpen(true); }
   function openEdit(col: MusicCollectionWithItems) { setEditingCol(col); setFormOpen(true); }
 
   function handleFormSubmit(data: typeof EMPTY_COL_FORM) {
-    if (editingCol) {
-      updateMut.mutate({ id: editingCol.id, d: data });
-    } else {
-      createMut.mutate(data);
-    }
+    if (editingCol) updateMut.mutate({ id: editingCol.id, d: data });
+    else createMut.mutate(data);
   }
 
   function handleMoveItem(col: MusicCollectionWithItems, itemId: number, direction: "up" | "down") {
@@ -1792,6 +2001,12 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
     reorderMut.mutate({ colId: col.id, itemIds: items.map((i) => i.id) });
   }
 
+  // Show Favorites detail
+  if (selectedId === "favorites") {
+    return <FavoritesDetail artists={artists} onBack={() => setSelectedId(null)} />;
+  }
+
+  // Show user playlist detail
   if (selectedCollection) {
     return (
       <CollectionDetail
@@ -1810,25 +2025,37 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{collections.length} {collections.length === 1 ? "collection" : "collections"}</p>
+        <p className="text-sm text-muted-foreground">{1 + collections.length} {1 + collections.length === 1 ? "playlist" : "playlists"}</p>
         <Button size="sm" onClick={openCreate} className="gap-1.5">
-          <Plus size={13} /> New Collection
+          <Plus size={13} /> New Playlist
         </Button>
       </div>
 
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground text-sm">Loading…</div>
-      ) : collections.length === 0 ? (
-        <div className="text-center py-16 border rounded-xl border-dashed">
-          <ListMusic size={32} className="text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">No collections yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Create a collection to group songs and artists together</p>
-          <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={openCreate}>
-            <Plus size={13} /> Create your first collection
-          </Button>
-        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Favorites — always first, built-in */}
+          <button
+            type="button"
+            onClick={() => setSelectedId("favorites")}
+            className="rounded-xl border bg-card overflow-hidden text-left hover:shadow-md transition-shadow group"
+          >
+            <div className="h-1.5 w-full bg-gradient-to-r from-pink-400 to-rose-500" />
+            <div className="flex items-center gap-3 p-4">
+              <div className="h-12 w-12 rounded-lg flex items-center justify-center text-2xl shrink-0 shadow-sm bg-gradient-to-br from-pink-400 to-rose-500">
+                ❤️
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-sm block">Favorites</span>
+                <p className="text-xs text-muted-foreground mt-0.5">Songs you've hearted</p>
+                <p className="text-xs text-muted-foreground mt-1">{favSongCount} {favSongCount === 1 ? "song" : "songs"}</p>
+              </div>
+              <ChevronRight size={14} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          </button>
+
+          {/* User playlists */}
           {collections.map((col) => (
             <button
               key={col.id}
@@ -1838,36 +2065,41 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
             >
               <div className="h-1.5 w-full" style={{ background: col.coverColor }} />
               <div className="flex items-center gap-3 p-4">
-                <div
-                  className="h-12 w-12 rounded-lg flex items-center justify-center text-2xl shrink-0 shadow-sm"
-                  style={{ background: col.coverColor }}
-                >
+                <div className="h-12 w-12 rounded-lg flex items-center justify-center text-2xl shrink-0 shadow-sm" style={{ background: col.coverColor }}>
                   {col.coverEmoji}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-semibold text-sm truncate">{col.name}</span>
-                    {col.sharedWithFriends && (
-                      <Share2 size={11} className="text-muted-foreground shrink-0" />
-                    )}
+                    {col.sharedWithFriends && <Share2 size={11} className="text-muted-foreground shrink-0" />}
                   </div>
-                  {col.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{col.description}</p>
-                  )}
+                  {col.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{col.description}</p>}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {col.items.length} {col.items.length === 1 ? "item" : "items"}
-                    {col.items.filter((i) => i.itemType === "song").length > 0 && (
-                      <span> · {col.items.filter((i) => i.itemType === "song").length} songs</span>
-                    )}
-                    {col.items.filter((i) => i.itemType === "artist").length > 0 && (
-                      <span> · {col.items.filter((i) => i.itemType === "artist").length} artists</span>
-                    )}
+                    {col.items.filter(i => i.itemType === "song").length} songs
+                    {col.items.filter(i => i.itemType === "artist").length > 0 && ` · ${col.items.filter(i => i.itemType === "artist").length} artists`}
                   </p>
                 </div>
                 <ChevronRight size={14} className="text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </button>
           ))}
+
+          {/* Create first user playlist prompt if none exist */}
+          {collections.length === 0 && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-xl border-2 border-dashed bg-card text-left hover:border-primary/40 transition-colors group p-4 flex items-center gap-3"
+            >
+              <div className="h-12 w-12 rounded-lg flex items-center justify-center text-muted-foreground/30 shrink-0 border-2 border-dashed">
+                <Plus size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Create a Playlist</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Group songs together and play them in order</p>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -1885,6 +2117,88 @@ function CollectionsTab({ artists }: { artists: MusicArtistWithSongs[] }) {
         isPending={createMut.isPending || updateMut.isPending}
       />
     </div>
+  );
+}
+
+// ── Add to Playlist Modal ─────────────────────────────────────────────────────
+function AddToPlaylistModal({ open, onClose, song, artistName }: {
+  open: boolean;
+  onClose: () => void;
+  song: MusicSong | null;
+  artistName: string;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: collections = [] } = useQuery<MusicCollectionWithItems[]>({
+    queryKey: ["/api/music/collections"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/music/collections"); return r.json(); },
+    enabled: open,
+  });
+
+  const addMut = useMutation({
+    mutationFn: ({ colId }: { colId: number }) =>
+      apiRequest("POST", `/api/music/collections/${colId}/items`, { itemType: "song", songId: song?.id ?? null, artistId: null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/music/collections"] });
+      toast({ title: `Added "${song?.title}" to playlist` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to add to playlist", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <ListMusic size={15} /> Add to Playlist
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border mb-2">
+          <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+            <Music size={13} className="text-violet-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{song?.title}</p>
+            <p className="text-xs text-muted-foreground truncate">{artistName}</p>
+          </div>
+        </div>
+        {collections.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No playlists yet — create one in the Playlists tab first.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+            {collections.map(col => {
+              const alreadyIn = col.items.some(i => i.itemType === "song" && i.songId === song?.id);
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  disabled={alreadyIn || addMut.isPending}
+                  onClick={() => addMut.mutate({ colId: col.id })}
+                  className="w-full flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors hover:bg-muted/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xl shrink-0" style={{ background: col.coverColor }}>
+                    {col.coverEmoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{col.name}</p>
+                    <p className="text-xs text-muted-foreground">{col.items.filter(i => i.itemType === "song").length} songs</p>
+                  </div>
+                  {alreadyIn
+                    ? <span className="text-xs text-muted-foreground shrink-0">Already added</span>
+                    : <Plus size={13} className="text-muted-foreground shrink-0" />
+                  }
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex justify-end pt-1">
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1930,6 +2244,9 @@ export default function MusicPage() {
     setRecommendSongTitle(songTitle);
     setRecommendOpen(true);
   }
+
+  // Add to playlist
+  const [addToPlaylistTarget, setAddToPlaylistTarget] = useState<{ song: MusicSong; artistName: string } | null>(null);
 
   // Artist modal
   const [artistModal, setArtistModal] = useState(false);
@@ -2254,7 +2571,7 @@ export default function MusicPage() {
       </div>
 
       {/* Search + Genre filter — shown on library tabs */}
-      {(tab === "artists" || tab === "favorites") && (
+      {tab === "artists" && (
         <div className="flex gap-2 mb-4 flex-wrap">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -2287,11 +2604,6 @@ export default function MusicPage() {
               <Music2 size={11} />
               <span>Library</span>
               {filteredArtists.length > 0 && <span className="text-[10px] opacity-60">({filteredArtists.length})</span>}
-            </TabsTrigger>
-            <TabsTrigger value="favorites" className="text-xs flex items-center gap-1.5 px-3">
-              <Heart size={11} />
-              <span>Favorites</span>
-              {favoriteArtists.length > 0 && <span className="text-[10px] opacity-60">({favoriteArtists.length})</span>}
             </TabsTrigger>
             <TabsTrigger value="recommendations" className="text-xs flex items-center gap-1.5 px-3">
               <Inbox size={11} />
@@ -2367,48 +2679,8 @@ export default function MusicPage() {
                   onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
                   onOpenSpotify={(name) => { setSpotifyArtistName(name); setTab("spotify"); }}
                   onOpenYouTube={(q) => { setSpotifyArtistName(q); setTab("spotify"); }}
+                  onAddToPlaylist={(song, name) => setAddToPlaylistTarget({ song, artistName: name })}
                 />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Favorites tab — shows favorited artists grouped by genre */}
-        <TabsContent value="favorites">
-          {favoriteArtists.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed rounded-2xl">
-              <Heart className="h-10 w-10 text-pink-300/50 mx-auto mb-3" />
-              <p className="text-sm font-medium mb-1">No favorite artists yet</p>
-              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                Tap the <Heart size={11} className="inline text-pink-400" fill="currentColor" /> heart icon on any artist in your Library to add them here, grouped by genre.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Object.entries(favArtistsByGenre).sort(([a], [b]) => a.localeCompare(b)).map(([genre, artistList]) => (
-                <div key={genre}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{genre}</h3>
-                    <div className="flex-1 border-t" />
-                    <span className="text-xs text-muted-foreground">{artistList.length}</span>
-                  </div>
-                  <div className="space-y-3">
-                    {artistList.map((a) => (
-                      <ArtistCard
-                        key={a.id}
-                        artist={a}
-                        onEditArtist={openEditArtist}
-                        onDeleteArtist={(id) => deleteArtist.mutate(id)}
-                        onToggleArtistFav={(a) => updateArtist.mutate({ id: a.id, d: { isFavorite: !a.isFavorite } })}
-                        onAddSong={openAddSong}
-                        onEditSong={openEditSong}
-                        onDeleteSong={(id) => deleteSong.mutate(id)}
-                        onRecommendArtist={(name) => openRecommend("artist", name)}
-                        onRecommendSong={(song, artist) => openRecommend("song", artist, song)}
-                      />
-                    ))}
-                  </div>
-                </div>
               ))}
             </div>
           )}
@@ -2639,6 +2911,14 @@ export default function MusicPage() {
         type={recommendType}
         artistName={recommendArtistName}
         songTitle={recommendSongTitle}
+      />
+
+      {/* Add to Playlist Modal */}
+      <AddToPlaylistModal
+        open={!!addToPlaylistTarget}
+        onClose={() => setAddToPlaylistTarget(null)}
+        song={addToPlaylistTarget?.song ?? null}
+        artistName={addToPlaylistTarget?.artistName ?? ""}
       />
 
       {/* CSV Format Info Dialog */}
