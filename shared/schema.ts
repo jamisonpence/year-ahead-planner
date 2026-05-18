@@ -1601,4 +1601,5 @@ export type NutritionSummary = {
   calories: number; protein: number; carbs: number; fat: number;
   fiber: number; sugar: number; sodium: number;
   servings: number; partial?: boolean;
+  unmatchedIngredients?: string[];
 };

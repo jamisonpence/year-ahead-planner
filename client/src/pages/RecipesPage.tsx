@@ -957,8 +957,20 @@ function RecipeNutritionCard({ recipe, onRefresh }: { recipe: Recipe; onRefresh:
         <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block" />Carbs</span>
         <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 bg-rose-500 rounded-full inline-block" />Fat</span>
       </div>
-      {nutrition.partial && (
-        <p className="text-[10px] text-amber-600 dark:text-amber-400">⚠ Partial estimate — some ingredients could not be matched</p>
+      {nutrition.unmatchedIngredients && nutrition.unmatchedIngredients.length > 0 && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2.5 py-2 space-y-1">
+          <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+            ⚠ {nutrition.unmatchedIngredients.length} ingredient{nutrition.unmatchedIngredients.length > 1 ? "s" : ""} not matched — estimate may be incomplete:
+          </p>
+          <ul className="space-y-0.5">
+            {nutrition.unmatchedIngredients.map((name) => (
+              <li key={name} className="text-[10px] text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0 inline-block" />
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <p className="text-[9px] text-muted-foreground">Nutrition data is estimated and may vary.</p>
     </div>

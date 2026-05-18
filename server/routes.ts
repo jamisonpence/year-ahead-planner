@@ -1086,15 +1086,14 @@ Return exactly this structure:
       const { ingredients, servings } = req.body as { ingredients: { name: string; qty: string }[]; servings: number };
       const srv = Math.max(1, servings || 4);
       let totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 };
-      let matched = 0;
-      const total = (ingredients || []).length;
+      const unmatched: string[] = [];
       for (const ing of (ingredients || [])) {
         try {
           const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(ing.name)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${apiKey}`;
           const r = await fetch(url);
           const data = await r.json() as any;
           const food = data.foods?.[0];
-          if (!food) continue;
+          if (!food) { unmatched.push(ing.name); continue; }
           const get = (id: number) => (food.foodNutrients?.find((n: any) => n.nutrientId === id)?.value || 0);
           totals.calories += get(1008);
           totals.protein  += get(1003);
@@ -1103,10 +1102,8 @@ Return exactly this structure:
           totals.fiber    += get(1079);
           totals.sugar    += get(2000);
           totals.sodium   += get(1093);
-          matched++;
-        } catch { /* skip */ }
+        } catch { unmatched.push(ing.name); }
       }
-      const partial = matched < total;
       res.json({
         nutrition: {
           calories: Math.round(totals.calories / srv),
@@ -1116,7 +1113,9 @@ Return exactly this structure:
           fiber:    Math.round(totals.fiber    / srv * 10) / 10,
           sugar:    Math.round(totals.sugar    / srv * 10) / 10,
           sodium:   Math.round(totals.sodium   / srv * 10) / 10,
-          servings: srv, partial,
+          servings: srv,
+          partial: unmatched.length > 0,
+          unmatchedIngredients: unmatched,
         }
       });
     } catch (e) { handleError(res, e); }
