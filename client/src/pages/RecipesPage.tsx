@@ -868,23 +868,30 @@ function RecipeNutritionCard({ recipe, onRefresh }: { recipe: Recipe; onRefresh:
   const [computing, setComputing] = useState(false);
   const { toast } = useToast();
 
-  const nutrition: NutritionSummary | null = (() => {
+  // Keep local copy so the card updates immediately after compute without
+  // needing the parent to re-render (detailRecipe state doesn't auto-update)
+  const [localNutrition, setLocalNutrition] = useState<NutritionSummary | null>(() => {
     try { return recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch { return null; }
-  })();
+  });
+
+  const nutrition = localNutrition;
 
   async function computeNutrition() {
     setComputing(true);
     try {
       const ingredients = JSON.parse(recipe.ingredientsJson || "[]");
-      const servings = (recipe as any).servings || 4;
+      const servings = recipe.servings || 4;
       const r = await apiRequest("POST", "/api/nutrition/recipe-compute", { ingredients, servings });
       const data = await r.json();
       if (data.nutrition) {
         await apiRequest("PATCH", `/api/recipes/${recipe.id}`, { nutritionData: JSON.stringify(data.nutrition) });
+        setLocalNutrition(data.nutrition);  // update immediately — no stale-prop problem
         onRefresh();
         toast({ title: "Nutrition estimated" });
+      } else if (data.error?.includes("USDA_API_KEY")) {
+        toast({ title: "USDA API key not set", description: "Add USDA_API_KEY to your Railway environment variables.", variant: "destructive" });
       } else {
-        toast({ title: "Could not estimate — check that USDA_API_KEY is set", variant: "destructive" });
+        toast({ title: "Could not estimate nutrition", description: "No ingredients were matched in the USDA database.", variant: "destructive" });
       }
     } catch { toast({ title: "Estimation failed", variant: "destructive" }); }
     setComputing(false);

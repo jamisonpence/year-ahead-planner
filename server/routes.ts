@@ -1082,7 +1082,7 @@ Return exactly this structure:
   app.post("/api/nutrition/recipe-compute", requireAuth, async (req, res) => {
     try {
       const apiKey = process.env.USDA_API_KEY;
-      if (!apiKey) return res.json({ nutrition: null });
+      if (!apiKey) return res.status(400).json({ nutrition: null, error: "USDA_API_KEY not configured" });
       const { ingredients, servings } = req.body as { ingredients: { name: string; qty: string }[]; servings: number };
       const srv = Math.max(1, servings || 4);
       let totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 };
