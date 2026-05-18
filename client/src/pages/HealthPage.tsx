@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
@@ -913,6 +913,66 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [qaSaveRecipe, setQaSaveRecipe] = useState(false);
   const [qaAdding, setQaAdding] = useState(false);
 
+  // ── Ingredient builder (inside Quick Add) ─────────────────────────────
+  type QAIngredient = {
+    id: number; name: string;
+    servingSize: number; servingUnit: string;
+    qty: number;
+    nutrients: { calories: number; protein: number; carbs: number; fat: number; fiber: number; sugar: number; sodium: number };
+  };
+  const [qaShowIngBuilder, setQaShowIngBuilder] = useState(false);
+  const [qaIngredients, setQaIngredients] = useState<QAIngredient[]>([]);
+  const [qaIngQuery, setQaIngQuery] = useState("");
+  const [qaIngResults, setQaIngResults] = useState<any[]>([]);
+  const [qaIngSearching, setQaIngSearching] = useState(false);
+  const [qaIngPending, setQaIngPending] = useState<any | null>(null);
+  const [qaIngPendingQty, setQaIngPendingQty] = useState(1);
+
+  // Auto-fill macro fields whenever ingredient list changes
+  useEffect(() => {
+    if (qaIngredients.length === 0) return;
+    const totals = qaIngredients.reduce(
+      (acc, ing) => ({
+        calories: acc.calories + ing.nutrients.calories * ing.qty,
+        protein:  acc.protein  + ing.nutrients.protein  * ing.qty,
+        carbs:    acc.carbs    + ing.nutrients.carbs     * ing.qty,
+        fat:      acc.fat      + ing.nutrients.fat       * ing.qty,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+    setQaCals(String(Math.round(totals.calories)));
+    setQaProt(String(Math.round(totals.protein)));
+    setQaCarbs(String(Math.round(totals.carbs)));
+    setQaFat(String(Math.round(totals.fat)));
+  }, [qaIngredients]);
+
+  async function doIngSearch() {
+    if (!qaIngQuery.trim()) return;
+    setQaIngSearching(true);
+    try {
+      const r = await apiRequest("GET", `/api/nutrition/usda-search?q=${encodeURIComponent(qaIngQuery)}`);
+      const data = await r.json();
+      setQaIngResults(data.foods || []);
+    } catch { toast({ title: "Search failed", variant: "destructive" }); }
+    setQaIngSearching(false);
+  }
+
+  function confirmIngredient() {
+    if (!qaIngPending) return;
+    setQaIngredients(prev => [...prev, {
+      id: Date.now(),
+      name: qaIngPending.description,
+      servingSize: qaIngPending.servingSize,
+      servingUnit: qaIngPending.servingUnit,
+      qty: qaIngPendingQty,
+      nutrients: qaIngPending.nutrients,
+    }]);
+    setQaIngPending(null);
+    setQaIngQuery("");
+    setQaIngResults([]);
+    setQaIngPendingQty(1);
+  }
+
   // ── My Recipes tab state ───────────────────────────────────────────────
   const [recipeSearch, setRecipeSearch] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
@@ -994,11 +1054,15 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
       // Optionally save as recipe
       if (qaSaveRecipe) {
         const nutrition: NutritionSummary = { calories: cals, protein: prot, carbs, fat, fiber: 0, sugar: 0, sodium: 0, servings: 1 };
+        // Build ingredientsJson from USDA ingredient builder if used
+        const ingredientsJson = qaIngredients.length > 0
+          ? JSON.stringify(qaIngredients.map(ing => ({ name: ing.name, qty: `${ing.qty} × ${ing.servingSize}${ing.servingUnit}` })))
+          : "[]";
         await apiRequest("POST", "/api/recipes", {
           name: qaName.trim(),
           emoji: "🍽️",
           servings: 1,
-          ingredientsJson: "[]",
+          ingredientsJson,
           nutritionData: JSON.stringify(nutrition),
         });
         qc.invalidateQueries({ queryKey: ["/api/recipes"] });
@@ -1010,6 +1074,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
       // Reset
       setQaName(""); setQaCals(""); setQaProt(""); setQaCarbs(""); setQaFat("");
       setQaServingSize("1"); setQaServingUnit("serving"); setQaQty(1); setQaSaveRecipe(false);
+      setQaIngredients([]); setQaIngQuery(""); setQaIngResults([]); setQaIngPending(null);
       onAdded();
     } catch { toast({ title: "Failed to log food", variant: "destructive" }); }
     setQaAdding(false);
@@ -1127,11 +1192,116 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
       {/* ── QUICK ADD TAB ──────────────────────────────────────────── */}
       {mode === "quick" && (
         <div className="space-y-2.5">
+          {/* Food name */}
           <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Food name *</p>
+            <p className="text-[10px] text-muted-foreground">Food / meal name *</p>
             <UIInput value={qaName} onChange={e => setQaName(e.target.value)}
               placeholder="e.g. Morning Smoothie" className="h-8 text-sm" />
           </div>
+
+          {/* ── Ingredient Builder ──────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => setQaShowIngBuilder(o => !o)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium bg-secondary/30 border-border text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Search size={11} />
+            <span className="flex-1 text-left">
+              {qaIngredients.length > 0
+                ? `${qaIngredients.length} ingredient${qaIngredients.length !== 1 ? "s" : ""} added — macros auto-calculated`
+                : "Build from ingredients (search USDA)"}
+            </span>
+            {qaShowIngBuilder ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
+
+          {qaShowIngBuilder && (
+            <div className="border rounded-xl p-3 space-y-2.5 bg-secondary/10">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Search ingredients</p>
+
+              {/* Per-ingredient USDA search */}
+              {!qaIngPending ? (
+                <>
+                  <div className="flex gap-2">
+                    <UIInput
+                      value={qaIngQuery}
+                      onChange={e => setQaIngQuery(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && doIngSearch()}
+                      placeholder="e.g. milk, avocado, spinach"
+                      className="flex-1 h-7 text-xs"
+                    />
+                    <Button size="sm" variant="outline" onClick={doIngSearch} disabled={qaIngSearching} className="h-7 shrink-0 px-2">
+                      {qaIngSearching ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
+                    </Button>
+                  </div>
+                  {qaIngResults.length > 0 && (
+                    <div className="space-y-1 max-h-36 overflow-y-auto border rounded-lg p-1 bg-card">
+                      {qaIngResults.map((f: any) => (
+                        <button key={f.fdcId}
+                          onClick={() => { setQaIngPending(f); setQaIngPendingQty(1); setQaIngResults([]); }}
+                          className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                          <p className="text-xs font-medium truncate">{f.description}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {Math.round(f.nutrients.calories)} kcal · P {Math.round(f.nutrients.protein)}g · C {Math.round(f.nutrients.carbs)}g · F {Math.round(f.nutrients.fat)}g
+                            {" "}per {f.servingSize}{f.servingUnit}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Confirm ingredient quantity */
+                <div className="space-y-2 border rounded-lg p-2.5 bg-card">
+                  <p className="text-xs font-medium truncate">{qaIngPending.description}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Per serving ({qaIngPending.servingSize}{qaIngPending.servingUnit}): {Math.round(qaIngPending.nutrients.calories)} kcal
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-muted-foreground shrink-0">Servings:</p>
+                    <UIInput type="number" value={qaIngPendingQty} min={0.25} step={0.25}
+                      onChange={e => setQaIngPendingQty(parseFloat(e.target.value) || 1)}
+                      className="h-7 text-xs w-20" />
+                    <p className="text-[10px] text-muted-foreground">
+                      = {Math.round(qaIngPending.nutrients.calories * qaIngPendingQty)} kcal
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={confirmIngredient} className="flex-1 h-7 text-xs gap-1">
+                      <Plus size={10} /> Add ingredient
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setQaIngPending(null); }} className="h-7 text-xs">Cancel</Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Ingredient list */}
+              {qaIngredients.length > 0 && (
+                <div className="space-y-1">
+                  {qaIngredients.map(ing => (
+                    <div key={ing.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-card border text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{ing.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {ing.qty} × {ing.servingSize}{ing.servingUnit} · {Math.round(ing.nutrients.calories * ing.qty)} kcal
+                        </p>
+                      </div>
+                      <button onClick={() => setQaIngredients(prev => prev.filter(i => i.id !== ing.id))}
+                        className="text-muted-foreground/40 hover:text-destructive shrink-0">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {/* Combined total */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/20 text-xs font-medium text-primary">
+                    <Check size={11} />
+                    Total: {qaCals} kcal · P {qaProt}g · C {qaCarbs}g · F {qaFat}g
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Serving info */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <p className="text-[10px] text-muted-foreground">Serving size</p>
@@ -1144,29 +1314,39 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
                 placeholder="serving, cup, oz…" className="h-7 text-xs" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground">Calories *</p>
-              <UIInput type="number" value={qaCals} onChange={e => setQaCals(e.target.value)}
-                placeholder="350" className="h-7 text-xs" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground">Protein (g)</p>
-              <UIInput type="number" value={qaProt} onChange={e => setQaProt(e.target.value)}
-                placeholder="20" className="h-7 text-xs" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground">Carbs (g)</p>
-              <UIInput type="number" value={qaCarbs} onChange={e => setQaCarbs(e.target.value)}
-                placeholder="45" className="h-7 text-xs" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground">Fat (g)</p>
-              <UIInput type="number" value={qaFat} onChange={e => setQaFat(e.target.value)}
-                placeholder="8" className="h-7 text-xs" />
+
+          {/* Macro fields — pre-filled from ingredients, still editable */}
+          <div>
+            <p className="text-[10px] text-muted-foreground mb-1.5">
+              Nutrition per serving
+              {qaIngredients.length > 0 && <span className="text-primary ml-1">(auto-calculated from ingredients)</span>}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground">Calories *</p>
+                <UIInput type="number" value={qaCals} onChange={e => setQaCals(e.target.value)}
+                  placeholder="350" className="h-7 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground">Protein (g)</p>
+                <UIInput type="number" value={qaProt} onChange={e => setQaProt(e.target.value)}
+                  placeholder="20" className="h-7 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground">Carbs (g)</p>
+                <UIInput type="number" value={qaCarbs} onChange={e => setQaCarbs(e.target.value)}
+                  placeholder="45" className="h-7 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground">Fat (g)</p>
+                <UIInput type="number" value={qaFat} onChange={e => setQaFat(e.target.value)}
+                  placeholder="8" className="h-7 text-xs" />
+              </div>
             </div>
           </div>
+
           <MealServingRow mealType={qaMeal} setMealType={setQaMeal} qty={qaQty} setQty={setQaQty} />
+
           {/* Save as recipe toggle */}
           <button
             type="button"
@@ -1187,9 +1367,10 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
           </button>
           {qaSaveRecipe && (
             <p className="text-[10px] text-muted-foreground px-1">
-              This will be saved to your Recipes tab so you can quickly log it again anytime.
+              Saved to your Recipes tab — including ingredients if you added any.
             </p>
           )}
+
           <Button size="sm" onClick={addQuickFood}
             disabled={qaAdding || !qaName.trim() || !qaCals}
             className="w-full h-8 text-xs gap-1.5">
