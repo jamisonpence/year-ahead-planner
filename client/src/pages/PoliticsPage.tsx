@@ -4969,7 +4969,7 @@ function DebatesTab() {
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2">
           <button onClick={() => setActiveDebateId(null)} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
             <ChevronRight size={16} className="rotate-180" />
           </button>
@@ -4979,34 +4979,35 @@ function DebatesTab() {
             {activeDebate.issueRef && (
               <Badge className="mt-1 bg-primary/10 text-primary text-[10px]">{activeDebate.issueRef}</Badge>
             )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Add Friend */}
-            <DebateFriendInvite debateId={activeDebate.id} currentUserId={currentUserId} />
-            {/* Share code */}
-            <button
-              onClick={() => copyCode(activeDebate.shareCode)}
-              className="flex items-center gap-1.5 text-[10px] font-mono font-bold border rounded-lg px-2 py-1 hover:bg-secondary/60 transition-colors"
-            >
-              {copiedCode === activeDebate.shareCode ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
-              {activeDebate.shareCode}
-            </button>
-            {/* Edit / Close / Delete for owner */}
-            {activeDebate.isOwn && (
-              <button onClick={() => openEditDebate(activeDebate)} className="text-[10px] text-muted-foreground hover:text-primary border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
-                <Pencil size={9} />Edit
+            {/* Action buttons — below the title so it never gets squeezed */}
+            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+              {/* Add Friend */}
+              <DebateFriendInvite debateId={activeDebate.id} currentUserId={currentUserId} />
+              {/* Share code */}
+              <button
+                onClick={() => copyCode(activeDebate.shareCode)}
+                className="flex items-center gap-1.5 text-[10px] font-mono font-bold border rounded-lg px-2 py-1 hover:bg-secondary/60 transition-colors"
+              >
+                {copiedCode === activeDebate.shareCode ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                {activeDebate.shareCode}
               </button>
-            )}
-            {activeDebate.isOwn && activeDebate.status === "open" && (
-              <button onClick={() => closeDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-amber-500 border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
-                <Lock size={9} />Close
-              </button>
-            )}
-            {activeDebate.isOwn && (
-              <button onClick={() => deleteDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-destructive border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
-                <Trash2 size={9} />Delete
-              </button>
-            )}
+              {/* Edit / Close / Delete for owner */}
+              {activeDebate.isOwn && (
+                <button onClick={() => openEditDebate(activeDebate)} className="text-[10px] text-muted-foreground hover:text-primary border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                  <Pencil size={9} />Edit
+                </button>
+              )}
+              {activeDebate.isOwn && activeDebate.status === "open" && (
+                <button onClick={() => closeDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-amber-500 border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                  <Lock size={9} />Close
+                </button>
+              )}
+              {activeDebate.isOwn && (
+                <button onClick={() => deleteDebate(activeDebate.id)} className="text-[10px] text-muted-foreground hover:text-destructive border rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
+                  <Trash2 size={9} />Delete
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
