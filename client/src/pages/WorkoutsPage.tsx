@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import { useLocation } from "wouter";
@@ -3129,6 +3130,11 @@ export default function WorkoutsPage() {
               </div>
             );
           })}
+
+          {/* Body Composition Plans section */}
+          <div className="pt-2 border-t border-dashed mt-2">
+            <BodyCompositionPlanSection />
+          </div>
         </div>
       )}
 

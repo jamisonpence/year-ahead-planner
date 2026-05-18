@@ -1549,6 +1549,53 @@ export const activityComments = pgTable("activity_comments", {
 });
 export type ActivityComment = typeof activityComments.$inferSelect;
 
+// ── BODY COMPOSITION PLANS ───────────────────────────────────────────────────
+// planType: "cut" | "bulk" | "recomp"
+// activityLevel: "sedentary" | "light" | "moderate" | "heavy" | "athlete"
+export const bodyCompPlans = pgTable("body_comp_plans", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  planType: text("plan_type").notNull().default("cut"), // cut | bulk | recomp
+  weightUnit: text("weight_unit").notNull().default("lbs"), // lbs | kg
+  currentWeight: real("current_weight"),
+  goalWeight: real("goal_weight"),
+  currentBodyFat: real("current_body_fat"),
+  goalBodyFat: real("goal_body_fat"),
+  activityLevel: text("activity_level").notNull().default("moderate"),
+  maintenanceCalories: integer("maintenance_calories").notNull(),
+  targetCalories: integer("target_calories").notNull(),
+  proteinGrams: integer("protein_grams").notNull(),
+  carbsGrams: integer("carbs_grams").notNull(),
+  fatGrams: integer("fat_grams").notNull(),
+  proteinPerLb: real("protein_per_lb").notNull().default(1.0),
+  fatPct: real("fat_pct").notNull().default(25.0),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+});
+
+export const bodyCompCheckIns = pgTable("body_comp_check_ins", {
+  id: serial("id").primaryKey(),
+  planId: integer("plan_id").notNull(),
+  userId: integer("user_id").notNull(),
+  date: text("date").notNull(),
+  weight: real("weight"),
+  bodyFat: real("body_fat"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertBodyCompPlanSchema = createInsertSchema(bodyCompPlans).omit({ id: true });
+export type InsertBodyCompPlan = z.infer<typeof insertBodyCompPlanSchema>;
+export type BodyCompPlan = typeof bodyCompPlans.$inferSelect;
+
+export const insertBodyCompCheckInSchema = createInsertSchema(bodyCompCheckIns).omit({ id: true });
+export type InsertBodyCompCheckIn = z.infer<typeof insertBodyCompCheckInSchema>;
+export type BodyCompCheckIn = typeof bodyCompCheckIns.$inferSelect;
+
+export type BodyCompPlanWithCheckIns = BodyCompPlan & { checkIns: BodyCompCheckIn[] };
+
 // ── Nutrition / Food Log ──────────────────────────────────────────────────────
 export const foodLogEntries = pgTable("food_log_entries", {
   id:          serial("id").primaryKey(),

@@ -718,6 +718,54 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Body Composition Plans ────────────────────────────────────────────────────
+  app.get("/api/body-comp-plans", requireAuth, async (req, res) => {
+    try { res.json(await storage.getBodyCompPlans((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/body-comp-plans", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const plan = await storage.createBodyCompPlan({ ...req.body, createdAt: new Date().toISOString() }, uid);
+      res.status(201).json(plan);
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/body-comp-plans/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateBodyCompPlan(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/body-comp-plans/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteBodyCompPlan(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.get("/api/body-comp-plans/:id/check-ins", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getBodyCompCheckIns(+req.params.id, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/body-comp-plans/:id/check-ins", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const checkin = await storage.createBodyCompCheckIn({
+        planId: +req.params.id,
+        ...req.body,
+        createdAt: new Date().toISOString(),
+      }, uid);
+      res.status(201).json(checkin);
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/body-comp-check-ins/:id", requireAuth, async (req, res) => {
+    try {
+      const ok = await storage.deleteBodyCompCheckIn(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Workout Shares ────────────────────────────────────────────────────────────
   app.get("/api/workout-shares", requireAuth, async (req, res) => {
     try { res.json(await storage.getWorkoutShares((req.user as User).id)); }

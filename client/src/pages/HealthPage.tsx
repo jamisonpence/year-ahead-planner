@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
@@ -1158,7 +1159,7 @@ function NutritionTab() {
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [activeSection, setActiveSection] = useState<"log" | "goals" | "weekly">("log");
+  const [activeSection, setActiveSection] = useState<"log" | "goals" | "plans" | "weekly">("log");
 
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
@@ -1225,12 +1226,12 @@ function NutritionTab() {
     <div className="space-y-5">
       {/* Section nav */}
       <div className="flex gap-2 flex-wrap">
-        {(["log", "goals", "weekly"] as const).map(s => (
+        {(["log", "goals", "plans", "weekly"] as const).map(s => (
           <button key={s} onClick={() => setActiveSection(s)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
             }`}>
-            {s === "log" ? "Food Log" : s === "goals" ? "Goals" : "Weekly"}
+            {s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
           </button>
         ))}
       </div>
@@ -1351,6 +1352,10 @@ function NutritionTab() {
           qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
           toast({ title: "Goals saved" });
         }} />
+      )}
+
+      {activeSection === "plans" && (
+        <BodyCompositionPlanSection />
       )}
 
       {activeSection === "weekly" && (

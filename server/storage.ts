@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -58,6 +58,7 @@ import type {
   InsertNutritionGoal, NutritionGoal,
   insertFoodLogSchema,
   insertNutritionGoalSchema,
+  InsertBodyCompPlan, BodyCompPlan, BodyCompCheckIn, InsertBodyCompCheckIn,
 } from "@shared/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
@@ -1305,6 +1306,42 @@ export async function initializeStorage() {
       water_glasses INTEGER NOT NULL DEFAULT 8
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS body_comp_plans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      plan_type TEXT NOT NULL DEFAULT 'cut',
+      weight_unit TEXT NOT NULL DEFAULT 'lbs',
+      current_weight REAL,
+      goal_weight REAL,
+      current_body_fat REAL,
+      goal_body_fat REAL,
+      activity_level TEXT NOT NULL DEFAULT 'moderate',
+      maintenance_calories INTEGER NOT NULL,
+      target_calories INTEGER NOT NULL,
+      protein_grams INTEGER NOT NULL,
+      carbs_grams INTEGER NOT NULL,
+      fat_grams INTEGER NOT NULL,
+      protein_per_lb REAL NOT NULL DEFAULT 1.0,
+      fat_pct REAL NOT NULL DEFAULT 25.0,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS body_comp_check_ins (
+      id SERIAL PRIMARY KEY,
+      plan_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      weight REAL,
+      body_fat REAL,
+      notes TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -1597,6 +1634,14 @@ export interface IStorage {
   createWorkoutPlan(data: InsertWorkoutPlan, userId: number): Promise<WorkoutPlan>;
   updateWorkoutPlan(id: number, data: Partial<InsertWorkoutPlan>): Promise<WorkoutPlan | null>;
   deleteWorkoutPlan(id: number): Promise<boolean>;
+  // Body Composition Plans
+  getBodyCompPlans(userId: number): Promise<BodyCompPlan[]>;
+  createBodyCompPlan(data: InsertBodyCompPlan, userId: number): Promise<BodyCompPlan>;
+  updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>): Promise<BodyCompPlan | null>;
+  deleteBodyCompPlan(id: number, userId: number): Promise<boolean>;
+  getBodyCompCheckIns(planId: number, userId: number): Promise<BodyCompCheckIn[]>;
+  createBodyCompCheckIn(data: InsertBodyCompCheckIn, userId: number): Promise<BodyCompCheckIn>;
+  deleteBodyCompCheckIn(id: number, userId: number): Promise<boolean>;
   // Workout Shares
   createWorkoutShare(data: InsertWorkoutShare): Promise<WorkoutShare>;
   getWorkoutShares(userId: number): Promise<WorkoutShareWithUser[]>;
@@ -3749,6 +3794,36 @@ export const storage: IStorage = {
       .where(eq(workoutPlans.id, id))
       .returning();
     return result[0] ?? null;
+  },
+
+  // ── Body Composition Plans ────────────────────────────────────────────────────
+  async getBodyCompPlans(userId: number) {
+    return db.select().from(bodyCompPlans).where(eq(bodyCompPlans.userId, userId)).orderBy(desc(bodyCompPlans.createdAt));
+  },
+  async createBodyCompPlan(data: InsertBodyCompPlan, userId: number) {
+    const result = await db.insert(bodyCompPlans).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>) {
+    const result = await db.update(bodyCompPlans).set(data).where(eq(bodyCompPlans.id, id)).returning();
+    return result[0] ?? null;
+  },
+  async deleteBodyCompPlan(id: number, userId: number) {
+    // Delete check-ins first
+    await db.delete(bodyCompCheckIns).where(and(eq(bodyCompCheckIns.planId, id), eq(bodyCompCheckIns.userId, userId)));
+    const result = await db.delete(bodyCompPlans).where(and(eq(bodyCompPlans.id, id), eq(bodyCompPlans.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  },
+  async getBodyCompCheckIns(planId: number, userId: number) {
+    return db.select().from(bodyCompCheckIns).where(and(eq(bodyCompCheckIns.planId, planId), eq(bodyCompCheckIns.userId, userId))).orderBy(desc(bodyCompCheckIns.date));
+  },
+  async createBodyCompCheckIn(data: InsertBodyCompCheckIn, userId: number) {
+    const result = await db.insert(bodyCompCheckIns).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async deleteBodyCompCheckIn(id: number, userId: number) {
+    const result = await db.delete(bodyCompCheckIns).where(and(eq(bodyCompCheckIns.id, id), eq(bodyCompCheckIns.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Workout Shares ───────────────────────────────────────────────────────────
