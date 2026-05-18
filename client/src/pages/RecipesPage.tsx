@@ -918,7 +918,17 @@ function RecipeNutritionCard({ recipe, onRefresh }: { recipe: Recipe; onRefresh:
     <div className="mt-3 rounded-xl border bg-card p-3 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold">Nutrition</p>
-        <span className="text-[10px] text-muted-foreground">per serving ({nutrition.servings} servings)</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">per serving ({nutrition.servings} servings)</span>
+          <button
+            onClick={computeNutrition}
+            disabled={computing}
+            title="Re-estimate nutrition"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {computing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+          </button>
+        </div>
       </div>
       <div className="flex items-baseline gap-1">
         <span className="text-2xl font-bold">{nutrition.calories}</span>
