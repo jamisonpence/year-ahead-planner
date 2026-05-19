@@ -5,11 +5,13 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, BookOpen, BookMarked, Check, Trash2, Pencil, MoreHorizontal,
   Flame, Search, Clock, X, Send, Users, Inbox, CornerUpRight, Target,
+  Calendar, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { bookProgress, daysUntil, BOOK_STATUSES, GENRE_TAGS, readingStreak } from "@/lib/plannerUtils";
@@ -560,13 +562,47 @@ export default function ReadingPage() {
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
   const [recommendBook, setRecommendBook] = useState<BookWithSessions | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
-  const [goalInput, setGoalInput] = useState("");
+  // Goal form state
+  const [gLabel, setGLabel]         = useState("");
+  const [gTarget, setGTarget]       = useState("12");
+  const [gTimeframe, setGTimeframe] = useState<"year" | "month" | "quarter" | "custom">("year");
+  const [gStart, setGStart]         = useState("");
+  const [gEnd, setGEnd]             = useState("");
+  // Book-assignment state within modal
+  const [addingBookId, setAddingBookId]     = useState<number | null>(null);
+  const [addingBookDate, setAddingBookDate] = useState("");
+  const [bookSearch, setBookSearch]         = useState("");
 
   const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
   const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
 
+  // Compute effective date range from goal
+  const currentYear = new Date().getFullYear();
+  const goalStartDate = readingGoal?.startDate ?? `${currentYear}-01-01`;
+  const goalEndDate   = readingGoal?.endDate   ?? `${currentYear}-12-31`;
+
+  // Books finished within goal window
+  const booksFinishedInGoal = useMemo(() => {
+    if (!readingGoal) return [];
+    return books.filter((b) => {
+      if (b.status !== "finished") return false;
+      const fd = (b as any).finishDate as string | null;
+      return fd && fd >= goalStartDate && fd <= goalEndDate;
+    });
+  }, [books, readingGoal, goalStartDate, goalEndDate]);
+
+  // Books planned in goal window (backlog/current/paused with targetFinishDate in range)
+  const booksPlannedInGoal = useMemo(() => {
+    if (!readingGoal) return [];
+    return books.filter((b) => {
+      if (b.status === "finished") return false;
+      const tfd = b.targetFinishDate;
+      return tfd && tfd >= goalStartDate && tfd <= goalEndDate;
+    });
+  }, [books, readingGoal, goalStartDate, goalEndDate]);
+
   const saveGoalMut = useMutation({
-    mutationFn: (booksTarget: number) => apiRequest("PATCH", "/api/reading/goal", { booksTarget, year: new Date().getFullYear() }),
+    mutationFn: (payload: object) => apiRequest("PATCH", "/api/reading/goal", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] });
       toast({ title: "Reading goal saved!" });
@@ -574,17 +610,59 @@ export default function ReadingPage() {
     },
   });
 
+  const updateBookDateMut = useMutation({
+    mutationFn: ({ id, targetFinishDate }: { id: number; targetFinishDate: string | null }) =>
+      apiRequest("PATCH", `/api/books/${id}`, { targetFinishDate }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/books"] });
+      setAddingBookId(null);
+      setAddingBookDate("");
+    },
+  });
+
+  // Precompute timeframe dates helper
+  function getTimeframeDates(tf: typeof gTimeframe): { start: string; end: string } {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    if (tf === "year")    return { start: `${y}-01-01`,           end: `${y}-12-31` };
+    if (tf === "month")   return { start: format(new Date(y, m, 1), "yyyy-MM-dd"), end: format(new Date(y, m + 1, 0), "yyyy-MM-dd") };
+    if (tf === "quarter") {
+      const q = Math.floor(m / 3);
+      return { start: format(new Date(y, q * 3, 1), "yyyy-MM-dd"), end: format(new Date(y, q * 3 + 3, 0), "yyyy-MM-dd") };
+    }
+    return { start: gStart, end: gEnd };
+  }
+
+  function openGoalModal() {
+    const rg = readingGoal;
+    setGLabel(rg?.label ?? "");
+    setGTarget(String(rg?.booksTarget ?? 12));
+    if (rg?.startDate && rg?.endDate) {
+      // Detect preset
+      const now = new Date();
+      const y = now.getFullYear(); const m = now.getMonth(); const q = Math.floor(m / 3);
+      const yd = getTimeframeDates("year"); const md = getTimeframeDates("month"); const qd = getTimeframeDates("quarter");
+      if (rg.startDate === yd.start && rg.endDate === yd.end) setGTimeframe("year");
+      else if (rg.startDate === md.start && rg.endDate === md.end) setGTimeframe("month");
+      else if (rg.startDate === qd.start && rg.endDate === qd.end) setGTimeframe("quarter");
+      else { setGTimeframe("custom"); setGStart(rg.startDate); setGEnd(rg.endDate); }
+    } else {
+      setGTimeframe("year");
+    }
+    setGoalModalOpen(true);
+  }
+
+  function handleSaveGoal() {
+    const n = parseInt(gTarget);
+    if (!n || n < 1) return;
+    const { start, end } = gTimeframe === "custom" ? { start: gStart, end: gEnd } : getTimeframeDates(gTimeframe);
+    if (!start || !end) return;
+    saveGoalMut.mutate({ booksTarget: n, year: parseInt(start.slice(0, 4)), label: gLabel.trim() || null, startDate: start, endDate: end });
+  }
+
   const allSessions = useMemo(() => books.flatMap((b) => b.sessions ?? []), [books]);
   const streak = readingStreak(allSessions);
-
-  const currentYear = new Date().getFullYear();
-  const booksFinishedThisYear = useMemo(() => {
-    return books.filter((b) => {
-      if (b.status !== "finished") return false;
-      const fd = (b as any).finishDate as string | null;
-      return fd ? fd.startsWith(String(currentYear)) : false;
-    }).length;
-  }, [books, currentYear]);
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/books/${id}`),
@@ -630,7 +708,7 @@ export default function ReadingPage() {
           )}
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setGoalInput(String(readingGoal?.booksTarget ?? 12)); setGoalModalOpen(true); }} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={openGoalModal} className="gap-1.5">
             <Target size={13} /> {readingGoal ? "Edit Goal" : "Set Goal"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
@@ -646,28 +724,43 @@ export default function ReadingPage() {
       </div>
 
       {/* Reading Goal Banner */}
-      {readingGoal && (
-        <div
-          className="flex items-center gap-4 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 cursor-pointer hover:border-amber-400 transition-colors"
-          onClick={() => { setGoalInput(String(readingGoal.booksTarget)); setGoalModalOpen(true); }}
-        >
-          <Target size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                {currentYear} Reading Goal: {booksFinishedThisYear} / {readingGoal.booksTarget} books
-              </span>
-              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 shrink-0">
-                {Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100)}%
-              </span>
+      {readingGoal && (() => {
+        const finished = booksFinishedInGoal.length;
+        const planned  = booksPlannedInGoal.length;
+        const total    = readingGoal.booksTarget;
+        const pct      = Math.min(100, Math.round((finished / total) * 100));
+        const rangeLabel = readingGoal.startDate && readingGoal.endDate
+          ? `${format(parseISO(readingGoal.startDate), "MMM d")} – ${format(parseISO(readingGoal.endDate), "MMM d, yyyy")}`
+          : String(currentYear);
+        return (
+          <div
+            className="p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 cursor-pointer hover:border-amber-400 transition-colors"
+            onClick={openGoalModal}
+          >
+            <div className="flex items-start gap-3">
+              <Target size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-sm font-semibold text-amber-900 dark:text-amber-200 truncate">
+                    {readingGoal.label || "Reading Goal"}
+                  </span>
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 shrink-0">{pct}%</span>
+                </div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Calendar size={11} className="text-amber-600/70 dark:text-amber-400/70 shrink-0" />
+                  <span className="text-xs text-amber-700/80 dark:text-amber-300/80">{rangeLabel}</span>
+                </div>
+                <Progress value={pct} className="h-1.5 mb-1.5" />
+                <div className="flex items-center gap-3 text-xs text-amber-700/80 dark:text-amber-300/80">
+                  <span><span className="font-bold text-amber-900 dark:text-amber-200">{finished}</span> finished</span>
+                  <span>of {total} goal</span>
+                  {planned > 0 && <span className="ml-auto">{planned} planned</span>}
+                </div>
+              </div>
             </div>
-            <Progress
-              value={Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100))}
-              className="h-1.5"
-            />
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
@@ -809,42 +902,225 @@ export default function ReadingPage() {
         book={recommendBook}
       />
 
-      {/* Set Reading Goal Modal */}
+      {/* Reading Goal Modal */}
       <Dialog open={goalModalOpen} onOpenChange={(o) => { if (!o) setGoalModalOpen(false); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
-              <Target size={16} /> {currentYear} Reading Goal
+              <Target size={16} /> Reading Goal
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-1">
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {/* Goal name */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Books to read this year</label>
-              <div className="flex items-center gap-3">
-                <Input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={goalInput}
-                  onChange={(e) => setGoalInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { const n = parseInt(goalInput); if (n > 0) saveGoalMut.mutate(n); } }}
-                  className="text-lg font-bold text-center w-24"
-                  autoFocus
-                />
-                <span className="text-sm text-muted-foreground">books in {currentYear}</span>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Goal Name (optional)</label>
+              <Input
+                placeholder="e.g. Summer Reading 2026, Q1 Challenge…"
+                value={gLabel}
+                onChange={(e) => setGLabel(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+
+            {/* Timeframe */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Timeframe</label>
+              <div className="grid grid-cols-4 gap-1.5 mb-3">
+                {(["year", "month", "quarter", "custom"] as const).map((tf) => {
+                  const labels = { year: "This Year", month: "This Month", quarter: "This Quarter", custom: "Custom" };
+                  return (
+                    <button
+                      key={tf}
+                      onClick={() => { setGTimeframe(tf); if (tf !== "custom") { const d = getTimeframeDates(tf); setGStart(d.start); setGEnd(d.end); } }}
+                      className={`py-2 rounded-lg text-xs font-medium border transition-colors ${gTimeframe === tf ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary border-border"}`}
+                    >
+                      {labels[tf]}
+                    </button>
+                  );
+                })}
               </div>
-              {readingGoal && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Progress so far: {booksFinishedThisYear} of {readingGoal.booksTarget} finished this year
-                </p>
+              {gTimeframe === "custom" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Start date</label>
+                    <Input type="date" value={gStart} onChange={(e) => setGStart(e.target.value)} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">End date</label>
+                    <Input type="date" value={gEnd} onChange={(e) => setGEnd(e.target.value)} className="text-sm" />
+                  </div>
+                </div>
+              ) : (
+                (() => {
+                  const d = getTimeframeDates(gTimeframe);
+                  return d.start && d.end ? (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Calendar size={11} />
+                      {format(parseISO(d.start), "MMM d, yyyy")} – {format(parseISO(d.end), "MMM d, yyyy")}
+                    </p>
+                  ) : null;
+                })()
               )}
             </div>
-            <div className="flex gap-2 justify-end">
+
+            {/* Book count target */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Books Target</label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center border rounded-lg overflow-hidden">
+                  <button onClick={() => setGTarget(String(Math.max(1, parseInt(gTarget || "1") - 1)))} className="px-3 py-2 text-sm hover:bg-secondary transition-colors font-bold">−</button>
+                  <Input
+                    type="number" min={1} max={500}
+                    value={gTarget}
+                    onChange={(e) => setGTarget(e.target.value)}
+                    className="w-16 text-center text-lg font-bold border-0 focus-visible:ring-0 rounded-none"
+                  />
+                  <button onClick={() => setGTarget(String(Math.min(500, parseInt(gTarget || "0") + 1)))} className="px-3 py-2 text-sm hover:bg-secondary transition-colors font-bold">+</button>
+                </div>
+                <span className="text-sm text-muted-foreground">books to read</span>
+              </div>
+            </div>
+
+            {/* Books in this goal */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books in This Goal</label>
+                <span className="text-xs text-muted-foreground">
+                  {booksPlannedInGoal.length + booksFinishedInGoal.length} assigned
+                </span>
+              </div>
+
+              {/* Existing goal books: planned + finished */}
+              {(booksPlannedInGoal.length > 0 || booksFinishedInGoal.length > 0) && (
+                <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                  {[...booksPlannedInGoal, ...booksFinishedInGoal].map((book) => {
+                    const isFinished = book.status === "finished";
+                    const date = isFinished ? (book as any).finishDate : book.targetFinishDate;
+                    return (
+                      <div key={book.id} className="flex items-center gap-2 px-2 py-2 rounded-lg bg-secondary/40">
+                        {(book as any).coverUrl ? (
+                          <img src={(book as any).coverUrl} alt={book.title} className="w-6 h-8 object-cover rounded shrink-0" />
+                        ) : (
+                          <div className="w-6 h-8 rounded shrink-0 bg-muted flex items-center justify-center">
+                            <BookOpen size={10} className="opacity-40" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{book.title}</p>
+                          {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isFinished ? (
+                            <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Done</span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">by {date ? format(parseISO(date), "MMM d") : "—"}</span>
+                          )}
+                          {!isFinished && (
+                            <button
+                              onClick={() => updateBookDateMut.mutate({ id: book.id, targetFinishDate: null })}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              title="Remove from goal"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add a book to the goal */}
+              <div className="border rounded-xl p-3 space-y-2 bg-secondary/20">
+                <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
+                <Input
+                  placeholder="Search your reading list…"
+                  value={bookSearch}
+                  onChange={(e) => setBookSearch(e.target.value)}
+                  className="text-xs h-8"
+                />
+                {(() => {
+                  const q = bookSearch.trim().toLowerCase();
+                  const windowStart = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).start : gStart;
+                  const windowEnd   = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).end   : gEnd;
+                  const unassigned = books.filter((b) => {
+                    if (b.status === "finished") return false;
+                    // Already in window
+                    if (b.targetFinishDate && b.targetFinishDate >= (windowStart || "") && b.targetFinishDate <= (windowEnd || "")) return false;
+                    if (!q) return true;
+                    return b.title.toLowerCase().includes(q) || (b.author ?? "").toLowerCase().includes(q);
+                  }).slice(0, 5);
+                  if (!unassigned.length && !q) return <p className="text-[10px] text-muted-foreground text-center py-1">All your backlog/current books are already assigned</p>;
+                  if (!unassigned.length) return <p className="text-[10px] text-muted-foreground text-center py-1">No books match "{bookSearch}"</p>;
+                  return (
+                    <div className="space-y-1">
+                      {unassigned.map((book) => (
+                        <div key={book.id}>
+                          {addingBookId === book.id ? (
+                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
+                              <BookOpen size={11} className="text-primary shrink-0" />
+                              <span className="text-xs flex-1 truncate">{book.title}</span>
+                              <Input
+                                type="date"
+                                value={addingBookDate}
+                                min={windowStart || undefined}
+                                max={windowEnd || undefined}
+                                onChange={(e) => setAddingBookDate(e.target.value)}
+                                className="h-6 text-xs w-32 shrink-0"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => { if (addingBookDate) updateBookDateMut.mutate({ id: book.id, targetFinishDate: addingBookDate }); }}
+                                disabled={!addingBookDate}
+                                className="shrink-0 p-1 rounded bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/80 transition-colors"
+                              >
+                                <Check size={11} />
+                              </button>
+                              <button onClick={() => { setAddingBookId(null); setAddingBookDate(""); }} className="shrink-0 p-1 text-muted-foreground hover:text-foreground">
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setAddingBookId(book.id); setAddingBookDate(windowEnd || ""); setBookSearch(""); }}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left"
+                            >
+                              {(book as any).coverUrl ? (
+                                <img src={(book as any).coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded shrink-0" />
+                              ) : (
+                                <div className="w-5 h-7 rounded shrink-0 bg-muted flex items-center justify-center">
+                                  <BookOpen size={9} className="opacity-40" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{book.title}</p>
+                                {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground capitalize shrink-0">{book.status}</span>
+                              <Plus size={11} className="text-primary shrink-0" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">
+              {booksFinishedInGoal.length} finished · {booksPlannedInGoal.length} planned
+            </span>
+            <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setGoalModalOpen(false)}>Cancel</Button>
               <Button
                 size="sm"
-                onClick={() => { const n = parseInt(goalInput); if (n > 0) saveGoalMut.mutate(n); }}
-                disabled={saveGoalMut.isPending || !goalInput || parseInt(goalInput) < 1}
+                onClick={handleSaveGoal}
+                disabled={saveGoalMut.isPending || !gTarget || parseInt(gTarget) < 1 || (gTimeframe === "custom" && (!gStart || !gEnd))}
                 className="gap-1.5"
               >
                 <Check size={13} /> Save Goal

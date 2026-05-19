@@ -616,8 +616,8 @@ Return exactly this structure:
   app.patch("/api/reading/goal", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      const { booksTarget, year } = req.body;
-      res.json(await storage.upsertReadingGoal(uid, { booksTarget, year }));
+      const { booksTarget, year, label, startDate, endDate } = req.body;
+      res.json(await storage.upsertReadingGoal(uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null }));
     } catch (e) { handleError(res, e); }
   });
 

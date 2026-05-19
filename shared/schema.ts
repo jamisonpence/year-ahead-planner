@@ -1658,6 +1658,9 @@ export const readingGoals = pgTable("reading_goals", {
   userId:       integer("user_id").notNull().unique(),
   booksTarget:  integer("books_target").notNull().default(12),
   year:         integer("year").notNull().default(2026),
+  label:        text("label"),           // e.g. "Summer Reading 2026"
+  startDate:    text("start_date"),      // ISO date "2026-01-01"
+  endDate:      text("end_date"),        // ISO date "2026-12-31"
 });
 export const insertReadingGoalSchema = createInsertSchema(readingGoals).omit({ id: true });
 export type InsertReadingGoal = z.infer<typeof insertReadingGoalSchema>;

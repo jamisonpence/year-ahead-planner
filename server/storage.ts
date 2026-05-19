@@ -1353,6 +1353,10 @@ export async function initializeStorage() {
       year INTEGER NOT NULL DEFAULT 2026
     )
   `);
+  // Migrate reading_goals to add flexible timeframe columns
+  await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS label TEXT`);
+  await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS start_date TEXT`);
+  await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS end_date TEXT`);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -4907,7 +4911,8 @@ export const storage: IStorage = {
       return r;
     }
     const currentYear = new Date().getFullYear();
-    const [r] = await db.insert(readingGoals).values({ userId, booksTarget: 12, year: currentYear, ...data }).returning();
+    const defaults = { booksTarget: 12, year: currentYear, label: null, startDate: null, endDate: null };
+    const [r] = await db.insert(readingGoals).values({ userId, ...defaults, ...data }).returning();
     return r;
   },
 

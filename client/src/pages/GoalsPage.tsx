@@ -259,9 +259,23 @@ export default function GoalsPage() {
   const isWorkoutGoalsSelected = selectedGoalId === WORKOUT_GOALS_ID;
   const isReadingGoalSelected = selectedGoalId === READING_GOAL_ID;
   const currentYear = new Date().getFullYear();
-  const booksFinishedThisYear = useMemo(() =>
-    books.filter((b) => b.status === "finished" && (b as any).finishDate?.startsWith(String(currentYear))).length,
-    [books, currentYear]);
+  const goalStart = readingGoal?.startDate ?? `${currentYear}-01-01`;
+  const goalEnd   = readingGoal?.endDate   ?? `${currentYear}-12-31`;
+  const booksFinishedInGoal = useMemo(() =>
+    books.filter((b) => {
+      if (b.status !== "finished") return false;
+      const fd = (b as any).finishDate as string | null;
+      return fd && fd >= goalStart && fd <= goalEnd;
+    }),
+    [books, goalStart, goalEnd]);
+  const booksFinishedThisYear = booksFinishedInGoal.length;
+  const booksPlannedInGoal = useMemo(() =>
+    books.filter((b) => {
+      if (b.status === "finished") return false;
+      const tfd = b.targetFinishDate;
+      return tfd && tfd >= goalStart && tfd <= goalEnd;
+    }),
+    [books, goalStart, goalEnd]);
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -666,41 +680,52 @@ export default function GoalsPage() {
             ) : /* Reading Goal mode: show progress overview */
             isReadingGoalSelected ? (
               <div className="space-y-3">
-                <div className="text-center pb-2">
-                  <BookOpen size={24} className="mx-auto mb-2 text-amber-400" />
-                  <p className="text-sm font-semibold">{currentYear} Reading Goal</p>
-                </div>
                 {readingGoal && (() => {
-                  const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
-                  const remaining = Math.max(0, readingGoal.booksTarget - booksFinishedThisYear);
-                  const yearStart = new Date(currentYear, 0, 1).getTime();
-                  const yearEnd = new Date(currentYear + 1, 0, 1).getTime();
-                  const yearPct = Math.round(((Date.now() - yearStart) / (yearEnd - yearStart)) * 100);
+                  const finished = booksFinishedThisYear;
+                  const planned  = booksPlannedInGoal.length;
+                  const pct = Math.min(100, Math.round((finished / readingGoal.booksTarget) * 100));
+                  const remaining = Math.max(0, readingGoal.booksTarget - finished);
+                  const rangeStart = readingGoal.startDate ?? `${currentYear}-01-01`;
+                  const rangeEnd   = readingGoal.endDate   ?? `${currentYear}-12-31`;
+                  const windowMs = new Date(rangeEnd).getTime() - new Date(rangeStart).getTime();
+                  const elapsedMs = Date.now() - new Date(rangeStart).getTime();
+                  const windowPct = Math.min(100, Math.max(0, Math.round((elapsedMs / windowMs) * 100)));
+                  const rangeLabel = `${format(parseISO(rangeStart), "MMM d")} – ${format(parseISO(rangeEnd), "MMM d, yyyy")}`;
                   return (
                     <div className="space-y-3">
+                      {readingGoal.label && (
+                        <p className="text-sm font-semibold text-center">{readingGoal.label}</p>
+                      )}
                       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
                         <div className="flex justify-between items-end mb-2">
                           <div>
-                            <p className="text-3xl font-bold text-amber-700 dark:text-amber-300">{booksFinishedThisYear}</p>
+                            <p className="text-3xl font-bold text-amber-700 dark:text-amber-300">{finished}</p>
                             <p className="text-xs text-muted-foreground">of {readingGoal.booksTarget} books</p>
                           </div>
                           <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{pct}%</p>
                         </div>
                         <Progress value={pct} className="h-2" />
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><Calendar size={9} />{rangeLabel}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2.5 rounded-lg bg-secondary/40 text-center">
                           <p className="text-lg font-bold">{remaining}</p>
-                          <p className="text-[10px] text-muted-foreground">books left</p>
+                          <p className="text-[10px] text-muted-foreground">left to read</p>
                         </div>
                         <div className="p-2.5 rounded-lg bg-secondary/40 text-center">
-                          <p className={`text-lg font-bold ${pct >= yearPct ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
-                            {pct >= yearPct ? "On track" : "Behind"}
+                          <p className={`text-lg font-bold ${pct >= windowPct ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {pct >= windowPct ? "On track" : "Behind"}
                           </p>
-                          <p className="text-[10px] text-muted-foreground">vs year ({yearPct}%)</p>
+                          <p className="text-[10px] text-muted-foreground">{windowPct}% of period</p>
                         </div>
                       </div>
-                      <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> View & edit in Reading</a></Link>
+                      {planned > 0 && (
+                        <div className="p-2.5 rounded-lg bg-secondary/40 text-center">
+                          <p className="text-lg font-bold">{planned}</p>
+                          <p className="text-[10px] text-muted-foreground">books planned</p>
+                        </div>
+                      )}
+                      <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> Edit goal in Reading</a></Link>
                     </div>
                   );
                 })()}
@@ -946,48 +971,95 @@ export default function GoalsPage() {
               </div>
             )}
 
-            {/* Reading Goal mode: show finished books this year */}
+            {/* Reading Goal mode: show planned + finished books */}
             {isReadingGoalSelected && readingGoal && (() => {
-              const finishedThisYear = books
-                .filter((b) => b.status === "finished" && (b as any).finishDate?.startsWith(String(currentYear)))
-                .sort((a, b) => ((b as any).finishDate ?? "").localeCompare((a as any).finishDate ?? ""));
-              const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
+              const finished = [...booksFinishedInGoal].sort((a, b) =>
+                ((a as any).finishDate ?? "").localeCompare((b as any).finishDate ?? ""));
+              const planned = [...booksPlannedInGoal].sort((a, b) =>
+                (a.targetFinishDate ?? "").localeCompare(b.targetFinishDate ?? ""));
+              const pct = Math.min(100, Math.round((finished.length / readingGoal.booksTarget) * 100));
+              const hasAny = finished.length > 0 || planned.length > 0;
               return (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
                     <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-sm font-semibold">{booksFinishedThisYear} of {readingGoal.booksTarget} books finished</span>
+                      <span className="text-sm font-semibold">{finished.length} of {readingGoal.booksTarget} finished</span>
                       <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{pct}%</span>
                     </div>
                     <Progress value={pct} className="h-1.5" />
                   </div>
-                  {finishedThisYear.length === 0 ? (
+
+                  {/* Planned books */}
+                  {planned.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Up Next — {planned.length} planned</p>
+                      <div className="space-y-1">
+                        {planned.map((book) => {
+                          const tfd = book.targetFinishDate;
+                          const d = tfd ? daysUntil(tfd) : null;
+                          const overdue = d !== null && d < 0;
+                          return (
+                            <div key={book.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-secondary/40 transition-colors">
+                              {(book as any).coverUrl ? (
+                                <img src={(book as any).coverUrl} alt={book.title} className="w-7 h-9 object-cover rounded shrink-0" />
+                              ) : (
+                                <div className="w-7 h-9 rounded shrink-0 flex items-center justify-center" style={{ backgroundColor: (book as any).coverColor || "#1e3a5f" }}>
+                                  <BookOpen size={11} className="text-white/60" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm truncate">{book.title}</p>
+                                {book.author && <p className="text-xs text-muted-foreground truncate">{book.author}</p>}
+                              </div>
+                              {tfd && (
+                                <span className={`text-xs shrink-0 font-medium ${overdue ? "text-destructive" : d !== null && d <= 7 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                  {overdue ? `${Math.abs(d!)}d late` : d === 0 ? "Today" : `by ${format(parseISO(tfd), "MMM d")}`}
+                                </span>
+                              )}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border capitalize shrink-0 ${book.status === "current" ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" : "bg-secondary text-muted-foreground border-border"}`}>
+                                {book.status === "backlog" ? "up next" : book.status}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Finished books */}
+                  {finished.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Finished — {finished.length}</p>
+                      <div className="space-y-1">
+                        {finished.map((book, i) => (
+                          <div key={book.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-secondary/40 transition-colors">
+                            <span className="text-xs font-bold text-muted-foreground w-5 shrink-0 text-right">{i + 1}</span>
+                            {(book as any).coverUrl ? (
+                              <img src={(book as any).coverUrl} alt={book.title} className="w-7 h-9 object-cover rounded shrink-0" />
+                            ) : (
+                              <div className="w-7 h-9 rounded shrink-0 flex items-center justify-center" style={{ backgroundColor: (book as any).coverColor || "#1e3a5f" }}>
+                                <BookOpen size={11} className="text-white/60" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm truncate">{book.title}</p>
+                              {book.author && <p className="text-xs text-muted-foreground truncate">{book.author}</p>}
+                            </div>
+                            {(book as any).finishDate && (
+                              <span className="text-xs text-muted-foreground shrink-0">{format(parseISO((book as any).finishDate), "MMM d")}</span>
+                            )}
+                            <Check size={13} className="text-emerald-500 shrink-0" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!hasAny && (
                     <div className="text-center py-10 text-muted-foreground">
                       <BookOpen size={28} className="mx-auto mb-3 opacity-20" />
-                      <p className="text-sm">No books finished yet in {currentYear}</p>
-                      <Link href="/reading"><a className="text-xs text-primary hover:underline mt-1 block">Mark books as finished in Reading →</a></Link>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {finishedThisYear.map((book, i) => (
-                        <div key={book.id} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-secondary/40 transition-colors">
-                          <span className="text-xs font-bold text-muted-foreground w-5 shrink-0 text-right">{i + 1}</span>
-                          {(book as any).coverUrl ? (
-                            <img src={(book as any).coverUrl} alt={book.title} className="w-7 h-9 object-cover rounded shrink-0" />
-                          ) : (
-                            <div className="w-7 h-9 rounded shrink-0 flex items-center justify-center" style={{ backgroundColor: (book as any).coverColor || "#1e3a5f" }}>
-                              <BookOpen size={12} className="text-white/60" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm truncate">{book.title}</p>
-                            {book.author && <p className="text-xs text-muted-foreground truncate">{book.author}</p>}
-                          </div>
-                          {(book as any).finishDate && (
-                            <span className="text-xs text-muted-foreground shrink-0">{format(parseISO((book as any).finishDate), "MMM d")}</span>
-                          )}
-                        </div>
-                      ))}
+                      <p className="text-sm">No books assigned to this goal yet</p>
+                      <Link href="/reading"><a className="text-xs text-primary hover:underline mt-1 block">Add books in Reading →</a></Link>
                     </div>
                   )}
                   <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> Manage in Reading</a></Link>
