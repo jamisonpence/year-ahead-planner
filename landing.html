@@ -110,7 +110,7 @@
   .hero {
     max-width: 780px;
     margin: 0 auto;
-    padding: 80px 24px 60px;
+    padding: 80px 24px 56px;
     text-align: center;
   }
   .eyebrow {
@@ -150,8 +150,29 @@
     animation: fadeUp 0.5s 0.16s ease both;
   }
   .hero-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     animation: fadeUp 0.5s 0.24s ease both;
   }
+  .trust-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    animation: fadeUp 0.5s 0.32s ease both;
+  }
+  .trust-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-soft);
+  }
+  .trust-item svg { opacity: 0.6; }
   .btn-google-hero {
     font-family: 'DM Sans', sans-serif;
     display: inline-flex;
@@ -173,12 +194,101 @@
     box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
   }
+  .hero-scroll-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-soft);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+    display: inline-block;
+  }
+  .hero-scroll-hint:hover { color: var(--indigo); }
+  /* ── HOW IT WORKS ── */
+  .section {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 72px 24px;
+  }
+  .section-label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin-bottom: 12px;
+  }
+  .section h2 {
+    font-family: 'Lora', serif;
+    font-size: clamp(24px, 3.5vw, 36px);
+    font-weight: 500;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+    line-height: 1.3;
+  }
+  .section-sub {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 300;
+    color: var(--text-mid);
+    margin-bottom: 44px;
+  }
+  /* How it works — horizontal steps */
+  .steps-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .step-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    animation: fadeUp 0.5s ease both;
+  }
+  .step-card:nth-child(1) { animation-delay: 0.05s; }
+  .step-card:nth-child(2) { animation-delay: 0.15s; }
+  .step-card:nth-child(3) { animation-delay: 0.25s; }
+  .step-num {
+    width: 36px;
+    height: 36px;
+    background: var(--indigo-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--indigo);
+    margin: 0 auto 14px;
+  }
+  .step-card h3 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .step-card p { font-size: 13px; font-weight: 300; color: var(--text-mid); line-height: 1.6; }
   /* ── DASHBOARD PREVIEW ── */
   .preview-wrap {
     max-width: 700px;
-    margin: 56px auto 0;
-    padding: 0 24px;
-    animation: fadeUp 0.6s 0.35s ease both;
+    margin: 0 auto;
+    padding: 0 24px 72px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  .preview-label {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-soft);
+    margin-bottom: 16px;
   }
   .browser-chrome {
     background: #f0eff0;
@@ -288,36 +398,15 @@
   .task-item.done { color: var(--text-soft); }
   .task-item.todo { color: var(--text); }
   /* ── CATEGORIES ── */
-  .section {
+  .section-alt {
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 72px 24px;
+  }
+  .section-alt-inner {
     max-width: 860px;
     margin: 0 auto;
-    padding: 80px 24px;
-  }
-  .section-label {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--indigo);
-    margin-bottom: 12px;
-  }
-  .section h2 {
-    font-family: 'Lora', serif;
-    font-size: clamp(24px, 3.5vw, 36px);
-    font-weight: 500;
-    text-align: center;
-    color: var(--text);
-    margin-bottom: 10px;
-    letter-spacing: -0.3px;
-    line-height: 1.3;
-  }
-  .section-sub {
-    text-align: center;
-    font-size: 15px;
-    font-weight: 300;
-    color: var(--text-mid);
-    margin-bottom: 44px;
   }
   .cats-grid {
     display: grid;
@@ -325,7 +414,7 @@
     gap: 12px;
   }
   .cat-card {
-    background: var(--bg-card);
+    background: var(--bg);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius);
     padding: 18px 14px;
@@ -349,11 +438,32 @@
   }
   .cat-name { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
   .cat-eg { font-size: 10px; color: var(--text-soft); line-height: 1.45; }
-  /* ── DIVIDER ── */
+  /* ── MID-PAGE CTA ── */
+  .mid-cta {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 64px 24px;
+    text-align: center;
+  }
+  .mid-cta h3 {
+    font-family: 'Lora', serif;
+    font-size: clamp(20px, 3vw, 28px);
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .mid-cta p {
+    font-size: 14px;
+    font-weight: 300;
+    color: var(--text-mid);
+    margin-bottom: 24px;
+  }
+  /* ── BJ CALLOUT ── */
   .divider {
     max-width: 680px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 24px 72px;
   }
   .bj-block {
     background: var(--indigo-light);
@@ -382,73 +492,62 @@
     margin-bottom: 5px;
   }
   .bj-block p { font-size: 13px; color: #4338CA; line-height: 1.6; font-weight: 300; }
-  /* ── HOW IT WORKS ── */
-  .steps {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    max-width: 520px;
-    margin: 0 auto;
-  }
-  .step {
-    display: flex;
-    gap: 18px;
-    align-items: flex-start;
-    opacity: 0;
-    animation: fadeUp 0.5s ease both;
-  }
-  .step:nth-child(1) { animation-delay: 0.05s; }
-  .step:nth-child(2) { animation-delay: 0.15s; }
-  .step:nth-child(3) { animation-delay: 0.25s; }
-  .step-num {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    background: var(--indigo-light);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--indigo);
-    margin-top: 2px;
-  }
-  .step h3 {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .step p { font-size: 14px; font-weight: 300; color: var(--text-mid); line-height: 1.6; }
   /* ── FOOTER CTA ── */
   .footer-cta {
-    background: var(--bg-card);
-    border-top: 1px solid var(--border-soft);
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e2d4d 100%);
     text-align: center;
-    padding: 72px 24px;
+    padding: 80px 24px;
   }
   .footer-cta h2 {
     font-family: 'Lora', serif;
-    font-size: clamp(24px, 3vw, 36px);
+    font-size: clamp(26px, 3.5vw, 42px);
     font-weight: 500;
-    color: var(--text);
-    margin-bottom: 10px;
+    color: #fff;
+    margin-bottom: 12px;
     letter-spacing: -0.3px;
+    line-height: 1.25;
+  }
+  .footer-cta h2 em {
+    font-style: italic;
+    color: var(--indigo-mid);
   }
   .footer-cta p {
     font-size: 15px;
     font-weight: 300;
-    color: var(--text-mid);
-    margin-bottom: 28px;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 32px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .btn-google-hero-light {
+    font-family: 'DM Sans', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    color: var(--text);
+    border: none;
+    padding: 14px 30px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    transition: box-shadow 0.2s, transform 0.15s;
+    text-decoration: none;
+  }
+  .btn-google-hero-light:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    transform: translateY(-2px);
   }
   .footer-note {
-    margin-top: 14px;
+    margin-top: 16px;
     font-size: 13px;
-    color: var(--text-soft);
+    color: rgba(255,255,255,0.45);
   }
-  .footer-note a { color: var(--indigo); text-decoration: none; }
-  .footer-note a:hover { text-decoration: underline; }
+  .footer-note a { color: rgba(255,255,255,0.7); text-decoration: none; }
+  .footer-note a:hover { color: #fff; text-decoration: underline; }
   /* ── FOOTER BAR ── */
   footer {
     background: var(--bg);
@@ -486,22 +585,26 @@
   @media (max-width: 640px) {
     nav { padding: 0 20px; }
     .nav-links { display: none; }
+    .steps-row { grid-template-columns: 1fr; gap: 12px; }
     .cats-grid { grid-template-columns: repeat(2, 1fr); }
     .dash-grid { grid-template-columns: 1fr 1fr; }
     .dash-grid .dash-card:last-child { display: none; }
     footer { flex-direction: column; gap: 10px; text-align: center; }
+    .trust-row { gap: 12px; }
+    .bj-block { flex-direction: column; gap: 12px; }
   }
 </style>
 </head>
 <body>
 <div class="bg-dots"></div>
 <div class="content-layer">
+
 <!-- NAV -->
 <nav>
   <a href="/" class="nav-logo">my<span>lifos</span></a>
   <ul class="nav-links">
-    <li><a href="#features">Features</a></li>
     <li><a href="#how">How it works</a></li>
+    <li><a href="#features">Features</a></li>
   </ul>
   <div class="nav-actions">
     <button class="btn-ghost" onclick="signInWithGoogle()">Log in</button>
@@ -516,11 +619,12 @@
     </button>
   </div>
 </nav>
+
 <!-- HERO -->
 <section class="hero">
   <div class="eyebrow">Your personal life OS</div>
-  <h1>One app for every part<br>of <em>your life</em></h1>
-  <p class="hero-sub">Goals, tasks, workouts, reading, music, recipes, budget, relationships, plants, kids, and more — all connected, all in one place.</p>
+  <h1>Stop juggling apps.<br>Start <em>living intentionally.</em></h1>
+  <p class="hero-sub">mylifos brings your goals, habits, relationships, reading, workouts, and everyday life together in one beautifully connected place.</p>
   <div class="hero-cta">
     <button class="btn-google-hero" onclick="signInWithGoogle()">
       <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -529,12 +633,53 @@
         <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
         <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
       </svg>
-      Continue with Google
+      Continue with Google — it's free
     </button>
+    <div class="trust-row">
+      <span class="trust-item">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        No credit card
+      </span>
+      <span class="trust-item">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Works on all devices
+      </span>
+      <span class="trust-item">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Set up in minutes
+      </span>
+    </div>
+    <a href="#how" class="hero-scroll-hint">See how it works ↓</a>
   </div>
 </section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how" style="padding-top: 0; padding-bottom: 72px;">
+  <div class="section-label">Simple by design</div>
+  <h2>How it works</h2>
+  <p class="section-sub">Up and running in minutes. No learning curve.</p>
+  <div class="steps-row">
+    <div class="step-card">
+      <div class="step-num">1</div>
+      <h3>Pick your modules</h3>
+      <p>Turn on the trackers that fit your life — goals, reading, workouts, budget, plants, and more. Hide everything else.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-num">2</div>
+      <h3>Log as you go</h3>
+      <p>Add entries throughout your day. Everything stays connected — a recipe links to your grocery list, a goal ties to your daily tasks.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-num">3</div>
+      <h3>See your whole life</h3>
+      <p>Your dashboard surfaces what matters: today's tasks, active goals, recent activity, and upcoming events — all at a glance.</p>
+    </div>
+  </div>
+</section>
+
 <!-- DASHBOARD PREVIEW -->
 <div class="preview-wrap">
+  <p class="preview-label">Your personalized dashboard</p>
   <div class="browser-chrome">
     <div class="chrome-dot"></div>
     <div class="chrome-dot"></div>
@@ -590,170 +735,189 @@
     </div>
   </div>
 </div>
+
 <!-- FEATURES / CATEGORIES -->
-<section class="section" id="features">
-  <div class="section-label">Everything in one place</div>
-  <h2>One app for all of it</h2>
-  <p class="section-sub">Every tracker you've ever wished existed, finally in one connected place.</p>
-  <div class="cats-grid">
+<div class="section-alt" id="features">
+  <div class="section-alt-inner">
+    <div class="section-label">Everything in one place</div>
+    <h2 style="text-align:center;font-family:'Lora',serif;font-size:clamp(24px,3.5vw,36px);font-weight:500;color:var(--text);margin-bottom:10px;letter-spacing:-0.3px;line-height:1.3;">One place for all of it</h2>
+    <p style="text-align:center;font-size:15px;font-weight:300;color:var(--text-mid);margin-bottom:44px;">Choose the trackers that match your life. Turn off the ones you don't need.</p>
+    <div class="cats-grid">
 
-    <!-- Goals, Projects & Tasks -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#EEEDFE;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <circle cx="9" cy="9" r="6.5" stroke="#4F46E5" stroke-width="1.5"/>
-          <path d="M6 9l2 2 4-4" stroke="#4F46E5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+      <!-- Goals, Projects & Tasks -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#EEEDFE;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="6.5" stroke="#4F46E5" stroke-width="1.5"/>
+            <path d="M6 9l2 2 4-4" stroke="#4F46E5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Goals & Projects</div>
+        <div class="cat-eg">Milestones, tasks, chores & house projects</div>
       </div>
-      <div class="cat-name">Goals & Projects</div>
-      <div class="cat-eg">Milestones, tasks, chores & house projects</div>
-    </div>
 
-    <!-- Calendar -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#EFF6FF;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <rect x="3" y="4" width="12" height="10" rx="1.5" stroke="#1D4ED8" stroke-width="1.4"/>
-          <path d="M6 4V3M12 4V3" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
-          <line x1="3" y1="7.5" x2="15" y2="7.5" stroke="#1D4ED8" stroke-width="1.2"/>
-          <circle cx="9" cy="11" r="1" fill="#1D4ED8"/>
-        </svg>
+      <!-- Calendar -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#EFF6FF;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <rect x="3" y="4" width="12" height="10" rx="1.5" stroke="#1D4ED8" stroke-width="1.4"/>
+            <path d="M6 4V3M12 4V3" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="3" y1="7.5" x2="15" y2="7.5" stroke="#1D4ED8" stroke-width="1.2"/>
+            <circle cx="9" cy="11" r="1" fill="#1D4ED8"/>
+          </svg>
+        </div>
+        <div class="cat-name">Calendar</div>
+        <div class="cat-eg">Events, birthdays & recurring reminders</div>
       </div>
-      <div class="cat-name">Calendar</div>
-      <div class="cat-eg">Events, birthdays & recurring reminders</div>
-    </div>
 
-    <!-- Workouts -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#FAEEDA;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path d="M3 9h2M13 9h2M5 9c0-1.66 1.34-3 3-3v6c-1.66 0-3-1.34-3-3zm5-3c1.66 0 3 1.34 3 3s-1.34 3-3 3V6z" stroke="#854F0B" stroke-width="1.3" stroke-linecap="round"/>
-        </svg>
+      <!-- Workouts -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#FAEEDA;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <path d="M3 9h2M13 9h2M5 9c0-1.66 1.34-3 3-3v6c-1.66 0-3-1.34-3-3zm5-3c1.66 0 3 1.34 3 3s-1.34 3-3 3V6z" stroke="#854F0B" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Workouts</div>
+        <div class="cat-eg">Strength, cardio, yoga & custom plans</div>
       </div>
-      <div class="cat-name">Workouts</div>
-      <div class="cat-eg">Strength, cardio, yoga & custom plans</div>
-    </div>
 
-    <!-- Reading -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#EFF6FF;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path d="M4 14V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v10" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M4 14h10" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
-          <line x1="7" y1="6" x2="11" y2="6" stroke="#1D4ED8" stroke-width="1.2" stroke-linecap="round"/>
-          <line x1="7" y1="8.5" x2="11" y2="8.5" stroke="#1D4ED8" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
+      <!-- Reading -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#EFF6FF;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <path d="M4 14V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v10" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M4 14h10" stroke="#1D4ED8" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="7" y1="6" x2="11" y2="6" stroke="#1D4ED8" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="7" y1="8.5" x2="11" y2="8.5" stroke="#1D4ED8" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Reading</div>
+        <div class="cat-eg">Books, reading progress & notes</div>
       </div>
-      <div class="cat-name">Reading</div>
-      <div class="cat-eg">Books, reading progress & notes</div>
-    </div>
 
-    <!-- Movies & Shows -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#F5F3FF;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="#6D28D9" stroke-width="1.4"/>
-          <path d="M7 8.5L11 11 7 13.5V8.5z" fill="#6D28D9" opacity="0.7"/>
-        </svg>
+      <!-- Movies & Shows -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#F5F3FF;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="#6D28D9" stroke-width="1.4"/>
+            <path d="M7 8.5L11 11 7 13.5V8.5z" fill="#6D28D9" opacity="0.7"/>
+          </svg>
+        </div>
+        <div class="cat-name">Movies & Shows</div>
+        <div class="cat-eg">Watchlist, ratings & recommendations</div>
       </div>
-      <div class="cat-name">Movies & Shows</div>
-      <div class="cat-eg">Watchlist, ratings & recommendations</div>
-    </div>
 
-    <!-- Music -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#FFF1F2;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <circle cx="6" cy="13" r="2" stroke="#9F1239" stroke-width="1.4"/>
-          <circle cx="13" cy="11" r="2" stroke="#9F1239" stroke-width="1.4"/>
-          <path d="M8 13V6l7-2v5" stroke="#9F1239" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+      <!-- Music -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#FFF1F2;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <circle cx="6" cy="13" r="2" stroke="#9F1239" stroke-width="1.4"/>
+            <circle cx="13" cy="11" r="2" stroke="#9F1239" stroke-width="1.4"/>
+            <path d="M8 13V6l7-2v5" stroke="#9F1239" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Music</div>
+        <div class="cat-eg">Artists, songs & collections</div>
       </div>
-      <div class="cat-name">Music</div>
-      <div class="cat-eg">Artists, songs & collections</div>
-    </div>
 
-    <!-- Recipes -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#E1F5EE;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path d="M5 6h8M5 9h6M5 12h4" stroke="#0F6E56" stroke-width="1.3" stroke-linecap="round"/>
-          <rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="#0F6E56" stroke-width="1.3"/>
-        </svg>
+      <!-- Recipes -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#E1F5EE;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <path d="M5 6h8M5 9h6M5 12h4" stroke="#0F6E56" stroke-width="1.3" stroke-linecap="round"/>
+            <rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="#0F6E56" stroke-width="1.3"/>
+          </svg>
+        </div>
+        <div class="cat-name">Recipes</div>
+        <div class="cat-eg">Meals, ingredients & grocery lists</div>
       </div>
-      <div class="cat-name">Recipes</div>
-      <div class="cat-eg">Meals, ingredients & grocery lists</div>
-    </div>
 
-    <!-- Budget -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#E6F1FB;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <rect x="2" y="5" width="14" height="9" rx="1.5" stroke="#185FA5" stroke-width="1.4"/>
-          <path d="M9 8v4M7 10h4" stroke="#185FA5" stroke-width="1.3" stroke-linecap="round"/>
-          <path d="M5 5V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="#185FA5" stroke-width="1.3"/>
-        </svg>
+      <!-- Budget -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#E6F1FB;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <rect x="2" y="5" width="14" height="9" rx="1.5" stroke="#185FA5" stroke-width="1.4"/>
+            <path d="M9 8v4M7 10h4" stroke="#185FA5" stroke-width="1.3" stroke-linecap="round"/>
+            <path d="M5 5V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="#185FA5" stroke-width="1.3"/>
+          </svg>
+        </div>
+        <div class="cat-name">Budget</div>
+        <div class="cat-eg">Spending, subscriptions & categories</div>
       </div>
-      <div class="cat-name">Budget</div>
-      <div class="cat-eg">Spending, subscriptions & categories</div>
-    </div>
 
-    <!-- Relationships -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#FFF1F2;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <circle cx="7" cy="7" r="2.5" stroke="#9F1239" stroke-width="1.4"/>
-          <circle cx="12.5" cy="7" r="2" stroke="#9F1239" stroke-width="1.3"/>
-          <path d="M3 14c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="#9F1239" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M12.5 11c1.38 0 2.5 1.12 2.5 2.5" stroke="#9F1239" stroke-width="1.3" stroke-linecap="round"/>
-        </svg>
+      <!-- Relationships -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#FFF1F2;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <circle cx="7" cy="7" r="2.5" stroke="#9F1239" stroke-width="1.4"/>
+            <circle cx="12.5" cy="7" r="2" stroke="#9F1239" stroke-width="1.3"/>
+            <path d="M3 14c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="#9F1239" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M12.5 11c1.38 0 2.5 1.12 2.5 2.5" stroke="#9F1239" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Relationships</div>
+        <div class="cat-eg">People, groups, birthdays & connections</div>
       </div>
-      <div class="cat-name">Relationships</div>
-      <div class="cat-eg">People, groups, birthdays & connections</div>
-    </div>
 
-    <!-- Kids -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#F0FDF4;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <circle cx="9" cy="6.5" r="2.5" stroke="#166534" stroke-width="1.4"/>
-          <path d="M5 15c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="#166534" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M6 9.5C4.5 10 3 11.5 3 13.5" stroke="#166534" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1.5 1.5"/>
-          <path d="M12 9.5c1.5.5 3 2 3 4" stroke="#166534" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1.5 1.5"/>
-        </svg>
+      <!-- Kids -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#F0FDF4;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="6.5" r="2.5" stroke="#166534" stroke-width="1.4"/>
+            <path d="M5 15c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="#166534" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M6 9.5C4.5 10 3 11.5 3 13.5" stroke="#166534" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1.5 1.5"/>
+            <path d="M12 9.5c1.5.5 3 2 3 4" stroke="#166534" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1.5 1.5"/>
+          </svg>
+        </div>
+        <div class="cat-name">Kids</div>
+        <div class="cat-eg">Milestones, memories & school prep</div>
       </div>
-      <div class="cat-name">Kids</div>
-      <div class="cat-eg">Milestones, memories & school prep</div>
-    </div>
 
-    <!-- Plants -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#F0FDF4;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path d="M9 15V9" stroke="#166534" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M9 9C9 9 5 9 4 5c2 0 4 1 5 4z" fill="#166534" opacity="0.25" stroke="#166534" stroke-width="1.2" stroke-linejoin="round"/>
-          <path d="M9 11C9 11 13 11 14 7c-2 0-4 1-5 4z" fill="#166534" opacity="0.25" stroke="#166534" stroke-width="1.2" stroke-linejoin="round"/>
-        </svg>
+      <!-- Plants -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#F0FDF4;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <path d="M9 15V9" stroke="#166534" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M9 9C9 9 5 9 4 5c2 0 4 1 5 4z" fill="#166534" opacity="0.25" stroke="#166534" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M9 11C9 11 13 11 14 7c-2 0-4 1-5 4z" fill="#166534" opacity="0.25" stroke="#166534" stroke-width="1.2" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Plants</div>
+        <div class="cat-eg">Plant care, watering & growth tracking</div>
       </div>
-      <div class="cat-name">Plants</div>
-      <div class="cat-eg">Plant care, watering & growth tracking</div>
-    </div>
 
-    <!-- Housekeeping -->
-    <div class="cat-card">
-      <div class="cat-icon" style="background:#FEF3C7;">
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path d="M3 9L9 3l6 6" stroke="#92400E" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M5 9v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V9" stroke="#92400E" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M7 15v-4h4v4" stroke="#92400E" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
+      <!-- Housekeeping -->
+      <div class="cat-card">
+        <div class="cat-icon" style="background:#FEF3C7;">
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <path d="M3 9L9 3l6 6" stroke="#92400E" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 9v5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V9" stroke="#92400E" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M7 15v-4h4v4" stroke="#92400E" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="cat-name">Housekeeping</div>
+        <div class="cat-eg">Chores, home projects & appliances</div>
       </div>
-      <div class="cat-name">Housekeeping</div>
-      <div class="cat-eg">Chores, home projects & appliances</div>
-    </div>
 
+    </div>
   </div>
-</section>
+</div>
+
+<!-- MID-PAGE CTA -->
+<div class="mid-cta">
+  <h3>Ready to get started?</h3>
+  <p>It takes less than a minute to sign up and start tracking what matters to you.</p>
+  <button class="btn-google-hero" onclick="signInWithGoogle()">
+    <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+      <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+    </svg>
+    Continue with Google
+  </button>
+</div>
+
 <!-- BJ CALLOUT -->
 <div class="divider">
   <div class="bj-block">
@@ -766,50 +930,23 @@
     </div>
   </div>
 </div>
-<!-- HOW IT WORKS -->
-<section class="section" id="how">
-  <div class="section-label">Simple by design</div>
-  <h2>How it works</h2>
-  <p class="section-sub">Get set up in minutes. No steep learning curve.</p>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <div>
-        <h3>Pick your modules</h3>
-        <p>Turn on the trackers that match your life — goals, reading, workouts, plants, kids, budget, or all of the above. Hide the ones you don't need.</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div>
-        <h3>Log as you go</h3>
-        <p>Add entries, check off tasks, and update progress throughout your day. Everything stays connected — a recipe links to your grocery list, a goal ties to daily tasks.</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div>
-        <h3>Connect with friends</h3>
-        <p>Share reading lists, recipes, workout plans, and more with people you're connected with on the app. Your life OS, together.</p>
-      </div>
-    </div>
-  </div>
-</section>
+
 <!-- FOOTER CTA -->
 <div class="footer-cta">
-  <h2>Start building your life OS</h2>
-  <p>Free to start. No credit card required.</p>
-  <button class="btn-google-hero" onclick="signInWithGoogle()">
+  <h2>Your whole life,<br><em>finally in one place.</em></h2>
+  <p>Free to use. Sign in with Google. No setup headaches.</p>
+  <button class="btn-google-hero-light" onclick="signInWithGoogle()">
     <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
       <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
       <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
       <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
       <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
     </svg>
-    Continue with Google
+    Get started free
   </button>
   <p class="footer-note">Already have an account? <a href="#" onclick="signInWithGoogle(); return false;">Log in →</a></p>
 </div>
+
 <!-- FOOTER -->
 <footer>
   <div class="footer-copy">mylifos</div>
@@ -819,7 +956,9 @@
     <a href="#">Contact</a>
   </div>
 </footer>
+
 </div><!-- end content-layer -->
+
 <!--
   GIS is loaded with onload="gisLoaded()" so we know exactly when it's ready.
   The client ID is injected server-side (no async fetch needed).
@@ -930,7 +1069,7 @@
 <!-- Sign-in button overlay (shown when One Tap is suppressed) -->
 <div id="gis-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#fff;border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;min-width:300px;max-width:90vw;">
-    <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">Sign in to MyLifos</p>
+    <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">Sign in to mylifos</p>
     <div id="gis-button-target"></div>
     <button onclick="document.getElementById('gis-overlay').style.display='none'" style="font-size:13px;color:#888;background:none;border:none;cursor:pointer;padding:4px 8px;">Cancel</button>
   </div>
