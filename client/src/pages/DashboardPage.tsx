@@ -536,7 +536,7 @@ export default function DashboardPage() {
           {/* Active Goals */}
           {visible.goals && (
             <Section title="Active Goals" icon={<Target size={14} className="text-[hsl(var(--cat-goal))]" />} linkHref="/goals" linkLabel="Goals">
-              {activeGoals.length === 0 && !nutritionGoal && workoutPlans.length === 0 && !readingGoal ? (
+              {activeGoals.length === 0 && !nutritionGoal && !workoutPlans.find(p => p.isActive) && !readingGoal ? (
                 <Empty icon={<Target size={26} />} text="No active goals yet" />
               ) : (
                 <div className="space-y-3">
@@ -587,8 +587,9 @@ export default function DashboardPage() {
                     const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0)
                       ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100))
                       : 0;
+                    const currentWeek = weeksElapsed !== null ? Math.min(weeksElapsed + 1, activePlan.durationWeeks) : null;
                     return (
-                      <Link href="/goals">
+                      <Link href="/workouts">
                         <a className="block p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2 hover:border-blue-400 transition-colors">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
@@ -599,8 +600,8 @@ export default function DashboardPage() {
                           </div>
                           <Progress value={pct} className="h-1.5" />
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span className="capitalize">{activePlan.goalType.replace("_", " ")}</span>
-                            <span>{pct}% complete</span>
+                            <span className="capitalize">{activePlan.goalType.replace(/_/g, " ")}</span>
+                            <span>{currentWeek !== null ? `Week ${currentWeek} of ${activePlan.durationWeeks}` : `${pct}% complete`}</span>
                           </div>
                         </a>
                       </Link>

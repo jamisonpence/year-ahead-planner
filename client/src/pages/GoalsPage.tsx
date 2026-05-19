@@ -495,24 +495,41 @@ export default function GoalsPage() {
               </div>
             )}
 
-            {/* Workout Goals card */}
-            {workoutPlans.length > 0 && (() => {
-              const activePlan = workoutPlans.find(p => p.isActive) ?? workoutPlans[0];
+            {/* Active Workout Plan card — only shown when a plan is active */}
+            {(() => {
+              const activePlan = workoutPlans.find(p => p.isActive);
+              if (!activePlan) return null;
+              const weeksElapsed = activePlan.startDate
+                ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
+                : null;
+              const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0)
+                ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100))
+                : 0;
+              const isSelected = selectedGoalId === WORKOUT_GOALS_ID;
               return (
                 <div
-                  onClick={() => { setSelectedGoalId(selectedGoalId === WORKOUT_GOALS_ID ? null : WORKOUT_GOALS_ID); setSelectedProjectId(null); }}
+                  onClick={() => { setSelectedGoalId(isSelected ? null : WORKOUT_GOALS_ID); setSelectedProjectId(null); }}
                   className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
-                    selectedGoalId === WORKOUT_GOALS_ID ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20" : "bg-card border-dashed hover:border-blue-300"
+                    isSelected ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20" : "bg-card hover:border-blue-300"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <Dumbbell size={15} className="text-blue-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">Workout Goals</p>
-                      <p className="text-xs text-muted-foreground capitalize">{activePlan.name} · {activePlan.goalType.replace("_", " ")}</p>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Dumbbell size={13} className="text-blue-500 shrink-0" />
+                        <p className="text-sm font-semibold truncate">{activePlan.name}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground capitalize">{activePlan.goalType.replace(/_/g, " ")} · {activePlan.durationWeeks}w plan</p>
                     </div>
-                    <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === WORKOUT_GOALS_ID ? "rotate-90" : ""}`} />
+                    <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 mt-1 ${isSelected ? "rotate-90" : ""}`} />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={pct} className="h-1.5 flex-1" />
+                    <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                  </div>
+                  {weeksElapsed !== null && (
+                    <p className="text-xs text-muted-foreground mt-1">Week {Math.min(weeksElapsed + 1, activePlan.durationWeeks)} of {activePlan.durationWeeks}</p>
+                  )}
                 </div>
               );
             })()}
@@ -632,52 +649,91 @@ export default function GoalsPage() {
                 )}
                 <Link href="/health"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Heart size={11} /> Manage in Health</a></Link>
               </div>
-            ) : /* Workout Goals mode: show active plan details */
-            isWorkoutGoalsSelected ? (
-              <div className="space-y-3">
-                <div className="text-center pb-2">
-                  <Dumbbell size={24} className="mx-auto mb-2 text-blue-400" />
-                  <p className="text-sm font-semibold">Workout Plans</p>
+            ) : /* Active Workout Plan: show goal overview with milestones as phases */
+            isWorkoutGoalsSelected ? (() => {
+              const activePlan = workoutPlans.find(p => p.isActive);
+              if (!activePlan) return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Dumbbell size={28} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-xs">No active plan</p>
+                  <Link href="/workouts"><a className="text-xs text-primary hover:underline mt-1 block">Set one in Workouts →</a></Link>
                 </div>
-                {workoutPlans.map((plan) => {
-                  let metric: { label: string; current?: number; target?: number; unit?: string } | null = null;
-                  try { if (plan.goalMetricJson) metric = JSON.parse(plan.goalMetricJson); } catch {}
-                  const weeksElapsed = plan.startDate
-                    ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / (7 * 86400000))
-                    : null;
-                  const pct = (weeksElapsed !== null && plan.durationWeeks > 0)
-                    ? Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100))
-                    : 0;
-                  return (
-                    <div key={plan.id} className={`p-3 rounded-xl border ${plan.isActive ? "border-blue-300 bg-blue-50 dark:bg-blue-950/20" : "bg-secondary/40"}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-semibold truncate flex-1">{plan.name}</p>
-                        {plan.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold ml-1 shrink-0">Active</span>}
+              );
+              let metric: { label: string; current?: number; target?: number; unit?: string } | null = null;
+              let milestones: { week: number; description: string; targetValue?: number }[] = [];
+              try { if (activePlan.goalMetricJson) metric = JSON.parse(activePlan.goalMetricJson); } catch {}
+              try { if (activePlan.milestonesJson) milestones = JSON.parse(activePlan.milestonesJson); } catch {}
+              const weeksElapsed = activePlan.startDate
+                ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
+                : null;
+              const currentWeek = weeksElapsed !== null ? Math.min(weeksElapsed + 1, activePlan.durationWeeks) : null;
+              const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0)
+                ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100))
+                : 0;
+              return (
+                <div className="space-y-3">
+                  {/* Progress hero */}
+                  <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                    <div className="flex justify-between items-end mb-2">
+                      <div>
+                        {currentWeek !== null && (
+                          <>
+                            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{currentWeek}</p>
+                            <p className="text-xs text-muted-foreground">of {activePlan.durationWeeks} weeks</p>
+                          </>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground capitalize mb-2">{plan.goalType.replace("_", " ")} · {plan.durationWeeks}w</p>
-                      {plan.startDate && (
-                        <>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
-                          </div>
-                          {weeksElapsed !== null && <p className="text-[10px] text-muted-foreground">Week {Math.min(weeksElapsed + 1, plan.durationWeeks)} of {plan.durationWeeks}</p>}
-                        </>
-                      )}
-                      {metric && metric.target && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Target: {metric.target}{metric.unit ? ` ${metric.unit}` : ""}
-                          {metric.current ? ` (now: ${metric.current}${metric.unit ? ` ${metric.unit}` : ""})` : ""}
-                        </p>
+                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{pct}%</p>
+                    </div>
+                    <Progress value={pct} className="h-2" />
+                    {activePlan.startDate && (
+                      <p className="text-[10px] text-muted-foreground mt-1 capitalize">{activePlan.goalType.replace(/_/g, " ")}</p>
+                    )}
+                  </div>
+                  {/* Goal metric */}
+                  {metric?.target && (
+                    <div className="p-2.5 rounded-lg bg-secondary/40">
+                      <p className="text-xs text-muted-foreground mb-0.5">Goal Target</p>
+                      <p className="text-sm font-semibold">{metric.target}{metric.unit ? ` ${metric.unit}` : ""}</p>
+                      {metric.current !== undefined && (
+                        <p className="text-xs text-muted-foreground">Currently: {metric.current}{metric.unit ? ` ${metric.unit}` : ""}</p>
                       )}
                     </div>
-                  );
-                })}
-                <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
-              </div>
-            ) : /* Reading Goal mode: show progress overview */
+                  )}
+                  {/* Milestones as phases */}
+                  {milestones.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Milestones</p>
+                      <div className="space-y-1.5">
+                        {milestones.map((m, i) => {
+                          const done = currentWeek !== null && currentWeek > m.week;
+                          const current = currentWeek !== null && (currentWeek === m.week || (i === 0 && currentWeek < m.week));
+                          return (
+                            <div key={i} className={`flex items-center gap-3 px-2.5 py-2.5 rounded-xl border transition-colors ${
+                              done ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+                              : current ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                              : "bg-card border-border"
+                            }`}>
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                done ? "border-emerald-500 bg-emerald-500" : current ? "border-blue-500" : "border-muted-foreground/30"
+                              }`}>
+                                {done && <Check size={10} className="text-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{m.description}</p>
+                                {m.targetValue !== undefined && <p className="text-[10px] text-muted-foreground">Target: {m.targetValue}{metric?.unit ? ` ${metric.unit}` : ""}</p>}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground shrink-0">Wk {m.week}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
+                </div>
+              );
+            })() : /* Reading Goal mode: show progress overview */
             isReadingGoalSelected ? (
               <div className="space-y-3">
                 {readingGoal && (() => {
@@ -899,7 +955,7 @@ export default function GoalsPage() {
                     {isAllTasksSelected ? "All Tasks"
                       : isPlantsSelected ? "Watering Schedule"
                       : isNutritionSelected ? "Nutrition Details"
-                      : isWorkoutGoalsSelected ? "Workout Schedule"
+                      : isWorkoutGoalsSelected ? "Weekly Schedule"
                       : isReadingGoalSelected ? "Books Finished"
                       : isHousekeepingSelected && selectedHouseProject ? `Tasks — ${selectedHouseProject.title}`
                       : isHousekeepingSelected ? "Chores"
@@ -1067,60 +1123,66 @@ export default function GoalsPage() {
               );
             })()}
 
-            {/* Workout Goals mode: show active plan schedule */}
-            {isWorkoutGoalsSelected && (
-              <div className="space-y-3">
-                {workoutPlans.length === 0 ? (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <Dumbbell size={36} className="mx-auto mb-4 opacity-20" />
-                    <p className="font-medium text-sm">No workout plans yet</p>
-                    <Link href="/workouts"><a className="text-xs text-primary hover:underline mt-1 block">Create a plan in Workouts →</a></Link>
-                  </div>
-                ) : workoutPlans.map((plan) => {
-                  let schedule: { dayOfWeek: string; templateName: string }[] = [];
-                  let milestones: { week: number; description: string; targetValue?: number }[] = [];
-                  try { schedule = JSON.parse(plan.scheduleJson); } catch {}
-                  try { if (plan.milestonesJson) milestones = JSON.parse(plan.milestonesJson); } catch {}
-                  const dayOrder = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
-                  const sortedSchedule = [...schedule].sort((a, b) => dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek));
-                  return (
-                    <div key={plan.id} className="space-y-2">
-                      <div className="flex items-center gap-2 px-1">
-                        <Dumbbell size={13} className="text-blue-500 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">{plan.name}</span>
-                        {plan.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Active</span>}
-                      </div>
-                      {sortedSchedule.length > 0 ? (
-                        <div className="space-y-1">
-                          {sortedSchedule.map((entry, i) => (
-                            <div key={i} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-secondary/40 transition-colors">
-                              <span className="text-xs font-semibold text-muted-foreground capitalize w-20 shrink-0">{entry.dayOfWeek}</span>
-                              <span className="text-sm truncate">{entry.templateName}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground px-2">No schedule set</p>
-                      )}
-                      {milestones.length > 0 && (
-                        <div className="mt-2 p-3 rounded-xl bg-secondary/40 border">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Milestones</p>
-                          <div className="space-y-1">
-                            {milestones.slice(0, 4).map((m, i) => (
-                              <div key={i} className="flex items-center gap-2 text-xs">
-                                <span className="text-muted-foreground shrink-0">Wk {m.week}</span>
-                                <span className="flex-1 truncate">{m.description}</span>
-                              </div>
-                            ))}
+            {/* Active Workout Plan mode: show weekly schedule */}
+            {isWorkoutGoalsSelected && (() => {
+              const activePlan = workoutPlans.find(p => p.isActive);
+              if (!activePlan) return (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Dumbbell size={36} className="mx-auto mb-4 opacity-20" />
+                  <p className="font-medium text-sm">No active plan</p>
+                  <Link href="/workouts"><a className="text-xs text-primary hover:underline mt-1 block">Set one in Workouts →</a></Link>
+                </div>
+              );
+              let schedule: { dayOfWeek: string; templateName: string }[] = [];
+              let milestones: { week: number; description: string; targetValue?: number }[] = [];
+              let metric: { label: string; current?: number; target?: number; unit?: string } | null = null;
+              try { schedule = JSON.parse(activePlan.scheduleJson); } catch {}
+              try { if (activePlan.milestonesJson) milestones = JSON.parse(activePlan.milestonesJson); } catch {}
+              try { if (activePlan.goalMetricJson) metric = JSON.parse(activePlan.goalMetricJson); } catch {}
+              const dayOrder = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+              const sortedSchedule = [...schedule].sort((a, b) => dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek));
+              const weeksElapsed = activePlan.startDate
+                ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
+                : null;
+              const currentWeek = weeksElapsed !== null ? Math.min(weeksElapsed + 1, activePlan.durationWeeks) : null;
+              const todayDow = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][new Date().getDay()];
+              return (
+                <div className="space-y-3">
+                  {/* Weekly schedule */}
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Weekly Schedule</p>
+                  {sortedSchedule.length > 0 ? (
+                    <div className="space-y-1">
+                      {sortedSchedule.map((entry, i) => {
+                        const isToday = entry.dayOfWeek === todayDow;
+                        return (
+                          <div key={i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${isToday ? "bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800" : "hover:bg-secondary/40"}`}>
+                            <span className={`text-xs font-semibold capitalize w-20 shrink-0 ${isToday ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>{entry.dayOfWeek}</span>
+                            <span className="text-sm truncate">{entry.templateName}</span>
+                            {isToday && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold shrink-0">Today</span>}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
-                  );
-                })}
-                <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
-              </div>
-            )}
+                  ) : (
+                    <p className="text-xs text-muted-foreground px-2">No schedule set</p>
+                  )}
+                  {/* Upcoming milestone */}
+                  {milestones.length > 0 && currentWeek !== null && (() => {
+                    const next = milestones.find(m => m.week >= currentWeek);
+                    if (!next) return null;
+                    return (
+                      <div className="p-3 rounded-xl bg-secondary/40 border">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Next Milestone</p>
+                        <p className="text-sm font-medium">{next.description}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Week {next.week} · {Math.max(0, next.week - currentWeek)} week{next.week - currentWeek !== 1 ? "s" : ""} away</p>
+                        {next.targetValue !== undefined && <p className="text-xs text-muted-foreground">Target: {next.targetValue}{metric?.unit ? ` ${metric.unit}` : ""}</p>}
+                      </div>
+                    );
+                  })()}
+                  <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Dumbbell size={11} /> View in Workouts</a></Link>
+                </div>
+              );
+            })()}
 
             {/* Housekeeping mode: show project tasks OR chores list */}
             {isHousekeepingSelected ? (() => {
