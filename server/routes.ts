@@ -1098,6 +1098,15 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Temporary: report server outbound IP (for FatSecret whitelist setup) ──
+  app.get("/api/server-ip", requireAuth, async (_req, res) => {
+    try {
+      const r = await fetch("https://api.ipify.org?format=json");
+      const data = await r.json() as { ip: string };
+      res.json({ ip: data.ip, note: "Add this IP to your FatSecret whitelist, then you can remove this route." });
+    } catch { res.status(500).json({ error: "Could not fetch IP" }); }
+  });
+
   // ── FatSecret restaurant / branded food search ───────────────────────────
   app.get("/api/nutrition/fatsecret-search", requireAuth, async (req, res) => {
     try {
