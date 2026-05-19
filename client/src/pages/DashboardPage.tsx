@@ -1144,35 +1144,55 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
 // ── MyRecentActivity component ────────────────────────────────────────────────
 
 function MyRecentActivity() {
+  const [expanded, setExpanded] = useState(false);
   const { data, isLoading } = useQuery<FeedItem[]>({
     queryKey: ["/api/feed/mine"],
     queryFn: () => fetch("/api/feed/mine").then((r) => r.json()),
   });
 
+  const items = data ?? [];
+  const visible = expanded ? items : items.slice(0, 3);
+  const hasMore = items.length > 3;
+
   return (
     <div className="bg-card border rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Clock size={14} className="text-primary" />
-        <span className="text-sm font-semibold">My Recent Activity</span>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Clock size={14} className="text-primary" />
+          <span className="text-sm font-semibold">My Recent Activity</span>
+        </div>
+        {items.length > 0 && (
+          <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+        )}
       </div>
       {isLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
-      {!isLoading && (!data || data.length === 0) && (
+      {!isLoading && items.length === 0 && (
         <p className="text-xs text-muted-foreground text-center py-4">No recent activity. Start adding items!</p>
       )}
-      {data && data.length > 0 && (
-        <div className="space-y-1.5">
-          {data.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 py-1">
-              <div className="text-muted-foreground shrink-0">
-                {item.itemType ? ITEM_TYPE_ICONS[item.itemType] : <Clock size={14} />}
+      {items.length > 0 && (
+        <>
+          <div className={`space-y-1.5 overflow-y-auto pr-1 transition-all ${expanded ? "max-h-72" : ""}`}>
+            {visible.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 py-1">
+                <div className="text-muted-foreground shrink-0">
+                  {item.itemType ? ITEM_TYPE_ICONS[item.itemType] : <Clock size={14} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{item.itemTitle ?? item.activityType}</p>
+                  <p className="text-[10px] text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType} · {timeAgo(item.createdAt)}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{item.itemTitle ?? item.activityType}</p>
-                <p className="text-[10px] text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType} · {timeAgo(item.createdAt)}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          {hasMore && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
+            >
+              {expanded ? "Show less" : `Show ${items.length - 3} more`}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
