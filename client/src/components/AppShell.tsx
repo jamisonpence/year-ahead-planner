@@ -101,6 +101,14 @@ const ALL_TABS = [
   { path: "/politics",      label: "Politics",                icon: Landmark        },
 ];
 
+// ── Desktop sidebar groupings ─────────────────────────────────────────────────
+const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
+  { key: "core",     label: null,        paths: ["/", "/discover", "/dashboard"] },
+  { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/quotes", "/art", "/hobbies", "/journal"] },
+  { key: "wellness", label: "Wellness",  paths: ["/workouts", "/plants", "/health"] },
+  { key: "life",     label: "Life",      paths: ["/goals", "/calendar", "/budget", "/relationships", "/housekeeping", "/kids", "/faith", "/politics"] },
+];
+
 function useNavPrefs() {
   const qc = useQueryClient();
   const { data: savedPrefs = [] } = useQuery<NavPref[]>({
@@ -574,8 +582,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 shrink-0 border-r bg-card h-screen sticky top-0">
-        <div className="p-4 border-b">
+      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r bg-card h-screen sticky top-0">
+        <div className="p-4 border-b space-y-3">
           <div className="flex items-center gap-2.5">
             <svg aria-label="Planner" viewBox="0 0 32 32" width="26" height="26" fill="none">
               <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
@@ -588,37 +596,63 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </svg>
             <span className="font-bold text-sm tracking-tight">MyLifos</span>
           </div>
+          <button
+            onClick={() => setQuickAddOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 bg-primary text-primary-foreground rounded-lg py-2 text-xs font-semibold hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={13} />
+            Quick Add
+          </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 overflow-y-auto">
           {manageMode ? (
-            localPrefs.map((pref, i) => {
-              const tab = ALL_TABS.find((t) => t.path === pref.path);
-              if (!tab) return null;
-              return (
-                <ManageItem
-                  key={pref.path}
-                  pref={pref}
-                  tab={tab}
-                  index={i}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  onToggle={handleToggleHidden}
-                />
-              );
-            })
+            <div className="space-y-1">
+              {localPrefs.map((pref, i) => {
+                const tab = ALL_TABS.find((t) => t.path === pref.path);
+                if (!tab) return null;
+                return (
+                  <ManageItem
+                    key={pref.path}
+                    pref={pref}
+                    tab={tab}
+                    index={i}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragEnd={handleDragEnd}
+                    onToggle={handleToggleHidden}
+                  />
+                );
+              })}
+            </div>
           ) : (
-            visibleTabs.map((tab) => (
-              <NavLink
-                key={tab.path}
-                path={tab.path}
-                label={tab.label}
-                icon={tab.icon}
-                active={location === tab.path}
-                badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
-              />
-            ))
+            <div>
+              {SIDEBAR_GROUPS.map(group => {
+                const groupTabs = visibleTabs.filter(t => group.paths.includes(t.path));
+                if (groupTabs.length === 0) return null;
+                return (
+                  <div key={group.key} className={group.label ? "mt-4" : ""}>
+                    {group.label && (
+                      <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider px-2 pb-1">
+                        {group.label}
+                      </p>
+                    )}
+                    <div className="space-y-0.5">
+                      {groupTabs.map((tab) => (
+                        <NavLink
+                          key={tab.path}
+                          path={tab.path}
+                          label={tab.label}
+                          icon={tab.icon}
+                          active={location === tab.path}
+                          badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </nav>
 
@@ -722,6 +756,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+          <div className="border-t my-1" />
           <button
             onClick={() => setManageMode(!manageMode)}
             className={`sidebar-item w-full ${manageMode ? "active" : ""}`}
@@ -735,8 +770,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           {user && (
-            <div className="pt-2 mt-1 border-t">
-              <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+            <div className="mt-1 pt-2 border-t">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors group">
                 {user.avatarUrl ? (
                   <img src={user.avatarUrl} alt={user.name} className="w-6 h-6 rounded-full shrink-0" />
                 ) : (
@@ -744,12 +779,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-xs text-muted-foreground truncate">{user.name}</span>
+                <span className="text-xs text-muted-foreground truncate flex-1">{user.name}</span>
+                <button
+                  onClick={handleLogout}
+                  title="Sign out"
+                  className="p-1 rounded hover:bg-secondary hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                >
+                  <LogOut size={13} className="text-muted-foreground" />
+                </button>
               </div>
-              <button onClick={handleLogout} className="sidebar-item w-full text-muted-foreground hover:text-destructive">
-                <LogOut size={14} />
-                <span>Sign out</span>
-              </button>
             </div>
           )}
         </div>
