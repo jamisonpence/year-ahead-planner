@@ -554,15 +554,76 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
     onClose();
   }
 
+  // ── Shared inner content (header + body) ──────────────────────────────────
+  const modalHeader = (
+    <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
+      {activeSection ? (
+        <button
+          onClick={() => { setActiveSection(null); setShowSuccess(false); }}
+          className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft size={15} />
+          Back
+        </button>
+      ) : (
+        <span className="font-bold text-base">Add Something</span>
+      )}
+      <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+        <X size={16} />
+      </button>
+    </div>
+  );
+
+  const modalBody = (
+    <>
+      {showSuccess && activeSection ? (
+        <div className="pb-10">
+          <SuccessFlash section={activeSection} onDone={handleSuccessDone} />
+        </div>
+      ) : activeSection && activeInfo ? (
+        /* Section form view */
+        <div className="px-5 py-5 space-y-5">
+          <div className="flex items-center gap-2.5">
+            <span className="text-3xl leading-none">{activeInfo.emoji}</span>
+            <div>
+              <p className="font-bold text-base leading-tight">{activeInfo.label}</p>
+              <p className="text-xs text-muted-foreground">{activeInfo.sub}</p>
+            </div>
+          </div>
+          <SectionForm section={activeSection} onSuccess={handleSuccess} />
+        </div>
+      ) : (
+        /* Grid picker view */
+        <>
+          <RecentAddsRow />
+          <div className="px-5 pb-6">
+            <div className="grid grid-cols-4 gap-2.5">
+              {SECTIONS.map(sec => (
+                <button
+                  key={sec.key}
+                  onClick={() => setActiveSection(sec.key)}
+                  className="flex flex-col items-center gap-1.5 py-3.5 px-1 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95"
+                >
+                  <span className="text-2xl leading-none">{sec.emoji}</span>
+                  <span className="text-[10px] font-semibold text-center leading-tight">{sec.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — shown on all screen sizes */}
       <div
-        className={`lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
       />
 
-      {/* Sheet */}
+      {/* ── Mobile: bottom sheet ──────────────────────────────────────────── */}
       <div
         className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-3xl shadow-2xl
           transition-transform duration-300 ease-out
@@ -571,66 +632,29 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
         onTouchEnd={onTouchEnd}
       >
         {/* Drag handle */}
-        <div className="flex justify-center pt-3">
+        <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-3 pb-3">
-          {activeSection ? (
-            <button
-              onClick={() => { setActiveSection(null); setShowSuccess(false); }}
-              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft size={15} />
-              Back
-            </button>
-          ) : (
-            <span className="font-bold text-base">Add Something</span>
-          )}
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Content */}
+        {modalHeader}
         <div className="overflow-y-auto" style={{ maxHeight: "65vh" }}>
-          {showSuccess && activeSection ? (
-            <div className="pb-10">
-              <SuccessFlash section={activeSection} onDone={handleSuccessDone} />
-            </div>
-          ) : activeSection && activeInfo ? (
-            /* Section form view */
-            <div className="px-5 pb-8 space-y-5">
-              <div className="flex items-center gap-2.5 mb-2">
-                <span className="text-3xl leading-none">{activeInfo.emoji}</span>
-                <div>
-                  <p className="font-bold text-base leading-tight">{activeInfo.label}</p>
-                  <p className="text-xs text-muted-foreground">{activeInfo.sub}</p>
-                </div>
-              </div>
-              <SectionForm section={activeSection} onSuccess={handleSuccess} />
-            </div>
-          ) : (
-            /* Grid picker view */
-            <>
-              <RecentAddsRow />
-              <div className="px-5 pb-8">
-                <div className="grid grid-cols-4 gap-2.5">
-                  {SECTIONS.map(sec => (
-                    <button
-                      key={sec.key}
-                      onClick={() => setActiveSection(sec.key)}
-                      className="flex flex-col items-center gap-1.5 py-3.5 px-1 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95"
-                    >
-                      <span className="text-2xl leading-none">{sec.emoji}</span>
-                      <span className="text-[10px] font-semibold text-center leading-tight">{sec.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          {modalBody}
+        </div>
+      </div>
+
+      {/* ── Desktop: centered dialog ──────────────────────────────────────── */}
+      <div
+        className={`hidden lg:flex fixed inset-0 z-50 items-center justify-center transition-all duration-200
+          ${visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+      >
+        <div
+          className={`bg-card rounded-2xl shadow-2xl w-[440px] max-h-[80vh] flex flex-col overflow-hidden
+            transition-all duration-200 ${visible ? "scale-100" : "scale-95"}`}
+          onClick={e => e.stopPropagation()}
+        >
+          {modalHeader}
+          <div className="overflow-y-auto flex-1">
+            {modalBody}
+          </div>
         </div>
       </div>
     </>
