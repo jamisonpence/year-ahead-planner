@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen,
+  ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
