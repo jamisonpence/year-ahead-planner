@@ -1099,7 +1099,7 @@ Return exactly this structure:
   });
 
   // ── Temporary: report server outbound IP (for FatSecret whitelist setup) ──
-  app.get("/api/server-ip", requireAuth, async (_req, res) => {
+  app.get("/api/server-ip", async (_req, res) => {
     try {
       const r = await fetch("https://api.ipify.org?format=json");
       const data = await r.json() as { ip: string };
