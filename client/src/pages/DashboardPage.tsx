@@ -480,7 +480,7 @@ export default function DashboardPage() {
           />
           <StatCard
             icon={<MapPin size={17} />} color="text-emerald-500"
-            label="Spots" value={String(spots.length)}
+            label="Places" value={String(spots.length)}
             sub={wantToVisit.length > 0 ? `${wantToVisit.length} want to visit` : `${favoriteSpots.length} favorites`}
           />
         </div>

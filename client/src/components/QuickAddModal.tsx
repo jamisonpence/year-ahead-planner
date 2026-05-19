@@ -24,7 +24,7 @@ const SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[]
   { key: "movies",   emoji: "🎬", label: "Movies & Shows", sub: "Watch list"     },
   { key: "music",    emoji: "🎵", label: "Music",          sub: "Artists & songs"},
   { key: "recipes",  emoji: "🍽️", label: "Recipes",       sub: "Food & drink"   },
-  { key: "spots",    emoji: "📍", label: "Spots",          sub: "Places"         },
+  { key: "spots",    emoji: "📍", label: "Places",         sub: "Spots & locations" },
   { key: "quotes",   emoji: "💬", label: "Quotes",         sub: "Inspiration"    },
   { key: "art",      emoji: "🎨", label: "Art",            sub: "Artworks"       },
   { key: "workouts", emoji: "💪", label: "Workouts",       sub: "Fitness"        },

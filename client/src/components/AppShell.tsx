@@ -303,12 +303,16 @@ function MyLifosSheet({
   privacySettings,
   onClose,
   onLogout,
+  onToggleTheme,
+  theme,
   location,
 }: {
   user: any;
   privacySettings: { path: string; visibility: string }[];
   onClose: () => void;
   onLogout: () => void;
+  onToggleTheme: () => void;
+  theme: string;
   location: string;
 }) {
   const { data: summary } = useQuery<UserSummary>({
@@ -437,6 +441,10 @@ function MyLifosSheet({
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
         <div className="px-5 py-4 border-t flex gap-2 bg-card">
+          <button onClick={onToggleTheme} className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors shrink-0">
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
           <button onClick={onLogout} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors">
             <LogOut size={14} />Sign out
           </button>
@@ -451,9 +459,7 @@ function MyLifosSheet({
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { theme, toggle } = useTheme();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [manageMode, setManageMode] = useState(false);
-  const [discoverOpen, setDiscoverOpen] = useState(false);
   const [myLifosOpen, setMyLifosOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const { prefs, save } = useNavPrefs();
@@ -463,7 +469,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Close all overlay sheets whenever the route changes
   useEffect(() => {
     setMyLifosOpen(false);
-    setDiscoverOpen(false);
     setQuickAddOpen(false);
   }, [location]);
 
@@ -756,10 +761,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </svg>
           <span className="font-bold text-sm">MyLifos</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={toggle} className="p-2 rounded-lg hover:bg-secondary transition-colors">
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setNotifOpen(!notifOpen)}
             className="relative p-2 rounded-lg hover:bg-secondary transition-colors"
@@ -801,7 +803,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Add — elevated circle */}
           <button
-            onClick={() => { setQuickAddOpen(true); setDiscoverOpen(false); setMyLifosOpen(false); }}
+            onClick={() => { setQuickAddOpen(true); setMyLifosOpen(false); }}
             className="flex flex-col items-center gap-0.5 min-w-[56px] -translate-y-3"
           >
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg flex items-center justify-center">
@@ -810,13 +812,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-[10px] font-medium text-muted-foreground">Add</span>
           </button>
 
-          {/* My Lifos */}
+          {/* Profile */}
           <button
-            onClick={() => { setMyLifosOpen(true); setDiscoverOpen(false); setQuickAddOpen(false); }}
+            onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
             className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
           >
             <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>My Lifos</span>
+            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Profile</span>
           </button>
 
           {/* Friends — with badge dot */}
@@ -834,44 +836,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* ── Discover sheet ───────────────────────────────────────────────────── */}
-      {discoverOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setDiscoverOpen(false)}>
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-card rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
-              <span className="font-bold text-base">Explore Sections</span>
-              <button onClick={() => setDiscoverOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
-            </div>
-            <div className="overflow-y-auto p-4 grid grid-cols-3 gap-2">
-              {visibleTabs.map(tab => {
-                const Icon = tab.icon;
-                const isActive = location === tab.path;
-                return (
-                  <Link key={tab.path} href={tab.path}>
-                    <button
-                      onClick={() => setDiscoverOpen(false)}
-                      className={`w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors ${isActive ? "bg-violet-500/10 border-violet-400/30 text-violet-500" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}
-                    >
-                      <Icon size={20} className={isActive ? "text-violet-500" : "text-muted-foreground"} />
-                      <span className="text-[11px] font-medium text-center leading-tight">{tab.label}</span>
-                    </button>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── My Lifos sheet ───────────────────────────────────────────────────── */}
+{/* ── My Lifos sheet ───────────────────────────────────────────────────── */}
       {myLifosOpen && <MyLifosSheet
         user={user}
         privacySettings={privacySettings}
         onClose={() => setMyLifosOpen(false)}
         onLogout={handleLogout}
+        onToggleTheme={toggle}
+        theme={theme}
         location={location}
       />}
 
@@ -880,7 +852,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile notifications panel */}
       {notifOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setNotifOpen(false)}>
+        <div className="lg:hidden fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" onClick={() => setNotifOpen(false)}>
           <div className="absolute right-4 top-16 w-72 bg-card border rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b flex items-center justify-between">
               <h3 className="font-semibold text-sm">Notifications</h3>

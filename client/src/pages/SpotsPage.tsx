@@ -18,6 +18,7 @@ import {
   Send, Inbox, CornerUpRight, Check, X, Plane, Calendar, ChevronLeft,
   CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
   Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
+  SlidersHorizontal, List, Map, CheckCheck, Share2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1215,7 +1216,7 @@ export default function SpotsPage() {
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Tag size={14} />
+              <SlidersHorizontal size={14} />
               Filters
               {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
@@ -1226,26 +1227,43 @@ export default function SpotsPage() {
             <div className="flex items-center rounded-xl border overflow-hidden h-10 shrink-0">
               <button
                 onClick={() => setViewMode("list")}
-                className={`h-full px-2.5 text-sm transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                 title="List view"
-              >☰</button>
+              ><List size={14} /> List</button>
               <button
                 onClick={() => setViewMode("map")}
-                className={`h-full px-2.5 text-sm transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                 title="Map view"
-              >🗺️</button>
+              ><Map size={14} /> Map</button>
             </div>
           </div>
 
-          {/* Plan My Day pill */}
-          <button
-            onClick={() => setPlannerOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full text-white
-              bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
-              shadow-sm transition-all"
-          >
-            <Sparkles size={13} /> Plan My Day
-          </button>
+          {/* Action row: Plan My Day + Add Place */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPlannerOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full text-white
+                bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
+                shadow-sm transition-all"
+            >
+              <Sparkles size={13} /> Plan My Day
+            </button>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                onClick={() => setNominatimOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+              >
+                <Search size={13} /> Find &amp; Add
+              </button>
+              <button
+                onClick={openNew}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+                title="Add a place manually"
+              >
+                <Plus size={13} /> Manual
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="px-3 pt-3 pb-1">
@@ -1403,22 +1421,6 @@ export default function SpotsPage() {
       {/* ── Filter Bottom Sheet ──────────────────────────────────────────────── */}
       <BottomSheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Places">
         <div className="px-4 pb-6 space-y-5">
-          {/* Add actions */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setFilterSheetOpen(false); setNominatimOpen(true); }}
-              className="flex items-center gap-2 flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
-            >
-              <Search size={15} /> Search & add
-            </button>
-            <button
-              onClick={() => { setFilterSheetOpen(false); setEditing(null); setForm({ ...EMPTY_FORM }); setModalOpen(true); }}
-              className="flex items-center gap-2 flex-1 px-4 py-3 rounded-xl bg-secondary text-sm font-medium"
-            >
-              <Plus size={15} /> Add manually
-            </button>
-          </div>
-
           {/* City */}
           {allCities.length >= 2 && (
             <div>
@@ -1606,16 +1608,6 @@ export default function SpotsPage() {
       {/* ── Trip Planner ──────────────────────────────────────────────────────── */}
       <TripPlannerModal open={plannerOpen} onClose={() => setPlannerOpen(false)} spots={spots} />
 
-      {/* ── Floating Add Button ───────────────────────────────────────────────── */}
-      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" && (
-        <button
-          onClick={() => setNominatimOpen(true)}
-          className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
-          title="Add place"
-        >
-          <Plus size={24} />
-        </button>
-      )}
     </div>
   );
 }
