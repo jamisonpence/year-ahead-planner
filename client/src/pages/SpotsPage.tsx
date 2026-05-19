@@ -18,7 +18,7 @@ import {
   Send, Inbox, CornerUpRight, Check, X, Plane, Calendar, ChevronLeft,
   CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
   Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
-  SlidersHorizontal, List, Map, CheckCheck, Share2,
+  SlidersHorizontal, List, Map as MapIcon, CheckCheck, Share2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1234,7 +1234,7 @@ export default function SpotsPage() {
                 onClick={() => setViewMode("map")}
                 className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                 title="Map view"
-              ><Map size={14} /> Map</button>
+              ><MapIcon size={14} /> Map</button>
             </div>
           </div>
 
