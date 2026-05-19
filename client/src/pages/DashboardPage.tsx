@@ -368,10 +368,13 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5"><Plus size={13} /><Calendar size={13} />Event</Button>
-          <Button size="sm" variant="outline" onClick={() => setAddBook(true)} className="gap-1.5"><Plus size={13} /><BookOpen size={13} />Book</Button>
-          <Button size="sm" variant="outline" onClick={() => setAddSession(true)} className="gap-1.5"><Plus size={13} /><BookMarked size={13} />Reading Log</Button>
-          <Button size="sm" onClick={() => setAddWorkout(true)} className="gap-1.5"><Plus size={13} /><Dumbbell size={13} />Workout Log</Button>
+          {/* Quick-add shortcuts — desktop only; on mobile use the + button in the nav */}
+          <div className="hidden sm:flex gap-2 items-center">
+            <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5"><Plus size={13} /><Calendar size={13} />Event</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddBook(true)} className="gap-1.5"><Plus size={13} /><BookOpen size={13} />Book</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddSession(true)} className="gap-1.5"><Plus size={13} /><BookMarked size={13} />Reading Log</Button>
+            <Button size="sm" onClick={() => setAddWorkout(true)} className="gap-1.5"><Plus size={13} /><Dumbbell size={13} />Workout Log</Button>
+          </div>
           <div className="relative" ref={customRef}>
             <Button
               size="sm"

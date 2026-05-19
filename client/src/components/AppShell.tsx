@@ -285,6 +285,7 @@ const COLLECTION_GROUPS = [
     label: "Life & Planning",
     subtitle: "Private by default",
     tiles: [
+      { path: "/dashboard",     emoji: "📊", label: "Dashboard"    },
       { path: "/goals",         emoji: "🎯", label: "Goals"        },
       { path: "/calendar",      emoji: "📅", label: "Calendar"     },
       { path: "/budget",        emoji: "💰", label: "Budget"       },
@@ -419,13 +420,15 @@ function MyLifosSheet({
                               : "bg-secondary/40 border-transparent hover:bg-secondary/80"
                             }`}
                         >
-                          {/* Privacy indicator */}
-                          <div className="absolute top-1.5 right-1.5">
-                            {vis === "friends"
-                              ? <span className="w-2 h-2 rounded-full bg-violet-500 block" />
-                              : <Lock size={8} className="text-muted-foreground/60" />
-                            }
-                          </div>
+                          {/* Privacy indicator — only for sections that have privacy settings */}
+                          {PRIVACY_PATHS.has(tile.path) && (
+                            <div className="absolute top-1.5 right-1.5">
+                              {vis === "friends"
+                                ? <span className="w-2 h-2 rounded-full bg-violet-500 block" />
+                                : <Lock size={8} className="text-muted-foreground/60" />
+                              }
+                            </div>
+                          )}
                           <span className="text-xl leading-none">{tile.emoji}</span>
                           <span className="text-[10px] font-medium text-center leading-tight">{tile.label}</span>
                           <span className="text-[10px] text-muted-foreground">{count > 0 ? count : ""}</span>

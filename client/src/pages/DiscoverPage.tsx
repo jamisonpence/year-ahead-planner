@@ -405,17 +405,15 @@ function SharedTasteSection() {
 
 export default function DiscoverPage() {
   return (
-    <div className="min-h-screen bg-background pb-4">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto pb-8">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">Discover</h1>
-            <p className="text-xs text-muted-foreground">Explore based on your tastes</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-violet-500" />
-          </div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Discover</h1>
+          <p className="text-sm text-muted-foreground">Explore based on your tastes</p>
+        </div>
+        <div className="w-9 h-9 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-violet-500" />
         </div>
       </div>
 

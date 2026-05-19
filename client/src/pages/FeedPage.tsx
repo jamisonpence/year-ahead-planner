@@ -422,6 +422,12 @@ export default function FeedPage() {
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* Page title */}
+      <div className="px-4 pt-4 pb-1">
+        <h1 className="text-2xl font-bold">Feed</h1>
+        <p className="text-sm text-muted-foreground">What your friends are up to</p>
+      </div>
+
       {/* Stories */}
       <StoriesRow />
 
