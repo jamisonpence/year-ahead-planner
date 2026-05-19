@@ -1044,19 +1044,19 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
         <Users size={14} className="text-primary" />
         <span className="text-sm font-semibold">Friends' Activity</span>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
         {items.map((item) => (
           <FeedCard key={item.id} item={item} currentUserId={currentUserId} />
         ))}
+        {hasMore && (
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="mt-1 w-full text-xs text-muted-foreground hover:text-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
+          >
+            Load more
+          </button>
+        )}
       </div>
-      {hasMore && (
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          className="mt-3 w-full text-xs text-muted-foreground hover:text-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
-        >
-          Load more
-        </button>
-      )}
     </div>
   );
 }

@@ -76,7 +76,6 @@ function PrivacyBanner({ path }: { path: string }) {
 }
 
 const ALL_TABS = [
-  { path: "/",              label: "Feed",                    icon: Home            },
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
@@ -103,7 +102,7 @@ const ALL_TABS = [
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",     label: null,        paths: ["/", "/discover", "/dashboard"] },
+  { key: "core",     label: null,        paths: ["/discover", "/dashboard"] },
   { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/quotes", "/art", "/hobbies", "/journal"] },
   { key: "wellness", label: "Wellness",  paths: ["/workouts", "/plants", "/health"] },
   { key: "life",     label: "Life",      paths: ["/goals", "/calendar", "/budget", "/relationships", "/housekeeping", "/kids", "/faith", "/politics"] },
@@ -826,11 +825,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t">
         <div className="flex items-end justify-around px-1 pt-2 pb-3">
 
-          {/* Feed */}
-          <Link href="/">
+          {/* Dashboard */}
+          <Link href="/dashboard">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Home size={22} className={location === "/" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Feed</span>
+              <LayoutDashboard size={22} className={location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Dashboard</span>
             </button>
           </Link>
 
