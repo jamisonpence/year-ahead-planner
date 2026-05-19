@@ -606,6 +606,21 @@ Return exactly this structure:
   });
 
   // ── Books ────────────────────────────────────────────────────────────────────
+  // ── Reading Goal ─────────────────────────────────────────────────────────────
+  app.get("/api/reading/goal", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json(await storage.getReadingGoal(uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/reading/goal", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { booksTarget, year } = req.body;
+      res.json(await storage.upsertReadingGoal(uid, { booksTarget, year }));
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/books", async (req, res) => {
     try {
       const uid = (req.user as User).id;

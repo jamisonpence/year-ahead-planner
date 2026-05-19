@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple,
+  ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -22,7 +22,7 @@ import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
   GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, Plant,
-  NutritionGoal, WorkoutPlan,
+  NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -92,6 +92,7 @@ const ALL_TASKS_ID = -3;
 const PLANTS_ID = -4;
 const NUTRITION_ID = -5;
 const WORKOUT_GOALS_ID = -6;
+const READING_GOAL_ID = -7;
 
 // Plant watering helpers
 function plantWateringDays(plant: Plant): number | null {
@@ -122,6 +123,8 @@ export default function GoalsPage() {
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["/api/plants"] });
   const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
+  const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
+  const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -254,6 +257,11 @@ export default function GoalsPage() {
   const isPlantsSelected = selectedGoalId === PLANTS_ID;
   const isNutritionSelected = selectedGoalId === NUTRITION_ID;
   const isWorkoutGoalsSelected = selectedGoalId === WORKOUT_GOALS_ID;
+  const isReadingGoalSelected = selectedGoalId === READING_GOAL_ID;
+  const currentYear = new Date().getFullYear();
+  const booksFinishedThisYear = useMemo(() =>
+    books.filter((b) => b.status === "finished" && (b as any).finishDate?.startsWith(String(currentYear))).length,
+    [books, currentYear]);
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -495,6 +503,32 @@ export default function GoalsPage() {
               );
             })()}
 
+            {/* Reading Goal card */}
+            {readingGoal && (() => {
+              const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
+              return (
+                <div
+                  onClick={() => { setSelectedGoalId(selectedGoalId === READING_GOAL_ID ? null : READING_GOAL_ID); setSelectedProjectId(null); }}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                    selectedGoalId === READING_GOAL_ID ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "bg-card border-dashed hover:border-amber-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <BookOpen size={15} className="text-amber-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">Reading Goal</p>
+                      <p className="text-xs text-muted-foreground">{booksFinishedThisYear} / {readingGoal.booksTarget} books in {currentYear}</p>
+                    </div>
+                    <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === READING_GOAL_ID ? "rotate-90" : ""}`} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={pct} className="h-1.5 flex-1" />
+                    <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* All Tasks card */}
             <div
               onClick={() => { setSelectedGoalId(selectedGoalId === ALL_TASKS_ID ? null : ALL_TASKS_ID); setSelectedProjectId(null); }}
@@ -523,11 +557,12 @@ export default function GoalsPage() {
                 : isPlantsSelected ? "Overview"
                 : isNutritionSelected ? "Overview"
                 : isWorkoutGoalsSelected ? "Overview"
+                : isReadingGoalSelected ? "Overview"
                 : isHousekeepingSelected ? "House Projects"
                 : isStandaloneSelected ? "General Projects"
                 : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
             </span>
-            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && (
+            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && (
               <span className="text-xs text-muted-foreground">
                 {isHousekeepingSelected ? houseProjects.length : isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
               </span>
@@ -627,6 +662,48 @@ export default function GoalsPage() {
                   );
                 })}
                 <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
+              </div>
+            ) : /* Reading Goal mode: show progress overview */
+            isReadingGoalSelected ? (
+              <div className="space-y-3">
+                <div className="text-center pb-2">
+                  <BookOpen size={24} className="mx-auto mb-2 text-amber-400" />
+                  <p className="text-sm font-semibold">{currentYear} Reading Goal</p>
+                </div>
+                {readingGoal && (() => {
+                  const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
+                  const remaining = Math.max(0, readingGoal.booksTarget - booksFinishedThisYear);
+                  const yearStart = new Date(currentYear, 0, 1).getTime();
+                  const yearEnd = new Date(currentYear + 1, 0, 1).getTime();
+                  const yearPct = Math.round(((Date.now() - yearStart) / (yearEnd - yearStart)) * 100);
+                  return (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                        <div className="flex justify-between items-end mb-2">
+                          <div>
+                            <p className="text-3xl font-bold text-amber-700 dark:text-amber-300">{booksFinishedThisYear}</p>
+                            <p className="text-xs text-muted-foreground">of {readingGoal.booksTarget} books</p>
+                          </div>
+                          <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{pct}%</p>
+                        </div>
+                        <Progress value={pct} className="h-2" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2.5 rounded-lg bg-secondary/40 text-center">
+                          <p className="text-lg font-bold">{remaining}</p>
+                          <p className="text-[10px] text-muted-foreground">books left</p>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-secondary/40 text-center">
+                          <p className={`text-lg font-bold ${pct >= yearPct ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {pct >= yearPct ? "On track" : "Behind"}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">vs year ({yearPct}%)</p>
+                        </div>
+                      </div>
+                      <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> View & edit in Reading</a></Link>
+                    </div>
+                  );
+                })()}
               </div>
             ) : /* Housekeeping mode: show house projects (selectable + addable) */
             isHousekeepingSelected ? (
@@ -798,6 +875,7 @@ export default function GoalsPage() {
                       : isPlantsSelected ? "Watering Schedule"
                       : isNutritionSelected ? "Nutrition Details"
                       : isWorkoutGoalsSelected ? "Workout Schedule"
+                      : isReadingGoalSelected ? "Books Finished"
                       : isHousekeepingSelected && selectedHouseProject ? `Tasks — ${selectedHouseProject.title}`
                       : isHousekeepingSelected ? "Chores"
                       : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}`
@@ -806,7 +884,7 @@ export default function GoalsPage() {
                   </span>
                 );
               })()}
-              {!isHousekeepingSelected && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && totalTasks > 0 && (
+              {!isHousekeepingSelected && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
@@ -823,8 +901,11 @@ export default function GoalsPage() {
               {isWorkoutGoalsSelected && (
                 <span className="text-xs text-muted-foreground">{workoutPlans.length} plan{workoutPlans.length !== 1 ? "s" : ""}</span>
               )}
+              {isReadingGoalSelected && (
+                <span className="text-xs text-muted-foreground">{booksFinishedThisYear} finished</span>
+              )}
             </div>
-            {!isHousekeepingSelected && !isAllTasksSelected && !isNutritionSelected && !isWorkoutGoalsSelected && totalTasks > 0 && (
+            {!isHousekeepingSelected && !isAllTasksSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && totalTasks > 0 && (
               <Progress value={totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0} className="h-1.5 w-24" />
             )}
           </div>
@@ -864,6 +945,55 @@ export default function GoalsPage() {
                 <Link href="/health"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Heart size={11} /> Edit in Health tab</a></Link>
               </div>
             )}
+
+            {/* Reading Goal mode: show finished books this year */}
+            {isReadingGoalSelected && readingGoal && (() => {
+              const finishedThisYear = books
+                .filter((b) => b.status === "finished" && (b as any).finishDate?.startsWith(String(currentYear)))
+                .sort((a, b) => ((b as any).finishDate ?? "").localeCompare((a as any).finishDate ?? ""));
+              const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
+              return (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-semibold">{booksFinishedThisYear} of {readingGoal.booksTarget} books finished</span>
+                      <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{pct}%</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                  </div>
+                  {finishedThisYear.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <BookOpen size={28} className="mx-auto mb-3 opacity-20" />
+                      <p className="text-sm">No books finished yet in {currentYear}</p>
+                      <Link href="/reading"><a className="text-xs text-primary hover:underline mt-1 block">Mark books as finished in Reading →</a></Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {finishedThisYear.map((book, i) => (
+                        <div key={book.id} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-secondary/40 transition-colors">
+                          <span className="text-xs font-bold text-muted-foreground w-5 shrink-0 text-right">{i + 1}</span>
+                          {(book as any).coverUrl ? (
+                            <img src={(book as any).coverUrl} alt={book.title} className="w-7 h-9 object-cover rounded shrink-0" />
+                          ) : (
+                            <div className="w-7 h-9 rounded shrink-0 flex items-center justify-center" style={{ backgroundColor: (book as any).coverColor || "#1e3a5f" }}>
+                              <BookOpen size={12} className="text-white/60" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{book.title}</p>
+                            {book.author && <p className="text-xs text-muted-foreground truncate">{book.author}</p>}
+                          </div>
+                          {(book as any).finishDate && (
+                            <span className="text-xs text-muted-foreground shrink-0">{format(parseISO((book as any).finishDate), "MMM d")}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> Manage in Reading</a></Link>
+                </div>
+              );
+            })()}
 
             {/* Workout Goals mode: show active plan schedule */}
             {isWorkoutGoalsSelected && (
@@ -1060,7 +1190,7 @@ export default function GoalsPage() {
             })()}
 
             {/* Due Chores section (only shown in non-housekeeping modes) */}
-            {!isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && (() => {
+            {!isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && (() => {
               const dueChores = chores
                 .filter((c) => c.isActive && c.nextDue)
                 .filter((c) => {
@@ -1308,7 +1438,7 @@ export default function GoalsPage() {
               );
             })()}
 
-            {!isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !selectedGoal && !isStandaloneSelected ? (
+            {!isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
                 <p className="font-medium text-sm">Select a goal to see tasks</p>
@@ -1364,13 +1494,13 @@ export default function GoalsPage() {
                 )}
                 <QuickAdd placeholder="Add general task..." onAdd={(t) => addGeneralTask.mutate(t)} className="mt-2 px-1" />
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">No tasks yet</p>
                 <p className="text-xs mt-1">Add a project and tasks to track your work</p>
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !isReadingGoalSelected ? (
               <div className="space-y-1">
                 {/* Group tasks by project when showing all */}
                 {!selectedProject && !standaloneSelectedProject && selectedGoal && selectedGoal.projects.map((p) => {

@@ -1651,3 +1651,14 @@ export type NutritionSummary = {
   servings: number; partial?: boolean;
   unmatchedIngredients?: string[];
 };
+
+// ── READING GOALS ──────────────────────────────────────────────────────────────
+export const readingGoals = pgTable("reading_goals", {
+  id:           serial("id").primaryKey(),
+  userId:       integer("user_id").notNull().unique(),
+  booksTarget:  integer("books_target").notNull().default(12),
+  year:         integer("year").notNull().default(2026),
+});
+export const insertReadingGoalSchema = createInsertSchema(readingGoals).omit({ id: true });
+export type InsertReadingGoal = z.infer<typeof insertReadingGoalSchema>;
+export type ReadingGoal = typeof readingGoals.$inferSelect;

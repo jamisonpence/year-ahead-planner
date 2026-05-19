@@ -16,7 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
   EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate,
-  GoalWithProjects, Chore, Spot, Quote, Subscription, NutritionGoal, WorkoutPlan,
+  GoalWithProjects, Chore, Spot, Quote, Subscription, NutritionGoal, WorkoutPlan, ReadingGoal,
 } from "@shared/schema";
 import {
   daysUntil, nextOccurrence, thisWeekDates, todayStr,
@@ -276,6 +276,7 @@ export default function DashboardPage() {
   const { data: chores = [] }     = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
   const { data: nutritionGoal }   = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
+  const { data: readingGoal }     = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
   const { data: spots = [] }      = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
   const { data: quotes = [] }     = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
   const { data: subs = [] }       = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
@@ -306,6 +307,12 @@ export default function DashboardPage() {
 
   // ── Goals ──────────────────────────────────────────────────────────────────
   const activeGoals = goals.filter((g) => !g.completedDate);
+  const currentYear = new Date().getFullYear();
+  const booksFinishedThisYear = books.filter((b) => {
+    if (b.status !== "finished") return false;
+    const fd = (b as any).finishDate as string | null;
+    return fd ? fd.startsWith(String(currentYear)) : false;
+  }).length;
   const avgGoalPct = activeGoals.length
     ? Math.round(activeGoals.reduce((sum, g) => {
         const pct = g.progressType === "boolean"
@@ -529,7 +536,7 @@ export default function DashboardPage() {
           {/* Active Goals */}
           {visible.goals && (
             <Section title="Active Goals" icon={<Target size={14} className="text-[hsl(var(--cat-goal))]" />} linkHref="/goals" linkLabel="Goals">
-              {activeGoals.length === 0 && !nutritionGoal && workoutPlans.length === 0 ? (
+              {activeGoals.length === 0 && !nutritionGoal && workoutPlans.length === 0 && !readingGoal ? (
                 <Empty icon={<Target size={26} />} text="No active goals yet" />
               ) : (
                 <div className="space-y-3">
@@ -593,6 +600,28 @@ export default function DashboardPage() {
                           <Progress value={pct} className="h-1.5" />
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span className="capitalize">{activePlan.goalType.replace("_", " ")}</span>
+                            <span>{pct}% complete</span>
+                          </div>
+                        </a>
+                      </Link>
+                    );
+                  })()}
+                  {/* Reading Goal card */}
+                  {readingGoal && (() => {
+                    const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
+                    return (
+                      <Link href="/reading">
+                        <a className="block p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2 hover:border-amber-400 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <BookOpen size={13} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                              <p className="text-sm font-medium">{currentYear} Reading Goal</p>
+                            </div>
+                            <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+                          </div>
+                          <Progress value={pct} className="h-1.5" />
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{booksFinishedThisYear} of {readingGoal.booksTarget} books</span>
                             <span>{pct}% complete</span>
                           </div>
                         </a>

@@ -4,17 +4,18 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
   Plus, BookOpen, BookMarked, Check, Trash2, Pencil, MoreHorizontal,
-  Flame, Search, Clock, X, Send, Users, Inbox, CornerUpRight,
+  Flame, Search, Clock, X, Send, Users, Inbox, CornerUpRight, Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { bookProgress, daysUntil, BOOK_STATUSES, GENRE_TAGS, readingStreak } from "@/lib/plannerUtils";
 import BookFormModal from "@/components/modals/BookFormModal";
 import ReadingSessionModal from "@/components/modals/ReadingSessionModal";
-import type { BookWithSessions, Book, ReadingSession, BookRecommendationWithUser, PublicUser } from "@shared/schema";
+import type { BookWithSessions, Book, ReadingSession, BookRecommendationWithUser, PublicUser, ReadingGoal } from "@shared/schema";
 
 const STATUS_TABS = [
   { value: "current",  label: "Reading"   },
@@ -558,11 +559,32 @@ export default function ReadingPage() {
   const [editSession, setEditSession] = useState<ReadingSession | null>(null);
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
   const [recommendBook, setRecommendBook] = useState<BookWithSessions | null>(null);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
 
   const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
+  const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
+
+  const saveGoalMut = useMutation({
+    mutationFn: (booksTarget: number) => apiRequest("PATCH", "/api/reading/goal", { booksTarget, year: new Date().getFullYear() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] });
+      toast({ title: "Reading goal saved!" });
+      setGoalModalOpen(false);
+    },
+  });
 
   const allSessions = useMemo(() => books.flatMap((b) => b.sessions ?? []), [books]);
   const streak = readingStreak(allSessions);
+
+  const currentYear = new Date().getFullYear();
+  const booksFinishedThisYear = useMemo(() => {
+    return books.filter((b) => {
+      if (b.status !== "finished") return false;
+      const fd = (b as any).finishDate as string | null;
+      return fd ? fd.startsWith(String(currentYear)) : false;
+    }).length;
+  }, [books, currentYear]);
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/books/${id}`),
@@ -608,6 +630,9 @@ export default function ReadingPage() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setGoalInput(String(readingGoal?.booksTarget ?? 12)); setGoalModalOpen(true); }} className="gap-1.5">
+            <Target size={13} /> {readingGoal ? "Edit Goal" : "Set Goal"}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
             <Search size={13} /> Find Books
           </Button>
@@ -619,6 +644,30 @@ export default function ReadingPage() {
           </Button>
         </div>
       </div>
+
+      {/* Reading Goal Banner */}
+      {readingGoal && (
+        <div
+          className="flex items-center gap-4 p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 cursor-pointer hover:border-amber-400 transition-colors"
+          onClick={() => { setGoalInput(String(readingGoal.booksTarget)); setGoalModalOpen(true); }}
+        >
+          <Target size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                {currentYear} Reading Goal: {booksFinishedThisYear} / {readingGoal.booksTarget} books
+              </span>
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 shrink-0">
+                {Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100)}%
+              </span>
+            </div>
+            <Progress
+              value={Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100))}
+              className="h-1.5"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
@@ -759,6 +808,51 @@ export default function ReadingPage() {
         onClose={() => setRecommendBook(null)}
         book={recommendBook}
       />
+
+      {/* Set Reading Goal Modal */}
+      <Dialog open={goalModalOpen} onOpenChange={(o) => { if (!o) setGoalModalOpen(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Target size={16} /> {currentYear} Reading Goal
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Books to read this year</label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={goalInput}
+                  onChange={(e) => setGoalInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { const n = parseInt(goalInput); if (n > 0) saveGoalMut.mutate(n); } }}
+                  className="text-lg font-bold text-center w-24"
+                  autoFocus
+                />
+                <span className="text-sm text-muted-foreground">books in {currentYear}</span>
+              </div>
+              {readingGoal && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Progress so far: {booksFinishedThisYear} of {readingGoal.booksTarget} finished this year
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setGoalModalOpen(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                onClick={() => { const n = parseInt(goalInput); if (n > 0) saveGoalMut.mutate(n); }}
+                disabled={saveGoalMut.isPending || !goalInput || parseInt(goalInput) < 1}
+                className="gap-1.5"
+              >
+                <Check size={13} /> Save Goal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

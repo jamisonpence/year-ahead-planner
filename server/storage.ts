@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -59,6 +59,7 @@ import type {
   insertFoodLogSchema,
   insertNutritionGoalSchema,
   InsertBodyCompPlan, BodyCompPlan, BodyCompCheckIn, InsertBodyCompCheckIn,
+  InsertReadingGoal, ReadingGoal,
 } from "@shared/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
@@ -1342,6 +1343,14 @@ export async function initializeStorage() {
       body_fat REAL,
       notes TEXT,
       created_at TEXT NOT NULL
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS reading_goals (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE,
+      books_target INTEGER NOT NULL DEFAULT 12,
+      year INTEGER NOT NULL DEFAULT 2026
     )
   `);
 }
@@ -4883,6 +4892,22 @@ export const storage: IStorage = {
       return r;
     }
     const [r] = await db.insert(waterLogs).values({ userId, date, glasses }).returning();
+    return r;
+  },
+
+  // ── Reading Goal ─────────────────────────────────────────────────────────────
+  async getReadingGoal(userId: number): Promise<ReadingGoal | null> {
+    const [r] = await db.select().from(readingGoals).where(eq(readingGoals.userId, userId));
+    return r ?? null;
+  },
+  async upsertReadingGoal(userId: number, data: Partial<Omit<ReadingGoal, 'id' | 'userId'>>): Promise<ReadingGoal> {
+    const existing = await storage.getReadingGoal(userId);
+    if (existing) {
+      const [r] = await db.update(readingGoals).set(data).where(eq(readingGoals.userId, userId)).returning();
+      return r;
+    }
+    const currentYear = new Date().getFullYear();
+    const [r] = await db.insert(readingGoals).values({ userId, booksTarget: 12, year: currentYear, ...data }).returning();
     return r;
   },
 
