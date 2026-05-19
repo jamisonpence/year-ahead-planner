@@ -620,6 +620,13 @@ Return exactly this structure:
       res.json(await storage.upsertReadingGoal(uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null }));
     } catch (e) { handleError(res, e); }
   });
+  app.delete("/api/reading/goal", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      await storage.deleteReadingGoal(uid);
+      res.status(204).end();
+    } catch (e) { handleError(res, e); }
+  });
 
   app.get("/api/books", async (req, res) => {
     try {

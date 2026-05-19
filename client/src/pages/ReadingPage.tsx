@@ -610,6 +610,15 @@ export default function ReadingPage() {
     },
   });
 
+  const deleteGoalMut = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/reading/goal"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] });
+      toast({ title: "Reading goal deleted" });
+      setGoalModalOpen(false);
+    },
+  });
+
   const updateBookDateMut = useMutation({
     mutationFn: ({ id, targetFinishDate }: { id: number; targetFinishDate: string | null }) =>
       apiRequest("PATCH", `/api/books/${id}`, { targetFinishDate }),
@@ -982,139 +991,165 @@ export default function ReadingPage() {
               </div>
             </div>
 
-            {/* Books in this goal */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books in This Goal</label>
-                <span className="text-xs text-muted-foreground">
-                  {booksPlannedInGoal.length + booksFinishedInGoal.length} assigned
-                </span>
-              </div>
+            {/* Books in this goal — computed from current modal window state */}
+            {(() => {
+              const modalStart = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).start : gStart;
+              const modalEnd   = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).end   : gEnd;
 
-              {/* Existing goal books: planned + finished */}
-              {(booksPlannedInGoal.length > 0 || booksFinishedInGoal.length > 0) && (
-                <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
-                  {[...booksPlannedInGoal, ...booksFinishedInGoal].map((book) => {
-                    const isFinished = book.status === "finished";
-                    const date = isFinished ? (book as any).finishDate : book.targetFinishDate;
-                    return (
-                      <div key={book.id} className="flex items-center gap-2 px-2 py-2 rounded-lg bg-secondary/40">
-                        {(book as any).coverUrl ? (
-                          <img src={(book as any).coverUrl} alt={book.title} className="w-6 h-8 object-cover rounded shrink-0" />
-                        ) : (
-                          <div className="w-6 h-8 rounded shrink-0 bg-muted flex items-center justify-center">
-                            <BookOpen size={10} className="opacity-40" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{book.title}</p>
-                          {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {isFinished ? (
-                            <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Done</span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">by {date ? format(parseISO(date), "MMM d") : "—"}</span>
-                          )}
-                          {!isFinished && (
-                            <button
-                              onClick={() => updateBookDateMut.mutate({ id: book.id, targetFinishDate: null })}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                              title="Remove from goal"
-                            >
-                              <X size={12} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              const modalBooksPlanned = books.filter((b) => {
+                if (b.status === "finished") return false;
+                const tfd = b.targetFinishDate;
+                return tfd && tfd >= (modalStart || "") && tfd <= (modalEnd || "");
+              });
+              const modalBooksFinished = books.filter((b) => {
+                if (b.status !== "finished") return false;
+                const fd = (b as any).finishDate as string | null;
+                return fd && fd >= (modalStart || "") && fd <= (modalEnd || "");
+              });
+              const assignedIds = new Set([...modalBooksPlanned, ...modalBooksFinished].map((b) => b.id));
 
-              {/* Add a book to the goal */}
-              <div className="border rounded-xl p-3 space-y-2 bg-secondary/20">
-                <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
-                <Input
-                  placeholder="Search your reading list…"
-                  value={bookSearch}
-                  onChange={(e) => setBookSearch(e.target.value)}
-                  className="text-xs h-8"
-                />
-                {(() => {
-                  const q = bookSearch.trim().toLowerCase();
-                  const windowStart = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).start : gStart;
-                  const windowEnd   = gTimeframe !== "custom" ? getTimeframeDates(gTimeframe).end   : gEnd;
-                  const unassigned = books.filter((b) => {
-                    if (b.status === "finished") return false;
-                    // Already in window
-                    if (b.targetFinishDate && b.targetFinishDate >= (windowStart || "") && b.targetFinishDate <= (windowEnd || "")) return false;
-                    if (!q) return true;
-                    return b.title.toLowerCase().includes(q) || (b.author ?? "").toLowerCase().includes(q);
-                  }).slice(0, 5);
-                  if (!unassigned.length && !q) return <p className="text-[10px] text-muted-foreground text-center py-1">All your backlog/current books are already assigned</p>;
-                  if (!unassigned.length) return <p className="text-[10px] text-muted-foreground text-center py-1">No books match "{bookSearch}"</p>;
-                  return (
-                    <div className="space-y-1">
-                      {unassigned.map((book) => (
-                        <div key={book.id}>
-                          {addingBookId === book.id ? (
-                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
-                              <BookOpen size={11} className="text-primary shrink-0" />
-                              <span className="text-xs flex-1 truncate">{book.title}</span>
-                              <Input
-                                type="date"
-                                value={addingBookDate}
-                                min={windowStart || undefined}
-                                max={windowEnd || undefined}
-                                onChange={(e) => setAddingBookDate(e.target.value)}
-                                className="h-6 text-xs w-32 shrink-0"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => { if (addingBookDate) updateBookDateMut.mutate({ id: book.id, targetFinishDate: addingBookDate }); }}
-                                disabled={!addingBookDate}
-                                className="shrink-0 p-1 rounded bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/80 transition-colors"
-                              >
-                                <Check size={11} />
-                              </button>
-                              <button onClick={() => { setAddingBookId(null); setAddingBookDate(""); }} className="shrink-0 p-1 text-muted-foreground hover:text-foreground">
-                                <X size={11} />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => { setAddingBookId(book.id); setAddingBookDate(windowEnd || ""); setBookSearch(""); }}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left"
-                            >
-                              {(book as any).coverUrl ? (
-                                <img src={(book as any).coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded shrink-0" />
-                              ) : (
-                                <div className="w-5 h-7 rounded shrink-0 bg-muted flex items-center justify-center">
-                                  <BookOpen size={9} className="opacity-40" />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{book.title}</p>
-                                {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books in This Goal</label>
+                    <span className="text-xs text-muted-foreground">
+                      {modalBooksPlanned.length + modalBooksFinished.length} assigned
+                    </span>
+                  </div>
+
+                  {/* Assigned books: planned + finished */}
+                  {(modalBooksPlanned.length > 0 || modalBooksFinished.length > 0) && (
+                    <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                      {[...modalBooksPlanned, ...modalBooksFinished].map((book) => {
+                        const isFinished = book.status === "finished";
+                        const date = isFinished ? (book as any).finishDate : book.targetFinishDate;
+                        return (
+                          <div key={book.id} className="flex items-center gap-2 px-2 py-2 rounded-lg bg-secondary/40">
+                            {(book as any).coverUrl ? (
+                              <img src={(book as any).coverUrl} alt={book.title} className="w-6 h-8 object-cover rounded shrink-0" />
+                            ) : (
+                              <div className="w-6 h-8 rounded shrink-0 bg-muted flex items-center justify-center">
+                                <BookOpen size={10} className="opacity-40" />
                               </div>
-                              <span className="text-[10px] text-muted-foreground capitalize shrink-0">{book.status}</span>
-                              <Plus size={11} className="text-primary shrink-0" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{book.title}</p>
+                              {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isFinished ? (
+                                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Done</span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">by {date ? format(parseISO(date), "MMM d") : "—"}</span>
+                              )}
+                              {!isFinished && (
+                                <button
+                                  onClick={() => updateBookDateMut.mutate({ id: book.id, targetFinishDate: null })}
+                                  className="text-muted-foreground hover:text-destructive transition-colors"
+                                  title="Remove from goal"
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })()}
-              </div>
-            </div>
+                  )}
+
+                  {/* Add a book to the goal */}
+                  <div className="border rounded-xl p-3 space-y-2 bg-secondary/20">
+                    <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
+                    <Input
+                      placeholder="Search your reading list…"
+                      value={bookSearch}
+                      onChange={(e) => setBookSearch(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                    {(() => {
+                      const q = bookSearch.trim().toLowerCase();
+                      const unassigned = books.filter((b) => {
+                        if (b.status === "finished") return false;
+                        if (assignedIds.has(b.id)) return false;
+                        if (!q) return true;
+                        return b.title.toLowerCase().includes(q) || (b.author ?? "").toLowerCase().includes(q);
+                      }).slice(0, 5);
+                      if (!unassigned.length && !q) return <p className="text-[10px] text-muted-foreground text-center py-1">All your backlog/current books are already assigned</p>;
+                      if (!unassigned.length) return <p className="text-[10px] text-muted-foreground text-center py-1">No books match "{bookSearch}"</p>;
+                      return (
+                        <div className="space-y-1">
+                          {unassigned.map((book) => (
+                            <div key={book.id}>
+                              {addingBookId === book.id ? (
+                                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
+                                  <BookOpen size={11} className="text-primary shrink-0" />
+                                  <span className="text-xs flex-1 truncate">{book.title}</span>
+                                  <Input
+                                    type="date"
+                                    value={addingBookDate}
+                                    min={modalStart || undefined}
+                                    max={modalEnd || undefined}
+                                    onChange={(e) => setAddingBookDate(e.target.value)}
+                                    className="h-6 text-xs w-32 shrink-0"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => { if (addingBookDate) updateBookDateMut.mutate({ id: book.id, targetFinishDate: addingBookDate }); }}
+                                    disabled={!addingBookDate}
+                                    className="shrink-0 p-1 rounded bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/80 transition-colors"
+                                  >
+                                    <Check size={11} />
+                                  </button>
+                                  <button onClick={() => { setAddingBookId(null); setAddingBookDate(""); }} className="shrink-0 p-1 text-muted-foreground hover:text-foreground">
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setAddingBookId(book.id); setAddingBookDate(modalEnd || ""); setBookSearch(""); }}
+                                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left"
+                                >
+                                  {(book as any).coverUrl ? (
+                                    <img src={(book as any).coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded shrink-0" />
+                                  ) : (
+                                    <div className="w-5 h-7 rounded shrink-0 bg-muted flex items-center justify-center">
+                                      <BookOpen size={9} className="opacity-40" />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium truncate">{book.title}</p>
+                                    {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground capitalize shrink-0">{book.status}</span>
+                                  <Plus size={11} className="text-primary shrink-0" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">
-              {booksFinishedInGoal.length} finished · {booksPlannedInGoal.length} planned
-            </span>
+            <div className="flex items-center gap-2">
+              {readingGoal && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { if (confirm("Delete your reading goal? This won't remove your books.")) deleteGoalMut.mutate(); }}
+                  disabled={deleteGoalMut.isPending}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 text-xs"
+                >
+                  <Trash2 size={12} /> Delete Goal
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setGoalModalOpen(false)}>Cancel</Button>
               <Button

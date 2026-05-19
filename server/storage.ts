@@ -4915,6 +4915,9 @@ export const storage: IStorage = {
     const [r] = await db.insert(readingGoals).values({ userId, ...defaults, ...data }).returning();
     return r;
   },
+  async deleteReadingGoal(userId: number): Promise<void> {
+    await db.delete(readingGoals).where(eq(readingGoals.userId, userId));
+  },
 
   // ── Nutrition Goals ──────────────────────────────────────────────────────────
   async getNutritionGoals(userId: number): Promise<NutritionGoal | null> {
