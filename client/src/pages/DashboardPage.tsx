@@ -8,7 +8,7 @@ import {
   BookMarked, Zap, Home, RefreshCw, MapPin, Quote as QuoteIcon,
   CreditCard, TrendingUp, Heart, Settings2, X,
   Sparkles, Clock, Star, Coffee, Sun, Sunset, Check, BookCopy,
-  Film, Music, ChefHat, MessageCircle, Send, Users,
+  Film, Music, ChefHat, MessageCircle, Send, Users, Apple,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -16,7 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
   EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate,
-  GoalWithProjects, Chore, Spot, Quote, Subscription,
+  GoalWithProjects, Chore, Spot, Quote, Subscription, NutritionGoal, WorkoutPlan,
 } from "@shared/schema";
 import {
   daysUntil, nextOccurrence, thisWeekDates, todayStr,
@@ -274,6 +274,8 @@ export default function DashboardPage() {
   const { data: wTemplates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
   const { data: goals = [] }      = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
   const { data: chores = [] }     = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
+  const { data: nutritionGoal }   = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
+  const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
   const { data: spots = [] }      = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
   const { data: quotes = [] }     = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
   const { data: subs = [] }       = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
@@ -527,7 +529,7 @@ export default function DashboardPage() {
           {/* Active Goals */}
           {visible.goals && (
             <Section title="Active Goals" icon={<Target size={14} className="text-[hsl(var(--cat-goal))]" />} linkHref="/goals" linkLabel="Goals">
-              {activeGoals.length === 0 ? (
+              {activeGoals.length === 0 && !nutritionGoal && workoutPlans.length === 0 ? (
                 <Empty icon={<Target size={26} />} text="No active goals yet" />
               ) : (
                 <div className="space-y-3">
@@ -549,6 +551,54 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
+                  {/* Nutrition Goals card */}
+                  {nutritionGoal && (
+                    <Link href="/goals">
+                      <a className="block p-3 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 space-y-2 hover:border-rose-400 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Apple size={13} className="text-rose-500 shrink-0" />
+                            <p className="text-sm font-medium">Nutrition Goals</p>
+                          </div>
+                          <ChevronRight size={12} className="text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.calories}</span> kcal</span>
+                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.protein}g</span> protein</span>
+                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.waterGlasses}</span> glasses</span>
+                        </div>
+                      </a>
+                    </Link>
+                  )}
+                  {/* Active Workout Plan card */}
+                  {(() => {
+                    const activePlan = workoutPlans.find(p => p.isActive);
+                    if (!activePlan) return null;
+                    const weeksElapsed = activePlan.startDate
+                      ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
+                      : null;
+                    const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0)
+                      ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100))
+                      : 0;
+                    return (
+                      <Link href="/goals">
+                        <a className="block p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2 hover:border-blue-400 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Dumbbell size={13} className="text-blue-500 shrink-0" />
+                              <p className="text-sm font-medium truncate">{activePlan.name}</p>
+                            </div>
+                            <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+                          </div>
+                          <Progress value={pct} className="h-1.5" />
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="capitalize">{activePlan.goalType.replace("_", " ")}</span>
+                            <span>{pct}% complete</span>
+                          </div>
+                        </a>
+                      </Link>
+                    );
+                  })()}
                 </div>
               )}
             </Section>

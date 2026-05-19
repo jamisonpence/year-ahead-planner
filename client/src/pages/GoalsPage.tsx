@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X, Inbox, Leaf, Droplets,
+  ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -22,6 +22,7 @@ import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
   GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, Plant,
+  NutritionGoal, WorkoutPlan,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -89,6 +90,8 @@ const STANDALONE_ID = -1;
 const HOUSEKEEPING_ID = -2;
 const ALL_TASKS_ID = -3;
 const PLANTS_ID = -4;
+const NUTRITION_ID = -5;
+const WORKOUT_GOALS_ID = -6;
 
 // Plant watering helpers
 function plantWateringDays(plant: Plant): number | null {
@@ -117,6 +120,8 @@ export default function GoalsPage() {
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
   const { data: houseProjects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["/api/plants"] });
+  const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
+  const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -247,6 +252,8 @@ export default function GoalsPage() {
   const isHousekeepingSelected = selectedGoalId === HOUSEKEEPING_ID;
   const isAllTasksSelected = selectedGoalId === ALL_TASKS_ID;
   const isPlantsSelected = selectedGoalId === PLANTS_ID;
+  const isNutritionSelected = selectedGoalId === NUTRITION_ID;
+  const isWorkoutGoalsSelected = selectedGoalId === WORKOUT_GOALS_ID;
   const selectedProject = selectedGoal?.projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // All tasks across selected goal's projects (for the Tasks column)
@@ -447,6 +454,47 @@ export default function GoalsPage() {
               );
             })()}
 
+            {/* Nutrition Goals card */}
+            {nutritionGoal && (
+              <div
+                onClick={() => { setSelectedGoalId(selectedGoalId === NUTRITION_ID ? null : NUTRITION_ID); setSelectedProjectId(null); }}
+                className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                  selectedGoalId === NUTRITION_ID ? "border-rose-400 bg-rose-50 dark:bg-rose-950/20" : "bg-card border-dashed hover:border-rose-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Apple size={15} className="text-rose-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">Nutrition Goals</p>
+                    <p className="text-xs text-muted-foreground">{nutritionGoal.calories} cal · {nutritionGoal.protein}g protein</p>
+                  </div>
+                  <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === NUTRITION_ID ? "rotate-90" : ""}`} />
+                </div>
+              </div>
+            )}
+
+            {/* Workout Goals card */}
+            {workoutPlans.length > 0 && (() => {
+              const activePlan = workoutPlans.find(p => p.isActive) ?? workoutPlans[0];
+              return (
+                <div
+                  onClick={() => { setSelectedGoalId(selectedGoalId === WORKOUT_GOALS_ID ? null : WORKOUT_GOALS_ID); setSelectedProjectId(null); }}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                    selectedGoalId === WORKOUT_GOALS_ID ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20" : "bg-card border-dashed hover:border-blue-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Dumbbell size={15} className="text-blue-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">Workout Goals</p>
+                      <p className="text-xs text-muted-foreground capitalize">{activePlan.name} · {activePlan.goalType.replace("_", " ")}</p>
+                    </div>
+                    <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === WORKOUT_GOALS_ID ? "rotate-90" : ""}`} />
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* All Tasks card */}
             <div
               onClick={() => { setSelectedGoalId(selectedGoalId === ALL_TASKS_ID ? null : ALL_TASKS_ID); setSelectedProjectId(null); }}
@@ -471,9 +519,15 @@ export default function GoalsPage() {
         <div className={`shrink-0 flex flex-col min-h-0 w-full md:w-72 ${mobileTab !== "projects" ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              {isAllTasksSelected ? "Overview" : isPlantsSelected ? "Overview" : isHousekeepingSelected ? "House Projects" : isStandaloneSelected ? "General Projects" : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
+              {isAllTasksSelected ? "Overview"
+                : isPlantsSelected ? "Overview"
+                : isNutritionSelected ? "Overview"
+                : isWorkoutGoalsSelected ? "Overview"
+                : isHousekeepingSelected ? "House Projects"
+                : isStandaloneSelected ? "General Projects"
+                : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
             </span>
-            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && !isPlantsSelected && (
+            {(selectedGoal || isStandaloneSelected || isHousekeepingSelected) && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && (
               <span className="text-xs text-muted-foreground">
                 {isHousekeepingSelected ? houseProjects.length : isStandaloneSelected ? standaloneProjects.length : selectedGoal?.projects.length}
               </span>
@@ -493,6 +547,86 @@ export default function GoalsPage() {
                 <Leaf size={28} className="mx-auto mb-3 opacity-20 text-green-500" />
                 <p className="text-sm font-medium">Plant Watering</p>
                 <p className="text-xs mt-1 px-2">All plants and their watering schedules are shown in the Tasks column</p>
+              </div>
+            ) : /* Nutrition Goals mode: show macro targets */
+            isNutritionSelected ? (
+              <div className="space-y-3">
+                <div className="text-center pb-2">
+                  <Apple size={24} className="mx-auto mb-2 text-rose-400" />
+                  <p className="text-sm font-semibold">Daily Nutrition Targets</p>
+                </div>
+                {nutritionGoal && (
+                  <div className="space-y-2.5">
+                    {[
+                      { label: "Calories", value: `${nutritionGoal.calories} kcal`, color: "bg-rose-500", pct: 100 },
+                      { label: "Protein", value: `${nutritionGoal.protein}g`, color: "bg-blue-500", pct: Math.round((nutritionGoal.protein * 4 / nutritionGoal.calories) * 100) },
+                      { label: "Carbs", value: `${nutritionGoal.carbs}g`, color: "bg-amber-500", pct: Math.round((nutritionGoal.carbs * 4 / nutritionGoal.calories) * 100) },
+                      { label: "Fat", value: `${nutritionGoal.fat}g`, color: "bg-violet-500", pct: Math.round((nutritionGoal.fat * 9 / nutritionGoal.calories) * 100) },
+                      { label: "Water", value: `${nutritionGoal.waterGlasses} glasses`, color: "bg-sky-500", pct: 100 },
+                    ].map(({ label, value, color, pct }) => (
+                      <div key={label} className="p-2.5 rounded-lg bg-secondary/40">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                          <span className="text-sm font-semibold">{value}</span>
+                        </div>
+                        {label !== "Water" && label !== "Calories" && (
+                          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                          </div>
+                        )}
+                        {label !== "Water" && label !== "Calories" && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{pct}% of calories</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Link href="/health"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Heart size={11} /> Manage in Health</a></Link>
+              </div>
+            ) : /* Workout Goals mode: show active plan details */
+            isWorkoutGoalsSelected ? (
+              <div className="space-y-3">
+                <div className="text-center pb-2">
+                  <Dumbbell size={24} className="mx-auto mb-2 text-blue-400" />
+                  <p className="text-sm font-semibold">Workout Plans</p>
+                </div>
+                {workoutPlans.map((plan) => {
+                  let metric: { label: string; current?: number; target?: number; unit?: string } | null = null;
+                  try { if (plan.goalMetricJson) metric = JSON.parse(plan.goalMetricJson); } catch {}
+                  const weeksElapsed = plan.startDate
+                    ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / (7 * 86400000))
+                    : null;
+                  const pct = (weeksElapsed !== null && plan.durationWeeks > 0)
+                    ? Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100))
+                    : 0;
+                  return (
+                    <div key={plan.id} className={`p-3 rounded-xl border ${plan.isActive ? "border-blue-300 bg-blue-50 dark:bg-blue-950/20" : "bg-secondary/40"}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold truncate flex-1">{plan.name}</p>
+                        {plan.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold ml-1 shrink-0">Active</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground capitalize mb-2">{plan.goalType.replace("_", " ")} · {plan.durationWeeks}w</p>
+                      {plan.startDate && (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                          </div>
+                          {weeksElapsed !== null && <p className="text-[10px] text-muted-foreground">Week {Math.min(weeksElapsed + 1, plan.durationWeeks)} of {plan.durationWeeks}</p>}
+                        </>
+                      )}
+                      {metric && metric.target && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Target: {metric.target}{metric.unit ? ` ${metric.unit}` : ""}
+                          {metric.current ? ` (now: ${metric.current}${metric.unit ? ` ${metric.unit}` : ""})` : ""}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
               </div>
             ) : /* Housekeeping mode: show house projects (selectable + addable) */
             isHousekeepingSelected ? (
@@ -662,6 +796,8 @@ export default function GoalsPage() {
                   <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     {isAllTasksSelected ? "All Tasks"
                       : isPlantsSelected ? "Watering Schedule"
+                      : isNutritionSelected ? "Nutrition Details"
+                      : isWorkoutGoalsSelected ? "Workout Schedule"
                       : isHousekeepingSelected && selectedHouseProject ? `Tasks — ${selectedHouseProject.title}`
                       : isHousekeepingSelected ? "Chores"
                       : (selectedProject || standaloneSelectedProject) ? `Tasks — ${(selectedProject || standaloneSelectedProject)!.title}`
@@ -670,7 +806,7 @@ export default function GoalsPage() {
                   </span>
                 );
               })()}
-              {!isHousekeepingSelected && !isAllTasksSelected && !isPlantsSelected && totalTasks > 0 && (
+              {!isHousekeepingSelected && !isAllTasksSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && totalTasks > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {doneTasks}/{totalTasks} done
                 </span>
@@ -681,13 +817,109 @@ export default function GoalsPage() {
               {isPlantsSelected && (
                 <span className="text-xs text-muted-foreground">{plants.length} plant{plants.length !== 1 ? "s" : ""}</span>
               )}
+              {isNutritionSelected && (
+                <span className="text-xs text-muted-foreground">daily targets</span>
+              )}
+              {isWorkoutGoalsSelected && (
+                <span className="text-xs text-muted-foreground">{workoutPlans.length} plan{workoutPlans.length !== 1 ? "s" : ""}</span>
+              )}
             </div>
-            {!isHousekeepingSelected && !isAllTasksSelected && totalTasks > 0 && (
+            {!isHousekeepingSelected && !isAllTasksSelected && !isNutritionSelected && !isWorkoutGoalsSelected && totalTasks > 0 && (
               <Progress value={totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0} className="h-1.5 w-24" />
             )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Nutrition Goals mode: show nutrient breakdown guide */}
+            {isNutritionSelected && nutritionGoal && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Daily Calories", value: `${nutritionGoal.calories}`, unit: "kcal", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800" },
+                    { label: "Protein", value: `${nutritionGoal.protein}`, unit: "g/day", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800" },
+                    { label: "Carbohydrates", value: `${nutritionGoal.carbs}`, unit: "g/day", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" },
+                    { label: "Fat", value: `${nutritionGoal.fat}`, unit: "g/day", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800" },
+                    { label: "Water", value: `${nutritionGoal.waterGlasses}`, unit: "glasses/day", color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800" },
+                  ].map(({ label, value, unit, color, bg }) => (
+                    <div key={label} className={`p-3 rounded-xl border ${bg}`}>
+                      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                      <p className={`text-xl font-bold ${color}`}>{value}</p>
+                      <p className="text-[10px] text-muted-foreground">{unit}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 rounded-xl bg-secondary/40 border">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Macro Split</p>
+                  <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+                    <div className="bg-blue-500 rounded-l-full" style={{ width: `${Math.round((nutritionGoal.protein * 4 / nutritionGoal.calories) * 100)}%` }} title="Protein" />
+                    <div className="bg-amber-500" style={{ width: `${Math.round((nutritionGoal.carbs * 4 / nutritionGoal.calories) * 100)}%` }} title="Carbs" />
+                    <div className="bg-violet-500 rounded-r-full flex-1" title="Fat" />
+                  </div>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Protein {Math.round((nutritionGoal.protein * 4 / nutritionGoal.calories) * 100)}%</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />Carbs {Math.round((nutritionGoal.carbs * 4 / nutritionGoal.calories) * 100)}%</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />Fat {Math.round((nutritionGoal.fat * 9 / nutritionGoal.calories) * 100)}%</span>
+                  </div>
+                </div>
+                <Link href="/health"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Heart size={11} /> Edit in Health tab</a></Link>
+              </div>
+            )}
+
+            {/* Workout Goals mode: show active plan schedule */}
+            {isWorkoutGoalsSelected && (
+              <div className="space-y-3">
+                {workoutPlans.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <Dumbbell size={36} className="mx-auto mb-4 opacity-20" />
+                    <p className="font-medium text-sm">No workout plans yet</p>
+                    <Link href="/workouts"><a className="text-xs text-primary hover:underline mt-1 block">Create a plan in Workouts →</a></Link>
+                  </div>
+                ) : workoutPlans.map((plan) => {
+                  let schedule: { dayOfWeek: string; templateName: string }[] = [];
+                  let milestones: { week: number; description: string; targetValue?: number }[] = [];
+                  try { schedule = JSON.parse(plan.scheduleJson); } catch {}
+                  try { if (plan.milestonesJson) milestones = JSON.parse(plan.milestonesJson); } catch {}
+                  const dayOrder = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+                  const sortedSchedule = [...schedule].sort((a, b) => dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek));
+                  return (
+                    <div key={plan.id} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <Dumbbell size={13} className="text-blue-500 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">{plan.name}</span>
+                        {plan.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Active</span>}
+                      </div>
+                      {sortedSchedule.length > 0 ? (
+                        <div className="space-y-1">
+                          {sortedSchedule.map((entry, i) => (
+                            <div key={i} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-secondary/40 transition-colors">
+                              <span className="text-xs font-semibold text-muted-foreground capitalize w-20 shrink-0">{entry.dayOfWeek}</span>
+                              <span className="text-sm truncate">{entry.templateName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground px-2">No schedule set</p>
+                      )}
+                      {milestones.length > 0 && (
+                        <div className="mt-2 p-3 rounded-xl bg-secondary/40 border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Milestones</p>
+                          <div className="space-y-1">
+                            {milestones.slice(0, 4).map((m, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span className="text-muted-foreground shrink-0">Wk {m.week}</span>
+                                <span className="flex-1 truncate">{m.description}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
+              </div>
+            )}
+
             {/* Housekeeping mode: show project tasks OR chores list */}
             {isHousekeepingSelected ? (() => {
               const selectedHouseProject = houseProjects.find((p) => p.id === selectedProjectId) ?? null;
@@ -828,7 +1060,7 @@ export default function GoalsPage() {
             })()}
 
             {/* Due Chores section (only shown in non-housekeeping modes) */}
-            {!isHousekeepingSelected && !isPlantsSelected && (() => {
+            {!isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && (() => {
               const dueChores = chores
                 .filter((c) => c.isActive && c.nextDue)
                 .filter((c) => {
@@ -1076,7 +1308,7 @@ export default function GoalsPage() {
               );
             })()}
 
-            {!isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !selectedGoal && !isStandaloneSelected ? (
+            {!isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && !selectedGoal && !isStandaloneSelected ? (
               <div className="text-center py-16 text-muted-foreground">
                 <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
                 <p className="font-medium text-sm">Select a goal to see tasks</p>
@@ -1132,13 +1364,13 @@ export default function GoalsPage() {
                 )}
                 <QuickAdd placeholder="Add general task..." onAdd={(t) => addGeneralTask.mutate(t)} className="mt-2 px-1" />
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected && tasksToShow.length === 0 && !selectedProject && !standaloneSelectedProject ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ClipboardList size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-sm font-medium">No tasks yet</p>
                 <p className="text-xs mt-1">Add a project and tasks to track your work</p>
               </div>
-            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected ? (
+            ) : !isAllTasksSelected && !isHousekeepingSelected && !isPlantsSelected && !isNutritionSelected && !isWorkoutGoalsSelected ? (
               <div className="space-y-1">
                 {/* Group tasks by project when showing all */}
                 {!selectedProject && !standaloneSelectedProject && selectedGoal && selectedGoal.projects.map((p) => {
