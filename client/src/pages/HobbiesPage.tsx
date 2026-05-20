@@ -325,6 +325,71 @@ function generateChessEloSteps(currentElo: number, targetElo: number, months: nu
   return steps;
 }
 
+// ── Poker helpers ──────────────────────────────────────────────────────────────
+
+// Stakes ordered lowest → highest. Each level jump = 12 months baseline, max 36.
+const POKER_STAKES = ["NL2", "NL5", "NL10", "NL25", "NL50", "NL100", "NL200", "NL500+"] as const;
+type PokerStake = typeof POKER_STAKES[number];
+
+function calcPokerDuration(jumps: number): { months: number; weeks: number } {
+  const months = Math.min(jumps * 12, 36);
+  return { months, weeks: months * 4 };
+}
+
+const POKER_PHASES = [
+  {
+    name: "Fundamentals & discipline",
+    secondary: "Basic preflop ranges",
+    milestone: "Beat lowest stake consistently with a positive win rate",
+    activities: "Study preflop charts daily · 2–3 sessions/week with hand review · Focus on c-betting basics and avoiding basic leaks",
+  },
+  {
+    name: "Postflop basics",
+    secondary: "Value betting & bluffing",
+    milestone: "Solid micro-stakes reg — tracking results and basic leak awareness",
+    activities: "Postflop fundamentals (bet sizing, board textures) · Alternate study/play days · Regular hand review in a tracker (PokerTracker/HEM)",
+  },
+  {
+    name: "Hand reading & ranges",
+    secondary: "Exploit vs population",
+    milestone: "Confident at your main stake with deeper postflop understanding",
+    activities: "Hand reading drills · Build population notes · 3–5 focused grind sessions/week · Mark and review 5–10 key hands weekly",
+  },
+  {
+    name: "Advanced concepts & review",
+    secondary: "Mental game & bankroll",
+    milestone: "Ready to take a disciplined shot at the next stake level",
+    activities: "Advanced concepts (3-bet pots, check-raises, blockers) · Mental game work · Review big pots and leaks · Strict bankroll rules for shot-taking",
+  },
+];
+
+function generatePokerSteps(currentStake: PokerStake, targetStake: PokerStake, months: number): GoalStep[] {
+  const steps: GoalStep[] = [];
+  const mpPhase = months / 4;
+
+  steps.push({ id: genId(), done: false,
+    text: `Setup — install a hand tracker (PokerTracker 4 or Hold'em Manager 3), verify bankroll meets 20–30 buy-in rule for ${currentStake}, and schedule weekly study sessions`,
+  });
+
+  for (let i = 0; i < 4; i++) {
+    const startMonth = Math.round(i * mpPhase) + 1;
+    const endMonth   = Math.round((i + 1) * mpPhase);
+    const ph = POKER_PHASES[i];
+    steps.push({ id: genId(), done: false,
+      text: `Month${startMonth === endMonth ? ` ${startMonth}` : `s ${startMonth}–${endMonth}`}: ${ph.name} + ${ph.secondary} — ${ph.activities}`,
+    });
+    steps.push({ id: genId(), done: false,
+      text: `Month ${endMonth} checkpoint: ${ph.milestone} · Review tracker stats for red-line, WTSD%, and biggest leaks`,
+    });
+  }
+
+  steps.push({ id: genId(), done: false,
+    text: `Month ${months}: Take your shot at ${targetStake} — enter with 20+ buy-ins, set a stop-loss rule, and track results over a meaningful sample (10k+ hands)`,
+  });
+
+  return steps;
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -696,6 +761,11 @@ function PlanWizard({
   const [currentElo, setCurrentElo] = useState("");
   const [targetElo, setTargetElo] = useState("");
 
+  // Poker wizard state
+  const [pokerMode, setPokerMode] = useState(false);
+  const [currentStake, setCurrentStake] = useState<PokerStake | "">("");
+  const [targetStake, setTargetStake] = useState<PokerStake | "">("");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -705,22 +775,28 @@ function PlanWizard({
   const eloGap = Math.max(0, Number(targetElo) - Number(currentElo));
   const eloDuration = eloGap > 0 ? calcChessDuration(eloGap) : null;
 
+  // Poker preview
+  const pokerJumps = (currentStake && targetStake)
+    ? Math.max(0, POKER_STAKES.indexOf(targetStake as PokerStake) - POKER_STAKES.indexOf(currentStake as PokerStake))
+    : 0;
+  const pokerDuration = pokerJumps > 0 ? calcPokerDuration(pokerJumps) : null;
+
   function reset() {
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setSteps([]); setStepInput(""); setStepDate("");
     setChessEloMode(false); setCurrentElo(""); setTargetElo("");
+    setPokerMode(false); setCurrentStake(""); setTargetStake("");
   }
   function handleClose() { reset(); onClose(); }
 
   function pickTemplate(t: PlanTemplate) {
-    const isChessRating = t.id === "gp3" && selectedHobby?.name?.toLowerCase().includes("chess");
+    const hobbyName = selectedHobby?.name?.toLowerCase() ?? "";
+    const isChessRating = t.id === "gp3" && hobbyName.includes("chess");
+    const isPokerRating = t.id === "gp3" && hobbyName.includes("poker");
     setSelectedTemplate(t);
-    if (isChessRating) {
-      setChessEloMode(true);
-      // Don't advance to step 2 yet — wait for ELO inputs
-      return;
-    }
+    if (isChessRating) { setChessEloMode(true); return; }
+    if (isPokerRating) { setPokerMode(true); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -737,6 +813,17 @@ function PlanWizard({
     setDurationWeeks(String(eloDuration.weeks));
     setSteps(generatedSteps);
     setChessEloMode(false);
+    setStep(2);
+  }
+
+  function applyPokerSettings() {
+    if (!pokerDuration || !currentStake || !targetStake) return;
+    const generatedSteps = generatePokerSteps(currentStake as PokerStake, targetStake as PokerStake, pokerDuration.months);
+    setTitle(`Poker: ${currentStake} → ${targetStake} (${pokerDuration.months}-month plan)`);
+    setDescription(`Structured improvement plan to move from ${currentStake} to ${targetStake} over ${pokerDuration.months} months (${pokerJumps} stake level${pokerJumps !== 1 ? "s" : ""}).`);
+    setDurationWeeks(String(pokerDuration.weeks));
+    setSteps(generatedSteps);
+    setPokerMode(false);
     setStep(2);
   }
 
@@ -763,25 +850,34 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode) && (
-              <button onClick={() => { if (chessEloMode) { setChessEloMode(false); setSelectedTemplate(null); } else setStep(1); }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
+            {(step === 2 || chessEloMode || pokerMode) && (
+              <button onClick={() => {
+                if (chessEloMode) { setChessEloMode(false); setSelectedTemplate(null); }
+                else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
+                else setStep(1);
+              }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
               </button>
             )}
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode ? "New Plan" : chessEloMode ? "Chess Rating Goal" : "Configure Your Plan"}
+                {step === 1 && !chessEloMode && !pokerMode ? "New Plan"
+                  : chessEloMode ? "Chess Rating Goal"
+                  : pokerMode ? "Poker Improvement Plan"
+                  : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode ? "Pick a hobby and choose a template" : chessEloMode ? "Set your current and target ELO to generate a personalised plan" : "Name, schedule, and build out your steps"}
+                {step === 1 && !chessEloMode && !pokerMode ? "Pick a hobby and choose a template"
+                  : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
+                  : pokerMode ? "Set your current and target stake to generate a personalised plan"
+                  : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {(chessEloMode ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              // chess mode: step1=idx0 filled, eloStep=idx0+1 filled, step2=all filled
-              const filled = chessEloMode ? idx <= 1 : n <= step;
+            {((chessEloMode || pokerMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || pokerMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -859,8 +955,93 @@ function PlanWizard({
             </>
           )}
 
+          {/* POKER STEP */}
+          {pokerMode && (
+            <>
+              <div className="flex items-center gap-3 p-3 rounded-xl border bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                <span className="text-2xl">♠️</span>
+                <div>
+                  <p className="text-sm font-semibold">Improve your game</p>
+                  <p className="text-xs text-muted-foreground">{selectedHobby?.name} · Games & Mind</p>
+                </div>
+              </div>
+
+              {/* Stake selectors */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Current Stake *</label>
+                  <Select value={currentStake} onValueChange={v => { setCurrentStake(v as PokerStake); setTargetStake(""); }}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select stake…" /></SelectTrigger>
+                    <SelectContent>
+                      {POKER_STAKES.slice(0, -1).map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground mt-1">The stake you play now</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target Stake *</label>
+                  <Select value={targetStake} onValueChange={v => setTargetStake(v as PokerStake)} disabled={!currentStake}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select target…" /></SelectTrigger>
+                    <SelectContent>
+                      {POKER_STAKES.filter((_, i) => i > POKER_STAKES.indexOf(currentStake as PokerStake)).map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground mt-1">The stake you want to beat</p>
+                </div>
+              </div>
+
+              {/* Dynamic plan preview */}
+              {pokerDuration && pokerJumps > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Your Plan Preview</p>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {currentStake} → {targetStake}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">{pokerDuration.months}</p>
+                      <p className="text-[10px] text-muted-foreground">months</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">{pokerJumps}</p>
+                      <p className="text-[10px] text-muted-foreground">stake jump{pokerJumps !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">4</p>
+                      <p className="text-[10px] text-muted-foreground">phases</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 pt-1 border-t">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Phase breakdown</p>
+                    {POKER_PHASES.map((ph, i) => {
+                      const phaseMonths = Math.round(pokerDuration.months / 4);
+                      const startM = i * phaseMonths + 1;
+                      const endM = Math.min((i + 1) * phaseMonths, pokerDuration.months);
+                      return (
+                        <div key={i} className="flex items-start gap-2 text-xs">
+                          <span className="w-16 shrink-0 text-muted-foreground font-medium">Mo {startM}–{endM}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{ph.name}</span>
+                            <span className="text-muted-foreground"> · {ph.milestone}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground border-t pt-2">Recommended: 3–10 hrs/week · track every session · 20+ buy-in bankroll rule</p>
+                </div>
+              )}
+            </>
+          )}
+
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && (
+          {step === 1 && !chessEloMode && !pokerMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -997,16 +1178,20 @@ function PlanWizard({
         <div className="px-5 py-3 border-t shrink-0 flex justify-between items-center">
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
           {chessEloMode && (
-            <Button
-              size="sm"
+            <Button size="sm"
               disabled={!eloDuration || Number(targetElo) <= Number(currentElo) || !currentElo || !targetElo}
-              onClick={applyEloSettings}
-              className="gap-1.5"
-            >
+              onClick={applyEloSettings} className="gap-1.5">
               <Check size={13} /> Generate Plan
             </Button>
           )}
-          {step === 2 && !chessEloMode && (
+          {pokerMode && (
+            <Button size="sm"
+              disabled={!pokerDuration || !currentStake || !targetStake || pokerJumps <= 0}
+              onClick={applyPokerSettings} className="gap-1.5">
+              <Check size={13} /> Generate Plan
+            </Button>
+          )}
+          {step === 2 && !chessEloMode && !pokerMode && (
             <Button size="sm" disabled={!title.trim() || !selectedHobbyId} onClick={handleSave} className="gap-1.5">
               <Check size={13} /> Create Plan
             </Button>
