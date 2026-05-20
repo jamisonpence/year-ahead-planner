@@ -3751,23 +3751,29 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
-  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=20&locationName=Boulder+CO
-   *  Uses Overpass API (OpenStreetMap) — no API key required.
-   *  Returns { trails: TrailResult[] } in a shape the HikingSection component already understands.
+  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=30&locationName=Boulder+CO
+   *  Uses Waymarked Trails API (waymarkedtrails.org) — no API key required.
+   *  Returns { trails: TrailResult[] } in a shape the HikingSection component understands.
    */
   app.get("/api/hiking/search", requireAuth, async (req, res) => {
     try {
-      const { lat, lon, maxDistance = "25", maxResults = "20", locationName = "" } = req.query as Record<string, string>;
+      const { lat, lon, maxDistance = "25", maxResults = "30", locationName = "" } = req.query as Record<string, string>;
       if (!lat || !lon) return res.status(400).json({ error: "lat and lon required" });
 
-      // Convert miles → metres for Overpass radius
-      const radiusMetres = Math.round(parseFloat(maxDistance) * 1609.34);
+      const latN = parseFloat(lat);
+      const lonN = parseFloat(lon);
+      const radiusMiles = parseFloat(maxDistance);
 
-      // Query hiking route relations within the radius
-      const overpassQuery = `[out:json][timeout:30];relation["route"="hiking"](around:${radiusMetres},${lat},${lon});out tags;`;
-      const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-      const r = await fetch(overpassUrl, { headers: { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" } });
-      const data = await r.json() as { elements?: any[] };
+      // Build bounding box from centre + radius
+      const latDelta = radiusMiles / 69.0;
+      const lonDelta = radiusMiles / (69.0 * Math.cos(latN * Math.PI / 180));
+      const bbox = `${lonN - lonDelta},${latN - latDelta},${lonN + lonDelta},${latN + latDelta}`;
+
+      const limit = parseInt(maxResults, 10) || 30;
+      const url = `https://hiking.waymarkedtrails.org/api/v1/list/by_area?bbox=${bbox}&limit=${limit}`;
+      const r = await fetch(url, { headers: { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" } });
+      if (!r.ok) return res.json({ trails: [], error: `Waymarked Trails returned ${r.status}` });
+      const data = await r.json() as { results?: any[]; total?: number };
 
       // Helper: OSM sac_scale → difficulty label
       function sacToDifficulty(sac?: string): string {
@@ -3778,51 +3784,28 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
           case "alpine_hiking":             return "Dbl Black";
           case "demanding_alpine_hiking":
           case "difficult_alpine_hiking":   return "Terrifying";
-          default:                          return "Green";
+          default:                          return "";
         }
       }
 
-      // Helper: parse distance string to miles (OSM stores "8.2 km", "5 mi", bare numbers as km)
-      function toMiles(distStr?: string): number {
-        if (!distStr) return 0;
-        const val = parseFloat(distStr);
-        if (isNaN(val)) return 0;
-        if (/mi/i.test(distStr)) return Math.round(val * 10) / 10;
-        // assume km
-        return Math.round(val * 0.621371 * 10) / 10;
-      }
+      const trails = (data.results ?? []).map((t: any) => ({
+        id:          t.id,
+        name:        t.name || "Unnamed Trail",
+        ref:         t.ref   || null,
+        location:    (locationName as string) || "",
+        // mapped_length is in metres; convert to miles
+        length:      t.mapped_length ? Math.round(t.mapped_length / 1609.34 * 10) / 10 : 0,
+        ascent:      0,   // not returned by list endpoint
+        difficulty:  sacToDifficulty(t.sac_scale),
+        stars:       0,
+        url:         `https://hiking.waymarkedtrails.org/#route?id=${t.id}`,
+        imgSqSmall:  null,
+        description: t.description || null,
+        network:     t.network     || null,
+        group:       t.group       || null,
+      }));
 
-      // Helper: elevation string (metres) → feet
-      function toFeet(ascentStr?: string): number {
-        if (!ascentStr) return 0;
-        const val = parseFloat(ascentStr);
-        return isNaN(val) ? 0 : Math.round(val * 3.28084);
-      }
-
-      const limit = parseInt(maxResults, 10) || 20;
-      const trails = (data.elements ?? [])
-        .filter((el: any) => el.tags?.name)   // skip unnamed routes
-        .slice(0, limit)
-        .map((el: any) => {
-          const tags = el.tags ?? {};
-          const fromTo = [tags.from, tags.to].filter(Boolean).join(" → ");
-          return {
-            id:          el.id,
-            name:        tags.name,
-            location:    fromTo || tags.area || (locationName as string) || "",
-            length:      toMiles(tags.distance),
-            ascent:      toFeet(tags.ascent),
-            difficulty:  sacToDifficulty(tags.sac_scale),
-            stars:       0,           // OSM has no star rating
-            url:         `https://www.openstreetmap.org/relation/${el.id}`,
-            imgSqSmall:  null,
-            operator:    tags.operator || null,
-            description: tags.description || tags["short_description"] || null,
-            network:     tags.network || null,
-          };
-        });
-
-      res.json({ trails });
+      res.json({ trails, total: data.total ?? trails.length });
     } catch (e) { handleError(res, e); }
   });
 

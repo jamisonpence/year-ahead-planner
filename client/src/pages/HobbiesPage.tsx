@@ -1612,17 +1612,53 @@ function HobbyCard({
 
 // ── HikingSection ─────────────────────────────────────────────────────────────
 
+/** Shared hook: geocode + Waymarked Trails search */
+function useTrailSearch() {
+  const [locationInput, setLocationInput] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchError, setSearchError] = useState("");
+
+  async function runSearch(query?: string) {
+    const q = (query ?? locationInput).trim();
+    if (!q) return;
+    setSearching(true); setSearchResults([]); setSearchError("");
+    try {
+      const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(q)}`);
+      const geoData = await geoRes.json();
+      if (!geoData?.length) {
+        setSearchError("Location not found. Try a more specific place name (e.g. 'Boulder, CO').");
+        setSearching(false); return;
+      }
+      const { lat, lon } = geoData[0];
+      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=30&locationName=${encodeURIComponent(q)}`);
+      const trailData = await trailRes.json();
+      if (!trailData.trails?.length) {
+        setSearchError("No hiking routes found near that location. Try a nearby city or park name.");
+        setSearching(false); return;
+      }
+      setSearchResults(trailData.trails);
+    } catch {
+      setSearchError("Search failed. Check your connection and try again.");
+    }
+    setSearching(false);
+  }
+
+  return { locationInput, setLocationInput, searching, searchResults, setSearchResults, searchError, runSearch };
+}
+
 function HikingSection({ hobby, onUpdateExtra }: {
   hobby: Hobby;
   onUpdateExtra: (newExtraJson: string) => void;
 }) {
   const { toast } = useToast();
   const [tab, setTab] = useState<"wishlist" | "log">("wishlist");
-  const [locationInput, setLocationInput] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchError, setSearchError] = useState("");
   const [showLogForm, setShowLogForm] = useState(false);
+  const [showLogSearch, setShowLogSearch] = useState(false);
+
+  // Separate search state for each tab
+  const wishlistSearch = useTrailSearch();
+  const logSearch      = useTrailSearch();
 
   // Log form state
   const [logName, setLogName] = useState("");
@@ -1641,24 +1677,6 @@ function HikingSection({ hobby, onUpdateExtra }: {
     onUpdateExtra(setHikingInExtra(hobby.extraJson ?? "{}", w, l));
   }
 
-  async function searchTrails() {
-    if (!locationInput.trim()) return;
-    setSearching(true); setSearchResults([]); setSearchError("");
-    try {
-      // Geocode first
-      const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(locationInput)}`);
-      const geoData = await geoRes.json();
-      if (!geoData?.length) { setSearchError("Location not found. Try a more specific name (e.g. 'Boulder, CO')."); setSearching(false); return; }
-      const { lat, lon } = geoData[0];
-      // Search trails via Overpass / OpenStreetMap (no API key needed)
-      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=30&locationName=${encodeURIComponent(locationInput)}`);
-      const trailData = await trailRes.json();
-      if (!trailData.trails?.length) { setSearchError("No named hiking routes found near that location. Try a city or trailhead name."); setSearching(false); return; }
-      setSearchResults(trailData.trails);
-    } catch { setSearchError("Search failed. Check your connection and try again."); }
-    setSearching(false);
-  }
-
   function addToWishlist(trail: any) {
     if (wishlist.some(w => w.trailId === trail.id)) { toast({ title: "Already on wishlist" }); return; }
     const entry: HikeWishlistEntry = {
@@ -1673,13 +1691,24 @@ function HikingSection({ hobby, onUpdateExtra }: {
 
   function removeWishlist(id: string) { saveHiking(wishlist.filter(w => w.id !== id), hikeLog); }
 
+  function prefillLog(name: string, dist: number, elev: number, diff: string) {
+    setLogName(name);
+    setLogDist(dist > 0 ? String(dist) : "");
+    setLogElev(elev > 0 ? String(elev) : "");
+    setLogDiff(diff || "");
+  }
+
   function logHike(fromTrail?: HikeWishlistEntry) {
-    if (fromTrail) {
-      setLogName(fromTrail.name); setLogDist(String(fromTrail.lengthMiles));
-      setLogElev(fromTrail.elevationGainFt ? String(fromTrail.elevationGainFt) : "");
-      setLogDiff(fromTrail.difficulty || "");
-    }
+    if (fromTrail) prefillLog(fromTrail.name, fromTrail.lengthMiles, fromTrail.elevationGainFt ?? 0, fromTrail.difficulty ?? "");
     setTab("log"); setShowLogForm(true);
+  }
+
+  function logFromSearchResult(trail: any) {
+    prefillLog(trail.name, trail.length ?? 0, trail.ascent ?? 0, trail.difficulty ?? "");
+    logSearch.setSearchResults([]);
+    setShowLogSearch(false);
+    setShowLogForm(true);
+    toast({ title: `"${trail.name}" pre-filled in log` });
   }
 
   function saveLog() {
@@ -1724,44 +1753,46 @@ function HikingSection({ hobby, onUpdateExtra }: {
         {/* WISHLIST TAB */}
         {tab === "wishlist" && (
           <>
-            {/* Search bar */}
+            {/* Wishlist search bar */}
             <div className="flex gap-2">
               <Input
                 placeholder="Search trails near… (e.g. Boulder, CO)"
-                value={locationInput} onChange={e => setLocationInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") searchTrails(); }}
+                value={wishlistSearch.locationInput}
+                onChange={e => wishlistSearch.setLocationInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") wishlistSearch.runSearch(); }}
                 className="text-sm h-8 flex-1"
               />
-              <Button size="sm" variant="outline" onClick={searchTrails} disabled={searching || !locationInput.trim()} className="h-8 gap-1.5 shrink-0">
-                {searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
-                {searching ? "Searching…" : "Search"}
+              <Button size="sm" variant="outline" onClick={() => wishlistSearch.runSearch()} disabled={wishlistSearch.searching || !wishlistSearch.locationInput.trim()} className="h-8 gap-1.5 shrink-0">
+                {wishlistSearch.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                {wishlistSearch.searching ? "Searching…" : "Search"}
               </Button>
             </div>
 
-            {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+            {wishlistSearch.searchError && <p className="text-xs text-destructive">{wishlistSearch.searchError}</p>}
 
             {/* Search results */}
-            {searchResults.length > 0 && (
+            {wishlistSearch.searchResults.length > 0 && (
               <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{searchResults.length} trails found</p>
-                {searchResults.map((trail: any) => (
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{wishlistSearch.searchResults.length} routes found via Waymarked Trails</p>
+                {wishlistSearch.searchResults.map((trail: any) => (
                   <div key={trail.id} className="flex items-start gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate">{trail.name}</p>
-                      {trail.location && <p className="text-[10px] text-muted-foreground truncate">{trail.location}</p>}
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-semibold truncate">{trail.name}</p>
+                        {trail.ref && <span className="text-[10px] text-muted-foreground shrink-0">({trail.ref})</span>}
+                      </div>
                       {trail.description && <p className="text-[10px] text-muted-foreground truncate italic">{trail.description}</p>}
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {diffBadge(trail.difficulty)}
                         {trail.length > 0 && <span className="text-[10px] text-muted-foreground">{trail.length} mi</span>}
-                        {trail.ascent > 0 && <span className="text-[10px] text-muted-foreground">+{trail.ascent}ft</span>}
-                        {trail.operator && <span className="text-[10px] text-muted-foreground">· {trail.operator}</span>}
+                        {trail.network && <span className="text-[10px] text-muted-foreground capitalize">{trail.network}</span>}
                       </div>
                     </div>
                     <div className="flex flex-col gap-1 shrink-0">
                       <button onClick={() => addToWishlist(trail)} className="text-[10px] px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
                         + Wishlist
                       </button>
-                      {trail.url && <a href={trail.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">OSM ↗</a>}
+                      {trail.url && <a href={trail.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">View ↗</a>}
                     </div>
                   </div>
                 ))}
@@ -1774,14 +1805,12 @@ function HikingSection({ hobby, onUpdateExtra }: {
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Wishlist</p>
                 {wishlist.map(w => (
                   <div key={w.id} className="flex items-start gap-2 p-2.5 rounded-lg border bg-card">
-                    {w.imgUrl && <img src={w.imgUrl} className="w-9 h-9 rounded object-cover shrink-0" alt="" />}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{w.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{w.location}</p>
+                      {w.location && <p className="text-[10px] text-muted-foreground truncate">{w.location}</p>}
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {diffBadge(w.difficulty)}
-                        <span className="text-[10px] text-muted-foreground">{w.lengthMiles} mi{w.elevationGainFt ? ` · +${w.elevationGainFt}ft` : ""}</span>
-                        {w.stars ? <span className="text-[10px] text-amber-500">★ {w.stars.toFixed(1)}</span> : null}
+                        {w.lengthMiles > 0 && <span className="text-[10px] text-muted-foreground">{w.lengthMiles} mi{w.elevationGainFt ? ` · +${w.elevationGainFt}ft` : ""}</span>}
                         {w.plannedDate && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Calendar size={9}/>{format(parseISO(w.plannedDate), "MMM d")}</span>}
                       </div>
                     </div>
@@ -1793,7 +1822,7 @@ function HikingSection({ hobby, onUpdateExtra }: {
                 ))}
               </div>
             )}
-            {wishlist.length === 0 && searchResults.length === 0 && (
+            {wishlist.length === 0 && wishlistSearch.searchResults.length === 0 && (
               <div className="text-center py-6 text-muted-foreground">
                 <Trees size={24} className="mx-auto mb-2 opacity-20" />
                 <p className="text-xs">Search for trails above to build your wishlist</p>
@@ -1805,6 +1834,56 @@ function HikingSection({ hobby, onUpdateExtra }: {
         {/* LOG TAB */}
         {tab === "log" && (
           <>
+            {/* Trail search to pre-fill log */}
+            <div className="border rounded-xl overflow-hidden">
+              <button
+                onClick={() => { setShowLogSearch(s => !s); logSearch.setSearchResults([]); }}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20 hover:bg-emerald-100/60 transition-colors"
+              >
+                <span className="flex items-center gap-1.5"><Search size={11} /> Find a trail to pre-fill</span>
+                {showLogSearch ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              {showLogSearch && (
+                <div className="p-2.5 space-y-2 border-t">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search near… (e.g. Rocky Mountain NP)"
+                      value={logSearch.locationInput}
+                      onChange={e => logSearch.setLocationInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") logSearch.runSearch(); }}
+                      className="text-sm h-8 flex-1"
+                    />
+                    <Button size="sm" variant="outline" onClick={() => logSearch.runSearch()} disabled={logSearch.searching || !logSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                      {logSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                      {logSearch.searching ? "…" : "Search"}
+                    </Button>
+                  </div>
+                  {logSearch.searchError && <p className="text-xs text-destructive">{logSearch.searchError}</p>}
+                  {logSearch.searchResults.length > 0 && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      <p className="text-[10px] text-muted-foreground">{logSearch.searchResults.length} routes — click one to pre-fill</p>
+                      {logSearch.searchResults.map((trail: any) => (
+                        <button
+                          key={trail.id}
+                          onClick={() => logFromSearchResult(trail)}
+                          className="w-full text-left flex items-center justify-between gap-2 p-2 rounded-lg border bg-card hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{trail.name}{trail.ref ? ` (${trail.ref})` : ""}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {diffBadge(trail.difficulty)}
+                              {trail.length > 0 && <span className="text-[10px] text-muted-foreground">{trail.length} mi</span>}
+                            </div>
+                          </div>
+                          <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {!showLogForm ? (
               <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
                 <Plus size={13} /> Log a Hike
