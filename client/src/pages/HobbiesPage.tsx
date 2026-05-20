@@ -1624,17 +1624,22 @@ function useTrailSearch() {
     if (!q) return;
     setSearching(true); setSearchResults([]); setSearchError("");
     try {
-      const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(q)}`);
-      const geoData = await geoRes.json();
-      if (!geoData?.length) {
-        setSearchError("Location not found. Try a more specific place name (e.g. 'Boulder, CO').");
-        setSearching(false); return;
-      }
-      const { lat, lon } = geoData[0];
-      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=30&locationName=${encodeURIComponent(q)}`);
+      // Geocode in parallel with the text search so we can do both at once
+      let latLonParams = "";
+      try {
+        const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(q)}`);
+        const geoData = await geoRes.json();
+        if (geoData?.length) {
+          const { lat, lon } = geoData[0];
+          latLonParams = `&lat=${lat}&lon=${lon}&maxDistance=25`;
+        }
+      } catch { /* geocode failure is non-fatal — text search still runs */ }
+
+      // Always include locationName so the server runs text search regardless
+      const trailRes = await fetch(`/api/hiking/search?locationName=${encodeURIComponent(q)}&maxResults=30${latLonParams}`);
       const trailData = await trailRes.json();
       if (!trailData.trails?.length) {
-        setSearchError("No hiking routes found near that location. Try a nearby city or park name.");
+        setSearchError("No hiking routes found. Try a trail name (e.g. 'Colorado Trail') or a city/park name.");
         setSearching(false); return;
       }
       setSearchResults(trailData.trails);

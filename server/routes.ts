@@ -3751,31 +3751,17 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
-  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=30&locationName=Boulder+CO
+  /** GET /api/hiking/search?query=Colorado+Trail[&lat=X&lon=Y&maxDistance=25]&maxResults=30
    *  Uses Waymarked Trails API (waymarkedtrails.org) — no API key required.
-   *  Returns { trails: TrailResult[] } in a shape the HikingSection component understands.
+   *  Runs text-search and (optionally) bounding-box area-search in parallel, merges results.
+   *  lat/lon are optional — if omitted only the text search runs.
    */
   app.get("/api/hiking/search", requireAuth, async (req, res) => {
     try {
       const { lat, lon, maxDistance = "25", maxResults = "30", locationName = "" } = req.query as Record<string, string>;
-      if (!lat || !lon) return res.status(400).json({ error: "lat and lon required" });
-
-      const latN = parseFloat(lat);
-      const lonN = parseFloat(lon);
-      const radiusMiles = parseFloat(maxDistance);
-
-      // Build bounding box from centre + radius
-      const latDelta = radiusMiles / 69.0;
-      const lonDelta = radiusMiles / (69.0 * Math.cos(latN * Math.PI / 180));
-      const bbox = `${lonN - lonDelta},${latN - latDelta},${lonN + lonDelta},${latN + latDelta}`;
-
       const limit = parseInt(maxResults, 10) || 30;
-      const url = `https://hiking.waymarkedtrails.org/api/v1/list/by_area?bbox=${bbox}&limit=${limit}`;
-      const r = await fetch(url, { headers: { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" } });
-      if (!r.ok) return res.json({ trails: [], error: `Waymarked Trails returned ${r.status}` });
-      const data = await r.json() as { results?: any[]; total?: number };
+      const query = (locationName as string).trim();
 
-      // Helper: OSM sac_scale → difficulty label
       function sacToDifficulty(sac?: string): string {
         switch (sac) {
           case "hiking":                    return "Green";
@@ -3787,25 +3773,61 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
           default:                          return "";
         }
       }
+      function mapTrail(t: any, loc: string) {
+        return {
+          id:          t.id,
+          name:        t.name || "Unnamed Trail",
+          ref:         t.ref  || null,
+          location:    loc,
+          length:      t.mapped_length ? Math.round(t.mapped_length / 1609.34 * 10) / 10 : 0,
+          ascent:      0,
+          difficulty:  sacToDifficulty(t.sac_scale),
+          stars:       0,
+          url:         `https://hiking.waymarkedtrails.org/#route?id=${t.id}`,
+          imgSqSmall:  null,
+          description: t.description || null,
+          network:     t.network     || null,
+          group:       t.group       || null,
+        };
+      }
 
-      const trails = (data.results ?? []).map((t: any) => ({
-        id:          t.id,
-        name:        t.name || "Unnamed Trail",
-        ref:         t.ref   || null,
-        location:    (locationName as string) || "",
-        // mapped_length is in metres; convert to miles
-        length:      t.mapped_length ? Math.round(t.mapped_length / 1609.34 * 10) / 10 : 0,
-        ascent:      0,   // not returned by list endpoint
-        difficulty:  sacToDifficulty(t.sac_scale),
-        stars:       0,
-        url:         `https://hiking.waymarkedtrails.org/#route?id=${t.id}`,
-        imgSqSmall:  null,
-        description: t.description || null,
-        network:     t.network     || null,
-        group:       t.group       || null,
-      }));
+      const UA = { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" };
+      const fetches: Promise<any[]>[] = [];
 
-      res.json({ trails, total: data.total ?? trails.length });
+      // 1. Text search (by trail name / keyword) — always run if query provided
+      if (query) {
+        fetches.push(
+          fetch(`https://hiking.waymarkedtrails.org/api/v1/list/search?query=${encodeURIComponent(query)}&limit=${limit}`, { headers: UA })
+            .then(r => r.ok ? r.json() : { results: [] })
+            .then((d: any) => (d.results ?? []).map((t: any) => mapTrail(t, query)))
+            .catch(() => [])
+        );
+      }
+
+      // 2. Bounding-box area search — only run when lat/lon provided
+      if (lat && lon) {
+        const latN = parseFloat(lat);
+        const lonN = parseFloat(lon);
+        const radiusMiles = parseFloat(maxDistance);
+        const latDelta = radiusMiles / 69.0;
+        const lonDelta = radiusMiles / (69.0 * Math.cos(latN * Math.PI / 180));
+        const bbox = `${lonN - lonDelta},${latN - latDelta},${lonN + lonDelta},${latN + latDelta}`;
+        fetches.push(
+          fetch(`https://hiking.waymarkedtrails.org/api/v1/list/by_area?bbox=${bbox}&limit=${limit}`, { headers: UA })
+            .then(r => r.ok ? r.json() : { results: [] })
+            .then((d: any) => (d.results ?? []).map((t: any) => mapTrail(t, query)))
+            .catch(() => [])
+        );
+      }
+
+      if (fetches.length === 0) return res.status(400).json({ error: "Provide locationName and/or lat+lon" });
+
+      // Merge, deduplicate by id (text-search results come first)
+      const all = (await Promise.all(fetches)).flat();
+      const seen = new Set<number>();
+      const trails = all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true; }).slice(0, limit);
+
+      res.json({ trails, total: trails.length });
     } catch (e) { handleError(res, e); }
   });
 
