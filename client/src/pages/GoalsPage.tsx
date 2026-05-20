@@ -121,6 +121,7 @@ export default function GoalsPage() {
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
   // selectedGoalId = null (nothing), a real goalId, or STANDALONE_ID (-1)
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
+  const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null); // "{hobbyId}_{planId}"
   const [mobileTab, setMobileTab] = useState<"goals" | "projects" | "tasks">("goals");
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
@@ -275,6 +276,14 @@ export default function GoalsPage() {
   const activeHobbyGoals = useMemo(() =>
     hobbies.flatMap(h => _parseGoals(h.extraJson ?? "{}").filter((g: any) => g.status === "active").map((g: any) => ({ ...g, hobby: h }))),
     [hobbies]);
+  const selectedHobbyPlan = useMemo(() => {
+    if (!selectedHobbyPlanKey) return null;
+    const [hIdStr, pId] = selectedHobbyPlanKey.split("_");
+    const hobby = hobbies.find(h => h.id === Number(hIdStr));
+    if (!hobby) return null;
+    const plan = _parsePlans(hobby.extraJson ?? "{}").find((p: any) => p.id === pId);
+    return plan ? { ...plan, hobby } : null;
+  }, [selectedHobbyPlanKey, hobbies]);
   const currentYear = new Date().getFullYear();
   const goalStart = readingGoal?.startDate ?? `${currentYear}-01-01`;
   const goalEnd   = readingGoal?.endDate   ?? `${currentYear}-12-31`;
@@ -577,26 +586,63 @@ export default function GoalsPage() {
               );
             })()}
 
-            {/* Hobby Plans & Goals card */}
-            {(activeHobbyPlans.length > 0 || activeHobbyGoals.length > 0) && (
+            {/* Individual active hobby plan cards */}
+            {activeHobbyPlans.map((p: any) => {
+              const key = `${p.hobby.id}_${p.id}`;
+              const isSelected = selectedGoalId === HOBBY_GOALS_ID && selectedHobbyPlanKey === key;
+              const done = (p.steps ?? []).filter((s: any) => s.done).length;
+              const total = (p.steps ?? []).length;
+              const pct = total ? Math.round((done / total) * 100) : 0;
+              const typeColors: Record<string, string> = { creative: "#ec4899", collection: "#f97316", outdoor: "#10b981", games: "#6366f1", learning: "#3b82f6", performance: "#8b5cf6" };
+              const color = typeColors[p.hobby.hobbyType] ?? "#6366f1";
+              return (
+                <div
+                  key={key}
+                  onClick={() => { setSelectedGoalId(HOBBY_GOALS_ID); setSelectedHobbyPlanKey(isSelected ? null : key); setSelectedProjectId(null); }}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
+                    isSelected ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20" : "bg-card hover:border-blue-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <ClipboardList size={13} style={{ color }} className="shrink-0" />
+                        <p className="text-sm font-semibold truncate">{p.title}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Heart size={10} style={{ color }} />
+                        <span>{p.hobby.name}</span>
+                        {p.durationWeeks && <span>· {p.durationWeeks}w</span>}
+                        <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 ml-auto">Active</span>
+                      </div>
+                    </div>
+                    <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 mt-1 ${isSelected ? "rotate-90" : ""}`} />
+                  </div>
+                  {total > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Progress value={pct} className="h-1.5 flex-1" />
+                      <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Active hobby goals (grouped) */}
+            {activeHobbyGoals.length > 0 && (
               <div
-                onClick={() => { setSelectedGoalId(selectedGoalId === HOBBY_GOALS_ID ? null : HOBBY_GOALS_ID); setSelectedProjectId(null); }}
+                onClick={() => { setSelectedGoalId(selectedGoalId === HOBBY_GOALS_ID && !selectedHobbyPlanKey ? null : HOBBY_GOALS_ID); setSelectedHobbyPlanKey(null); setSelectedProjectId(null); }}
                 className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
-                  selectedGoalId === HOBBY_GOALS_ID ? "border-violet-400 bg-violet-50 dark:bg-violet-950/20" : "bg-card hover:border-violet-300"
+                  selectedGoalId === HOBBY_GOALS_ID && !selectedHobbyPlanKey ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "bg-card hover:border-amber-300"
                 }`}
               >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Target size={13} className="text-violet-500 shrink-0" />
-                      <p className="text-sm font-semibold">Hobby Plans & Goals</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                      {activeHobbyPlans.length > 0 && <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />{activeHobbyPlans.length} active plan{activeHobbyPlans.length !== 1 ? "s" : ""}</span>}
-                      {activeHobbyGoals.length > 0 && <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{activeHobbyGoals.length} active goal{activeHobbyGoals.length !== 1 ? "s" : ""}</span>}
-                    </div>
+                <div className="flex items-center gap-2">
+                  <Target size={13} className="text-amber-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">Hobby Goals</p>
+                    <p className="text-xs text-muted-foreground">{activeHobbyGoals.length} active goal{activeHobbyGoals.length !== 1 ? "s" : ""}</p>
                   </div>
-                  <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 mt-1 ${selectedGoalId === HOBBY_GOALS_ID ? "rotate-90" : ""}`} />
+                  <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 ${selectedGoalId === HOBBY_GOALS_ID && !selectedHobbyPlanKey ? "rotate-90" : ""}`} />
                 </div>
               </div>
             )}
@@ -630,7 +676,8 @@ export default function GoalsPage() {
                 : isNutritionSelected ? "Overview"
                 : isWorkoutGoalsSelected ? "Overview"
                 : isReadingGoalSelected ? "Overview"
-                : isHobbyGoalsSelected ? "Overview"
+                : isHobbyGoalsSelected && selectedHobbyPlan ? "Plan Detail"
+                : isHobbyGoalsSelected ? "Hobby Goals"
                 : isHousekeepingSelected ? "House Projects"
                 : isStandaloneSelected ? "General Projects"
                 : selectedGoal ? `Projects — ${selectedGoal.title}` : "Projects"}
@@ -828,84 +875,84 @@ export default function GoalsPage() {
                   );
                 })()}
               </div>
-            ) : /* Hobby Plans & Goals mode */
-            isHobbyGoalsSelected ? (
+            ) : /* Hobby Plan detail mode */
+            isHobbyGoalsSelected && selectedHobbyPlan ? (
               <div className="space-y-4">
-                {/* Active Plans */}
-                {activeHobbyPlans.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 px-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" /> Active Plans
-                    </p>
-                    {activeHobbyPlans.map((p: any) => {
-                      const done = p.steps.filter((s: any) => s.done).length;
-                      const total = p.steps.length;
-                      const pct = total ? Math.round((done / total) * 100) : 0;
-                      const ti = p.hobby.hobbyType;
-                      const typeColors: Record<string, string> = { creative: "#ec4899", collection: "#f97316", outdoor: "#10b981", games: "#6366f1", learning: "#3b82f6", performance: "#8b5cf6" };
-                      const color = typeColors[ti] ?? "#888";
-                      return (
-                        <div key={p.id} className="rounded-xl border p-3 space-y-2 bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold truncate">{p.title}</p>
-                              <p className="text-xs text-muted-foreground">{p.hobby.name}{p.durationWeeks ? ` · ${p.durationWeeks}w` : ""}</p>
-                            </div>
-                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0">Active</span>
-                          </div>
-                          {total > 0 && (
-                            <>
-                              <div className="flex items-center gap-2 text-xs">
-                                <Progress value={pct} className="h-1.5 flex-1" />
-                                <span className="text-muted-foreground shrink-0">{done}/{total}</span>
-                              </div>
-                              <div className="space-y-0.5 max-h-28 overflow-y-auto">
-                                {p.steps.slice(0, 4).map((s: any) => (
-                                  <div key={s.id} className="flex items-center gap-1.5 px-1">
-                                    {s.done ? <CheckCircle2 size={11} className="text-emerald-500 shrink-0" /> : <Circle size={11} className="text-muted-foreground/30 shrink-0" />}
-                                    <span className={`text-xs ${s.done ? "line-through text-muted-foreground" : ""}`}>{s.text}</span>
-                                  </div>
-                                ))}
-                                {p.steps.length > 4 && <p className="text-[10px] text-muted-foreground px-1">+{p.steps.length - 4} more steps</p>}
-                              </div>
-                            </>
-                          )}
+                {/* Plan header */}
+                <div className="rounded-xl border p-3 space-y-2 bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{selectedHobbyPlan.title}</p>
+                      <p className="text-xs text-muted-foreground">{selectedHobbyPlan.hobby.name}{selectedHobbyPlan.durationWeeks ? ` · ${selectedHobbyPlan.durationWeeks}w plan` : ""}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0">Active</span>
+                  </div>
+                  {selectedHobbyPlan.description && (
+                    <p className="text-xs text-muted-foreground">{selectedHobbyPlan.description}</p>
+                  )}
+                  {(() => {
+                    const steps: any[] = selectedHobbyPlan.steps ?? [];
+                    const done = steps.filter((s: any) => s.done).length;
+                    const total = steps.length;
+                    const pct = total ? Math.round((done / total) * 100) : 0;
+                    if (!total) return null;
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{done} / {total} steps</span>
+                          <span className="font-semibold">{pct}%</span>
                         </div>
-                      );
-                    })}
+                        <Progress value={pct} className="h-2" />
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* All steps */}
+                {(selectedHobbyPlan.steps ?? []).length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Steps</p>
+                    {(selectedHobbyPlan.steps ?? []).map((s: any) => (
+                      <div key={s.id} className="flex items-start gap-2 px-2 py-2 rounded-lg bg-secondary/30">
+                        {s.done
+                          ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0 mt-0.5" />
+                          : <Circle size={13} className="text-muted-foreground/30 shrink-0 mt-0.5" />}
+                        <span className={`text-xs flex-1 ${s.done ? "line-through text-muted-foreground" : ""}`}>{s.text}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {/* Active Goals */}
-                {activeHobbyGoals.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 px-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" /> Active Goals
-                    </p>
-                    {activeHobbyGoals.map((g: any) => {
-                      let pct = 0;
-                      let sublabel = "";
-                      if (g.goalType === "count") { const cur = g.currentValue ?? 0; const tgt = g.targetValue ?? 1; pct = Math.min(100, Math.round((cur / tgt) * 100)); sublabel = `${cur} / ${tgt} ${g.unit ?? ""}`; }
-                      else if (g.goalType === "milestone") { pct = g.status === "completed" ? 100 : 0; sublabel = "Milestone"; }
-                      else if (g.goalType === "frequency") { sublabel = `${g.freqTimes}× / ${g.freqPeriod}`; pct = 50; }
-                      return (
-                        <div key={g.id} className="rounded-xl border p-3 space-y-1.5 bg-card">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold truncate">{g.title}</p>
-                              <p className="text-xs text-muted-foreground">{g.hobby.name} · <span className="capitalize">{g.goalType}</span></p>
-                            </div>
-                          </div>
-                          {g.goalType === "count" && <Progress value={pct} className="h-1.5" />}
-                          <p className="text-xs text-muted-foreground">{sublabel}</p>
+                <Link href="/hobbies">
+                  <a className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors px-1">
+                    <ClipboardList size={11} /> Manage steps in Hobbies →
+                  </a>
+                </Link>
+              </div>
+            ) : /* Hobby Goals overview mode */
+            isHobbyGoalsSelected && !selectedHobbyPlanKey ? (
+              <div className="space-y-3">
+                {activeHobbyGoals.map((g: any) => {
+                  let pct = 0;
+                  let sublabel = "";
+                  if (g.goalType === "count") { const cur = g.currentValue ?? 0; const tgt = g.targetValue ?? 1; pct = Math.min(100, Math.round((cur / tgt) * 100)); sublabel = `${cur} / ${tgt} ${g.unit ?? ""}`; }
+                  else if (g.goalType === "milestone") { pct = g.status === "completed" ? 100 : 0; sublabel = "Milestone"; }
+                  else if (g.goalType === "frequency") { sublabel = `${g.freqTimes}× / ${g.freqPeriod}`; pct = 50; }
+                  return (
+                    <div key={g.id} className="rounded-xl border p-3 space-y-1.5 bg-card">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{g.title}</p>
+                          <p className="text-xs text-muted-foreground">{g.hobby.name} · <span className="capitalize">{g.goalType}</span></p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {activeHobbyPlans.length === 0 && activeHobbyGoals.length === 0 && (
+                      </div>
+                      {g.goalType === "count" && <Progress value={pct} className="h-1.5" />}
+                      <p className="text-xs text-muted-foreground">{sublabel}</p>
+                    </div>
+                  );
+                })}
+                {activeHobbyGoals.length === 0 && (
                   <div className="text-center py-10 text-muted-foreground">
                     <Target size={28} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-xs">No active hobby plans or goals</p>
+                    <p className="text-xs">No active hobby goals</p>
                   </div>
                 )}
                 <Link href="/hobbies"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><Target size={11} /> Manage in Hobbies →</a></Link>
