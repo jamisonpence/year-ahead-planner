@@ -3737,6 +3737,34 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Hiking / Trails ───────────────────────────────────────────────────────────
+
+  /** GET /api/hiking/geocode?q=Boulder+CO  — returns [{ lat, lon, display_name }] */
+  app.get("/api/hiking/geocode", requireAuth, async (req, res) => {
+    try {
+      const { q } = req.query as { q?: string };
+      if (!q?.trim()) return res.status(400).json({ error: "q required" });
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3&addressdetails=1`;
+      const r = await fetch(url, { headers: { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" } });
+      const data = await r.json();
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=20 */
+  app.get("/api/hiking/search", requireAuth, async (req, res) => {
+    try {
+      const apiKey = process.env.HIKING_PROJECT_API_KEY;
+      if (!apiKey) return res.json({ trails: [], error: "no_key", message: "Add HIKING_PROJECT_API_KEY to your Railway environment variables. Get a free key at hikingproject.com/data." });
+      const { lat, lon, maxDistance = "25", maxResults = "20" } = req.query as Record<string, string>;
+      if (!lat || !lon) return res.status(400).json({ error: "lat and lon required" });
+      const url = `https://www.hikingproject.com/data/get-trails?lat=${lat}&lon=${lon}&maxDistance=${maxDistance}&maxResults=${maxResults}&key=${apiKey}`;
+      const r = await fetch(url);
+      const data = await r.json();
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Music Collections ─────────────────────────────────────────────────────────
   app.get("/api/music/collections", requireAuth, async (req, res) => {
     try {

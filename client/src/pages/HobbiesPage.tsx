@@ -23,6 +23,57 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
+// ── Hiking types ──────────────────────────────────────────────────────────────
+
+interface HikeWishlistEntry {
+  id: string;
+  trailId?: number;
+  name: string;
+  location: string;
+  lengthMiles: number;
+  elevationGainFt: number;
+  difficulty: string;
+  stars?: number;
+  url?: string;
+  imgUrl?: string;
+  notes?: string;
+  plannedDate?: string;
+  addedAt: string;
+}
+
+interface HikeLogEntry {
+  id: string;
+  trailId?: number;
+  name: string;
+  date: string;
+  distanceMiles: number;
+  elevationGainFt?: number;
+  durationMins?: number;
+  difficulty?: string;
+  rating?: number;
+  notes?: string;
+  url?: string;
+}
+
+function parseHikeWishlist(extraJson: string): HikeWishlistEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.hikeWishlist) ? o.hikeWishlist : []; } catch { return []; }
+}
+function parseHikeLog(extraJson: string): HikeLogEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.hikeLog) ? o.hikeLog : []; } catch { return []; }
+}
+function setHikingInExtra(extraJson: string, wishlist: HikeWishlistEntry[], log: HikeLogEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, hikeWishlist: wishlist, hikeLog: log }); }
+  catch { return JSON.stringify({ hikeWishlist: wishlist, hikeLog: log }); }
+}
+
+const DIFF_COLOR: Record<string, string> = {
+  "Green":     "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200",
+  "Blue":      "text-blue-600 bg-blue-50 dark:bg-blue-950/30 border-blue-200",
+  "Black":     "text-gray-800 bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:text-gray-200",
+  "Dbl Black": "text-gray-900 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:text-white",
+  "Terrifying":"text-red-700 bg-red-50 dark:bg-red-950/30 border-red-300",
+};
+
 // ── Hobby type constants ───────────────────────────────────────────────────────
 
 export type HobbyType = "creative" | "collection" | "outdoor" | "games" | "learning" | "performance";
@@ -1559,12 +1610,308 @@ function HobbyCard({
 
 // ── Hobby Detail Dialog (with Goals section) ───────────────────────────────────
 
+// ── HikingSection ─────────────────────────────────────────────────────────────
+
+function HikingSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"wishlist" | "log">("wishlist");
+  const [locationInput, setLocationInput] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchError, setSearchError] = useState("");
+  const [noKey, setNoKey] = useState(false);
+  const [showLogForm, setShowLogForm] = useState(false);
+
+  // Log form state
+  const [logName, setLogName] = useState("");
+  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0, 10));
+  const [logDist, setLogDist] = useState("");
+  const [logElev, setLogElev] = useState("");
+  const [logDur, setLogDur] = useState("");
+  const [logDiff, setLogDiff] = useState("");
+  const [logRating, setLogRating] = useState("");
+  const [logNotes, setLogNotes] = useState("");
+
+  const wishlist = parseHikeWishlist(hobby.extraJson ?? "{}");
+  const hikeLog  = parseHikeLog(hobby.extraJson ?? "{}");
+
+  function saveHiking(w: HikeWishlistEntry[], l: HikeLogEntry[]) {
+    onUpdateExtra(setHikingInExtra(hobby.extraJson ?? "{}", w, l));
+  }
+
+  async function searchTrails() {
+    if (!locationInput.trim()) return;
+    setSearching(true); setSearchResults([]); setSearchError(""); setNoKey(false);
+    try {
+      // Geocode first
+      const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(locationInput)}`);
+      const geoData = await geoRes.json();
+      if (!geoData?.length) { setSearchError("Location not found. Try a more specific name (e.g. 'Boulder, CO')."); setSearching(false); return; }
+      const { lat, lon } = geoData[0];
+      // Search trails
+      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=20`);
+      const trailData = await trailRes.json();
+      if (trailData.error === "no_key") { setNoKey(true); setSearching(false); return; }
+      if (!trailData.trails?.length) { setSearchError("No trails found near that location. Try a different area."); setSearching(false); return; }
+      setSearchResults(trailData.trails);
+    } catch { setSearchError("Search failed. Check your connection and try again."); }
+    setSearching(false);
+  }
+
+  function addToWishlist(trail: any) {
+    if (wishlist.some(w => w.trailId === trail.id)) { toast({ title: "Already on wishlist" }); return; }
+    const entry: HikeWishlistEntry = {
+      id: genId(), trailId: trail.id, name: trail.name, location: trail.location,
+      lengthMiles: trail.length, elevationGainFt: trail.ascent,
+      difficulty: trail.difficulty, stars: trail.stars, url: trail.url,
+      imgUrl: trail.imgSqSmall, addedAt: new Date().toISOString(),
+    };
+    saveHiking([...wishlist, entry], hikeLog);
+    toast({ title: `"${trail.name}" added to wishlist` });
+  }
+
+  function removeWishlist(id: string) { saveHiking(wishlist.filter(w => w.id !== id), hikeLog); }
+
+  function logHike(fromTrail?: HikeWishlistEntry) {
+    if (fromTrail) {
+      setLogName(fromTrail.name); setLogDist(String(fromTrail.lengthMiles));
+      setLogElev(fromTrail.elevationGainFt ? String(fromTrail.elevationGainFt) : "");
+      setLogDiff(fromTrail.difficulty || "");
+    }
+    setTab("log"); setShowLogForm(true);
+  }
+
+  function saveLog() {
+    if (!logName.trim() || !logDate) return;
+    const entry: HikeLogEntry = {
+      id: genId(), name: logName.trim(), date: logDate,
+      distanceMiles: Number(logDist) || 0,
+      elevationGainFt: logElev ? Number(logElev) : undefined,
+      durationMins: logDur ? Number(logDur) : undefined,
+      difficulty: logDiff || undefined,
+      rating: logRating ? Number(logRating) : undefined,
+      notes: logNotes.trim() || undefined,
+    };
+    saveHiking(wishlist, [...hikeLog, entry]);
+    setShowLogForm(false); setLogName(""); setLogDate(new Date().toISOString().slice(0,10));
+    setLogDist(""); setLogElev(""); setLogDur(""); setLogDiff(""); setLogRating(""); setLogNotes("");
+    toast({ title: "Hike logged!" });
+  }
+
+  function deleteLog(id: string) { saveHiking(wishlist, hikeLog.filter(l => l.id !== id)); }
+
+  const diffBadge = (d?: string) => d
+    ? <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${DIFF_COLOR[d] ?? "text-muted-foreground bg-secondary border-border"}`}>{d}</span>
+    : null;
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-emerald-200 dark:border-emerald-800">
+        <div className="flex items-center gap-2">
+          <Trees size={15} className="text-emerald-600" />
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Trails</span>
+          <span className="text-xs text-muted-foreground">{wishlist.length} wishlist · {hikeLog.length} logged</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("wishlist")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "wishlist" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Wishlist</button>
+          <button onClick={() => setTab("log")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Log</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {/* WISHLIST TAB */}
+        {tab === "wishlist" && (
+          <>
+            {/* Search bar */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search trails near… (e.g. Boulder, CO)"
+                value={locationInput} onChange={e => setLocationInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") searchTrails(); }}
+                className="text-sm h-8 flex-1"
+              />
+              <Button size="sm" variant="outline" onClick={searchTrails} disabled={searching || !locationInput.trim()} className="h-8 gap-1.5 shrink-0">
+                {searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                {searching ? "Searching…" : "Search"}
+              </Button>
+            </div>
+
+            {/* No API key notice */}
+            {noKey && (
+              <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-lg p-3 space-y-1">
+                <p className="font-semibold">Hiking Project API key not configured</p>
+                <p>Get a free key at <a href="https://www.hikingproject.com/data" target="_blank" rel="noopener noreferrer" className="underline">hikingproject.com/data</a>, then add <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">HIKING_PROJECT_API_KEY</code> to your Railway environment variables.</p>
+              </div>
+            )}
+            {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+
+            {/* Search results */}
+            {searchResults.length > 0 && (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{searchResults.length} trails found</p>
+                {searchResults.map((trail: any) => (
+                  <div key={trail.id} className="flex items-start gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                    {trail.imgSqSmall && <img src={trail.imgSqSmall} className="w-10 h-10 rounded object-cover shrink-0" alt="" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate">{trail.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{trail.location}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {diffBadge(trail.difficulty)}
+                        <span className="text-[10px] text-muted-foreground">{trail.length} mi · {trail.ascent > 0 ? `+${trail.ascent}ft` : ""}</span>
+                        {trail.stars > 0 && <span className="text-[10px] text-amber-500">★ {trail.stars.toFixed(1)}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => addToWishlist(trail)} className="text-[10px] px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
+                        + Wishlist
+                      </button>
+                      {trail.url && <a href={trail.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">View</a>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Wishlist */}
+            {wishlist.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Wishlist</p>
+                {wishlist.map(w => (
+                  <div key={w.id} className="flex items-start gap-2 p-2.5 rounded-lg border bg-card">
+                    {w.imgUrl && <img src={w.imgUrl} className="w-9 h-9 rounded object-cover shrink-0" alt="" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate">{w.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{w.location}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {diffBadge(w.difficulty)}
+                        <span className="text-[10px] text-muted-foreground">{w.lengthMiles} mi{w.elevationGainFt ? ` · +${w.elevationGainFt}ft` : ""}</span>
+                        {w.stars ? <span className="text-[10px] text-amber-500">★ {w.stars.toFixed(1)}</span> : null}
+                        {w.plannedDate && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Calendar size={9}/>{format(parseISO(w.plannedDate), "MMM d")}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => logHike(w)} className="text-[10px] px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">Log it</button>
+                      <button onClick={() => removeWishlist(w.id)} className="text-[10px] px-2 py-1 rounded border hover:bg-destructive/10 hover:text-destructive transition-colors">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {wishlist.length === 0 && searchResults.length === 0 && !noKey && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Trees size={24} className="mx-auto mb-2 opacity-20" />
+                <p className="text-xs">Search for trails above to build your wishlist</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* LOG TAB */}
+        {tab === "log" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Hike
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border rounded-xl p-3">
+                <p className="text-xs font-semibold">Log a Hike</p>
+                <Input placeholder="Trail / hike name *" value={logName} onChange={e => setLogName(e.target.value)} className="text-sm h-8" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Date *</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Distance (miles)</label>
+                    <Input type="number" min={0} step={0.1} placeholder="e.g. 5.2" value={logDist} onChange={e => setLogDist(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Elevation gain (ft)</label>
+                    <Input type="number" min={0} placeholder="e.g. 1200" value={logElev} onChange={e => setLogElev(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Duration (mins)</label>
+                    <Input type="number" min={0} placeholder="e.g. 180" value={logDur} onChange={e => setLogDur(e.target.value)} className="text-sm h-8" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Difficulty</label>
+                    <Select value={logDiff} onValueChange={setLogDiff}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+                      <SelectContent>
+                        {["Green", "Blue", "Black", "Dbl Black", "Terrifying"].map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Rating (1–5)</label>
+                    <Select value={logRating} onValueChange={setLogRating}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Stars…" /></SelectTrigger>
+                      <SelectContent>
+                        {[5,4,3,2,1].map(n => <SelectItem key={n} value={String(n)}>{"★".repeat(n)}{"☆".repeat(5-n)}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Textarea placeholder="Notes (optional)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm min-h-[50px]" />
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                  <Button size="sm" disabled={!logName.trim() || !logDate} onClick={saveLog} className="gap-1.5"><Check size={12} /> Save</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Log list */}
+            {hikeLog.length > 0 ? (
+              <div className="space-y-2">
+                {[...hikeLog].sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
+                  <div key={entry.id} className="p-3 rounded-xl border bg-card space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{entry.name}</p>
+                        <p className="text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {entry.rating && <span className="text-xs text-amber-500">{"★".repeat(entry.rating)}</span>}
+                        <button onClick={() => deleteLog(entry.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      {entry.distanceMiles > 0 && <span className="flex items-center gap-0.5"><Mountain size={10}/> {entry.distanceMiles} mi</span>}
+                      {entry.elevationGainFt && <span>+{entry.elevationGainFt}ft</span>}
+                      {entry.durationMins && <span>{Math.floor(entry.durationMins / 60)}h {entry.durationMins % 60}m</span>}
+                      {diffBadge(entry.difficulty)}
+                    </div>
+                    {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Mountain size={24} className="mx-auto mb-2 opacity-20" />
+                <p className="text-xs">No hikes logged yet — click "Log a Hike" to add your first</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HobbyDetailDialog({
-  hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans,
+  hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra,
 }: {
   hobby: Hobby | null; open: boolean; onClose: () => void; onEdit: () => void;
   onUpdateGoals: (goals: HobbyGoal[]) => void;
   onUpdatePlans: (plans: HobbyPlan[]) => void;
+  onUpdateExtra: (newExtraJson: string) => void;
 }) {
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingPlan, setAddingPlan] = useState(false);
@@ -1750,6 +2097,13 @@ function HobbyDetailDialog({
           <GoalWizard open={addingGoal} onClose={() => setAddingGoal(false)} hobbies={[hobby]} defaultHobbyId={hobby.id}
             onSave={(_, goal) => { onUpdateGoals([...goals, goal]); setAddingGoal(false); }}
           />
+        )}
+
+        {/* ── Hiking section (only for hiking hobbies) ── */}
+        {hobby.name.toLowerCase().includes("hiking") && (
+          <div className="mt-4 border-t pt-4">
+            <HikingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -2441,6 +2795,7 @@ export default function HobbiesPage() {
         onEdit={() => { if (detailHobby) { setDetailHobby(null); openEdit(detailHobby); } }}
         onUpdateGoals={(goals) => { if (detailHobby) handleUpdateGoals(detailHobby, goals); }}
         onUpdatePlans={(plans) => { if (detailHobby) handleUpdatePlans(detailHobby, plans); }}
+        onUpdateExtra={(newJson) => { if (detailHobby) handleUpdateHobbyExtra(detailHobby.id, newJson); }}
       />
     </div>
   );
