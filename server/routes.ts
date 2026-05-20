@@ -3751,17 +3751,78 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
-  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=20 */
+  /** GET /api/hiking/search?lat=X&lon=Y&maxDistance=25&maxResults=20&locationName=Boulder+CO
+   *  Uses Overpass API (OpenStreetMap) — no API key required.
+   *  Returns { trails: TrailResult[] } in a shape the HikingSection component already understands.
+   */
   app.get("/api/hiking/search", requireAuth, async (req, res) => {
     try {
-      const apiKey = process.env.HIKING_PROJECT_API_KEY;
-      if (!apiKey) return res.json({ trails: [], error: "no_key", message: "Add HIKING_PROJECT_API_KEY to your Railway environment variables. Get a free key at hikingproject.com/data." });
-      const { lat, lon, maxDistance = "25", maxResults = "20" } = req.query as Record<string, string>;
+      const { lat, lon, maxDistance = "25", maxResults = "20", locationName = "" } = req.query as Record<string, string>;
       if (!lat || !lon) return res.status(400).json({ error: "lat and lon required" });
-      const url = `https://www.hikingproject.com/data/get-trails?lat=${lat}&lon=${lon}&maxDistance=${maxDistance}&maxResults=${maxResults}&key=${apiKey}`;
-      const r = await fetch(url);
-      const data = await r.json();
-      res.json(data);
+
+      // Convert miles → metres for Overpass radius
+      const radiusMetres = Math.round(parseFloat(maxDistance) * 1609.34);
+
+      // Query hiking route relations within the radius
+      const overpassQuery = `[out:json][timeout:30];relation["route"="hiking"](around:${radiusMetres},${lat},${lon});out tags;`;
+      const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+      const r = await fetch(overpassUrl, { headers: { "User-Agent": "MyLifos/1.0 (hobby-hiking-feature)" } });
+      const data = await r.json() as { elements?: any[] };
+
+      // Helper: OSM sac_scale → difficulty label
+      function sacToDifficulty(sac?: string): string {
+        switch (sac) {
+          case "hiking":                    return "Green";
+          case "mountain_hiking":           return "Blue";
+          case "demanding_mountain_hiking": return "Black";
+          case "alpine_hiking":             return "Dbl Black";
+          case "demanding_alpine_hiking":
+          case "difficult_alpine_hiking":   return "Terrifying";
+          default:                          return "Green";
+        }
+      }
+
+      // Helper: parse distance string to miles (OSM stores "8.2 km", "5 mi", bare numbers as km)
+      function toMiles(distStr?: string): number {
+        if (!distStr) return 0;
+        const val = parseFloat(distStr);
+        if (isNaN(val)) return 0;
+        if (/mi/i.test(distStr)) return Math.round(val * 10) / 10;
+        // assume km
+        return Math.round(val * 0.621371 * 10) / 10;
+      }
+
+      // Helper: elevation string (metres) → feet
+      function toFeet(ascentStr?: string): number {
+        if (!ascentStr) return 0;
+        const val = parseFloat(ascentStr);
+        return isNaN(val) ? 0 : Math.round(val * 3.28084);
+      }
+
+      const limit = parseInt(maxResults, 10) || 20;
+      const trails = (data.elements ?? [])
+        .filter((el: any) => el.tags?.name)   // skip unnamed routes
+        .slice(0, limit)
+        .map((el: any) => {
+          const tags = el.tags ?? {};
+          const fromTo = [tags.from, tags.to].filter(Boolean).join(" → ");
+          return {
+            id:          el.id,
+            name:        tags.name,
+            location:    fromTo || tags.area || (locationName as string) || "",
+            length:      toMiles(tags.distance),
+            ascent:      toFeet(tags.ascent),
+            difficulty:  sacToDifficulty(tags.sac_scale),
+            stars:       0,           // OSM has no star rating
+            url:         `https://www.openstreetmap.org/relation/${el.id}`,
+            imgSqSmall:  null,
+            operator:    tags.operator || null,
+            description: tags.description || tags["short_description"] || null,
+            network:     tags.network || null,
+          };
+        });
+
+      res.json({ trails });
     } catch (e) { handleError(res, e); }
   });
 

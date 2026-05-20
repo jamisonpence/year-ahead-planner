@@ -1622,7 +1622,6 @@ function HikingSection({ hobby, onUpdateExtra }: {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchError, setSearchError] = useState("");
-  const [noKey, setNoKey] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
 
   // Log form state
@@ -1644,18 +1643,17 @@ function HikingSection({ hobby, onUpdateExtra }: {
 
   async function searchTrails() {
     if (!locationInput.trim()) return;
-    setSearching(true); setSearchResults([]); setSearchError(""); setNoKey(false);
+    setSearching(true); setSearchResults([]); setSearchError("");
     try {
       // Geocode first
       const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(locationInput)}`);
       const geoData = await geoRes.json();
       if (!geoData?.length) { setSearchError("Location not found. Try a more specific name (e.g. 'Boulder, CO')."); setSearching(false); return; }
       const { lat, lon } = geoData[0];
-      // Search trails
-      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=20`);
+      // Search trails via Overpass / OpenStreetMap (no API key needed)
+      const trailRes = await fetch(`/api/hiking/search?lat=${lat}&lon=${lon}&maxDistance=25&maxResults=30&locationName=${encodeURIComponent(locationInput)}`);
       const trailData = await trailRes.json();
-      if (trailData.error === "no_key") { setNoKey(true); setSearching(false); return; }
-      if (!trailData.trails?.length) { setSearchError("No trails found near that location. Try a different area."); setSearching(false); return; }
+      if (!trailData.trails?.length) { setSearchError("No named hiking routes found near that location. Try a city or trailhead name."); setSearching(false); return; }
       setSearchResults(trailData.trails);
     } catch { setSearchError("Search failed. Check your connection and try again."); }
     setSearching(false);
@@ -1740,13 +1738,6 @@ function HikingSection({ hobby, onUpdateExtra }: {
               </Button>
             </div>
 
-            {/* No API key notice */}
-            {noKey && (
-              <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-lg p-3 space-y-1">
-                <p className="font-semibold">Hiking Project API key not configured</p>
-                <p>Get a free key at <a href="https://www.hikingproject.com/data" target="_blank" rel="noopener noreferrer" className="underline">hikingproject.com/data</a>, then add <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">HIKING_PROJECT_API_KEY</code> to your Railway environment variables.</p>
-              </div>
-            )}
             {searchError && <p className="text-xs text-destructive">{searchError}</p>}
 
             {/* Search results */}
@@ -1755,21 +1746,22 @@ function HikingSection({ hobby, onUpdateExtra }: {
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{searchResults.length} trails found</p>
                 {searchResults.map((trail: any) => (
                   <div key={trail.id} className="flex items-start gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
-                    {trail.imgSqSmall && <img src={trail.imgSqSmall} className="w-10 h-10 rounded object-cover shrink-0" alt="" />}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{trail.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{trail.location}</p>
+                      {trail.location && <p className="text-[10px] text-muted-foreground truncate">{trail.location}</p>}
+                      {trail.description && <p className="text-[10px] text-muted-foreground truncate italic">{trail.description}</p>}
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {diffBadge(trail.difficulty)}
-                        <span className="text-[10px] text-muted-foreground">{trail.length} mi · {trail.ascent > 0 ? `+${trail.ascent}ft` : ""}</span>
-                        {trail.stars > 0 && <span className="text-[10px] text-amber-500">★ {trail.stars.toFixed(1)}</span>}
+                        {trail.length > 0 && <span className="text-[10px] text-muted-foreground">{trail.length} mi</span>}
+                        {trail.ascent > 0 && <span className="text-[10px] text-muted-foreground">+{trail.ascent}ft</span>}
+                        {trail.operator && <span className="text-[10px] text-muted-foreground">· {trail.operator}</span>}
                       </div>
                     </div>
                     <div className="flex flex-col gap-1 shrink-0">
                       <button onClick={() => addToWishlist(trail)} className="text-[10px] px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
                         + Wishlist
                       </button>
-                      {trail.url && <a href={trail.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">View</a>}
+                      {trail.url && <a href={trail.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">OSM ↗</a>}
                     </div>
                   </div>
                 ))}
@@ -1801,7 +1793,7 @@ function HikingSection({ hobby, onUpdateExtra }: {
                 ))}
               </div>
             )}
-            {wishlist.length === 0 && searchResults.length === 0 && !noKey && (
+            {wishlist.length === 0 && searchResults.length === 0 && (
               <div className="text-center py-6 text-muted-foreground">
                 <Trees size={24} className="mx-auto mb-2 opacity-20" />
                 <p className="text-xs">Search for trails above to build your wishlist</p>
