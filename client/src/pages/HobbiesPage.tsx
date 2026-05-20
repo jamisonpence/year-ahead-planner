@@ -1729,7 +1729,21 @@ function HobbyDetailDialog({
 
         {addingPlan && (
           <PlanWizard open={addingPlan} onClose={() => setAddingPlan(false)} hobbies={[hobby]} defaultHobbyId={hobby.id}
-            onSave={(_, plan) => { onUpdatePlans([...plans, plan]); setAddingPlan(false); }}
+            onSave={(_, plan) => {
+              // Auto-generate a matching milestone goal alongside the plan
+              const autoGoal: HobbyGoal = {
+                id: genId(),
+                title: plan.title,
+                description: plan.description || undefined,
+                goalType: "milestone",
+                durationWeeks: plan.durationWeeks,
+                status: plan.isActive ? "active" : "paused",
+                createdAt: plan.createdAt,
+              };
+              onUpdatePlans([...plans, plan]);
+              onUpdateGoals([...goals, autoGoal]);
+              setAddingPlan(false);
+            }}
           />
         )}
         {addingGoal && (
@@ -2031,7 +2045,24 @@ function PlansGoalsTab({
         onSave={(hobbyId, plan) => {
           const hobby = hobbies.find(h => h.id === hobbyId);
           if (!hobby) return;
-          onUpdateHobby(hobbyId, setPlansInExtra(hobby.extraJson ?? "{}", [...parsePlans(hobby.extraJson ?? "{}"), plan]));
+          const existingPlans = parsePlans(hobby.extraJson ?? "{}");
+          const existingGoals = parseGoals(hobby.extraJson ?? "{}");
+          // Auto-generate a milestone goal that mirrors this plan's objective
+          const autoGoal: HobbyGoal = {
+            id: genId(),
+            title: plan.title,
+            description: plan.description || undefined,
+            goalType: "milestone",
+            durationWeeks: plan.durationWeeks,
+            status: plan.isActive ? "active" : "paused",
+            createdAt: plan.createdAt,
+          };
+          const newExtra = setPlansAndGoalsInExtra(
+            hobby.extraJson ?? "{}",
+            [...existingPlans, plan],
+            [...existingGoals, autoGoal],
+          );
+          onUpdateHobby(hobbyId, newExtra);
         }}
       />
       <GoalWizard
