@@ -277,6 +277,7 @@ export default function DashboardPage() {
   const { data: nutritionGoal }   = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
   const { data: readingGoal }     = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
+  const { data: hobbies = [] }    = useQuery<any[]>({ queryKey: ["/api/hobbies"] });
   const { data: spots = [] }      = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
   const { data: quotes = [] }     = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
   const { data: subs = [] }       = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
@@ -536,7 +537,7 @@ export default function DashboardPage() {
           {/* Active Goals */}
           {visible.goals && (
             <Section title="Active Goals" icon={<Target size={14} className="text-[hsl(var(--cat-goal))]" />} linkHref="/goals" linkLabel="Goals">
-              {activeGoals.length === 0 && !nutritionGoal && !workoutPlans.find(p => p.isActive) && !readingGoal ? (
+              {activeGoals.length === 0 && !nutritionGoal && !workoutPlans.find(p => p.isActive) && !readingGoal && !hobbies.some((h: any) => { try { const o = JSON.parse(h.extraJson || "{}"); return (Array.isArray(o.plans) && o.plans.some((p: any) => p.isActive && !p.completedAt)) || (Array.isArray(o.goals) && o.goals.some((g: any) => g.status === "active")); } catch { return false; } }) ? (
                 <Empty icon={<Target size={26} />} text="No active goals yet" />
               ) : (
                 <div className="space-y-3">
@@ -625,6 +626,84 @@ export default function DashboardPage() {
                             <span>{booksFinishedThisYear} of {readingGoal.booksTarget} books</span>
                             <span>{pct}% complete</span>
                           </div>
+                        </a>
+                      </Link>
+                    );
+                  })()}
+                  {/* Active Hobby Plans & Goals card */}
+                  {(() => {
+                    const activeHobbyPlans: Array<{ plan: any; hobby: any }> = [];
+                    const activeHobbyGoals: Array<{ goal: any; hobby: any }> = [];
+                    for (const h of hobbies) {
+                      try {
+                        const o = JSON.parse(h.extraJson || "{}");
+                        if (Array.isArray(o.plans)) {
+                          for (const p of o.plans) {
+                            if (p.isActive && !p.completedAt) activeHobbyPlans.push({ plan: p, hobby: h });
+                          }
+                        }
+                        if (Array.isArray(o.goals)) {
+                          for (const g of o.goals) {
+                            if (g.status === "active") activeHobbyGoals.push({ goal: g, hobby: h });
+                          }
+                        }
+                      } catch {}
+                    }
+                    const allItems = [
+                      ...activeHobbyPlans.map(({ plan, hobby }) => ({ type: "plan" as const, item: plan, hobby })),
+                      ...activeHobbyGoals.map(({ goal, hobby }) => ({ type: "goal" as const, item: goal, hobby })),
+                    ];
+                    if (allItems.length === 0) return null;
+                    const shown = allItems.slice(0, 3);
+                    return (
+                      <Link href="/hobbies">
+                        <a className="block p-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 space-y-2 hover:border-violet-400 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Heart size={13} className="text-violet-500 shrink-0" />
+                              <p className="text-sm font-medium">Hobby Plans & Goals</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">{allItems.length} active</span>
+                              <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {shown.map((entry, i) => {
+                              if (entry.type === "plan") {
+                                const steps: any[] = entry.item.steps ?? [];
+                                const done = steps.filter((s: any) => s.done).length;
+                                const total = steps.length;
+                                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                                return (
+                                  <div key={i} className="flex items-center justify-between text-xs gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                                      <span className="truncate font-medium">{entry.item.title}</span>
+                                      <span className="text-muted-foreground shrink-0">· {entry.hobby.name}</span>
+                                    </div>
+                                    <span className="text-muted-foreground shrink-0">{pct}%</span>
+                                  </div>
+                                );
+                              } else {
+                                const g = entry.item;
+                                const pct = (g.target ?? 0) > 0 ? Math.min(100, Math.round(((g.current ?? 0) / g.target) * 100)) : 0;
+                                return (
+                                  <div key={i} className="flex items-center justify-between text-xs gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                                      <span className="truncate font-medium">{g.title}</span>
+                                      <span className="text-muted-foreground shrink-0">· {entry.hobby.name}</span>
+                                    </div>
+                                    <span className="text-muted-foreground shrink-0">{pct}%</span>
+                                  </div>
+                                );
+                              }
+                            })}
+                          </div>
+                          {allItems.length > 3 && (
+                            <p className="text-[10px] text-muted-foreground">+{allItems.length - 3} more</p>
+                          )}
                         </a>
                       </Link>
                     );
