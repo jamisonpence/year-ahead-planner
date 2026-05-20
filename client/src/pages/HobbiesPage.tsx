@@ -273,6 +273,58 @@ const PLAN_TEMPLATES: Record<HobbyType, PlanTemplate[]> = {
   ],
 };
 
+// ── Chess ELO helpers ──────────────────────────────────────────────────────────
+
+// 400 ELO gain = 12 months baseline; 1000 ELO gain = 30 months.
+// Linear interpolation between the two anchors; scale down for smaller gaps.
+function calcChessDuration(gap: number): { months: number; weeks: number; monthlyGain: number } {
+  const g = Math.max(1, gap);
+  let months: number;
+  if (g <= 400) {
+    months = Math.max(2, Math.round((g / 400) * 12));
+  } else {
+    months = Math.round(12 + ((Math.min(g, 1000) - 400) / 600) * 18);
+    months = Math.min(months, 30);
+  }
+  return { months, weeks: months * 4, monthlyGain: Math.round(g / months) };
+}
+
+const CHESS_PHASES = [
+  { name: "Blunder reduction & basic tactics",      secondary: "Opening principles",           activities: "Daily tactics puzzles (30–45 min) · Learn basic 1.e4/1.d4 principles · Play 3–5 rapid games/week and review blunders" },
+  { name: "Intermediate tactics & simple endgames", secondary: "Opening repertoire",           activities: "Intermediate puzzles daily · Rook & pawn endgames · Build a 2–3 line opening repertoire for each color" },
+  { name: "Middlegame planning & endgames",         secondary: "Tactics maintenance",          activities: "Strategic planning study · Complex endgames (R+K, Q endings) · Analyze 1 master game/week for ideas" },
+  { name: "Game analysis & consistency",            secondary: "Advanced openings/endgames",   activities: "Deep analysis of your own games · Advanced endgame technique · Play in rated tournaments or events" },
+];
+
+function generateChessEloSteps(currentElo: number, targetElo: number, months: number): GoalStep[] {
+  const gap = targetElo - currentElo;
+  const steps: GoalStep[] = [];
+  const mpPhase = months / 4;
+
+  steps.push({ id: genId(), done: false,
+    text: `Setup — record starting rating (${currentElo}), choose platform (Lichess or Chess.com), and schedule weekly study time`,
+  });
+
+  for (let i = 0; i < 4; i++) {
+    const startMonth = Math.round(i * mpPhase) + 1;
+    const endMonth   = Math.round((i + 1) * mpPhase);
+    const endRating  = Math.round(currentElo + (gap / 4) * (i + 1));
+    const ph = CHESS_PHASES[i];
+    steps.push({ id: genId(), done: false,
+      text: `Month${startMonth === endMonth ? ` ${startMonth}` : `s ${startMonth}–${endMonth}`}: ${ph.name} + ${ph.secondary} — ${ph.activities}`,
+    });
+    steps.push({ id: genId(), done: false,
+      text: `Month ${endMonth} checkpoint: Target ~${endRating} rating · Analyze 5 recent losses for recurring patterns`,
+    });
+  }
+
+  steps.push({ id: genId(), done: false,
+    text: `Month ${months}: Final push — reach ${targetElo} ELO target · Play a tournament or official rated event to lock in the gain`,
+  });
+
+  return steps;
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -639,23 +691,52 @@ function PlanWizard({
   const [stepInput, setStepInput] = useState("");
   const [stepDate, setStepDate] = useState("");
 
+  // Chess ELO wizard state
+  const [chessEloMode, setChessEloMode] = useState(false);
+  const [currentElo, setCurrentElo] = useState("");
+  const [targetElo, setTargetElo] = useState("");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
   const templates = PLAN_TEMPLATES[hobbyType] ?? [];
 
+  // Chess ELO preview
+  const eloGap = Math.max(0, Number(targetElo) - Number(currentElo));
+  const eloDuration = eloGap > 0 ? calcChessDuration(eloGap) : null;
+
   function reset() {
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setSteps([]); setStepInput(""); setStepDate("");
+    setChessEloMode(false); setCurrentElo(""); setTargetElo("");
   }
   function handleClose() { reset(); onClose(); }
 
   function pickTemplate(t: PlanTemplate) {
+    const isChessRating = t.id === "gp3" && selectedHobby?.name?.toLowerCase().includes("chess");
     setSelectedTemplate(t);
+    if (isChessRating) {
+      setChessEloMode(true);
+      // Don't advance to step 2 yet — wait for ELO inputs
+      return;
+    }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
+    setStep(2);
+  }
+
+  function applyEloSettings() {
+    if (!eloDuration) return;
+    const cur = Number(currentElo);
+    const tgt = Number(targetElo);
+    const generatedSteps = generateChessEloSteps(cur, tgt, eloDuration.months);
+    setTitle(`Chess: ${cur} → ${tgt} ELO (${eloDuration.months}-month plan)`);
+    setDescription(`Structured improvement plan to gain ${eloGap} ELO rating points over ${eloDuration.months} months.`);
+    setDurationWeeks(String(eloDuration.weeks));
+    setSteps(generatedSteps);
+    setChessEloMode(false);
     setStep(2);
   }
 
@@ -682,29 +763,104 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {step === 2 && (
-              <button onClick={() => setStep(1)} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
+            {(step === 2 || chessEloMode) && (
+              <button onClick={() => { if (chessEloMode) { setChessEloMode(false); setSelectedTemplate(null); } else setStep(1); }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
               </button>
             )}
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 ? "New Plan" : "Configure Your Plan"}
+                {step === 1 && !chessEloMode ? "New Plan" : chessEloMode ? "Chess Rating Goal" : "Configure Your Plan"}
               </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">{step === 1 ? "Pick a hobby and choose a template" : "Name, schedule, and build out your steps"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {step === 1 && !chessEloMode ? "Pick a hobby and choose a template" : chessEloMode ? "Set your current and target ELO to generate a personalised plan" : "Name, schedule, and build out your steps"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {[1, 2].map(n => (
-              <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${n <= step ? "bg-primary" : "bg-secondary"}`} />
-            ))}
+            {(chessEloMode ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              // chess mode: step1=idx0 filled, eloStep=idx0+1 filled, step2=all filled
+              const filled = chessEloMode ? idx <= 1 : n <= step;
+              return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
+            })}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* CHESS ELO STEP */}
+          {chessEloMode && (
+            <>
+              <div className="flex items-center gap-3 p-3 rounded-xl border bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800">
+                <span className="text-2xl">⚡</span>
+                <div>
+                  <p className="text-sm font-semibold">Improve your rating</p>
+                  <p className="text-xs text-muted-foreground">{selectedHobby?.name} · Games & Mind</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Current ELO *</label>
+                  <Input type="number" min={100} max={3500} placeholder="e.g. 800"
+                    value={currentElo} onChange={e => setCurrentElo(e.target.value)} className="text-sm" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Your Chess.com / Lichess rating</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target ELO *</label>
+                  <Input type="number" min={100} max={3500} placeholder="e.g. 1200"
+                    value={targetElo} onChange={e => setTargetElo(e.target.value)} className="text-sm" />
+                  <p className="text-[10px] text-muted-foreground mt-1">The rating you want to reach</p>
+                </div>
+              </div>
+              {eloDuration && Number(targetElo) > Number(currentElo) && (
+                <div className="rounded-xl border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Your Plan Preview</p>
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">+{eloGap} ELO</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">{eloDuration.months}</p>
+                      <p className="text-[10px] text-muted-foreground">months</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">~{eloDuration.monthlyGain}</p>
+                      <p className="text-[10px] text-muted-foreground">ELO / month</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg py-2 px-1">
+                      <p className="text-base font-bold">4</p>
+                      <p className="text-[10px] text-muted-foreground">phases</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 pt-1 border-t">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Phase breakdown</p>
+                    {CHESS_PHASES.map((ph, i) => {
+                      const phaseMonths = Math.round(eloDuration.months / 4);
+                      const startM = i * phaseMonths + 1;
+                      const endM = Math.min((i + 1) * phaseMonths, eloDuration.months);
+                      const targetAtEnd = Math.round(Number(currentElo) + (eloGap / 4) * (i + 1));
+                      return (
+                        <div key={i} className="flex items-start gap-2 text-xs">
+                          <span className="w-16 shrink-0 text-muted-foreground font-medium">Mo {startM}–{endM}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{ph.name}</span>
+                            <span className="text-muted-foreground"> · target ~{targetAtEnd}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground border-t pt-2">Recommended: 3–10 hrs/week · daily tactics puzzles + rated game play</p>
+                </div>
+              )}
+              {Number(targetElo) > 0 && Number(currentElo) > 0 && Number(targetElo) <= Number(currentElo) && (
+                <p className="text-xs text-destructive text-center py-1">Target ELO must be higher than your current rating</p>
+              )}
+            </>
+          )}
+
           {/* STEP 1 */}
-          {step === 1 && (
+          {step === 1 && !chessEloMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -840,7 +996,17 @@ function PlanWizard({
 
         <div className="px-5 py-3 border-t shrink-0 flex justify-between items-center">
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
-          {step === 2 && (
+          {chessEloMode && (
+            <Button
+              size="sm"
+              disabled={!eloDuration || Number(targetElo) <= Number(currentElo) || !currentElo || !targetElo}
+              onClick={applyEloSettings}
+              className="gap-1.5"
+            >
+              <Check size={13} /> Generate Plan
+            </Button>
+          )}
+          {step === 2 && !chessEloMode && (
             <Button size="sm" disabled={!title.trim() || !selectedHobbyId} onClick={handleSave} className="gap-1.5">
               <Check size={13} /> Create Plan
             </Button>
