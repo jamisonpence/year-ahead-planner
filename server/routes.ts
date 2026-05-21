@@ -3493,62 +3493,62 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const q = String(req.query.q || "").trim();
       if (!q) return res.json({ results: [] });
 
-      // Try both the root endpoint and /graphql path — OpenBeta has changed URLs before
-      const ENDPOINTS = ["https://api.openbeta.io/graphql", "https://api.openbeta.io"];
+      const GQL_URL = "https://api.openbeta.io/graphql";
+      const headers = { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "MyLifos/1.0" };
+
+      // Log available query fields once so we know the real schema
+      fetch(GQL_URL, {
+        method: "POST", headers,
+        body: JSON.stringify({ query: "{ __schema { queryType { fields { name } } } }" }),
+      }).then(r => r.text()).then(t => console.log("[OpenBeta schema]", t.slice(0, 600))).catch(() => {});
+
+      // areas() + nested climbs — the current documented query for text search
       const gql = `
-        query SearchClimbs($q: String!) {
-          search(query: $q) {
+        query SearchAreas($q: String!) {
+          areas(filter: { area_name: { match: $q } }) {
+            id
+            areaName
             climbs {
               id
               name
-              type { sport trad boulder topRope }
               grades { yds vscale }
+              type { sport trad boulder topRope }
             }
           }
         }
       `;
-      const body = JSON.stringify({ query: gql, variables: { q } });
-      const headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "MyLifos/1.0",
-      };
+      const r = await fetch(GQL_URL, { method: "POST", headers, body: JSON.stringify({ query: gql, variables: { q } }) });
+      const rawText = await r.text();
+      console.log(`[OpenBeta areas query] HTTP ${r.status}: ${rawText.slice(0, 400)}`);
 
-      let rawText = "";
-      let ok = false;
-      for (const url of ENDPOINTS) {
-        const r = await fetch(url, { method: "POST", headers, body });
-        rawText = await r.text();
-        console.log(`[OpenBeta] ${url} → HTTP ${r.status}: ${rawText.slice(0, 200)}`);
-        if (r.ok) { ok = true; break; }
-      }
+      if (!r.ok) return res.status(502).json({ error: "Route search unavailable. You can type the route name manually below." });
 
-      if (!ok) {
-        return res.status(502).json({ error: `Route search unavailable. Try typing the route name manually.` });
-      }
       let data: any;
       try { data = JSON.parse(rawText); } catch {
-        console.error("[OpenBeta] Non-JSON response:", rawText.slice(0, 400));
-        return res.status(502).json({ error: "Route search returned an unexpected response." });
+        return res.status(502).json({ error: "Route search unavailable. You can type the route name manually below." });
       }
       if (data.errors?.length) {
-        const msg = data.errors[0]?.message ?? "unknown error";
         console.error("[OpenBeta] GraphQL errors:", JSON.stringify(data.errors).slice(0, 400));
-        return res.status(502).json({ error: `OpenBeta error: ${msg}` });
+        return res.status(502).json({ error: `Route search unavailable. You can type the route name manually below.` });
       }
-      const climbs: any[] = data?.data?.search?.climbs ?? [];
-      const results = climbs.slice(0, 15).map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        grade: c.grades?.yds ?? c.grades?.vscale ?? "",
-        climbType: c.type?.boulder ? "Boulder"
-                 : c.type?.sport   ? "Sport"
-                 : c.type?.trad    ? "Trad"
-                 : c.type?.topRope ? "Top Rope"
-                 : "Route",
-        description: "",
-        location: "",
-      }));
+
+      // Flatten climbs from all matched areas
+      const areas: any[] = data?.data?.areas ?? [];
+      const results: any[] = [];
+      for (const area of areas) {
+        for (const c of (area.climbs ?? [])) {
+          if (results.length >= 15) break;
+          results.push({
+            id: c.id,
+            name: c.name,
+            grade: c.grades?.yds ?? c.grades?.vscale ?? "",
+            climbType: c.type?.boulder ? "Boulder" : c.type?.sport ? "Sport" : c.type?.trad ? "Trad" : c.type?.topRope ? "Top Rope" : "Route",
+            location: area.areaName ?? "",
+            description: "",
+          });
+        }
+        if (results.length >= 15) break;
+      }
       res.json({ results });
     } catch (e) { handleError(res, e); }
   });
