@@ -74,6 +74,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Bundle grew past 2 MB after hobby features — raise Workbox precache limit to 5 MB
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Only precache static assets — NOT HTML pages.
         // HTML is server-rendered with auth state so it must always come from the network.
         globPatterns: ["**/*.{js,css,ico,png,svg,woff,woff2}"],
