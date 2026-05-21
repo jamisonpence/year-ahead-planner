@@ -3492,7 +3492,9 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     try {
       const q = String(req.query.q || "").trim();
       if (!q) return res.json({ results: [] });
-      // Use GraphQL variables (not inline interpolation) and only request known-stable fields
+
+      // Try both the root endpoint and /graphql path — OpenBeta has changed URLs before
+      const ENDPOINTS = ["https://api.openbeta.io/graphql", "https://api.openbeta.io"];
       const gql = `
         query SearchClimbs($q: String!) {
           search(query: $q) {
@@ -3505,18 +3507,24 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
           }
         }
       `;
-      const r = await fetch("https://api.openbeta.io", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "MyLifos/1.0 (hobby-climbing-feature)",
-        },
-        body: JSON.stringify({ query: gql, variables: { q } }),
-      });
-      const rawText = await r.text();
-      if (!r.ok) {
-        console.error(`[OpenBeta] HTTP ${r.status}: ${rawText.slice(0, 400)}`);
-        return res.status(502).json({ error: `Route search unavailable (HTTP ${r.status}). Try again shortly.` });
+      const body = JSON.stringify({ query: gql, variables: { q } });
+      const headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "MyLifos/1.0",
+      };
+
+      let rawText = "";
+      let ok = false;
+      for (const url of ENDPOINTS) {
+        const r = await fetch(url, { method: "POST", headers, body });
+        rawText = await r.text();
+        console.log(`[OpenBeta] ${url} → HTTP ${r.status}: ${rawText.slice(0, 200)}`);
+        if (r.ok) { ok = true; break; }
+      }
+
+      if (!ok) {
+        return res.status(502).json({ error: `Route search unavailable. Try typing the route name manually.` });
       }
       let data: any;
       try { data = JSON.parse(rawText); } catch {
@@ -3538,7 +3546,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
                  : c.type?.trad    ? "Trad"
                  : c.type?.topRope ? "Top Rope"
                  : "Route",
-        description: (c.content?.description ?? "").slice(0, 200),
+        description: "",
         location: "",
       }));
       res.json({ results });
