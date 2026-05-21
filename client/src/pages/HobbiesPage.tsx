@@ -376,6 +376,84 @@ function generateChessEloSteps(currentElo: number, targetElo: number, months: nu
   return steps;
 }
 
+// ── Chess plan helpers ─────────────────────────────────────────────────────────
+
+type ChessGoalType = "rating" | "study" | "openings" | "endgames" | "tournament";
+
+const CHESS_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "ch-rating",     emoji: "⚡",  label: "Rating goal",         description: "Reach a target rating on Chess.com or Lichess",                durationWeeks: 12, defaultSteps: [] },
+  { id: "ch-study",      emoji: "📚",  label: "Daily study habit",   description: "Build a consistent tactics or study routine — e.g. 30 min/day", durationWeeks: 8,  defaultSteps: [] },
+  { id: "ch-openings",   emoji: "♟️", label: "Opening repertoire",  description: "Learn one White system vs 1…e5 and 1…c5",                      durationWeeks: 6,  defaultSteps: [] },
+  { id: "ch-endgames",   emoji: "👑",  label: "Endgame mastery",     description: "Master basic king and pawn endings this month",                 durationWeeks: 4,  defaultSteps: [] },
+  { id: "ch-tournament", emoji: "🏆",  label: "Tournament prep",     description: "Prepare for and play your first OTB or online event",           durationWeeks: 8,  defaultSteps: [] },
+];
+
+const CHESS_GOAL_TYPE_MAP: Record<string, ChessGoalType> = {
+  "ch-rating": "rating", "ch-study": "study", "ch-openings": "openings",
+  "ch-endgames": "endgames", "ch-tournament": "tournament",
+};
+
+function generateChessGoalSteps(
+  goalType: ChessGoalType,
+  opts: {
+    currentElo?: string; targetElo?: string; months?: number;
+    studyMins?: string; studyDays?: string; studyFocus?: string;
+    openingColor?: string; vsResponse?: string; openingSystem?: string;
+    endgameTopics?: string[];
+    tournamentType?: string; tournamentDate?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  switch (goalType) {
+    case "rating":
+      return generateChessEloSteps(Number(opts.currentElo ?? 0), Number(opts.targetElo ?? 0), opts.months ?? 12);
+    case "study": {
+      const mins = opts.studyMins ?? "30"; const days = opts.studyDays ?? "5"; const focus = opts.studyFocus ?? "Tactics";
+      return [
+        g(`Set up your ${focus} resource — Lichess Puzzles, Chess.com, or Chessable`),
+        g(`Week 1–2: Build the habit — ${mins} min of ${focus.toLowerCase()}, ${days} days/week`),
+        g(`Week 3–4: Track streak and consistency — aim for 90%+ days completed`),
+        g(`Month 2: Check progress — are your puzzle ratings and accuracy improving?`),
+        g(`Month 2: Add a second element — game review or opening mini-study`),
+        g(`Final weeks: Maintain routine, review blunders from recent games`),
+      ];
+    }
+    case "openings": {
+      const color = opts.openingColor ?? "White"; const vsR = opts.vsResponse ?? "1...e5"; const sys = opts.openingSystem?.trim() || "";
+      return [
+        g(`Choose your ${color} system${sys ? ` — ${sys}` : ""} vs ${vsR} · get a reference (book, Chessable course, or video series)`),
+        g(`Study the main line — key ideas, typical pawn structure, key squares`),
+        g(`Learn the 2–3 most common sidelines and how to handle them`),
+        g(`Play 10 games as ${color} using your new opening · annotate each game`),
+        g(`Identify recurring uncomfortable positions — study those specifically`),
+        g(`Play 10 more games to consolidate · review and build a personal repertoire doc`),
+      ];
+    }
+    case "endgames": {
+      const topics = opts.endgameTopics?.length ? opts.endgameTopics : ["King and pawn endings"];
+      return [
+        g(`Get study material on: ${topics.join(", ")} (Silman's Complete Endgame Course recommended)`),
+        g(`Week 1: Learn the theoretical positions and key rules for each topic`),
+        g(`Week 2: Drill endgame puzzles — 20 puzzles per session on target topics`),
+        g(`Week 3: Practice positions against a computer or training partner`),
+        g(`Week 4: Play games and review every endgame that arises, win or lose`),
+        g(`Final check: explain each key position from memory without notes`),
+      ];
+    }
+    case "tournament": {
+      const etype = opts.tournamentType ?? "OTB";
+      return [
+        g(`Find a ${etype} event and register · note the time control and format`),
+        g(`Solidify openings — 2–3 lines for White and Black you feel confident playing`),
+        g(`Practice at classical or rapid time controls — slow down and calculate`),
+        g(`Drill tactical motifs: pins, forks, skewers, discovered attacks, back-rank mates`),
+        g(`Play 2–3 practice games at the event time control · review with engine after`),
+        g(`Event day — focus on process over result · review all games the same evening`),
+      ];
+    }
+  }
+}
+
 // ── Poker helpers ──────────────────────────────────────────────────────────────
 
 // Stakes ordered lowest → highest. Each level jump = 12 months baseline, max 36.
@@ -893,10 +971,26 @@ function PlanWizard({
   const [stepInput, setStepInput] = useState("");
   const [stepDate, setStepDate] = useState("");
 
-  // Chess ELO wizard state
+  // Chess wizard state
+  const [chessMode, setChessMode] = useState(false);
+  const [chessGoalType, setChessGoalType] = useState<ChessGoalType | "">("");
+  // Rating sub-state (reuses ELO calculator)
   const [chessEloMode, setChessEloMode] = useState(false);
   const [currentElo, setCurrentElo] = useState("");
   const [targetElo, setTargetElo] = useState("");
+  // Study habit
+  const [studyMins, setStudyMins] = useState("30");
+  const [studyDays, setStudyDays] = useState("5");
+  const [studyFocus, setStudyFocus] = useState("Tactics");
+  // Openings
+  const [openingColor, setOpeningColor] = useState("White");
+  const [openingVsResponse, setOpeningVsResponse] = useState("1...e5");
+  const [openingSystem, setOpeningSystem] = useState("");
+  // Endgames
+  const [endgameTopics, setEndgameTopics] = useState<string[]>(["King and pawn endings"]);
+  // Tournament
+  const [tournamentType, setTournamentType] = useState("OTB");
+  const [tournamentDate, setTournamentDate] = useState("");
 
   // Poker wizard state
   const [pokerMode, setPokerMode] = useState(false);
@@ -920,7 +1014,10 @@ function PlanWizard({
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
   const isHikingHobby = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
-  const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES : (PLAN_TEMPLATES[hobbyType] ?? []);
+  const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
+  const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
+                  : isChessHobby  ? CHESS_PLAN_TEMPLATES
+                  : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
   const eloGap = Math.max(0, Number(targetElo) - Number(currentElo));
@@ -936,7 +1033,10 @@ function PlanWizard({
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setSteps([]); setStepInput(""); setStepDate("");
-    setChessEloMode(false); setCurrentElo(""); setTargetElo("");
+    setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
+    setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
+    setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
+    setEndgameTopics(["King and pawn endings"]); setTournamentType("OTB"); setTournamentDate("");
     setPokerMode(false); setCurrentStake(""); setTargetStake("");
     setHikingMode(false); setHikingGoalType(""); setHikeCount("52"); setHikeMiles("300");
     setHikeFeet("50000"); setPeakAltitude("14000"); setPeakName(""); setTrailListName("");
@@ -946,17 +1046,39 @@ function PlanWizard({
 
   function pickTemplate(t: PlanTemplate) {
     const hobbyName = selectedHobby?.name?.toLowerCase() ?? "";
-    const isChessRating = t.id === "gp3" && hobbyName.includes("chess");
     const isPokerRating = t.id === "gp3" && hobbyName.includes("poker");
+    const chessType  = CHESS_GOAL_TYPE_MAP[t.id];
     const hikingType = HIKING_GOAL_TYPE_MAP[t.id];
     setSelectedTemplate(t);
-    if (isChessRating) { setChessEloMode(true); return; }
     if (isPokerRating) { setPokerMode(true); return; }
+    if (chessType) {
+      setChessMode(true); setChessGoalType(chessType);
+      if (chessType === "rating") setChessEloMode(true);
+      return;
+    }
     if (hikingType) { setHikingMode(true); setHikingGoalType(hikingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
     setStep(2);
+  }
+
+  function applyChessSettings() {
+    if (!chessGoalType || chessGoalType === "rating") return;
+    const generatedSteps = generateChessGoalSteps(chessGoalType, {
+      studyMins, studyDays, studyFocus,
+      openingColor, vsResponse: openingVsResponse, openingSystem,
+      endgameTopics, tournamentType, tournamentDate,
+    });
+    let planTitle = "", desc = "", weeks = 8;
+    switch (chessGoalType) {
+      case "study":      planTitle = `${studyMins} min ${studyFocus} daily, ${studyDays}×/week`;        desc = `Build a consistent ${studyFocus.toLowerCase()} study habit over ${weeks} weeks.`; break;
+      case "openings":   planTitle = `${openingColor} opening vs ${openingVsResponse}${openingSystem ? ` — ${openingSystem}` : ""}`;  desc = `Learn a solid ${openingColor} system vs ${openingVsResponse}.`; weeks = 6; break;
+      case "endgames":   planTitle = `Endgame mastery: ${endgameTopics.join(", ")}`;                     desc = `Master ${endgameTopics.join(" and ")} positions.`; weeks = 4; break;
+      case "tournament": planTitle = `${tournamentType} tournament prep${tournamentDate ? ` — ${tournamentDate}` : ""}`;  desc = `Prepare for and compete in a ${tournamentType} event.`; break;
+    }
+    setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setChessMode(false); setChessGoalType(""); setStep(2);
   }
 
   function applyHikingSettings() {
@@ -989,7 +1111,7 @@ function PlanWizard({
     setDescription(`Structured improvement plan to gain ${eloGap} ELO rating points over ${eloDuration.months} months.`);
     setDurationWeeks(String(eloDuration.weeks));
     setSteps(generatedSteps);
-    setChessEloMode(false);
+    setChessEloMode(false); setChessMode(false); setChessGoalType("");
     setStep(2);
   }
 
@@ -1027,9 +1149,10 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || pokerMode || hikingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || hikingMode) && (
               <button onClick={() => {
-                if (chessEloMode) { setChessEloMode(false); setSelectedTemplate(null); }
+                if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
+                else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else setStep(1);
@@ -1040,15 +1163,17 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !pokerMode && !hikingMode ? "New Plan"
-                  : chessEloMode ? "Chess Rating Goal"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode ? "New Plan"
+                  : chessEloMode ? "Chess: Rating Goal"
+                  : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker Improvement Plan"
                   : hikingMode ? "Hiking Goal"
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !pokerMode && !hikingMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
+                  : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : "Name, schedule, and build out your steps"}
@@ -1056,8 +1181,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || pokerMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || pokerMode || hikingMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || hikingMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -1227,6 +1352,144 @@ function PlanWizard({
             );
           })()}
 
+          {/* ── CHESS GOAL WIZARD (non-rating types) ── */}
+          {chessMode && !chessEloMode && (() => {
+            const tplMeta = CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType);
+            const ENDGAME_OPTIONS = ["King and pawn endings", "Rook endings", "Queen endings", "Bishop endings", "Knight endings", "Pawn structure"];
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "♟️"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* STUDY HABIT */}
+                {chessGoalType === "study" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Minutes per session *</label>
+                        <Input type="number" min={5} max={180} placeholder="e.g. 30" value={studyMins} onChange={e => setStudyMins(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Days per week *</label>
+                        <Input type="number" min={1} max={7} placeholder="e.g. 5" value={studyDays} onChange={e => setStudyDays(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Primary focus</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["Tactics", "Openings", "Endgames", "All-around"].map(f => (
+                          <button key={f} onClick={() => setStudyFocus(f)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${studyFocus === f ? "bg-indigo-600 text-white border-indigo-600" : "bg-card hover:bg-secondary"}`}>
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {studyMins && studyDays && (
+                      <p className="text-[10px] text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
+                        ≈ {Math.round(Number(studyMins) * Number(studyDays) / 60 * 10) / 10} hrs/week · {Math.round(Number(studyMins) * Number(studyDays) * 8 / 60)} hrs over 8 weeks
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* OPENINGS */}
+                {chessGoalType === "openings" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">You are playing as</label>
+                      <div className="flex gap-2">
+                        {["White", "Black"].map(c => (
+                          <button key={c} onClick={() => setOpeningColor(c)}
+                            className={`flex-1 text-sm py-2 rounded-lg border font-medium transition-colors ${openingColor === c ? "bg-indigo-600 text-white border-indigo-600" : "bg-card hover:bg-secondary"}`}>
+                            {c === "White" ? "♔ White" : "♚ Black"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Main opponent response to address</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(openingColor === "White"
+                          ? ["1...e5", "1...c5", "1...d5", "1...e6", "Other"]
+                          : ["1.e4", "1.d4", "1.c4", "1.Nf3", "Other"]
+                        ).map(r => (
+                          <button key={r} onClick={() => setOpeningVsResponse(r)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-mono ${openingVsResponse === r ? "bg-indigo-600 text-white border-indigo-600" : "bg-card hover:bg-secondary"}`}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">System name (optional)</label>
+                      <Input placeholder="e.g. Italian Game, Sicilian Najdorf, London System…" value={openingSystem} onChange={e => setOpeningSystem(e.target.value)} className="text-sm" />
+                    </div>
+                  </div>
+                )}
+
+                {/* ENDGAMES */}
+                {chessGoalType === "endgames" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Topics to cover (select all that apply)</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {ENDGAME_OPTIONS.map(topic => {
+                          const active = endgameTopics.includes(topic);
+                          return (
+                            <button key={topic} onClick={() => setEndgameTopics(t => active ? t.filter(x => x !== topic) : [...t, topic])}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${active ? "bg-indigo-600 text-white border-indigo-600" : "bg-card hover:bg-secondary"}`}>
+                              {topic}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {endgameTopics.length === 0 && <p className="text-[10px] text-destructive mt-1">Select at least one topic</p>}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Recommended resource: <em>Silman's Complete Endgame Course</em> or Lichess Endgame Practice</p>
+                  </div>
+                )}
+
+                {/* TOURNAMENT */}
+                {chessGoalType === "tournament" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Event type</label>
+                      <div className="flex gap-2">
+                        {["OTB", "Online"].map(et => (
+                          <button key={et} onClick={() => setTournamentType(et)}
+                            className={`flex-1 text-sm py-2 rounded-lg border font-medium transition-colors ${tournamentType === et ? "bg-indigo-600 text-white border-indigo-600" : "bg-card hover:bg-secondary"}`}>
+                            {et === "OTB" ? "🏛️ Over the Board" : "💻 Online"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target event date (optional)</label>
+                      <Input type="date" value={tournamentDate} onChange={e => setTournamentDate(e.target.value)} className="text-sm" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {tournamentType === "OTB" ? "Find local clubs and events at uschess.org or your national federation." : "Chess.com and Lichess host rated tournaments daily."}
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={applyChessSettings}
+                  disabled={chessGoalType === "endgames" && endgameTopics.length === 0}
+                  className="w-full gap-2"
+                >
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* CHESS ELO STEP */}
           {chessEloMode && (
             <>
@@ -1384,7 +1647,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !pokerMode && !hikingMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
