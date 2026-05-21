@@ -974,6 +974,135 @@ function generateBirdSteps(
   }
 }
 
+// ── Cycling plan helpers ──────────────────────────────────────────────────────
+
+interface CycleWishlistEntry {
+  id: string;
+  routeId?: number;
+  name: string;
+  location: string;
+  lengthMiles: number;
+  url?: string;
+  notes?: string;
+  plannedDate?: string;
+  addedAt: string;
+}
+
+interface RideLogEntry {
+  id: string;
+  routeId?: number;
+  name: string;
+  date: string;
+  distanceMiles: number;
+  elevationGainFt?: number;
+  durationMins?: number;
+  avgSpeedMph?: number;
+  rideType?: string;
+  rating?: number;
+  notes?: string;
+}
+
+function parseCycleWishlist(extraJson: string): CycleWishlistEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.cycleWishlist) ? o.cycleWishlist : []; } catch { return []; }
+}
+function parseRideLog(extraJson: string): RideLogEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.rideLog) ? o.rideLog : []; } catch { return []; }
+}
+function setCyclingInExtra(extraJson: string, wishlist: CycleWishlistEntry[], log: RideLogEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, cycleWishlist: wishlist, rideLog: log }); }
+  catch { return JSON.stringify({ cycleWishlist: wishlist, rideLog: log }); }
+}
+
+const RIDE_TYPES = ["Road", "MTB", "Gravel", "Commute", "Indoor / Zwift", "Touring", "BMX / Trick"] as const;
+
+type CyclingGoalType = "frequency" | "distance" | "elevation" | "event" | "routes";
+
+const CYCLING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "cy-freq",   emoji: "🚲", label: "Annual ride count",     description: "Commit to a number of rides — e.g. 150 rides in a year",                durationWeeks: 52, defaultSteps: [] },
+  { id: "cy-dist",   emoji: "📏", label: "Annual distance",        description: "Set a total distance goal for the year — e.g. 2,000 miles",             durationWeeks: 52, defaultSteps: [] },
+  { id: "cy-elev",   emoji: "📈", label: "Annual elevation gain",  description: "Rack up a total elevation gain goal — e.g. 100,000 ft",                 durationWeeks: 52, defaultSteps: [] },
+  { id: "cy-event",  emoji: "🏅", label: "Event / sportive goal",  description: "Train for a century ride, gran fondo, or charity event",                durationWeeks: 16, defaultSteps: [] },
+  { id: "cy-routes", emoji: "📋", label: "Route list / challenge", description: "Work through a local club list, Strava challenge, or route bucket list", durationWeeks: 52, defaultSteps: [] },
+];
+
+const CYCLING_GOAL_TYPE_MAP: Record<string, CyclingGoalType> = {
+  "cy-freq": "frequency", "cy-dist": "distance", "cy-elev": "elevation",
+  "cy-event": "event", "cy-routes": "routes",
+};
+
+function generateCyclingSteps(
+  goalType: CyclingGoalType,
+  opts: {
+    count?: string; miles?: string; feet?: string;
+    eventName?: string; eventDistance?: string; eventDate?: string;
+    listName?: string; listCount?: string; planRoutes?: any[];
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const n = (s: string) => Number(s) || 0;
+  const fmt = (v: number) => v.toLocaleString();
+
+  switch (goalType) {
+    case "frequency": {
+      const c = n(opts.count ?? "150");
+      return [
+        g("Set up ride tracking — Strava, Garmin Connect, or a training log"),
+        g(`Complete first ${Math.round(c / 4)} rides — Q1 milestone`),
+        g(`Reach ${Math.round(c / 2)} rides — halfway mark`),
+        g(`Log ${Math.round(c * 3 / 4)} rides — Q3 milestone`),
+        g(`Complete all ${c} rides — celebrate!`),
+      ];
+    }
+    case "distance": {
+      const m = n(opts.miles ?? "2000");
+      return [
+        g(`Plan a mix of short and long rides to hit ${fmt(m)} miles over the year`),
+        g(`Log first ${fmt(Math.round(m / 4))} miles — Q1 milestone`),
+        g(`Reach ${fmt(Math.round(m / 2))} miles — halfway mark`),
+        g(`Log ${fmt(Math.round(m * 3 / 4))} miles — Q3 milestone`),
+        g(`Complete ${fmt(m)} miles — goal achieved!`),
+      ];
+    }
+    case "elevation": {
+      const f = n(opts.feet ?? "100000");
+      return [
+        g(`Identify hilly routes to accumulate ${fmt(f)} ft of elevation gain this year`),
+        g(`Log first ${fmt(Math.round(f / 4))} ft — Q1 milestone`),
+        g(`Reach ${fmt(Math.round(f / 2))} ft — halfway mark`),
+        g(`Log ${fmt(Math.round(f * 3 / 4))} ft — Q3 milestone`),
+        g(`Complete ${fmt(f)} ft of total elevation gain`),
+      ];
+    }
+    case "event": {
+      const event = opts.eventName?.trim() || "the event";
+      const dist = Number(opts.eventDistance ?? "100");
+      return [
+        g(`Register for ${event}${opts.eventDate ? ` on ${opts.eventDate}` : ""} — confirm the route, kit, and logistics`),
+        g("Build base fitness — 3 rides per week for 4 weeks at a comfortable pace"),
+        g(`Long-ride progression: complete a ${Math.round(dist * 0.5)}-mile ride`),
+        g(`Long-ride progression: complete a ${Math.round(dist * 0.75)}-mile ride — simulate event conditions`),
+        g("Taper week — short, easy rides so you arrive fresh on event day"),
+        g(`Event day — complete ${event}!`),
+      ];
+    }
+    case "routes": {
+      const routes = opts.planRoutes ?? [];
+      const lc = n(opts.listCount ?? "20");
+      const listLabel = opts.listName?.trim() || "the route list";
+      if (routes.length > 0) {
+        return routes.map(r => g(`Ride: ${r.name}${r.length > 0 ? ` (${r.length} mi)` : ""}`));
+      }
+      return [
+        g(`Research all routes on ${listLabel}`),
+        g(`Complete first ${Math.round(lc / 4)} routes — Q1 milestone`),
+        g(`Halfway milestone — ${Math.round(lc / 2)} routes done`),
+        g(`Three-quarters complete — ${Math.round(lc * 3 / 4)} routes done`),
+        g(`Complete all ${lc} routes on ${listLabel} — challenge complete!`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1431,22 +1560,38 @@ function PlanWizard({
   const [instrPerfSong,      setInstrPerfSong]      = useState("");
   const [instrSessions,      setInstrSessions]      = useState("2");
 
+  // Cycling wizard state
+  const [cyclingMode, setCyclingMode] = useState(false);
+  const [cyclingGoalType, setCyclingGoalType] = useState<CyclingGoalType | "">("");
+  const [cyCount,         setCyCount]         = useState("150");
+  const [cyMiles,         setCyMiles]         = useState("2000");
+  const [cyFeet,          setCyFeet]          = useState("100000");
+  const [cyEventName,     setCyEventName]     = useState("");
+  const [cyEventDist,     setCyEventDist]     = useState("100");
+  const [cyEventDate,     setCyEventDate]     = useState("");
+  const [cyListName,      setCyListName]      = useState("");
+  const [cyListCount,     setCyListCount]     = useState("20");
+  const [planRoutes,      setPlanRoutes]      = useState<any[]>([]);
+  const cycleRouteSearch = useCycleRouteSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
-  const isHikingHobby = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
-  const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
-  const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
-  const isBirdHobby   = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
-  const isLangHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
+  const isHikingHobby  = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
+  const isChessHobby   = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
+  const isPokerHobby   = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
+  const isBirdHobby    = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
+  const isCyclingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("biking") || n.includes("mtb") || n.includes("gravel riding"); })();
+  const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
-  const isInstrHobby  = hobbyType === "performance";
-  const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
-                  : isChessHobby  ? CHESS_PLAN_TEMPLATES
-                  : isPokerHobby  ? POKER_PLAN_TEMPLATES
-                  : isBirdHobby   ? BIRD_PLAN_TEMPLATES
-                  : isLangHobby   ? LANGUAGE_PLAN_TEMPLATES
-                  : isInstrHobby  ? INSTRUMENT_PLAN_TEMPLATES
+  const isInstrHobby   = hobbyType === "performance";
+  const templates = isHikingHobby  ? HIKING_PLAN_TEMPLATES
+                  : isCyclingHobby ? CYCLING_PLAN_TEMPLATES
+                  : isChessHobby   ? CHESS_PLAN_TEMPLATES
+                  : isPokerHobby   ? POKER_PLAN_TEMPLATES
+                  : isBirdHobby    ? BIRD_PLAN_TEMPLATES
+                  : isLangHobby    ? LANGUAGE_PLAN_TEMPLATES
+                  : isInstrHobby   ? INSTRUMENT_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
@@ -1485,6 +1630,9 @@ function PlanWizard({
     setInstrMode(false); setInstrGoalType(""); setInstrInstrument(""); setInstrSong("");
     setInstrSongCount("7"); setInstrPracticeMins("20"); setInstrPracticeDays("5");
     setInstrPerfSong(""); setInstrSessions("2");
+    setCyclingMode(false); setCyclingGoalType(""); setCyCount("150"); setCyMiles("2000");
+    setCyFeet("100000"); setCyEventName(""); setCyEventDist("100"); setCyEventDate("");
+    setCyListName(""); setCyListCount("20"); setPlanRoutes([]);
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1512,6 +1660,8 @@ function PlanWizard({
     if (langType) { setLangMode(true); setLangGoalType(langType); return; }
     const instrType = INSTRUMENT_GOAL_TYPE_MAP[t.id];
     if (instrType) { setInstrMode(true); setInstrGoalType(instrType); return; }
+    const cyclingType = CYCLING_GOAL_TYPE_MAP[t.id];
+    if (cyclingType) { setCyclingMode(true); setCyclingGoalType(cyclingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1555,6 +1705,25 @@ function PlanWizard({
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
     setSteps(generatedSteps); setHikingMode(false); setStep(2);
+  }
+
+  function applyCyclingSettings() {
+    if (!cyclingGoalType) return;
+    const generatedSteps = generateCyclingSteps(cyclingGoalType, {
+      count: cyCount, miles: cyMiles, feet: cyFeet,
+      eventName: cyEventName, eventDistance: cyEventDist, eventDate: cyEventDate,
+      listName: cyListName, listCount: cyListCount, planRoutes,
+    });
+    let title = "", desc = "", weeks = 52;
+    switch (cyclingGoalType) {
+      case "frequency": title = `${cyCount} Rides This Year`;                          desc = `Complete ${cyCount} rides over the year — roughly ${(Number(cyCount)/52).toFixed(1)} per week.`; break;
+      case "distance":  title = `Ride ${Number(cyMiles).toLocaleString()} Miles This Year`; desc = `Cover ${Number(cyMiles).toLocaleString()} miles on the bike over the year.`; break;
+      case "elevation": title = `${Number(cyFeet).toLocaleString()} Feet of Climbing This Year`; desc = `Accumulate ${Number(cyFeet).toLocaleString()} ft of elevation gain on the bike.`; break;
+      case "event":     title = cyEventName ? `Complete: ${cyEventName}` : `${cyEventDist}-Mile Event`; desc = `Train for and complete ${cyEventName || "the event"}${cyEventDate ? ` on ${cyEventDate}` : ""}.`; weeks = 16; break;
+      case "routes":    title = cyListName ? `Complete: ${cyListName}` : `Route List (${cyListCount} routes)`; desc = `Work through the "${cyListName || "route list"}" — ${planRoutes.length > 0 ? planRoutes.length : cyListCount} routes to complete.`; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setCyclingMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -1684,13 +1853,14 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (pokerGoalMode) { setPokerGoalMode(false); setPokerGoalType(""); setSelectedTemplate(null); }
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
+                else if (cyclingMode) { setCyclingMode(false); setCyclingGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -1702,24 +1872,26 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
                   : pokerGoalMode ? `Poker: ${POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType)?.label ?? "Goal"}`
                   : hikingMode ? "Hiking Goal"
+                  : cyclingMode ? `Cycling: ${CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
                   : pokerGoalMode ? "Configure your poker goal to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
+                  : cyclingMode ? "Configure your cycling goal and optionally add specific routes"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -1728,8 +1900,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -2269,6 +2441,173 @@ function PlanWizard({
             );
           })()}
 
+          {/* ── CYCLING GOAL WIZARD ── */}
+          {cyclingMode && (() => {
+            const tplMeta = CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType);
+            const meta: Record<CyclingGoalType, { emoji: string; example: string }> = {
+              frequency: { emoji: "🚲", example: "e.g. 150 rides this year (~3 per week)" },
+              distance:  { emoji: "📏", example: "e.g. Ride 2,000 miles this year" },
+              elevation: { emoji: "📈", example: "e.g. 100,000 feet of climbing this year" },
+              event:     { emoji: "🏅", example: "e.g. First century ride, Gran Fondo" },
+              routes:    { emoji: "📋", example: "e.g. Finish local club's 20 classic routes" },
+            };
+            const m = cyclingGoalType ? meta[cyclingGoalType] : null;
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <span className="text-2xl">{m?.emoji ?? "🚲"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* FREQUENCY */}
+                {cyclingGoalType === "frequency" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target ride count *</label>
+                    <Input type="number" min={1} max={365} placeholder="e.g. 150" value={cyCount} onChange={e => setCyCount(e.target.value)} className="text-sm" />
+                    {Number(cyCount) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {(Number(cyCount) / 52).toFixed(1)} rides per week over a year</p>}
+                  </div>
+                )}
+
+                {/* DISTANCE */}
+                {cyclingGoalType === "distance" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target miles *</label>
+                    <Input type="number" min={1} placeholder="e.g. 2000" value={cyMiles} onChange={e => setCyMiles(e.target.value)} className="text-sm" />
+                    {Number(cyMiles) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {Math.round(Number(cyMiles) / 52)} miles per week over a year</p>}
+                  </div>
+                )}
+
+                {/* ELEVATION */}
+                {cyclingGoalType === "elevation" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target elevation gain (feet) *</label>
+                    <Input type="number" min={1000} step={1000} placeholder="e.g. 100000" value={cyFeet} onChange={e => setCyFeet(e.target.value)} className="text-sm" />
+                    {Number(cyFeet) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {Math.round(Number(cyFeet) / 52).toLocaleString()} ft/week over a year</p>}
+                  </div>
+                )}
+
+                {/* EVENT */}
+                {cyclingGoalType === "event" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Event name (optional)</label>
+                      <Input placeholder="e.g. L'Étape du Tour, Ride London, local century…" value={cyEventName} onChange={e => setCyEventName(e.target.value)} className="text-sm" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Event distance (miles) *</label>
+                        <Input type="number" min={1} placeholder="e.g. 100" value={cyEventDist} onChange={e => setCyEventDist(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Event date (optional)</label>
+                        <Input type="date" value={cyEventDate} onChange={e => setCyEventDate(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                    {/* Route search for the event */}
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Find route via search (optional)</label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Search near… (e.g. London, Bristol)"
+                          value={cycleRouteSearch.locationInput} onChange={e => cycleRouteSearch.setLocationInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") cycleRouteSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => cycleRouteSearch.runSearch()} disabled={cycleRouteSearch.searching || !cycleRouteSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                          {cycleRouteSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {cycleRouteSearch.searchError && <p className="text-xs text-destructive mt-1">{cycleRouteSearch.searchError}</p>}
+                      {cycleRouteSearch.searchResults.length > 0 && (
+                        <div className="mt-1.5 space-y-1 max-h-36 overflow-y-auto">
+                          {cycleRouteSearch.searchResults.map((r: any) => (
+                            <button key={r.id} onClick={() => { setCyEventName(r.name); if (r.length > 0) setCyEventDist(String(r.length)); cycleRouteSearch.setSearchResults([]); }}
+                              className="w-full text-left p-2 rounded border text-xs hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors">
+                              <span className="font-medium">{r.name}</span>{r.length > 0 ? <span className="text-muted-foreground ml-1">({r.length} mi)</span> : ""}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ROUTE LIST */}
+                {cyclingGoalType === "routes" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">List / challenge name</label>
+                        <Input placeholder='e.g. "Club 20 Classics"' value={cyListName} onChange={e => setCyListName(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Total route count</label>
+                        <Input type="number" min={1} placeholder="e.g. 20" value={cyListCount} onChange={e => setCyListCount(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                    {/* Route search */}
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                        Add specific routes to the plan{planRoutes.length > 0 ? ` (${planRoutes.length} added)` : " (optional)"}
+                      </label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Search route name or location…"
+                          value={cycleRouteSearch.locationInput} onChange={e => cycleRouteSearch.setLocationInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") cycleRouteSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => cycleRouteSearch.runSearch()} disabled={cycleRouteSearch.searching || !cycleRouteSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                          {cycleRouteSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                          {cycleRouteSearch.searching ? "…" : "Search"}
+                        </Button>
+                      </div>
+                      {cycleRouteSearch.searchError && <p className="text-xs text-destructive mt-1">{cycleRouteSearch.searchError}</p>}
+                      {cycleRouteSearch.searchResults.length > 0 && (
+                        <div className="mt-1.5 space-y-1 max-h-40 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">{cycleRouteSearch.searchResults.length} routes found — click to add</p>
+                          {cycleRouteSearch.searchResults.map((r: any) => {
+                            const added = planRoutes.some(p => p.id === r.id);
+                            return (
+                              <button key={r.id} disabled={added} onClick={() => setPlanRoutes(p => [...p, r])}
+                                className={`w-full text-left flex items-center justify-between p-2 rounded border text-xs transition-colors ${added ? "opacity-50 cursor-not-allowed bg-secondary" : "hover:bg-blue-50 dark:hover:bg-blue-950/20"}`}>
+                                <span><span className="font-medium">{r.name}</span>{r.length > 0 ? <span className="text-muted-foreground ml-1">({r.length} mi)</span> : ""}</span>
+                                {added ? <Check size={11} className="text-blue-600 shrink-0" /> : <Plus size={11} className="text-muted-foreground shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {planRoutes.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Added to plan ({planRoutes.length})</p>
+                          {planRoutes.map((r, i) => (
+                            <div key={r.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                              <span className="truncate">{i + 1}. {r.name}{r.length > 0 ? <span className="text-muted-foreground ml-1">({r.length} mi)</span> : ""}</span>
+                              <button onClick={() => setPlanRoutes(p => p.filter(x => x.id !== r.id))} className="ml-2 text-muted-foreground hover:text-destructive shrink-0"><X size={11} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={applyCyclingSettings}
+                  disabled={
+                    (cyclingGoalType === "frequency" && !cyCount) ||
+                    (cyclingGoalType === "distance"  && !cyMiles) ||
+                    (cyclingGoalType === "elevation" && !cyFeet)  ||
+                    (cyclingGoalType === "event"     && !cyEventDist)
+                  }
+                  className="w-full gap-2"
+                >
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* ── CHESS GOAL WIZARD (non-rating types) ── */}
           {chessMode && !chessEloMode && (() => {
             const tplMeta = CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType);
@@ -2699,7 +3038,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -3473,8 +3812,8 @@ function BirdSection({ hobby, onUpdateExtra }: { hobby: Hobby; onUpdateExtra: (n
 
 // ── HikingSection ─────────────────────────────────────────────────────────────
 
-/** Shared hook: geocode + Waymarked Trails search */
-function useTrailSearch() {
+/** Shared hook: geocode + Waymarked Trails route search. Pass apiPath = "hiking" or "cycling". */
+function useWaymarkedSearch(apiPath: "hiking" | "cycling") {
   const [locationInput, setLocationInput] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -3485,7 +3824,6 @@ function useTrailSearch() {
     if (!q) return;
     setSearching(true); setSearchResults([]); setSearchError("");
     try {
-      // Geocode in parallel with the text search so we can do both at once
       let latLonParams = "";
       try {
         const geoRes = await fetch(`/api/hiking/geocode?q=${encodeURIComponent(q)}`);
@@ -3494,16 +3832,17 @@ function useTrailSearch() {
           const { lat, lon } = geoData[0];
           latLonParams = `&lat=${lat}&lon=${lon}&maxDistance=25`;
         }
-      } catch { /* geocode failure is non-fatal — text search still runs */ }
+      } catch { /* non-fatal */ }
 
-      // Always include locationName so the server runs text search regardless
-      const trailRes = await fetch(`/api/hiking/search?locationName=${encodeURIComponent(q)}&maxResults=30${latLonParams}`);
-      const trailData = await trailRes.json();
-      if (!trailData.trails?.length) {
-        setSearchError("No hiking routes found. Try a trail name (e.g. 'Colorado Trail') or a city/park name.");
+      const res = await fetch(`/api/${apiPath}/search?locationName=${encodeURIComponent(q)}&maxResults=30${latLonParams}`);
+      const data = await res.json();
+      if (!data.trails?.length) {
+        setSearchError(apiPath === "hiking"
+          ? "No hiking routes found. Try a trail name (e.g. 'Colorado Trail') or a city/park name."
+          : "No cycling routes found. Try a route name or a city/region name.");
         setSearching(false); return;
       }
-      setSearchResults(trailData.trails);
+      setSearchResults(data.trails);
     } catch {
       setSearchError("Search failed. Check your connection and try again.");
     }
@@ -3512,6 +3851,10 @@ function useTrailSearch() {
 
   return { locationInput, setLocationInput, searching, searchResults, setSearchResults, searchError, runSearch };
 }
+
+/** Convenience wrappers */
+function useTrailSearch()      { return useWaymarkedSearch("hiking"); }
+function useCycleRouteSearch() { return useWaymarkedSearch("cycling"); }
 
 function HikingSection({ hobby, onUpdateExtra }: {
   hobby: Hobby;
@@ -3842,6 +4185,323 @@ function HikingSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── CyclingSection ────────────────────────────────────────────────────────────
+
+function CyclingSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"wishlist" | "log">("wishlist");
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [showLogSearch, setShowLogSearch] = useState(false);
+
+  const wishlistSearch = useCycleRouteSearch();
+  const logSearch      = useCycleRouteSearch();
+
+  // Log form state
+  const [logName,     setLogName]     = useState("");
+  const [logDate,     setLogDate]     = useState(new Date().toISOString().slice(0, 10));
+  const [logDist,     setLogDist]     = useState("");
+  const [logElev,     setLogElev]     = useState("");
+  const [logDur,      setLogDur]      = useState("");
+  const [logSpeed,    setLogSpeed]    = useState("");
+  const [logType,     setLogType]     = useState("");
+  const [logRating,   setLogRating]   = useState("");
+  const [logNotes,    setLogNotes]    = useState("");
+
+  const wishlist = parseCycleWishlist(hobby.extraJson ?? "{}");
+  const rideLog  = parseRideLog(hobby.extraJson ?? "{}");
+
+  function saveCycling(w: CycleWishlistEntry[], l: RideLogEntry[]) {
+    onUpdateExtra(setCyclingInExtra(hobby.extraJson ?? "{}", w, l));
+  }
+
+  function addToWishlist(route: any) {
+    if (wishlist.some(w => w.routeId === route.id)) { toast({ title: "Already on wishlist" }); return; }
+    const entry: CycleWishlistEntry = {
+      id: genId(), routeId: route.id, name: route.name,
+      location: route.location ?? "", lengthMiles: route.length ?? 0,
+      url: route.url, addedAt: new Date().toISOString(),
+    };
+    saveCycling([...wishlist, entry], rideLog);
+    toast({ title: `"${route.name}" added to wishlist` });
+  }
+
+  function removeWishlist(id: string) { saveCycling(wishlist.filter(w => w.id !== id), rideLog); }
+
+  function prefillLog(name: string, dist: number) {
+    setLogName(name);
+    setLogDist(dist > 0 ? String(dist) : "");
+  }
+
+  function logFromWishlist(w: CycleWishlistEntry) {
+    prefillLog(w.name, w.lengthMiles);
+    setTab("log"); setShowLogForm(true);
+  }
+
+  function logFromSearchResult(route: any) {
+    prefillLog(route.name, route.length ?? 0);
+    logSearch.setSearchResults([]);
+    setShowLogSearch(false);
+    setShowLogForm(true);
+    toast({ title: `"${route.name}" pre-filled in log` });
+  }
+
+  function saveLog() {
+    if (!logName.trim() || !logDate) return;
+    const entry: RideLogEntry = {
+      id: genId(), name: logName.trim(), date: logDate,
+      distanceMiles: Number(logDist) || 0,
+      elevationGainFt: logElev ? Number(logElev) : undefined,
+      durationMins: logDur ? Number(logDur) : undefined,
+      avgSpeedMph: logSpeed ? Number(logSpeed) : undefined,
+      rideType: logType || undefined,
+      rating: logRating ? Number(logRating) : undefined,
+      notes: logNotes.trim() || undefined,
+    };
+    saveCycling(wishlist, [...rideLog, entry]);
+    setShowLogForm(false);
+    setLogName(""); setLogDate(new Date().toISOString().slice(0, 10));
+    setLogDist(""); setLogElev(""); setLogDur(""); setLogSpeed(""); setLogType(""); setLogRating(""); setLogNotes("");
+    toast({ title: "Ride logged!" });
+  }
+
+  function deleteLog(id: string) { saveCycling(wishlist, rideLog.filter(l => l.id !== id)); }
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-blue-50/60 dark:bg-blue-950/20 border-b border-blue-200 dark:border-blue-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🚲</span>
+          <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">Routes & Rides</span>
+          <span className="text-xs text-muted-foreground">{wishlist.length} wishlist · {rideLog.length} logged</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("wishlist")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "wishlist" ? "bg-blue-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Wishlist</button>
+          <button onClick={() => setTab("log")}      className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log"      ? "bg-blue-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Log</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {/* WISHLIST TAB */}
+        {tab === "wishlist" && (
+          <>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search cycling routes near… (e.g. Bristol, UK)"
+                value={wishlistSearch.locationInput}
+                onChange={e => wishlistSearch.setLocationInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") wishlistSearch.runSearch(); }}
+                className="text-sm h-8 flex-1"
+              />
+              <Button size="sm" variant="outline" onClick={() => wishlistSearch.runSearch()} disabled={wishlistSearch.searching || !wishlistSearch.locationInput.trim()} className="h-8 gap-1.5 shrink-0">
+                {wishlistSearch.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                {wishlistSearch.searching ? "Searching…" : "Search"}
+              </Button>
+            </div>
+
+            {wishlistSearch.searchError && <p className="text-xs text-destructive">{wishlistSearch.searchError}</p>}
+
+            {wishlistSearch.searchResults.length > 0 && (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{wishlistSearch.searchResults.length} routes found via Waymarked Trails</p>
+                {wishlistSearch.searchResults.map((route: any) => (
+                  <div key={route.id} className="flex items-start gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-semibold truncate">{route.name}</p>
+                        {route.ref && <span className="text-[10px] text-muted-foreground shrink-0">({route.ref})</span>}
+                      </div>
+                      {route.description && <p className="text-[10px] text-muted-foreground truncate italic">{route.description}</p>}
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {route.length > 0 && <span className="text-[10px] text-muted-foreground">{route.length} mi</span>}
+                        {route.network && <span className="text-[10px] text-muted-foreground capitalize">{route.network}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => addToWishlist(route)} className="text-[10px] px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                        + Wishlist
+                      </button>
+                      {route.url && <a href={route.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-1 rounded border hover:bg-secondary transition-colors text-center">View ↗</a>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {wishlist.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Wishlist</p>
+                {wishlist.map(w => (
+                  <div key={w.id} className="flex items-start gap-2 p-2.5 rounded-lg border bg-card">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate">{w.name}</p>
+                      {w.location && <p className="text-[10px] text-muted-foreground truncate">{w.location}</p>}
+                      {w.lengthMiles > 0 && <span className="text-[10px] text-muted-foreground">{w.lengthMiles} mi</span>}
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => logFromWishlist(w)} className="text-[10px] px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">Log it</button>
+                      <button onClick={() => removeWishlist(w.id)} className="text-[10px] px-2 py-1 rounded border hover:bg-destructive/10 hover:text-destructive transition-colors">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {wishlist.length === 0 && wishlistSearch.searchResults.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-30">🚲</span>
+                <p className="text-xs">Search for cycling routes above to build your wishlist</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* LOG TAB */}
+        {tab === "log" && (
+          <>
+            {/* Route search to pre-fill log */}
+            <div className="border rounded-xl overflow-hidden">
+              <button
+                onClick={() => { setShowLogSearch(s => !s); logSearch.setSearchResults([]); }}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/20 hover:bg-blue-100/60 transition-colors"
+              >
+                <span className="flex items-center gap-1.5"><Search size={11} /> Find a route to pre-fill</span>
+                {showLogSearch ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              {showLogSearch && (
+                <div className="p-2.5 space-y-2 border-t">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search near… (e.g. Manchester, UK)"
+                      value={logSearch.locationInput}
+                      onChange={e => logSearch.setLocationInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") logSearch.runSearch(); }}
+                      className="text-sm h-8 flex-1"
+                    />
+                    <Button size="sm" variant="outline" onClick={() => logSearch.runSearch()} disabled={logSearch.searching || !logSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                      {logSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                      {logSearch.searching ? "…" : "Search"}
+                    </Button>
+                  </div>
+                  {logSearch.searchError && <p className="text-xs text-destructive">{logSearch.searchError}</p>}
+                  {logSearch.searchResults.length > 0 && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      <p className="text-[10px] text-muted-foreground">{logSearch.searchResults.length} routes — click one to pre-fill</p>
+                      {logSearch.searchResults.map((route: any) => (
+                        <button
+                          key={route.id}
+                          onClick={() => logFromSearchResult(route)}
+                          className="w-full text-left flex items-center justify-between gap-2 p-2 rounded-lg border bg-card hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{route.name}{route.ref ? ` (${route.ref})` : ""}</p>
+                            {route.length > 0 && <span className="text-[10px] text-muted-foreground">{route.length} mi</span>}
+                          </div>
+                          <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Ride
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border rounded-xl p-3">
+                <p className="text-xs font-semibold">Log a Ride</p>
+                <Input placeholder="Route / ride name *" value={logName} onChange={e => setLogName(e.target.value)} className="text-sm h-8" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Date *</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Distance (miles)</label>
+                    <Input type="number" min={0} step={0.1} placeholder="e.g. 32.5" value={logDist} onChange={e => setLogDist(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Elevation gain (ft)</label>
+                    <Input type="number" min={0} placeholder="e.g. 1800" value={logElev} onChange={e => setLogElev(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Duration (mins)</label>
+                    <Input type="number" min={0} placeholder="e.g. 120" value={logDur} onChange={e => setLogDur(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Avg speed (mph)</label>
+                    <Input type="number" min={0} step={0.1} placeholder="e.g. 16.2" value={logSpeed} onChange={e => setLogSpeed(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Ride type</label>
+                    <Select value={logType} onValueChange={setLogType}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+                      <SelectContent>
+                        {RIDE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Rating (1–5)</label>
+                  <Select value={logRating} onValueChange={setLogRating}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Stars…" /></SelectTrigger>
+                    <SelectContent>
+                      {[5,4,3,2,1].map(n => <SelectItem key={n} value={String(n)}>{"★".repeat(n)}{"☆".repeat(5-n)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Textarea placeholder="Notes (optional)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm min-h-[50px]" />
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                  <Button size="sm" disabled={!logName.trim() || !logDate} onClick={saveLog} className="gap-1.5"><Check size={12} /> Save</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Ride log list */}
+            {rideLog.length > 0 ? (
+              <div className="space-y-2">
+                {[...rideLog].sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
+                  <div key={entry.id} className="p-3 rounded-xl border bg-card space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{entry.name}</p>
+                        <p className="text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}{entry.rideType ? ` · ${entry.rideType}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {entry.rating && <span className="text-xs text-amber-500">{"★".repeat(entry.rating)}</span>}
+                        <button onClick={() => deleteLog(entry.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      {entry.distanceMiles > 0 && <span>🚲 {entry.distanceMiles} mi</span>}
+                      {entry.elevationGainFt && <span>↑ {entry.elevationGainFt}ft</span>}
+                      {entry.durationMins && <span>⏱ {Math.floor(entry.durationMins / 60)}h {entry.durationMins % 60}m</span>}
+                      {entry.avgSpeedMph && <span>⚡ {entry.avgSpeedMph} mph</span>}
+                    </div>
+                    {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🚲</span>
+                <p className="text-xs">No rides logged yet — click "Log a Ride" to add your first</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HobbyDetailDialog({
   hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra,
 }: {
@@ -4039,6 +4699,17 @@ function HobbyDetailDialog({
         {hobby.name.toLowerCase().includes("hiking") && (
           <div className="mt-4 border-t pt-4">
             <HikingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Cycling section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("biking") || n.includes("mtb") || n.includes("gravel riding"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🚲</span>
+              <p className="text-sm font-semibold">Routes & Rides</p>
+            </div>
+            <CyclingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
 

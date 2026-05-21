@@ -3831,6 +3831,66 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  /** GET /api/cycling/search?query=...&lat=X&lon=Y&maxDistance=25&maxResults=30
+   *  Uses Waymarked Trails cycling API (cycling.waymarkedtrails.org) — no API key required.
+   *  Mirrors /api/hiking/search but targets the cycling subdomain.
+   */
+  app.get("/api/cycling/search", requireAuth, async (req, res) => {
+    try {
+      const { lat, lon, maxDistance = "25", maxResults = "30", locationName = "" } = req.query as Record<string, string>;
+      const limit = parseInt(maxResults, 10) || 30;
+      const query = (locationName as string).trim();
+
+      function mapRoute(t: any, loc: string) {
+        return {
+          id:          t.id,
+          name:        t.name || "Unnamed Route",
+          ref:         t.ref  || null,
+          location:    loc,
+          length:      t.mapped_length ? Math.round(t.mapped_length / 1609.34 * 10) / 10 : 0,
+          url:         `https://cycling.waymarkedtrails.org/#route?id=${t.id}`,
+          description: t.description || null,
+          network:     t.network     || null,
+        };
+      }
+
+      const UA = { "User-Agent": "MyLifos/1.0 (hobby-cycling-feature)" };
+      const fetches: Promise<any[]>[] = [];
+
+      if (query) {
+        fetches.push(
+          fetch(`https://cycling.waymarkedtrails.org/api/v1/list/search?query=${encodeURIComponent(query)}&limit=${limit}`, { headers: UA })
+            .then(r => r.ok ? r.json() : { results: [] })
+            .then((d: any) => (d.results ?? []).map((t: any) => mapRoute(t, query)))
+            .catch(() => [])
+        );
+      }
+
+      if (lat && lon) {
+        const latN = parseFloat(lat);
+        const lonN = parseFloat(lon);
+        const radiusMiles = parseFloat(maxDistance);
+        const latDelta = radiusMiles / 69.0;
+        const lonDelta = radiusMiles / (69.0 * Math.cos(latN * Math.PI / 180));
+        const bbox = `${lonN - lonDelta},${latN - latDelta},${lonN + lonDelta},${latN + latDelta}`;
+        fetches.push(
+          fetch(`https://cycling.waymarkedtrails.org/api/v1/list/by_area?bbox=${bbox}&limit=${limit}`, { headers: UA })
+            .then(r => r.ok ? r.json() : { results: [] })
+            .then((d: any) => (d.results ?? []).map((t: any) => mapRoute(t, query)))
+            .catch(() => [])
+        );
+      }
+
+      if (fetches.length === 0) return res.status(400).json({ error: "Provide locationName and/or lat+lon" });
+
+      const all = (await Promise.all(fetches)).flat();
+      const seen = new Set<number>();
+      const trails = all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true; }).slice(0, limit);
+
+      res.json({ trails, total: trails.length });
+    } catch (e) { handleError(res, e); }
+  });
+
   /** GET /api/birds/search?name=robin&page=1
    *  Proxies to Nuthatch API (nuthatch.lastelm.software) — requires NUTHATCH_API_KEY env var.
    *  Returns { birds: [{ id, name, sciName, status, image }], total }
