@@ -584,6 +584,12 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expiry TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_last_sync TEXT`);
 
+  // Strava integration tokens
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_access_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_refresh_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_token_expiry TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_athlete_id TEXT`);
+
   // Google Calendar event ID on events table
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS gcal_event_id TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS events_gcal_event_id_idx ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL`);
@@ -1488,6 +1494,10 @@ export interface IStorage {
   getUserById(id: number): Promise<User | undefined>;
   completeOnboarding(userId: number): Promise<void>;
   deleteAccount(userId: number): Promise<void>;
+  // Strava tokens
+  saveStravaTokens(userId: number, accessToken: string, refreshToken: string, expiry: string, athleteId: string): Promise<void>;
+  getStravaTokens(userId: number): Promise<{ accessToken: string; refreshToken: string; expiry: string; athleteId: string } | null>;
+  clearStravaTokens(userId: number): Promise<void>;
   // Google Calendar tokens
   saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string): Promise<void>;
   getGcalTokens(userId: number): Promise<{ accessToken: string; refreshToken: string | null; expiry: string } | null>;
@@ -2493,6 +2503,17 @@ export const storage: IStorage = {
   },
   async completeOnboarding(userId: number) {
     await db.update(users).set({ onboarded: true }).where(eq(users.id, userId));
+  },
+  async saveStravaTokens(userId: number, accessToken: string, refreshToken: string, expiry: string, athleteId: string) {
+    await db.update(users).set({ stravaAccessToken: accessToken, stravaRefreshToken: refreshToken, stravaTokenExpiry: expiry, stravaAthleteId: athleteId }).where(eq(users.id, userId));
+  },
+  async getStravaTokens(userId: number) {
+    const result = await db.select({ a: users.stravaAccessToken, r: users.stravaRefreshToken, e: users.stravaTokenExpiry, ai: users.stravaAthleteId }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!result[0]?.a) return null;
+    return { accessToken: result[0].a, refreshToken: result[0].r!, expiry: result[0].e!, athleteId: result[0].ai! };
+  },
+  async clearStravaTokens(userId: number) {
+    await db.update(users).set({ stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null, stravaAthleteId: null }).where(eq(users.id, userId));
   },
   async saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string) {
     await db.update(users).set({ gcalAccessToken: accessToken, gcalRefreshToken: refreshToken, gcalTokenExpiry: expiry }).where(eq(users.id, userId));

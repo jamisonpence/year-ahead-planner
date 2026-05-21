@@ -18,6 +18,11 @@ export const users = pgTable("users", {
   gcalRefreshToken: text("gcal_refresh_token"),
   gcalTokenExpiry: text("gcal_token_expiry"),
   gcalLastSync: text("gcal_last_sync"),
+  // Strava integration
+  stravaAccessToken: text("strava_access_token"),
+  stravaRefreshToken: text("strava_refresh_token"),
+  stravaTokenExpiry: text("strava_token_expiry"),
+  stravaAthleteId: text("strava_athlete_id"),
 });
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

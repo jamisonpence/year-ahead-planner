@@ -3487,6 +3487,135 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Strava OAuth ─────────────────────────────────────────────────────────────
+
+  function stravaCallbackUrl(req: Request): string {
+    if (process.env.STRAVA_CALLBACK_URL) return process.env.STRAVA_CALLBACK_URL;
+    const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+    return `${proto}://${req.get("host")}/api/strava/callback`;
+  }
+
+  async function getValidStravaToken(userId: number): Promise<string | null> {
+    const tokens = await storage.getStravaTokens(userId);
+    if (!tokens) return null;
+    // Refresh if expired (with 5-min buffer)
+    if (Number(tokens.expiry) < Date.now() / 1000 + 300) {
+      const r = await fetch("https://www.strava.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: process.env.STRAVA_CLIENT_ID,
+          client_secret: process.env.STRAVA_CLIENT_SECRET,
+          grant_type: "refresh_token",
+          refresh_token: tokens.refreshToken,
+        }),
+      });
+      if (!r.ok) { await storage.clearStravaTokens(userId); return null; }
+      const d = await r.json() as any;
+      await storage.saveStravaTokens(userId, d.access_token, d.refresh_token, String(d.expires_at), tokens.athleteId);
+      return d.access_token;
+    }
+    return tokens.accessToken;
+  }
+
+  // GET /api/strava/status
+  app.get("/api/strava/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const tokens = await storage.getStravaTokens(userId);
+      res.json({
+        connected: !!tokens,
+        athleteId: tokens?.athleteId ?? null,
+        configured: !!(process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET),
+        callbackUrl: stravaCallbackUrl(req),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/strava/connect — redirect to Strava OAuth
+  app.get("/api/strava/connect", requireAuth, (req, res) => {
+    const clientId = process.env.STRAVA_CLIENT_ID;
+    if (!clientId) return res.status(500).json({ error: "STRAVA_CLIENT_ID not configured" });
+    (req.session as any).stravaUserId = (req.user as User).id;
+    const url = new URL("https://www.strava.com/oauth/authorize");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", stravaCallbackUrl(req));
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("approval_prompt", "auto");
+    url.searchParams.set("scope", "activity:read_all");
+    res.redirect(url.toString());
+  });
+
+  // GET /api/strava/callback — exchange code for tokens
+  app.get("/api/strava/callback", async (req, res) => {
+    try {
+      const { code, error } = req.query as Record<string, string>;
+      const userId = (req.session as any).stravaUserId;
+      if (error || !code || !userId) return res.redirect("/?strava=error");
+      const r = await fetch("https://www.strava.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: process.env.STRAVA_CLIENT_ID,
+          client_secret: process.env.STRAVA_CLIENT_SECRET,
+          code,
+          grant_type: "authorization_code",
+        }),
+      });
+      if (!r.ok) return res.redirect("/?strava=error");
+      const d = await r.json() as any;
+      await storage.saveStravaTokens(
+        userId,
+        d.access_token,
+        d.refresh_token,
+        String(d.expires_at),
+        String(d.athlete?.id ?? ""),
+      );
+      delete (req.session as any).stravaUserId;
+      res.redirect("/?strava=connected");
+    } catch (e) { console.error("[Strava callback]", e); res.redirect("/?strava=error"); }
+  });
+
+  // GET /api/strava/activities — fetch recent runs
+  app.get("/api/strava/activities", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const accessToken = await getValidStravaToken(userId);
+      if (!accessToken) return res.status(401).json({ error: "Not connected to Strava" });
+      const perPage = Math.min(Number(req.query.per_page ?? 20), 50);
+      const r = await fetch(
+        `https://www.strava.com/api/v3/athlete/activities?per_page=${perPage}&page=1`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      if (!r.ok) {
+        if (r.status === 401) await storage.clearStravaTokens(userId);
+        return res.status(r.status).json({ error: "Strava API error" });
+      }
+      const activities = await r.json() as any[];
+      const runs = activities
+        .filter((a: any) => a.type === "Run" || a.sport_type === "Run" || a.sport_type === "TrailRun")
+        .map((a: any) => ({
+          id: String(a.id),
+          name: a.name,
+          date: a.start_date_local?.slice(0, 10) ?? "",
+          distanceKm: Math.round((a.distance / 1000) * 100) / 100,
+          durationSec: a.moving_time,
+          elevationGain: Math.round(a.total_elevation_gain ?? 0),
+          isTrail: a.sport_type === "TrailRun",
+          stravaUrl: `https://www.strava.com/activities/${a.id}`,
+        }));
+      res.json({ runs });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/strava/disconnect
+  app.delete("/api/strava/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.clearStravaTokens((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── OpenBeta climbing route search ───────────────────────────────────────────
   app.get("/api/climbing/search", requireAuth, async (req, res) => {
     try {

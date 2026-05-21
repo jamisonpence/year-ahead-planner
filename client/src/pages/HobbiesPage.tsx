@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Hobby, InsertHobby } from "@shared/schema";
@@ -1440,6 +1440,113 @@ function generateClimbingSteps(
   }
 }
 
+// ── Running types ────────────────────────────────────────────────────────────
+
+interface RunLogEntry {
+  id: string;
+  stravaId?: string;
+  name: string;
+  date: string;
+  distanceKm: number;
+  durationSec?: number;
+  elevationGain?: number;
+  isTrail?: boolean;
+  stravaUrl?: string;
+  notes?: string;
+  addedAt: string;
+}
+
+function parseRunLog(extraJson: string): RunLogEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.runLog) ? o.runLog : []; } catch { return []; }
+}
+function setRunningInExtra(extraJson: string, log: RunLogEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, runLog: log }); }
+  catch { return JSON.stringify({ runLog: log }); }
+}
+
+type RunningGoalType = "consistency" | "distance" | "time" | "enjoyment";
+
+const RUNNING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "rn-consistency", emoji: "🗓️", label: "Consistency / habit",     description: "Run at least 3 times per week for the whole year — build the habit before speed",  durationWeeks: 52, defaultSteps: [] },
+  { id: "rn-distance",    emoji: "📏", label: "Distance / milestone",    description: "Hit a milestone distance — 5K, 10K, half marathon, or full marathon this year",     durationWeeks: 26, defaultSteps: [] },
+  { id: "rn-time",        emoji: "⏱️", label: "Time / performance",      description: "Hit a target time — e.g. sub-25 5K, sub-2:00 half, or sub-4:00 marathon",           durationWeeks: 16, defaultSteps: [] },
+  { id: "rn-enjoyment",   emoji: "😊", label: "Enjoyment / experience",  description: "Try trail running, parkruns, or fun-runs — run for joy, not just numbers",          durationWeeks: 52, defaultSteps: [] },
+];
+
+const RUNNING_GOAL_TYPE_MAP: Record<string, RunningGoalType> = {
+  "rn-consistency": "consistency", "rn-distance": "distance", "rn-time": "time", "rn-enjoyment": "enjoyment",
+};
+
+function generateRunningSteps(
+  goalType: RunningGoalType,
+  opts: {
+    runsPerWeek?: string;
+    distanceTarget?: string;
+    raceType?: string;
+    targetTime?: string;
+    currentTime?: string;
+    funRunCount?: string;
+    trailRuns?: string;
+  }
+): PlanStep[] {
+  const g = (text: string): PlanStep => ({ id: genId(), text, done: false });
+  switch (goalType) {
+    case "consistency": {
+      const freq = opts.runsPerWeek?.trim() || "3";
+      return [
+        g(`Set a non-negotiable schedule: ${freq} run days per week — block them in your calendar`),
+        g(`Week 1–4: short easy runs (20–30 min), focus on showing up, not pace`),
+        g(`Add a slightly longer run on weekends — comfortable conversational pace`),
+        g(`Track your runs for 30 days — celebrate the streak, not the speed`),
+        g(`If you miss a day, run the next — consistency over perfection`),
+        g(`Month 3: you're a runner — review your log and see how far you've come`),
+      ];
+    }
+    case "distance": {
+      const race = opts.raceType?.trim() || "5K";
+      const isMarathon = race.toLowerCase().includes("marathon") && !race.toLowerCase().includes("half");
+      const isHalf = race.toLowerCase().includes("half");
+      const weeks = isMarathon ? 18 : isHalf ? 12 : 8;
+      return [
+        g(`Choose a target ${race} race — register early for motivation`),
+        g(`Build your base: ${weeks >= 16 ? "3–4" : "3"} easy runs per week for the first month`),
+        g(`Add one longer run each week, increasing distance by no more than 10% per week`),
+        g(`Midpoint check: run a time trial at half the target distance — feel your progress`),
+        g(`Practice race-day nutrition and gear on your long run`),
+        g(`Taper week: reduce mileage, stay relaxed, trust the training`),
+        g(`Race day: run your ${race} — enjoy every step of it`),
+      ];
+    }
+    case "time": {
+      const race = opts.raceType?.trim() || "5K";
+      const target = opts.targetTime?.trim() || "goal time";
+      const current = opts.currentTime?.trim() || "";
+      return [
+        g(`Establish your current ${race} baseline — run a time trial at full effort`),
+        g(`${current ? `Starting from ${current}, plan a path to ${target}` : `Set your target: ${target} — break it into monthly pace milestones`}`),
+        g(`Add 1 tempo run per week (comfortably hard pace — you can talk in short sentences)`),
+        g(`Add 1 interval session per week — e.g. 6 × 400m at target pace with 90s rest`),
+        g(`Long easy run on weekends to build aerobic base`),
+        g(`Week before race: reduce intensity, stay loose, trust your preparation`),
+        g(`Race: execute your pace strategy — hit ${target}`),
+      ];
+    }
+    case "enjoyment": {
+      const funRuns = opts.funRunCount?.trim() || "6";
+      const trailRuns = opts.trailRuns?.trim() || "3";
+      return [
+        g(`Sign up for your first parkrun (free, friendly, 5K every Saturday)`),
+        g(`Try a trail run in nature — even a short one changes everything`),
+        g(`Join a local running club for one session — community makes it fun`),
+        g(`Sign up for a themed fun run or colour run — something with a smile factor`),
+        g(`Log ${trailRuns} trail runs this year — explore somewhere new each time`),
+        g(`Complete ${funRuns} fun-run events or parkruns — make it social`),
+        g(`Reflect: what kind of running do you love? Lean into that for next year`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1944,6 +2051,17 @@ function PlanWizard({
   const [rcLeadRoutes,     setRcLeadRoutes]     = useState("10");
   const climbWizardSearch = useOpenBetaSearch();
 
+  // Running wizard state
+  const [runningMode,     setRunningMode]     = useState(false);
+  const [runningGoalType, setRunningGoalType] = useState<RunningGoalType | "">("");
+  const [rnRunsPerWeek,   setRnRunsPerWeek]   = useState("3");
+  const [rnDistanceTarget,setRnDistanceTarget]= useState("");
+  const [rnRaceType,      setRnRaceType]      = useState("5K");
+  const [rnTargetTime,    setRnTargetTime]    = useState("");
+  const [rnCurrentTime,   setRnCurrentTime]   = useState("");
+  const [rnFunRunCount,   setRnFunRunCount]   = useState("6");
+  const [rnTrailRuns,     setRnTrailRuns]     = useState("3");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1955,6 +2073,7 @@ function PlanWizard({
   const isFishingHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })();
   const isGardeningHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })();
   const isClimbingHobby  = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("climb") || n.includes("climbing") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })();
+  const isRunningHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n === "running" || n.includes("running") || n.includes("marathon") || n.includes("5k") || n.includes("10k") || n.includes("trail run"); })();
   const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
@@ -1963,6 +2082,7 @@ function PlanWizard({
                   : isFishingHobby   ? FISHING_PLAN_TEMPLATES
                   : isGardeningHobby  ? GARDENING_PLAN_TEMPLATES
                   : isClimbingHobby  ? CLIMBING_PLAN_TEMPLATES
+                  : isRunningHobby   ? RUNNING_PLAN_TEMPLATES
                   : isChessHobby     ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
@@ -2016,6 +2136,8 @@ function PlanWizard({
     setGdMinutes("15"); setGdDays("3");
     setClimbingMode(false); setClimbingGoalType(""); setRcTargetGrade(""); setRcClimbStyle("Sport");
     setRcWeeklyFreq("2"); setRcOutdoorFreq("monthly"); setRcPullUpTarget("10"); setRcHangboard(true); setRcLeadRoutes("10");
+    setRunningMode(false); setRunningGoalType(""); setRnRunsPerWeek("3"); setRnDistanceTarget("");
+    setRnRaceType("5K"); setRnTargetTime(""); setRnCurrentTime(""); setRnFunRunCount("6"); setRnTrailRuns("3");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -2051,6 +2173,8 @@ function PlanWizard({
     if (gardeningType) { setGardeningMode(true); setGardeningGoalType(gardeningType); return; }
     const climbingType = CLIMBING_GOAL_TYPE_MAP[t.id];
     if (climbingType) { setClimbingMode(true); setClimbingGoalType(climbingType); return; }
+    const runningType = RUNNING_GOAL_TYPE_MAP[t.id];
+    if (runningType) { setRunningMode(true); setRunningGoalType(runningType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -2209,6 +2333,37 @@ function PlanWizard({
     setSteps(generatedSteps); setClimbingMode(false); setStep(2);
   }
 
+  function applyRunningSettings() {
+    if (!runningGoalType) return;
+    const generatedSteps = generateRunningSteps(runningGoalType, {
+      runsPerWeek: rnRunsPerWeek, distanceTarget: rnDistanceTarget,
+      raceType: rnRaceType, targetTime: rnTargetTime, currentTime: rnCurrentTime,
+      funRunCount: rnFunRunCount, trailRuns: rnTrailRuns,
+    });
+    let title = "", desc = "", weeks = 26;
+    switch (runningGoalType) {
+      case "consistency":
+        title = `Run ${rnRunsPerWeek}×/Week All Year`;
+        desc = `Build a lasting running habit — ${rnRunsPerWeek} runs per week, every week.`;
+        weeks = 52; break;
+      case "distance":
+        title = rnRaceType ? `Complete a ${rnRaceType}` : "Hit Your Distance Milestone";
+        desc = `Train consistently to complete ${rnRaceType || "your target distance"}.`;
+        weeks = rnRaceType.toLowerCase().includes("marathon") && !rnRaceType.toLowerCase().includes("half") ? 18 : rnRaceType.toLowerCase().includes("half") ? 12 : 8;
+        break;
+      case "time":
+        title = rnTargetTime ? `${rnRaceType} in ${rnTargetTime}` : `${rnRaceType} Time Goal`;
+        desc = `${rnCurrentTime ? `Improve from ${rnCurrentTime} to ${rnTargetTime}` : `Hit ${rnTargetTime || "your target time"}`} in the ${rnRaceType}.`;
+        weeks = 16; break;
+      case "enjoyment":
+        title = `${rnFunRunCount} Fun Runs + ${rnTrailRuns} Trail Runs`;
+        desc = `Run for joy — explore trails, join parkruns, and make running social.`;
+        weeks = 52; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setRunningMode(false); setStep(2);
+  }
+
   function applyEloSettings() {
     if (!eloDuration) return;
     const cur = Number(currentElo);
@@ -2336,7 +2491,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode || climbingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -2347,6 +2502,7 @@ function PlanWizard({
                 else if (fishingMode) { setFishingMode(false); setFishingGoalType(""); setSelectedTemplate(null); }
                 else if (gardeningMode) { setGardeningMode(false); setGardeningGoalType(""); setSelectedTemplate(null); }
                 else if (climbingMode) { setClimbingMode(false); setClimbingGoalType(""); setSelectedTemplate(null); }
+                else if (runningMode) { setRunningMode(false); setRunningGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -2358,7 +2514,7 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
@@ -2368,13 +2524,14 @@ function PlanWizard({
                   : fishingMode ? `Fishing: ${FISHING_PLAN_TEMPLATES.find(t => FISHING_GOAL_TYPE_MAP[t.id] === fishingGoalType)?.label ?? "Goal"}`
                   : gardeningMode ? `Gardening: ${GARDENING_PLAN_TEMPLATES.find(t => GARDENING_GOAL_TYPE_MAP[t.id] === gardeningGoalType)?.label ?? "Goal"}`
                   : climbingMode ? `Climbing: ${CLIMBING_PLAN_TEMPLATES.find(t => CLIMBING_GOAL_TYPE_MAP[t.id] === climbingGoalType)?.label ?? "Goal"}`
+                  : runningMode ? `Running: ${RUNNING_PLAN_TEMPLATES.find(t => RUNNING_GOAL_TYPE_MAP[t.id] === runningGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
@@ -2384,6 +2541,7 @@ function PlanWizard({
                   : fishingMode ? "Configure your fishing goal"
                   : gardeningMode ? "Configure your gardening goal"
                   : climbingMode ? "Configure your climbing goal and optionally search for routes"
+                  : runningMode ? "Configure your running goal"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -2392,8 +2550,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -3341,6 +3499,132 @@ function PlanWizard({
                 )}
 
                 <Button onClick={applyClimbingSettings} className="w-full gap-2">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── RUNNING GOAL WIZARD ── */}
+          {runningMode && (() => {
+            const tplMeta = RUNNING_PLAN_TEMPLATES.find(t => RUNNING_GOAL_TYPE_MAP[t.id] === runningGoalType);
+            const meta: Record<RunningGoalType, { emoji: string; example: string }> = {
+              consistency: { emoji: "🗓️", example: "e.g. Run 3×/week every week this year" },
+              distance:    { emoji: "📏", example: "e.g. Complete a half marathon in October" },
+              time:        { emoji: "⏱️", example: "e.g. Sub-25 5K, sub-2:00 half marathon" },
+              enjoyment:   { emoji: "😊", example: "e.g. 6 parkruns + 3 trail runs this year" },
+            };
+            const m = runningGoalType ? meta[runningGoalType] : null;
+            return (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-sky-50/60 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800">
+                  <span className="text-2xl">{m?.emoji ?? "🏃"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* consistency: runs per week */}
+                {runningGoalType === "consistency" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Runs per week</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["2", "3", "4", "5"].map(n => (
+                          <button key={n} onClick={() => setRnRunsPerWeek(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rnRunsPerWeek === n ? "bg-sky-600 text-white border-sky-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n}×/week
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">That's {Math.round(Number(rnRunsPerWeek) * 52)} runs over the year. Consistency over intensity.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* distance: race type + distance target */}
+                {runningGoalType === "distance" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Race type / target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["5K", "10K", "Half Marathon", "Marathon"].map(r => (
+                          <button key={r} onClick={() => setRnRaceType(r)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${rnRaceType === r ? "bg-sky-600 text-white border-sky-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Specific race or event name (optional)</label>
+                      <Input placeholder="e.g. Chicago Marathon, local parkrun" value={rnDistanceTarget}
+                        onChange={e => setRnDistanceTarget(e.target.value)} className="text-sm" />
+                    </div>
+                  </div>
+                )}
+
+                {/* time: race type + target time + current time */}
+                {runningGoalType === "time" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Race distance</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["5K", "10K", "Half Marathon", "Marathon"].map(r => (
+                          <button key={r} onClick={() => setRnRaceType(r)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${rnRaceType === r ? "bg-sky-600 text-white border-sky-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Target time *</label>
+                        <Input placeholder="e.g. 25:00" value={rnTargetTime}
+                          onChange={e => setRnTargetTime(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Current best (optional)</label>
+                        <Input placeholder="e.g. 28:30" value={rnCurrentTime}
+                          onChange={e => setRnCurrentTime(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* enjoyment: fun run count + trail run count */}
+                {runningGoalType === "enjoyment" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Fun-run / parkrun target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["4", "6", "8", "12"].map(n => (
+                          <button key={n} onClick={() => setRnFunRunCount(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rnFunRunCount === n ? "bg-sky-600 text-white border-sky-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} events
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Trail runs target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["1", "3", "6", "12"].map(n => (
+                          <button key={n} onClick={() => setRnTrailRuns(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rnTrailRuns === n ? "bg-sky-600 text-white border-sky-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} trail runs
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Trail running is the gateway drug — beautiful views, soft ground, and no pace pressure.</p>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applyRunningSettings} className="w-full gap-2">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -6380,6 +6664,292 @@ function GardeningSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── RunningSection ────────────────────────────────────────────────────────────
+
+function RunningSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+
+  // Strava state
+  const [tab, setTab] = useState<"log" | "strava">("log");
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [stravaActivities, setStravaActivities] = useState<any[]>([]);
+  const [stravaLoading, setStravaLoading] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState<boolean | null>(null);
+  const [stravaAthlete, setStravaAthlete] = useState<any>(null);
+
+  // Manual log form state
+  const [logName,     setLogName]     = useState("");
+  const [logDate,     setLogDate]     = useState(new Date().toISOString().slice(0, 10));
+  const [logDistKm,   setLogDistKm]   = useState("");
+  const [logDurMin,   setLogDurMin]   = useState("");
+  const [logElev,     setLogElev]     = useState("");
+  const [logIsTrail,  setLogIsTrail]  = useState(false);
+  const [logNotes,    setLogNotes]    = useState("");
+
+  const runLog = parseRunLog(hobby.extraJson ?? "{}");
+
+  function saveLog(newLog: RunLogEntry[]) {
+    onUpdateExtra(setRunningInExtra(hobby.extraJson ?? "{}", newLog));
+  }
+
+  // Check Strava connection on mount
+  useEffect(() => {
+    apiRequest("GET", "/api/strava/status")
+      .then(r => r.json())
+      .then(d => { setStravaConnected(d.connected); setStravaAthlete(d.athlete ?? null); })
+      .catch(() => setStravaConnected(false));
+  }, []);
+
+  function loadStravaRuns() {
+    setStravaLoading(true);
+    apiRequest("GET", "/api/strava/activities?per_page=20")
+      .then(r => r.json())
+      .then(d => { setStravaActivities(d.runs ?? []); setStravaLoading(false); })
+      .catch(() => { setStravaLoading(false); toast({ title: "Could not load Strava activities", variant: "destructive" }); });
+  }
+
+  function importStravaRun(run: any) {
+    if (runLog.some(r => r.stravaId === String(run.id))) {
+      toast({ title: "Already imported" }); return;
+    }
+    const entry: RunLogEntry = {
+      id: genId(), stravaId: String(run.id), name: run.name,
+      date: run.date, distanceKm: run.distanceKm,
+      durationSec: run.durationSec, elevationGain: run.elevationGain,
+      isTrail: run.isTrail, stravaUrl: run.stravaUrl,
+      addedAt: new Date().toISOString(),
+    };
+    saveLog([...runLog, entry]);
+    toast({ title: `"${run.name}" imported!` });
+  }
+
+  function addManualRun() {
+    if (!logName.trim() || !logDate || !logDistKm) return;
+    const entry: RunLogEntry = {
+      id: genId(), name: logName.trim(), date: logDate,
+      distanceKm: parseFloat(logDistKm) || 0,
+      durationSec: logDurMin ? Math.round(parseFloat(logDurMin) * 60) : undefined,
+      elevationGain: logElev ? parseFloat(logElev) : undefined,
+      isTrail: logIsTrail, notes: logNotes.trim() || undefined,
+      addedAt: new Date().toISOString(),
+    };
+    saveLog([...runLog, entry]);
+    setShowLogForm(false);
+    setLogName(""); setLogDate(new Date().toISOString().slice(0, 10));
+    setLogDistKm(""); setLogDurMin(""); setLogElev(""); setLogIsTrail(false); setLogNotes("");
+    toast({ title: "Run logged!" });
+  }
+
+  function deleteRun(id: string) { saveLog(runLog.filter(r => r.id !== id)); }
+
+  // Stats
+  const totalKm = runLog.reduce((sum, r) => sum + (r.distanceKm ?? 0), 0);
+  const totalRuns = runLog.length;
+  const trailRuns = runLog.filter(r => r.isTrail).length;
+
+  function formatDuration(sec?: number) {
+    if (!sec) return "";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-sky-50/60 dark:bg-sky-950/20 border-b border-sky-200 dark:border-sky-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🏃</span>
+          <span className="text-sm font-semibold text-sky-800 dark:text-sky-300">Run Log</span>
+          <span className="text-xs text-muted-foreground">{totalRuns} runs · {totalKm.toFixed(1)} km{trailRuns > 0 ? ` · ${trailRuns} trail` : ""}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("log")}    className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log"    ? "bg-sky-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>My Runs</button>
+          <button onClick={() => { setTab("strava"); if (stravaConnected && stravaActivities.length === 0) loadStravaRuns(); }}
+            className={`text-xs px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${tab === "strava" ? "bg-sky-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>
+            <Zap size={10} /> Strava
+          </button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+
+        {/* ── MY RUNS TAB ── */}
+        {tab === "log" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Run
+              </Button>
+            ) : (
+              <div className="space-y-2 p-3 rounded-xl border bg-sky-50/40 dark:bg-sky-950/10">
+                <p className="text-xs font-semibold text-sky-800 dark:text-sky-300">Log a Run</p>
+                <Input placeholder="Run name" value={logName} onChange={e => setLogName(e.target.value)} className="text-sm" />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Date</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Distance (km) *</label>
+                    <Input type="number" step="0.01" placeholder="e.g. 5.2" value={logDistKm} onChange={e => setLogDistKm(e.target.value)} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Duration (min)</label>
+                    <Input type="number" step="0.5" placeholder="e.g. 28" value={logDurMin} onChange={e => setLogDurMin(e.target.value)} className="text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Elevation gain (m)</label>
+                    <Input type="number" placeholder="e.g. 120" value={logElev} onChange={e => setLogElev(e.target.value)} className="text-sm" />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer self-end pb-1">
+                    <input type="checkbox" checked={logIsTrail} onChange={e => setLogIsTrail(e.target.checked)} className="rounded" />
+                    Trail run
+                  </label>
+                </div>
+                <Textarea placeholder="Notes (optional)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm resize-none" rows={2} />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={addManualRun} disabled={!logName.trim() || !logDistKm} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white gap-1">
+                    <Check size={12} /> Save Run
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Run log list */}
+            {runLog.length > 0 ? (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {[...runLog].sort((a, b) => b.date.localeCompare(a.date)).map(run => (
+                  <div key={run.id} className="flex items-start gap-2.5 p-2.5 rounded-lg border bg-card">
+                    <div className="text-lg leading-none mt-0.5">{run.isTrail ? "🌲" : "🏃"}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{run.name}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">{run.date}</span>
+                        <span className="text-[10px] font-semibold text-sky-700 dark:text-sky-400">{run.distanceKm.toFixed(2)} km</span>
+                        {run.durationSec && <span className="text-[10px] text-muted-foreground">{formatDuration(run.durationSec)}</span>}
+                        {run.elevationGain != null && run.elevationGain > 0 && <span className="text-[10px] text-muted-foreground">↑{run.elevationGain}m</span>}
+                        {run.stravaUrl && <a href={run.stravaUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-orange-600 hover:underline flex items-center gap-0.5"><Zap size={9} />Strava</a>}
+                      </div>
+                      {run.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{run.notes}</p>}
+                    </div>
+                    <button onClick={() => deleteRun(run.id)} className="text-muted-foreground hover:text-destructive transition-colors p-0.5 mt-0.5">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🏃</span>
+                <p className="text-xs">No runs logged yet — log your first run or connect Strava</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── STRAVA TAB ── */}
+        {tab === "strava" && (
+          <div className="space-y-3">
+            {stravaConnected === null && (
+              <p className="text-xs text-muted-foreground text-center py-4">Checking Strava connection…</p>
+            )}
+
+            {stravaConnected === false && (
+              <div className="text-center space-y-3 py-4">
+                <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-950/30 flex items-center justify-center mx-auto">
+                  <Zap size={22} className="text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Connect Strava</p>
+                  <p className="text-xs text-muted-foreground mt-1">Import your runs automatically from Strava</p>
+                </div>
+                <Button size="sm" onClick={() => window.location.href = "/api/strava/connect"}
+                  className="gap-2 bg-orange-600 hover:bg-orange-700 text-white">
+                  <Power size={13} /> Connect Strava
+                </Button>
+              </div>
+            )}
+
+            {stravaConnected === true && (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-950/30 flex items-center justify-center">
+                      <Zap size={13} className="text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold">{stravaAthlete?.name ?? "Strava"}</p>
+                      <p className="text-[10px] text-emerald-600">Connected</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" onClick={loadStravaRuns} disabled={stravaLoading} className="gap-1 h-7 text-xs">
+                      {stravaLoading ? <RefreshCw size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                      Refresh
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => {
+                      apiRequest("DELETE", "/api/strava/disconnect").then(() => {
+                        setStravaConnected(false); setStravaAthlete(null); setStravaActivities([]);
+                        toast({ title: "Strava disconnected" });
+                      });
+                    }} className="h-7 text-xs text-muted-foreground gap-1">
+                      <PowerOff size={11} />
+                    </Button>
+                  </div>
+                </div>
+
+                {stravaActivities.length === 0 && !stravaLoading && (
+                  <Button size="sm" variant="outline" onClick={loadStravaRuns} className="w-full gap-1.5">
+                    <RefreshCw size={12} /> Load Recent Runs
+                  </Button>
+                )}
+
+                {stravaActivities.length > 0 && (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    <p className="text-[10px] text-muted-foreground">Click Import to add a run to your log</p>
+                    {stravaActivities.map((run: any) => {
+                      const alreadyImported = runLog.some(r => r.stravaId === String(run.id));
+                      return (
+                        <div key={run.id} className="flex items-start gap-2.5 p-2.5 rounded-lg border bg-card">
+                          <div className="text-lg leading-none mt-0.5">{run.isTrail ? "🌲" : "🏃"}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{run.name}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                              <span className="text-[10px] text-muted-foreground">{run.date}</span>
+                              <span className="text-[10px] font-semibold text-sky-700 dark:text-sky-400">{Number(run.distanceKm).toFixed(2)} km</span>
+                              {run.durationSec && <span className="text-[10px] text-muted-foreground">{formatDuration(run.durationSec)}</span>}
+                              {run.elevationGain > 0 && <span className="text-[10px] text-muted-foreground">↑{run.elevationGain}m</span>}
+                            </div>
+                          </div>
+                          {alreadyImported ? (
+                            <span className="text-[10px] text-emerald-600 px-1.5 py-0.5 shrink-0 flex items-center gap-0.5"><Check size={9} /> Logged</span>
+                          ) : (
+                            <button onClick={() => importStravaRun(run)}
+                              className="text-[10px] px-2 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 transition-colors shrink-0">Import</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HobbyDetailDialog({
   hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra,
 }: {
@@ -6620,6 +7190,13 @@ function HobbyDetailDialog({
         {(() => { const n = hobby.name.toLowerCase(); return n.includes("climb") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })() && (
           <div className="mt-4 border-t pt-4">
             <ClimbingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Running section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n === "running" || n.includes("running") || n.includes("marathon") || n.includes("trail run"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <RunningSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
       </DialogContent>
