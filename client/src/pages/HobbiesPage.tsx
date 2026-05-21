@@ -702,6 +702,100 @@ function generateHikingSteps(
   }
 }
 
+// ── Language Learning plan helpers ────────────────────────────────────────────
+
+const WORLD_LANGUAGES = [
+  "Arabic", "Bengali", "Cantonese", "Czech", "Danish", "Dutch", "Finnish",
+  "French", "German", "Greek", "Hebrew", "Hindi", "Hungarian", "Indonesian",
+  "Italian", "Japanese", "Korean", "Malay", "Mandarin Chinese", "Norwegian",
+  "Persian (Farsi)", "Polish", "Portuguese", "Romanian", "Russian", "Spanish",
+  "Swahili", "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese",
+] as const;
+
+const LANGUAGE_EXAM_MAP: Record<string, string> = {
+  "Spanish": "DELE", "French": "DELF/DALF", "German": "Goethe-Zertifikat / TestDaF",
+  "Italian": "CILS / CELI", "Portuguese": "CELPE-Bras / CAPLE", "Japanese": "JLPT",
+  "Mandarin Chinese": "HSK", "Korean": "TOPIK", "Arabic": "CEFR-aligned test",
+  "Dutch": "NT2 / CNaVT", "Russian": "TORFL", "Greek": "KPG",
+};
+
+type LanguageGoalType = "communication" | "exam" | "routine" | "reallife";
+
+const LANGUAGE_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "ll-comm",    emoji: "💬", label: "Communication skills",  description: "Hold a 5–10 min conversation in the language without switching back",       durationWeeks: 16, defaultSteps: [] },
+  { id: "ll-exam",    emoji: "📋", label: "Exam / proficiency",    description: "Reach B2 level and pass an official exam within 12 months",                  durationWeeks: 52, defaultSteps: [] },
+  { id: "ll-routine", emoji: "📅", label: "Routine & habits",      description: "Study 30 min/day, 5 days/week, and learn 50 new words each week",            durationWeeks: 52, defaultSteps: [] },
+  { id: "ll-real",    emoji: "✈️", label: "Real-life usage",       description: "Handle all basic interactions in a country where the language is spoken",     durationWeeks: 26, defaultSteps: [] },
+];
+
+const LANGUAGE_GOAL_TYPE_MAP: Record<string, LanguageGoalType> = {
+  "ll-comm": "communication", "ll-exam": "exam", "ll-routine": "routine", "ll-real": "reallife",
+};
+
+function generateLanguageSteps(
+  goalType: LanguageGoalType,
+  opts: {
+    language: string;
+    convMinutes?: string;
+    examName?: string; examLevel?: string; examMonths?: string;
+    studyMins?: string; studyDays?: string; wordsPerWeek?: string;
+    travelCountry?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const lang = opts.language || "the language";
+  switch (goalType) {
+    case "communication": {
+      const mins = opts.convMinutes ?? "10";
+      return [
+        g(`Set up ${lang} practice: find a language exchange partner or tutor (iTalki, Tandem, or HelloTalk)`),
+        g("Month 1: Build core vocabulary — 500–800 most-common words + greetings and introductions"),
+        g("Month 2: First short conversations — 2–3 minutes on familiar topics (name, work, hobbies)"),
+        g(`Month 3: Extend conversations to ${Math.round(Number(mins) / 2)} minutes — talk about daily routines and preferences`),
+        g(`Month 4: Full ${mins}-minute conversation about daily life without switching to English`),
+        g("Celebrate: record yourself having a real conversation and watch it back"),
+      ];
+    }
+    case "exam": {
+      const exam = opts.examName ?? (LANGUAGE_EXAM_MAP[lang] ?? "official language exam");
+      const level = opts.examLevel ?? "B2";
+      const months = Number(opts.examMonths ?? "12");
+      return [
+        g(`Research the ${exam} ${level} exam format, syllabus, and test dates — register your target date`),
+        g(`Month 1–2: Assess current level with a practice test · focus on vocabulary and grammar gaps`),
+        g(`Month 3–${Math.round(months * 0.5)}: Structured study — grammar workbook, listening practice, reading texts`),
+        g(`Month ${Math.round(months * 0.5)}–${Math.round(months * 0.75)}: Speaking practice with a tutor 2×/week · writing timed essays`),
+        g(`Month ${Math.round(months * 0.75)}–${months - 1}: Full mock exams under timed conditions — identify remaining weaknesses`),
+        g(`Month ${months}: Final review and exam day — pass ${exam} ${level}!`),
+      ];
+    }
+    case "routine": {
+      const mins = opts.studyMins ?? "30";
+      const days = opts.studyDays ?? "5";
+      const words = opts.wordsPerWeek ?? "50";
+      return [
+        g(`Choose your tools: Anki or Duolingo for vocabulary, a grammar course, and a podcast (e.g. Pimsleur, LanguageTransfer)`),
+        g(`Week 1–2: Build the habit — ${mins} min/day for ${days} days/week · Learn first ${words} words`),
+        g(`Month 1: ${words} words + core grammar basics · track your streak`),
+        g(`Month 2–3: ${words} new words/week · add one conversation session per week`),
+        g(`Month 6: Review vocab retention — 90%+ recall on Anki deck milestones`),
+        g(`Year end: Celebrate consistency — log total study hours and test your level`),
+      ];
+    }
+    case "reallife": {
+      const country = opts.travelCountry?.trim() || `a ${lang}-speaking country`;
+      return [
+        g(`Plan the trip to ${country} — book flights, accommodation, and set a travel date`),
+        g("Learn survival phrases: greetings, numbers, ordering food, asking for directions, transport vocab"),
+        g("Practice real scenarios: role-play at a restaurant, checking into a hotel, buying tickets"),
+        g("Month before trip: intensive speaking practice — 30 min/day with a tutor"),
+        g(`In ${country}: handle check-in, order all meals, ask locals for directions — in ${lang} only`),
+        g(`Debrief: which interactions were easy? Which were hard? Set next language goal`),
+      ];
+    }
+  }
+}
+
 // ── Bird watching plan helpers ────────────────────────────────────────────────
 
 type BirdGoalType = "species" | "local" | "skills" | "lifestyle";
@@ -1217,6 +1311,19 @@ function PlanWizard({
   const [planBirds, setPlanBirds] = useState<any[]>([]);
   const birdWizardSearch = useBirdSearch();
 
+  // Language wizard state
+  const [langMode, setLangMode] = useState(false);
+  const [langGoalType, setLangGoalType] = useState<LanguageGoalType | "">("");
+  const [llLanguage,    setLlLanguage]    = useState("");
+  const [llConvMins,    setLlConvMins]    = useState("10");
+  const [llExamName,    setLlExamName]    = useState("");
+  const [llExamLevel,   setLlExamLevel]   = useState("B2");
+  const [llExamMonths,  setLlExamMonths]  = useState("12");
+  const [llStudyMins,   setLlStudyMins]   = useState("30");
+  const [llStudyDays,   setLlStudyDays]   = useState("5");
+  const [llWordsWeek,   setLlWordsWeek]   = useState("50");
+  const [llTravelCountry, setLlTravelCountry] = useState("");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1224,10 +1331,12 @@ function PlanWizard({
   const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
   const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const isBirdHobby   = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
+  const isLangHobby   = selectedHobby?.name?.toLowerCase().includes("language") ?? false;
   const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
                   : isChessHobby  ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby  ? POKER_PLAN_TEMPLATES
                   : isBirdHobby   ? BIRD_PLAN_TEMPLATES
+                  : isLangHobby   ? LANGUAGE_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
@@ -1260,6 +1369,9 @@ function PlanWizard({
     setBirdMode(false); setBirdGoalType(""); setBwSpeciesTarget("50"); setBwLocalTarget("150");
     setBwCounty(""); setBwSkillTarget("30"); setBwSkillFocus("song and sight");
     setBwFreqHours("1"); setBwLifestyleReason("stress relief"); setPlanBirds([]);
+    setLangMode(false); setLangGoalType(""); setLlLanguage(""); setLlConvMins("10");
+    setLlExamName(""); setLlExamLevel("B2"); setLlExamMonths("12");
+    setLlStudyMins("30"); setLlStudyDays("5"); setLlWordsWeek("50"); setLlTravelCountry("");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1283,6 +1395,8 @@ function PlanWizard({
     if (hikingType) { setHikingMode(true); setHikingGoalType(hikingType); return; }
     const birdType = BIRD_GOAL_TYPE_MAP[t.id];
     if (birdType) { setBirdMode(true); setBirdGoalType(birdType); return; }
+    const langType = LANGUAGE_GOAL_TYPE_MAP[t.id];
+    if (langType) { setLangMode(true); setLangGoalType(langType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1392,6 +1506,27 @@ function PlanWizard({
     setSteps(generatedSteps); setBirdMode(false); setBirdGoalType(""); setStep(2);
   }
 
+  function applyLanguageSettings() {
+    if (!langGoalType || !llLanguage) return;
+    const autoExam = LANGUAGE_EXAM_MAP[llLanguage] ?? "official language exam";
+    const examName = llExamName.trim() || autoExam;
+    const generatedSteps = generateLanguageSteps(langGoalType, {
+      language: llLanguage, convMinutes: llConvMins,
+      examName, examLevel: llExamLevel, examMonths: llExamMonths,
+      studyMins: llStudyMins, studyDays: llStudyDays, wordsPerWeek: llWordsWeek,
+      travelCountry: llTravelCountry,
+    });
+    let planTitle = "", desc = "", weeks = 16;
+    switch (langGoalType) {
+      case "communication": planTitle = `Hold a ${llConvMins}-min ${llLanguage} conversation`; desc = `Build ${llLanguage} to hold a ${llConvMins}-minute conversation about daily life.`; break;
+      case "exam":          planTitle = `${llLanguage} — ${examName} ${llExamLevel}`; desc = `Reach ${llExamLevel} level and pass the ${examName} exam.`; weeks = Number(llExamMonths) * 4; break;
+      case "routine":       planTitle = `${llLanguage} — ${llStudyMins} min/day, ${llWordsWeek} words/week`; desc = `Build a consistent ${llLanguage} study routine.`; weeks = 52; break;
+      case "reallife":      planTitle = `${llLanguage} in real life${llTravelCountry ? ` — ${llTravelCountry}` : ""}`; desc = `Handle real-life interactions in ${llLanguage}.`; weeks = 26; break;
+    }
+    setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setLangMode(false); setLangGoalType(""); setStep(2);
+  }
+
   function addStep() {
     if (!stepInput.trim()) return;
     setSteps(s => [...s, { id: genId(), text: stepInput.trim(), done: false, dueDate: stepDate || undefined }]);
@@ -1415,7 +1550,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -1423,6 +1558,7 @@ function PlanWizard({
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
+                else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else setStep(1);
               }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
@@ -1431,30 +1567,32 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
                   : pokerGoalMode ? `Poker: ${POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType)?.label ?? "Goal"}`
                   : hikingMode ? "Hiking Goal"
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
+                  : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
                   : pokerGoalMode ? "Configure your poker goal to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
+                  : langMode ? "Choose your language and configure your goal"
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -1756,6 +1894,131 @@ function PlanWizard({
                 )}
 
                 <Button onClick={applyBirdSettings} disabled={!birdGoalType} className="w-full">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── LANGUAGE GOAL WIZARD ── */}
+          {langMode && (() => {
+            const tplMeta = LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType);
+            const autoExam = llLanguage ? (LANGUAGE_EXAM_MAP[llLanguage] ?? "official exam") : "official exam";
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "🌍"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* Language picker — always shown first */}
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Which language are you learning? *</label>
+                  <select value={llLanguage} onChange={e => { setLlLanguage(e.target.value); setLlExamName(""); }}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">Select a language…</option>
+                    {WORLD_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                    <option value="Other">Other</option>
+                  </select>
+                  {llLanguage === "Other" && (
+                    <Input className="text-sm mt-2" placeholder="Type your language…" value={llExamName === "" ? "" : undefined}
+                      onChange={e => setLlLanguage(e.target.value)} />
+                  )}
+                </div>
+
+                {/* Communication skills */}
+                {langGoalType === "communication" && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Target conversation length</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["5", "10", "15", "20", "30"].map(m => (
+                        <button key={m} onClick={() => setLlConvMins(m)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${llConvMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                          {m} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Exam / proficiency */}
+                {langGoalType === "exam" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">
+                        Exam name {llLanguage && autoExam !== "official exam" && <span className="text-muted-foreground font-normal">(suggested: {autoExam})</span>}
+                      </label>
+                      <Input value={llExamName} onChange={e => setLlExamName(e.target.value)} placeholder={autoExam} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Target level</label>
+                      <div className="flex flex-wrap gap-2">
+                        {["A1", "A2", "B1", "B2", "C1", "C2", "N5", "N4", "N3", "N2", "N1", "HSK 4", "HSK 5", "TOPIK II"].map(lvl => (
+                          <button key={lvl} onClick={() => setLlExamLevel(lvl)}
+                            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${llExamLevel === lvl ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Timeline (months)</label>
+                      <div className="flex gap-2">
+                        {["6", "9", "12", "18", "24"].map(m => (
+                          <button key={m} onClick={() => setLlExamMonths(m)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${llExamMonths === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {m} mo
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Routine & habits */}
+                {langGoalType === "routine" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Daily study time</label>
+                      <div className="flex gap-2">
+                        {["15", "30", "45", "60", "90"].map(m => (
+                          <button key={m} onClick={() => setLlStudyMins(m)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${llStudyMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {m} min
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Days per week</label>
+                      <div className="flex gap-2">
+                        {["3", "4", "5", "6", "7"].map(d => (
+                          <button key={d} onClick={() => setLlStudyDays(d)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${llStudyDays === d ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {d}×/wk
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">New words per week</label>
+                      <Input type="number" value={llWordsWeek} onChange={e => setLlWordsWeek(e.target.value)} className="text-sm" placeholder="e.g. 50" min={1} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Real-life usage */}
+                {langGoalType === "reallife" && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Country you plan to visit</label>
+                    <Input value={llTravelCountry} onChange={e => setLlTravelCountry(e.target.value)} className="text-sm" placeholder={llLanguage ? `e.g. a ${llLanguage}-speaking country` : "e.g. Mexico, France, Japan…"} />
+                  </div>
+                )}
+
+                <Button onClick={applyLanguageSettings} disabled={!langGoalType || !llLanguage} className="w-full">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -2192,7 +2455,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -2220,6 +2483,20 @@ function PlanWizard({
                   </div>
                 )}
               </div>
+              {selectedHobby && isLangHobby && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which language? 🌍</label>
+                  <select value={llLanguage} onChange={e => setLlLanguage(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">Select a language…</option>
+                    {WORLD_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                    <option value="Other">Other…</option>
+                  </select>
+                  {llLanguage === "Other" && (
+                    <Input className="text-sm mt-2" placeholder="Type your language…" onChange={e => setLlLanguage(e.target.value)} />
+                  )}
+                </div>
+              )}
               {selectedHobby && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
