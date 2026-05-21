@@ -3512,7 +3512,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
               id
               name
               grades { yds vscale }
-              type { sport trad boulder topRope }
+              type { sport trad bouldering tr }
             }
           }
         }
@@ -3542,7 +3542,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
             id: c.id,
             name: c.name,
             grade: c.grades?.yds ?? c.grades?.vscale ?? "",
-            climbType: c.type?.boulder ? "Boulder" : c.type?.sport ? "Sport" : c.type?.trad ? "Trad" : c.type?.topRope ? "Top Rope" : "Route",
+            climbType: c.type?.bouldering ? "Boulder" : c.type?.sport ? "Sport" : c.type?.trad ? "Trad" : c.type?.tr ? "Top Rope" : "Route",
             location: area.areaName ?? "",
             description: "",
           });
