@@ -519,6 +519,103 @@ function generatePokerSteps(currentStake: PokerStake, targetStake: PokerStake, m
   return steps;
 }
 
+// ── Poker plan helpers (5-goal wizard) ────────────────────────────────────────
+
+type PokerGoalType = "volume" | "study" | "winrate" | "stakes" | "tournament";
+
+const POKER_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "pk-volume",  emoji: "🃏", label: "Volume goal",         description: "Play 50,000 online hands per month",                              durationWeeks: 12, defaultSteps: [] },
+  { id: "pk-study",   emoji: "📖", label: "Study routine",        description: "Study 5 hours/week and review marked hands",                      durationWeeks: 8,  defaultSteps: [] },
+  { id: "pk-winrate", emoji: "📈", label: "Win rate goal",        description: "Achieve 8 bb/100 at NL25 over 100k hands",                        durationWeeks: 16, defaultSteps: [] },
+  { id: "pk-stakes",  emoji: "💰", label: "Stakes / bankroll",    description: "Move up when 40 buy-ins are saved at the next stake",             durationWeeks: 12, defaultSteps: [] },
+  { id: "pk-tourney", emoji: "🏆", label: "Tournament result",    description: "Cash in a WSOP event or final-table a local major",               durationWeeks: 16, defaultSteps: [] },
+];
+
+const POKER_GOAL_TYPE_MAP: Record<string, PokerGoalType> = {
+  "pk-volume": "volume", "pk-study": "study", "pk-winrate": "winrate",
+  "pk-stakes": "stakes", "pk-tourney": "tournament",
+};
+
+function generatePokerGoalSteps(
+  goalType: PokerGoalType,
+  opts: {
+    handsTarget?: string; period?: string;
+    studyHours?: string; studyMethods?: string[];
+    wrTarget?: string; wrStake?: string; wrHandSample?: string;
+    stakeFrom?: string; stakeTo?: string; buyins?: string;
+    tourneyType?: string; tourneyTarget?: string;
+    // stakes progression (existing)
+    currentStake?: PokerStake | ""; targetStake?: PokerStake | ""; months?: number;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const fmt = (n: number) => n.toLocaleString();
+
+  switch (goalType) {
+    case "volume": {
+      const t = Number(opts.handsTarget ?? "50000");
+      const per = opts.period ?? "month";
+      return [
+        g("Set up hand tracking — PokerTracker 4, Hand2Note, or Hold'em Manager 3"),
+        g(`Build the routine: log ${fmt(Math.round(t / 4))} hands — establish daily session targets`),
+        g(`${fmt(Math.round(t / 2))} hands reached — review win rate and session timing`),
+        g(`${fmt(Math.round(t * 3 / 4))} hands — check quality vs quantity; adjust if win rate is dipping`),
+        g(`Complete ${fmt(t)} hands per ${per} — analyse full stats and set next period target`),
+      ];
+    }
+    case "study": {
+      const hrs = opts.studyHours ?? "5";
+      const methods = opts.studyMethods?.length ? opts.studyMethods : ["Hand review", "Solver work"];
+      return [
+        g(`Set up study system: ${methods.join(", ")} — schedule fixed weekly study blocks`),
+        g(`Week 1–2: ${Math.round(Number(hrs) / 2)} hrs/week — preflop charts + mark and review 3 hands per session`),
+        g(`Week 3–4: Full ${hrs} hrs/week — add postflop spot study and range analysis`),
+        g(`Month 2: Pull tracker stats — identify your top 3 red-line leaks (WTSD%, fold-to-cbet, etc.)`),
+        g(`Month 2: Targeted leak study — run solver for 3–5 recurring problem spots`),
+        g(`Month 3+: Maintain ${hrs}-hr study habit; track how win rate changes each month`),
+      ];
+    }
+    case "winrate": {
+      const bb = opts.wrTarget ?? "8"; const stake = opts.wrStake ?? "NL25";
+      const hands = Number(opts.wrHandSample ?? "100000");
+      return [
+        g(`Install PokerTracker 4 / HM3 · set correct filters for ${stake} (6-max or full ring)`),
+        g(`Baseline: play 10,000 hands · record current bb/100, VPIP, PFR, AF, WTSD%`),
+        g(`Identify the 2–3 biggest leaks dragging win rate below ${bb} bb/100 · build study plan around them`),
+        g(`${fmt(Math.round(hands / 4))} hands reached · review stats, confirm leaks are shrinking`),
+        g(`${fmt(Math.round(hands / 2))} hands · win rate should be trending toward ${bb} bb/100 · adjust if not`),
+        g(`Complete ${fmt(hands)}-hand sample at ${stake} · evaluate true win rate and decide next step`),
+      ];
+    }
+    case "stakes": {
+      if (opts.currentStake && opts.targetStake && opts.months) {
+        // reuse the existing phased progression generator
+        return generatePokerSteps(opts.currentStake as PokerStake, opts.targetStake as PokerStake, opts.months);
+      }
+      const from = opts.stakeFrom ?? "1/2"; const to = opts.stakeTo ?? "2/5"; const bui = opts.buyins ?? "40";
+      return [
+        g(`Document current bankroll and win rate at ${from} — confirm ${bui} buy-ins rule is your threshold`),
+        g(`Set up a dedicated poker bankroll tracker (separate from living expenses)`),
+        g(`Study ${to} game: player pool tendencies, pot geometry, 3-bet frequency adjustments`),
+        g(`Reach ${bui} buy-ins confirmed in tracker at ${from} — do NOT move up before this milestone`),
+        g(`Trial period at ${to}: 20 sessions or 10k hands — track separately`),
+        g(`Evaluate: sustain at ${to} or move back down and repeat the process`),
+      ];
+    }
+    case "tournament": {
+      const type = opts.tourneyType ?? "Live MTT"; const target = opts.tourneyTarget?.trim() || "cash in a major event";
+      return [
+        g(`Define target: ${target} — research schedule, buy-ins, and registration`),
+        g(`Study MTT-specific strategy: ICM, push/fold ranges, bubble play, final-table dynamics`),
+        g(`Play 10 online MTTs or SNGs for volume reps — review all deep-run and bust-out hands`),
+        g(`Study short-stack play, 3-bet/4-bet spots, and heads-up adjustments`),
+        g(`Warm-up event: ${type === "Live MTT" ? "local league or series" : "online qualifier"} — treat as full prep run`),
+        g(`Target event day — play your A-game; review all key hands the same evening`),
+      ];
+    }
+  }
+}
+
 // ── Hiking plan helpers ────────────────────────────────────────────────────────
 
 type HikingGoalType = "frequency" | "distance" | "elevation" | "peak" | "trails";
@@ -996,6 +1093,21 @@ function PlanWizard({
   const [pokerMode, setPokerMode] = useState(false);
   const [currentStake, setCurrentStake] = useState<PokerStake | "">("");
   const [targetStake, setTargetStake] = useState<PokerStake | "">("");
+  // Poker goal wizard (non-stakes types)
+  const [pokerGoalMode, setPokerGoalMode] = useState(false);
+  const [pokerGoalType, setPokerGoalType] = useState<PokerGoalType | "">("");
+  const [pkHandsTarget,   setPkHandsTarget]   = useState("50000");
+  const [pkPeriod,        setPkPeriod]        = useState("month");
+  const [pkStudyHours,    setPkStudyHours]    = useState("5");
+  const [pkStudyMethods,  setPkStudyMethods]  = useState<string[]>(["Hand review", "GTO solver"]);
+  const [pkWrTarget,      setPkWrTarget]      = useState("8");
+  const [pkWrStake,       setPkWrStake]       = useState("NL25");
+  const [pkWrHandSample,  setPkWrHandSample]  = useState("100000");
+  const [pkStakeFrom,     setPkStakeFrom]     = useState("");
+  const [pkStakeTo,       setPkStakeTo]       = useState("");
+  const [pkBuyins,        setPkBuyins]        = useState("40");
+  const [pkTourneyType,   setPkTourneyType]   = useState("Live MTT");
+  const [pkTourneyTarget, setPkTourneyTarget] = useState("");
 
   // Hiking wizard state
   const [hikingMode, setHikingMode] = useState(false);
@@ -1015,8 +1127,10 @@ function PlanWizard({
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
   const isHikingHobby = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
   const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
+  const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
                   : isChessHobby  ? CHESS_PLAN_TEMPLATES
+                  : isPokerHobby  ? POKER_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
@@ -1038,6 +1152,11 @@ function PlanWizard({
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
     setEndgameTopics(["King and pawn endings"]); setTournamentType("OTB"); setTournamentDate("");
     setPokerMode(false); setCurrentStake(""); setTargetStake("");
+    setPokerGoalMode(false); setPokerGoalType(""); setPkHandsTarget("50000"); setPkPeriod("month");
+    setPkStudyHours("5"); setPkStudyMethods(["Hand review", "GTO solver"]);
+    setPkWrTarget("8"); setPkWrStake("NL25"); setPkWrHandSample("100000");
+    setPkStakeFrom(""); setPkStakeTo(""); setPkBuyins("40");
+    setPkTourneyType("Live MTT"); setPkTourneyTarget("");
     setHikingMode(false); setHikingGoalType(""); setHikeCount("52"); setHikeMiles("300");
     setHikeFeet("50000"); setPeakAltitude("14000"); setPeakName(""); setTrailListName("");
     setTrailListCount("52"); setPlanTrails([]);
@@ -1051,6 +1170,11 @@ function PlanWizard({
     const hikingType = HIKING_GOAL_TYPE_MAP[t.id];
     setSelectedTemplate(t);
     if (isPokerRating) { setPokerMode(true); return; }
+    const pkType = POKER_GOAL_TYPE_MAP[t.id];
+    if (pkType) {
+      if (pkType === "stakes") { setPokerMode(true); return; } // reuse existing stakes wizard
+      setPokerGoalMode(true); setPokerGoalType(pkType); return;
+    }
     if (chessType) {
       setChessMode(true); setChessGoalType(chessType);
       if (chessType === "rating") setChessEloMode(true);
@@ -1126,6 +1250,26 @@ function PlanWizard({
     setStep(2);
   }
 
+  function applyPokerGoalSettings() {
+    if (!pokerGoalType) return;
+    const generatedSteps = generatePokerGoalSteps(pokerGoalType, {
+      handsTarget: pkHandsTarget, period: pkPeriod,
+      studyHours: pkStudyHours, studyMethods: pkStudyMethods,
+      wrTarget: pkWrTarget, wrStake: pkWrStake, wrHandSample: pkWrHandSample,
+      stakeFrom: pkStakeFrom, stakeTo: pkStakeTo, buyins: pkBuyins,
+      tourneyType: pkTourneyType, tourneyTarget: pkTourneyTarget,
+    });
+    let planTitle = "", desc = "", weeks = 12;
+    switch (pokerGoalType) {
+      case "volume":     planTitle = `${Number(pkHandsTarget).toLocaleString()} hands per ${pkPeriod}`; desc = `Build volume to ${Number(pkHandsTarget).toLocaleString()} hands per ${pkPeriod}.`; break;
+      case "study":      planTitle = `${pkStudyHours} hrs/week study routine`; desc = `Structured study: ${pkStudyMethods.join(", ")} each week.`; weeks = 8; break;
+      case "winrate":    planTitle = `${pkWrTarget} bb/100 at ${pkWrStake} over ${Number(pkWrHandSample).toLocaleString()} hands`; desc = `Achieve ${pkWrTarget} bb/100 win rate at ${pkWrStake}.`; weeks = 16; break;
+      case "tournament": planTitle = pkTourneyTarget || `${pkTourneyType} result goal`; desc = `Prepare for and achieve: ${pkTourneyTarget || "major tournament result"}.`; weeks = 16; break;
+    }
+    setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setPokerGoalMode(false); setPokerGoalType(""); setStep(2);
+  }
+
   function addStep() {
     if (!stepInput.trim()) return;
     setSteps(s => [...s, { id: genId(), text: stepInput.trim(), done: false, dueDate: stepDate || undefined }]);
@@ -1149,10 +1293,11 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || hikingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
+                else if (pokerGoalMode) { setPokerGoalMode(false); setPokerGoalType(""); setSelectedTemplate(null); }
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else setStep(1);
@@ -1163,26 +1308,28 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
-                  : pokerMode ? "Poker Improvement Plan"
+                  : pokerMode ? "Poker: Stakes Plan"
+                  : pokerGoalMode ? `Poker: ${POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType)?.label ?? "Goal"}`
                   : hikingMode ? "Hiking Goal"
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
+                  : pokerGoalMode ? "Configure your poker goal to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || hikingMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -1561,6 +1708,141 @@ function PlanWizard({
             </>
           )}
 
+          {/* ── POKER GOAL WIZARD (non-stakes types) ── */}
+          {pokerGoalMode && (() => {
+            const tplMeta = POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType);
+            const STUDY_METHODS = ["Hand review", "GTO solver", "Video courses", "Coaching", "Database analysis"];
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "♠️"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* VOLUME */}
+                {pokerGoalType === "volume" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target hands *</label>
+                      <Input type="number" min={1000} step={1000} placeholder="e.g. 50000" value={pkHandsTarget} onChange={e => setPkHandsTarget(e.target.value)} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Per</label>
+                      <div className="flex gap-2">
+                        {["day", "week", "month"].map(p => (
+                          <button key={p} onClick={() => setPkPeriod(p)}
+                            className={`flex-1 text-sm py-2 rounded-lg border font-medium capitalize transition-colors ${pkPeriod === p ? "bg-emerald-600 text-white border-emerald-600" : "bg-card hover:bg-secondary"}`}>
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {pkHandsTarget && <p className="text-[10px] text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
+                      ≈ {Math.round(Number(pkHandsTarget) / (pkPeriod === "day" ? 1 : pkPeriod === "week" ? 7 : 30))} hands/day session target
+                    </p>}
+                  </div>
+                )}
+
+                {/* STUDY */}
+                {pokerGoalType === "study" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Study hours per week *</label>
+                      <Input type="number" min={1} max={40} step={0.5} placeholder="e.g. 5" value={pkStudyHours} onChange={e => setPkStudyHours(e.target.value)} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Study methods (select all)</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {STUDY_METHODS.map(m => {
+                          const active = pkStudyMethods.includes(m);
+                          return (
+                            <button key={m} onClick={() => setPkStudyMethods(s => active ? s.filter(x => x !== m) : [...s, m])}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-card hover:bg-secondary"}`}>
+                              {m}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {pkStudyHours && <p className="text-[10px] text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
+                      ≈ {Math.round(Number(pkStudyHours) * 8)} hrs over 8 weeks · {Number(pkStudyHours) >= 5 ? "strong improvement expected" : "solid foundation building"}
+                    </p>}
+                  </div>
+                )}
+
+                {/* WIN RATE */}
+                {pokerGoalType === "winrate" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target bb/100 *</label>
+                        <Input type="number" min={1} max={30} step={0.5} placeholder="e.g. 8" value={pkWrTarget} onChange={e => setPkWrTarget(e.target.value)} className="text-sm" />
+                        <p className="text-[10px] text-muted-foreground mt-1">Good reg: 5–8 bb/100; elite: 10+</p>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Stake *</label>
+                        <Select value={pkWrStake} onValueChange={setPkWrStake}>
+                          <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {POKER_STAKES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Hand sample target *</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["50000", "100000", "200000"].map(h => (
+                          <button key={h} onClick={() => setPkWrHandSample(h)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${pkWrHandSample === h ? "bg-emerald-600 text-white border-emerald-600" : "bg-card hover:bg-secondary"}`}>
+                            {Number(h).toLocaleString()} hands
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">100k+ is statistically meaningful</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* TOURNAMENT */}
+                {pokerGoalType === "tournament" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Event type</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["Live MTT", "Online MTT", "Live Series (WSOP/WPT)", "Satellite"].map(et => (
+                          <button key={et} onClick={() => setPkTourneyType(et)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${pkTourneyType === et ? "bg-emerald-600 text-white border-emerald-600" : "bg-card hover:bg-secondary"}`}>
+                            {et}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Specific goal (optional)</label>
+                      <Input placeholder='e.g. "Cash in a WSOP event", "Final table local major"…' value={pkTourneyTarget} onChange={e => setPkTourneyTarget(e.target.value)} className="text-sm" />
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={applyPokerGoalSettings}
+                  disabled={
+                    (pokerGoalType === "volume"  && !pkHandsTarget) ||
+                    (pokerGoalType === "study"   && (!pkStudyHours || pkStudyMethods.length === 0)) ||
+                    (pokerGoalType === "winrate" && (!pkWrTarget || !pkWrStake))
+                  }
+                  className="w-full gap-2"
+                >
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* POKER STEP */}
           {pokerMode && (
             <>
@@ -1647,7 +1929,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !hikingMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
