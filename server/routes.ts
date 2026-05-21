@@ -3831,6 +3831,32 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  /** GET /api/birds/search?name=robin&page=1
+   *  Proxies to Nuthatch API (nuthatch.lastelm.software) — requires NUTHATCH_API_KEY env var.
+   *  Returns { birds: [{ id, name, sciName, status, image }], total }
+   */
+  app.get("/api/birds/search", requireAuth, async (req, res) => {
+    try {
+      const { name = "", page = "1" } = req.query as Record<string, string>;
+      const apiKey = process.env.NUTHATCH_API_KEY ?? "";
+      if (!apiKey) {
+        return res.status(503).json({ error: "Bird search is not configured (NUTHATCH_API_KEY missing). Add your Nuthatch API key in Railway environment variables." });
+      }
+      const url = `https://nuthatch.lastelm.software/v2/birds?pageSize=10&page=${encodeURIComponent(page)}&name=${encodeURIComponent(name)}&hasImg=true&operator=AND`;
+      const r = await fetch(url, { headers: { "API-Key": apiKey } });
+      if (!r.ok) return res.status(r.status).json({ error: "Bird API error" });
+      const data = await r.json();
+      const birds = (data.entities ?? []).map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        sciName: b.sciName ?? "",
+        status: b.status ?? "",
+        image: Array.isArray(b.images) && b.images.length > 0 ? b.images[0] : null,
+      }));
+      res.json({ birds, total: data.total ?? birds.length });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Music Collections ─────────────────────────────────────────────────────────
   app.get("/api/music/collections", requireAuth, async (req, res) => {
     try {

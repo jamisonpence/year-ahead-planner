@@ -702,6 +702,88 @@ function generateHikingSteps(
   }
 }
 
+// ── Bird watching plan helpers ────────────────────────────────────────────────
+
+type BirdGoalType = "species" | "local" | "skills" | "lifestyle";
+
+const BIRD_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "bw-species",   emoji: "🦅", label: "Species / life list",   description: "Add 50 new species to your life list this year",                  durationWeeks: 52, defaultSteps: [] },
+  { id: "bw-local",     emoji: "📍", label: "Local annual total",    description: "Record 150 species in your county this calendar year",            durationWeeks: 52, defaultSteps: [] },
+  { id: "bw-skills",    emoji: "🔭", label: "ID & field skills",     description: "Learn to recognise 30 common local birds by song and sight",     durationWeeks: 16, defaultSteps: [] },
+  { id: "bw-lifestyle", emoji: "🌿", label: "Lifestyle / wellbeing", description: "Go birding at least once a week for an hour for stress relief",   durationWeeks: 52, defaultSteps: [] },
+];
+
+const BIRD_GOAL_TYPE_MAP: Record<string, BirdGoalType> = {
+  "bw-species": "species", "bw-local": "local", "bw-skills": "skills", "bw-lifestyle": "lifestyle",
+};
+
+function generateBirdSteps(
+  goalType: BirdGoalType,
+  opts: {
+    speciesTarget?: string; county?: string;
+    localTarget?: string;
+    skillTarget?: string; skillFocus?: string;
+    freqHours?: string; lifestyleReason?: string;
+    planBirds?: { name: string; sciName?: string }[];
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const n = (s: string) => Number(s) || 0;
+  switch (goalType) {
+    case "species": {
+      const target = n(opts.speciesTarget ?? "50");
+      const birds = opts.planBirds ?? [];
+      if (birds.length > 0) {
+        return birds.map(b => g(`Find and ID: ${b.name}${b.sciName ? ` (${b.sciName})` : ""}`));
+      }
+      return [
+        g("Set up an eBird or Merlin account to log sightings"),
+        g(`Log first ${Math.round(target / 4)} new species — Q1 milestone`),
+        g(`Reach ${Math.round(target / 2)} new species — halfway mark`),
+        g(`Log ${Math.round(target * 3 / 4)} new species — Q3 milestone`),
+        g(`Complete all ${target} new species added to your life list`),
+      ];
+    }
+    case "local": {
+      const target = n(opts.localTarget ?? "150");
+      const county = opts.county?.trim() || "your county";
+      return [
+        g(`Set up eBird county list for ${county} and review your current total`),
+        g("Visit top local hotspots — compile a list of must-visit patches"),
+        g(`Log ${Math.round(target / 4)} species — Q1 milestone`),
+        g(`Reach ${Math.round(target / 2)} species — halfway`),
+        g(`Log ${Math.round(target * 3 / 4)} species — Q3 milestone`),
+        g(`Complete ${target} species in ${county} for the year`),
+      ];
+    }
+    case "skills": {
+      const target = n(opts.skillTarget ?? "30");
+      const focus = opts.skillFocus ?? "song and sight";
+      const third = Math.round(target / 3);
+      return [
+        g("Download Merlin Bird ID and explore the Sound ID feature"),
+        g(`Learn first ${third} birds — master their songs and key field marks`),
+        g(`Learn next ${third} birds — expand to a second habitat type`),
+        g(`Learn final ${target - 2 * third} birds — complete the target set`),
+        g(`Field test: spend a day identifying by ${focus} alone`),
+        g("Teach someone else: take a beginner friend birding as a final test"),
+      ];
+    }
+    case "lifestyle": {
+      const hours = opts.freqHours ?? "1";
+      const reason = opts.lifestyleReason?.trim() || "stress relief and mindfulness";
+      return [
+        g("Identify 2–3 local spots within 15 minutes of home for regular sessions"),
+        g(`Week 1–4: Build the habit — ${hours}h birding session each week`),
+        g("Month 2: Keep the streak — log sessions in eBird or a journal"),
+        g("Month 3: Expand — try a new location once this month"),
+        g(`Month 6: Reflect on how birding has contributed to ${reason}`),
+        g("Year end: Review sessions logged and celebrate the habit"),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1122,15 +1204,30 @@ function PlanWizard({
   const [planTrails, setPlanTrails] = useState<any[]>([]);
   const hikingTrailSearch = useTrailSearch();
 
+  // Bird wizard state
+  const [birdMode, setBirdMode] = useState(false);
+  const [birdGoalType, setBirdGoalType] = useState<BirdGoalType | "">("");
+  const [bwSpeciesTarget, setBwSpeciesTarget] = useState("50");
+  const [bwLocalTarget,   setBwLocalTarget]   = useState("150");
+  const [bwCounty,        setBwCounty]        = useState("");
+  const [bwSkillTarget,   setBwSkillTarget]   = useState("30");
+  const [bwSkillFocus,    setBwSkillFocus]    = useState("song and sight");
+  const [bwFreqHours,     setBwFreqHours]     = useState("1");
+  const [bwLifestyleReason, setBwLifestyleReason] = useState("stress relief");
+  const [planBirds, setPlanBirds] = useState<any[]>([]);
+  const birdWizardSearch = useBirdSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
   const isHikingHobby = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
   const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
   const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
+  const isBirdHobby   = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
   const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
                   : isChessHobby  ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby  ? POKER_PLAN_TEMPLATES
+                  : isBirdHobby   ? BIRD_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
@@ -1160,6 +1257,9 @@ function PlanWizard({
     setHikingMode(false); setHikingGoalType(""); setHikeCount("52"); setHikeMiles("300");
     setHikeFeet("50000"); setPeakAltitude("14000"); setPeakName(""); setTrailListName("");
     setTrailListCount("52"); setPlanTrails([]);
+    setBirdMode(false); setBirdGoalType(""); setBwSpeciesTarget("50"); setBwLocalTarget("150");
+    setBwCounty(""); setBwSkillTarget("30"); setBwSkillFocus("song and sight");
+    setBwFreqHours("1"); setBwLifestyleReason("stress relief"); setPlanBirds([]);
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1181,6 +1281,8 @@ function PlanWizard({
       return;
     }
     if (hikingType) { setHikingMode(true); setHikingGoalType(hikingType); return; }
+    const birdType = BIRD_GOAL_TYPE_MAP[t.id];
+    if (birdType) { setBirdMode(true); setBirdGoalType(birdType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1270,6 +1372,26 @@ function PlanWizard({
     setSteps(generatedSteps); setPokerGoalMode(false); setPokerGoalType(""); setStep(2);
   }
 
+  function applyBirdSettings() {
+    if (!birdGoalType) return;
+    const generatedSteps = generateBirdSteps(birdGoalType, {
+      speciesTarget: bwSpeciesTarget, county: bwCounty,
+      localTarget: bwLocalTarget,
+      skillTarget: bwSkillTarget, skillFocus: bwSkillFocus,
+      freqHours: bwFreqHours, lifestyleReason: bwLifestyleReason,
+      planBirds,
+    });
+    let planTitle = "", desc = "", weeks = 52;
+    switch (birdGoalType) {
+      case "species":   planTitle = planBirds.length > 0 ? `Target ${planBirds.length} species` : `Add ${bwSpeciesTarget} species to life list`; desc = `Work toward ${planBirds.length > 0 ? planBirds.length : bwSpeciesTarget} new species.`; break;
+      case "local":     planTitle = `${bwLocalTarget} species in ${bwCounty || "county"} this year`; desc = `Record ${bwLocalTarget} species in ${bwCounty || "your county"} over the calendar year.`; break;
+      case "skills":    planTitle = `Learn ${bwSkillTarget} birds by ${bwSkillFocus}`; desc = `Build ID skills to recognise ${bwSkillTarget} birds by ${bwSkillFocus}.`; weeks = 16; break;
+      case "lifestyle": planTitle = `Weekly birding habit — ${bwFreqHours}h/week`; desc = `Go birding ${bwFreqHours}h per week for ${bwLifestyleReason}.`; break;
+    }
+    setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setBirdMode(false); setBirdGoalType(""); setStep(2);
+  }
+
   function addStep() {
     if (!stepInput.trim()) return;
     setSteps(s => [...s, { id: genId(), text: stepInput.trim(), done: false, dueDate: stepDate || undefined }]);
@@ -1293,13 +1415,14 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (pokerGoalMode) { setPokerGoalMode(false); setPokerGoalType(""); setSelectedTemplate(null); }
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
+                else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else setStep(1);
               }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
@@ -1308,28 +1431,30 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
                   : pokerGoalMode ? `Poker: ${POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType)?.label ?? "Goal"}`
                   : hikingMode ? "Hiking Goal"
+                  : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
                   : pokerGoalMode ? "Configure your poker goal to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
+                  : birdMode ? "Configure your birding goal and optionally search for target species"
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -1493,6 +1618,144 @@ function PlanWizard({
                   }
                   className="w-full gap-2"
                 >
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── BIRD GOAL WIZARD ── */}
+          {birdMode && (() => {
+            const tplMeta = BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType);
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "🦅"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* Species / life list */}
+                {birdGoalType === "species" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Target species to add</label>
+                      <Input type="number" value={bwSpeciesTarget} onChange={e => setBwSpeciesTarget(e.target.value)} className="text-sm" placeholder="e.g. 50" min={1} />
+                      <p className="text-[11px] text-muted-foreground mt-1">How many new species do you want to add to your life list?</p>
+                    </div>
+                    {/* Bird search for species list */}
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Search & add specific target species (optional)</label>
+                      <div className="flex gap-2">
+                        <Input value={birdWizardSearch.query} onChange={e => birdWizardSearch.setQuery(e.target.value)} placeholder="e.g. warbler, eagle…" className="text-sm h-8 flex-1"
+                          onKeyDown={e => e.key === "Enter" && birdWizardSearch.runSearch()} />
+                        <button onClick={() => birdWizardSearch.runSearch()} disabled={birdWizardSearch.searching}
+                          className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 disabled:opacity-50 transition-colors shrink-0">
+                          {birdWizardSearch.searching ? "…" : "Search"}
+                        </button>
+                      </div>
+                      {birdWizardSearch.error && <p className="text-xs text-destructive mt-1">{birdWizardSearch.error}</p>}
+                      {birdWizardSearch.results.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2 mt-2 max-h-52 overflow-y-auto">
+                          {birdWizardSearch.results.map((b: any) => {
+                            const added = planBirds.some(pb => pb.name === b.name);
+                            return (
+                              <div key={b.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                                {b.image && <img src={b.image} alt={b.name} className="w-full h-20 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                                {!b.image && <div className="w-full h-20 bg-secondary flex items-center justify-center text-2xl">🐦</div>}
+                                <div className="p-1.5 flex items-center justify-between gap-1">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold leading-tight truncate">{b.name}</p>
+                                    {b.sciName && <p className="text-[10px] italic text-muted-foreground truncate">{b.sciName}</p>}
+                                  </div>
+                                  <button onClick={() => {
+                                    if (added) { setPlanBirds(pb => pb.filter(x => x.name !== b.name)); }
+                                    else { setPlanBirds(pb => [...pb, { name: b.name, sciName: b.sciName, image: b.image }]); }
+                                  }} className={`text-[10px] px-2 py-0.5 rounded font-medium shrink-0 transition-colors ${added ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-secondary hover:bg-secondary/80"}`}>
+                                    {added ? "✓ Added" : "+ Add"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {planBirds.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[11px] font-medium text-muted-foreground">{planBirds.length} target species added</p>
+                          <div className="flex flex-wrap gap-1">
+                            {planBirds.map(b => (
+                              <span key={b.name} className="flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full">
+                                {b.name}
+                                <button onClick={() => setPlanBirds(pb => pb.filter(x => x.name !== b.name))} className="hover:text-destructive transition-colors">×</button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Local / annual total */}
+                {birdGoalType === "local" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Target species count</label>
+                      <Input type="number" value={bwLocalTarget} onChange={e => setBwLocalTarget(e.target.value)} className="text-sm" placeholder="e.g. 150" min={1} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">County / area name</label>
+                      <Input value={bwCounty} onChange={e => setBwCounty(e.target.value)} className="text-sm" placeholder="e.g. Boulder County" />
+                    </div>
+                  </div>
+                )}
+
+                {/* ID & field skills */}
+                {birdGoalType === "skills" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Number of birds to learn</label>
+                      <Input type="number" value={bwSkillTarget} onChange={e => setBwSkillTarget(e.target.value)} className="text-sm" placeholder="e.g. 30" min={1} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Identification method focus</label>
+                      <div className="flex flex-wrap gap-2">
+                        {["song and sight", "song only", "flight pattern", "habitat cues"].map(opt => (
+                          <button key={opt} onClick={() => setBwSkillFocus(opt)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${bwSkillFocus === opt ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lifestyle / wellbeing */}
+                {birdGoalType === "lifestyle" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Hours per session</label>
+                      <div className="flex gap-2">
+                        {["0.5", "1", "1.5", "2", "3"].map(h => (
+                          <button key={h} onClick={() => setBwFreqHours(h)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${bwFreqHours === h ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {h}h
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Why do you want this habit?</label>
+                      <Input value={bwLifestyleReason} onChange={e => setBwLifestyleReason(e.target.value)} className="text-sm" placeholder="e.g. stress relief, mindfulness, connecting with nature" />
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applyBirdSettings} disabled={!birdGoalType} className="w-full">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -2447,6 +2710,232 @@ function HobbyCard({
 
 // ── Hobby Detail Dialog (with Goals section) ───────────────────────────────────
 
+// ── BirdSection ───────────────────────────────────────────────────────────────
+
+function useBirdSearch() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState("");
+
+  async function runSearch(q?: string) {
+    const term = (q ?? query).trim();
+    if (!term) return;
+    setSearching(true); setResults([]); setError("");
+    try {
+      const r = await fetch(`/api/birds/search?name=${encodeURIComponent(term)}`);
+      const data = await r.json();
+      if (!r.ok) { setError(data.error ?? "Bird search failed."); setSearching(false); return; }
+      if (!data.birds?.length) { setError("No birds found. Try a common name like 'robin' or 'warbler'."); setSearching(false); return; }
+      setResults(data.birds);
+    } catch { setError("Search failed. Check your connection."); }
+    setSearching(false);
+  }
+
+  return { query, setQuery, searching, results, setResults, error, runSearch };
+}
+
+function BirdSection({ hobby, onUpdateExtra }: { hobby: Hobby; onUpdateExtra: (newJson: string) => void }) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"sightings" | "wishlist">("sightings");
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const birdSearch = useBirdSearch();
+
+  // Persist data inside extraJson.birdData
+  function parseBirdData(json: string) {
+    try { const o = JSON.parse(json || "{}"); return { sightings: Array.isArray(o.birdData?.sightings) ? o.birdData.sightings : [], wishlist: Array.isArray(o.birdData?.wishlist) ? o.birdData.wishlist : [] }; }
+    catch { return { sightings: [], wishlist: [] }; }
+  }
+  function setBirdData(json: string, data: { sightings: any[]; wishlist: any[] }) {
+    try { const o = JSON.parse(json || "{}"); return JSON.stringify({ ...o, birdData: data }); }
+    catch { return JSON.stringify({ birdData: data }); }
+  }
+
+  const birdData = parseBirdData(hobby.extraJson ?? "{}");
+  const { sightings, wishlist } = birdData;
+
+  // Log form
+  const [logBirdName, setLogBirdName] = useState("");
+  const [logSciName, setLogSciName] = useState("");
+  const [logImage, setLogImage] = useState("");
+  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0, 10));
+  const [logLocation, setLogLocation] = useState("");
+  const [logNotes, setLogNotes] = useState("");
+
+  function prefillFromResult(b: any) {
+    setLogBirdName(b.name); setLogSciName(b.sciName ?? ""); setLogImage(b.image ?? "");
+    setShowSearch(false); setShowLogForm(true);
+  }
+
+  function addToWishlist(b: any) {
+    if (wishlist.find((w: any) => w.name === b.name)) { toast({ title: "Already on wishlist" }); return; }
+    const updated = { sightings, wishlist: [...wishlist, { name: b.name, sciName: b.sciName ?? "", image: b.image ?? "", addedAt: new Date().toISOString() }] };
+    onUpdateExtra(setBirdData(hobby.extraJson ?? "{}", updated));
+    toast({ title: "Added to wishlist", description: b.name });
+  }
+
+  function removeWishlist(name: string) {
+    onUpdateExtra(setBirdData(hobby.extraJson ?? "{}", { sightings, wishlist: wishlist.filter((w: any) => w.name !== name) }));
+  }
+
+  function submitLog(e: React.FormEvent) {
+    e.preventDefault();
+    if (!logBirdName.trim()) return;
+    const entry = { id: genId(), name: logBirdName.trim(), sciName: logSciName.trim(), image: logImage, date: logDate, location: logLocation.trim(), notes: logNotes.trim(), loggedAt: new Date().toISOString() };
+    onUpdateExtra(setBirdData(hobby.extraJson ?? "{}", { sightings: [entry, ...sightings], wishlist }));
+    toast({ title: "Sighting logged!", description: entry.name });
+    setLogBirdName(""); setLogSciName(""); setLogImage(""); setLogLocation(""); setLogNotes(""); setLogDate(new Date().toISOString().slice(0, 10));
+    setShowLogForm(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1">
+          {(["sightings", "wishlist"] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`text-xs px-3 py-1 rounded-full font-medium transition-colors capitalize ${tab === t ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>
+              {t} {t === "sightings" ? `(${sightings.length})` : `(${wishlist.length})`}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => { setShowLogForm(true); setShowSearch(false); }}
+          className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-medium">
+          <Plus size={12} /> Log sighting
+        </button>
+      </div>
+
+      {/* Bird search (for pre-filling log or wishlist) */}
+      {tab === "wishlist" && (
+        <button onClick={() => setShowSearch(v => !v)}
+          className="w-full text-xs text-left px-3 py-2 rounded-lg border border-dashed border-muted-foreground/30 hover:border-primary/50 text-muted-foreground hover:text-primary transition-colors">
+          {showSearch ? "▲ Hide bird search" : "🔍 Search birds to add to wishlist"}
+        </button>
+      )}
+      {tab === "sightings" && showLogForm && !showSearch && (
+        <button onClick={() => setShowSearch(true)}
+          className="text-xs text-primary hover:underline">
+          🔍 Search birds to pre-fill
+        </button>
+      )}
+
+      {/* Search panel */}
+      {showSearch && (
+        <div className="rounded-xl border bg-secondary/30 p-3 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">Search birds (Nuthatch API)</p>
+          <div className="flex gap-2">
+            <Input value={birdSearch.query} onChange={e => birdSearch.setQuery(e.target.value)} placeholder="e.g. robin, warbler, eagle…" className="text-sm h-8 flex-1"
+              onKeyDown={e => e.key === "Enter" && birdSearch.runSearch()} />
+            <button onClick={() => birdSearch.runSearch()} disabled={birdSearch.searching}
+              className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 disabled:opacity-50 transition-colors shrink-0">
+              {birdSearch.searching ? "…" : "Search"}
+            </button>
+          </div>
+          {birdSearch.error && <p className="text-xs text-destructive">{birdSearch.error}</p>}
+          {birdSearch.results.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+              {birdSearch.results.map((b: any) => (
+                <div key={b.id} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                  {b.image && <img src={b.image} alt={b.name} className="w-full h-24 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                  {!b.image && <div className="w-full h-24 bg-secondary flex items-center justify-center text-2xl">🐦</div>}
+                  <div className="p-2 flex-1 flex flex-col gap-1">
+                    <p className="text-xs font-semibold leading-tight">{b.name}</p>
+                    {b.sciName && <p className="text-[10px] italic text-muted-foreground leading-tight">{b.sciName}</p>}
+                    <div className="flex gap-1 mt-auto pt-1">
+                      <button onClick={() => prefillFromResult(b)} className="flex-1 text-[10px] py-1 rounded bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-medium">Log</button>
+                      <button onClick={() => addToWishlist(b)} className="flex-1 text-[10px] py-1 rounded bg-secondary hover:bg-secondary/80 transition-colors font-medium">Wishlist</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Log form */}
+      {showLogForm && (
+        <form onSubmit={submitLog} className="rounded-xl border bg-secondary/30 p-3 space-y-2">
+          <p className="text-xs font-semibold">Log a sighting</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Bird name *</label>
+              <Input value={logBirdName} onChange={e => setLogBirdName(e.target.value)} placeholder="e.g. American Robin" className="text-xs h-8" required />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Scientific name</label>
+              <Input value={logSciName} onChange={e => setLogSciName(e.target.value)} placeholder="e.g. Turdus migratorius" className="text-xs h-8 italic" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Date</label>
+              <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-xs h-8" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Location</label>
+              <Input value={logLocation} onChange={e => setLogLocation(e.target.value)} placeholder="e.g. City Park" className="text-xs h-8" />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Notes</label>
+            <Input value={logNotes} onChange={e => setLogNotes(e.target.value)} placeholder="Behaviour, plumage notes…" className="text-xs h-8" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" className="flex-1 text-xs py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 font-medium transition-colors">Save sighting</button>
+            <button type="button" onClick={() => setShowLogForm(false)} className="flex-1 text-xs py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 font-medium transition-colors">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {/* Sightings tab */}
+      {tab === "sightings" && !showLogForm && (
+        sightings.length === 0
+          ? <p className="text-xs text-muted-foreground text-center py-4">No sightings logged yet. Press "Log sighting" to start your list!</p>
+          : <div className="space-y-2">
+              {sightings.map((s: any) => (
+                <div key={s.id} className="flex items-center gap-3 rounded-xl border bg-card p-2">
+                  {s.image
+                    ? <img src={s.image} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" onError={e => { (e.target as HTMLImageElement).src = ""; (e.target as HTMLImageElement).style.display = "none"; }} />
+                    : <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center text-xl shrink-0">🐦</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{s.name}</p>
+                    {s.sciName && <p className="text-[11px] italic text-muted-foreground truncate">{s.sciName}</p>}
+                    <p className="text-[11px] text-muted-foreground">{s.date}{s.location ? ` · ${s.location}` : ""}</p>
+                  </div>
+                  <button onClick={() => onUpdateExtra(setBirdData(hobby.extraJson ?? "{}", { sightings: sightings.filter((x: any) => x.id !== s.id), wishlist }))}
+                    className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"><Trash2 size={11} /></button>
+                </div>
+              ))}
+            </div>
+      )}
+
+      {/* Wishlist tab */}
+      {tab === "wishlist" && !showSearch && (
+        wishlist.length === 0
+          ? <p className="text-xs text-muted-foreground text-center py-4">No birds on your wishlist yet. Search for birds above to add them!</p>
+          : <div className="grid grid-cols-2 gap-2">
+              {wishlist.map((b: any) => (
+                <div key={b.name} className="rounded-lg border bg-card overflow-hidden flex flex-col">
+                  {b.image && <img src={b.image} alt={b.name} className="w-full h-24 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                  {!b.image && <div className="w-full h-24 bg-secondary flex items-center justify-center text-2xl">🐦</div>}
+                  <div className="p-2 flex items-start justify-between gap-1">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold leading-tight truncate">{b.name}</p>
+                      {b.sciName && <p className="text-[10px] italic text-muted-foreground leading-tight truncate">{b.sciName}</p>}
+                    </div>
+                    <button onClick={() => removeWishlist(b.name)} className="p-0.5 hover:text-destructive text-muted-foreground transition-colors shrink-0"><Trash2 size={10} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+      )}
+    </div>
+  );
+}
+
 // ── HikingSection ─────────────────────────────────────────────────────────────
 
 /** Shared hook: geocode + Waymarked Trails search */
@@ -3016,6 +3505,17 @@ function HobbyDetailDialog({
         {hobby.name.toLowerCase().includes("hiking") && (
           <div className="mt-4 border-t pt-4">
             <HikingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Bird watching section ── */}
+        {(hobby.name.toLowerCase().includes("bird") || hobby.name.toLowerCase().includes("birding")) && (
+          <div className="mt-4 border-t pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🦅</span>
+              <p className="text-sm font-semibold">Sightings & Wishlist</p>
+            </div>
+            <BirdSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
       </DialogContent>
