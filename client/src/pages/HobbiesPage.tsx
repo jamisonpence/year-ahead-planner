@@ -441,6 +441,92 @@ function generatePokerSteps(currentStake: PokerStake, targetStake: PokerStake, m
   return steps;
 }
 
+// ── Hiking plan helpers ────────────────────────────────────────────────────────
+
+type HikingGoalType = "frequency" | "distance" | "elevation" | "peak" | "trails";
+
+const HIKING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "hk-freq",  emoji: "🥾", label: "Annual hike count",    description: "Commit to a number of hikes — e.g. 52 hikes in a year",           durationWeeks: 52, defaultSteps: [] },
+  { id: "hk-dist",  emoji: "📏", label: "Annual distance",       description: "Set a total mileage goal for the year — e.g. 300 miles",          durationWeeks: 52, defaultSteps: [] },
+  { id: "hk-elev",  emoji: "📈", label: "Annual elevation gain", description: "Rack up a total elevation goal — e.g. 50,000 ft of gain",         durationWeeks: 52, defaultSteps: [] },
+  { id: "hk-peak",  emoji: "🏔️", label: "Peak / altitude goal", description: "Chase a specific summit — e.g. first 14,000-foot summit",          durationWeeks: 16, defaultSteps: [] },
+  { id: "hk-list",  emoji: "📋", label: "Trail list / challenge", description: "Work through a named list — e.g. local \"52 with a view\" list",  durationWeeks: 52, defaultSteps: [] },
+];
+
+const HIKING_GOAL_TYPE_MAP: Record<string, HikingGoalType> = {
+  "hk-freq": "frequency", "hk-dist": "distance", "hk-elev": "elevation",
+  "hk-peak": "peak", "hk-list": "trails",
+};
+
+function generateHikingSteps(
+  goalType: HikingGoalType,
+  opts: { count?: string; miles?: string; feet?: string; altitude?: string; peakName?: string; listName?: string; listCount?: string; planTrails?: any[] },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const n = (s: string) => Number(s) || 0;
+  const fmt = (v: number) => v.toLocaleString();
+
+  switch (goalType) {
+    case "frequency": {
+      const c = n(opts.count ?? "52");
+      return [
+        g("Research and map local trails, parks, and hiking areas"),
+        g(`Complete first ${Math.round(c / 4)} hikes — Q1 milestone`),
+        g(`Reach ${Math.round(c / 2)} hikes — halfway mark`),
+        g(`Log ${Math.round(c * 3 / 4)} hikes — Q3 milestone`),
+        g(`Complete all ${c} hikes — celebrate!`),
+      ];
+    }
+    case "distance": {
+      const m = n(opts.miles ?? "300");
+      return [
+        g(`Plan a mix of short and long hikes to hit ${fmt(m)} miles over the year`),
+        g(`Log first ${Math.round(m / 4)} miles — Q1 milestone`),
+        g(`Reach ${Math.round(m / 2)} miles — halfway mark`),
+        g(`Log ${Math.round(m * 3 / 4)} miles — Q3 milestone`),
+        g(`Complete ${fmt(m)} miles — goal achieved!`),
+      ];
+    }
+    case "elevation": {
+      const f = n(opts.feet ?? "50000");
+      return [
+        g(`Identify hikes with significant elevation gain to accumulate ${fmt(f)} ft`),
+        g(`Log first ${fmt(Math.round(f / 4))} ft — Q1 milestone`),
+        g(`Reach ${fmt(Math.round(f / 2))} ft — halfway mark`),
+        g(`Log ${fmt(Math.round(f * 3 / 4))} ft — Q3 milestone`),
+        g(`Complete ${fmt(f)} ft of total elevation gain`),
+      ];
+    }
+    case "peak": {
+      const alt = n(opts.altitude ?? "14000");
+      const name = opts.peakName?.trim() || `a ${fmt(alt)}-foot peak`;
+      return [
+        g(`Research the route, permits, and conditions for ${name}`),
+        g("Build base fitness — 3 hikes per week for 4 weeks"),
+        g("Training hike with significant elevation gain (5,000+ ft)"),
+        g("Overnight backpacking trip — altitude and fitness test"),
+        g("Gear check — footwear, layers, navigation, emergency kit"),
+        g(`Summit day — top of ${name}!`),
+      ];
+    }
+    case "trails": {
+      const trails = opts.planTrails ?? [];
+      const lc = n(opts.listCount ?? "52");
+      const listLabel = opts.listName?.trim() || "the trail list";
+      if (trails.length > 0) {
+        return trails.map(t => g(`Hike: ${t.name}${t.length > 0 ? ` (${t.length} mi)` : ""}`));
+      }
+      return [
+        g(`Research all trails on ${listLabel}`),
+        g(`Complete first ${Math.round(lc / 4)} trails — Q1 milestone`),
+        g(`Halfway milestone — ${Math.round(lc / 2)} trails done`),
+        g(`Three-quarters complete — ${Math.round(lc * 3 / 4)} trails done`),
+        g(`Complete all ${lc} trails on ${listLabel} — challenge complete!`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -817,10 +903,24 @@ function PlanWizard({
   const [currentStake, setCurrentStake] = useState<PokerStake | "">("");
   const [targetStake, setTargetStake] = useState<PokerStake | "">("");
 
+  // Hiking wizard state
+  const [hikingMode, setHikingMode] = useState(false);
+  const [hikingGoalType, setHikingGoalType] = useState<HikingGoalType | "">("");
+  const [hikeCount,    setHikeCount]    = useState("52");
+  const [hikeMiles,    setHikeMiles]    = useState("300");
+  const [hikeFeet,     setHikeFeet]     = useState("50000");
+  const [peakAltitude, setPeakAltitude] = useState("14000");
+  const [peakName,     setPeakName]     = useState("");
+  const [trailListName,  setTrailListName]  = useState("");
+  const [trailListCount, setTrailListCount] = useState("52");
+  const [planTrails, setPlanTrails] = useState<any[]>([]);
+  const hikingTrailSearch = useTrailSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
-  const templates = PLAN_TEMPLATES[hobbyType] ?? [];
+  const isHikingHobby = selectedHobby?.name?.toLowerCase().includes("hiking") ?? false;
+  const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
   const eloGap = Math.max(0, Number(targetElo) - Number(currentElo));
@@ -838,6 +938,9 @@ function PlanWizard({
     setActivateNow(true); setSteps([]); setStepInput(""); setStepDate("");
     setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setPokerMode(false); setCurrentStake(""); setTargetStake("");
+    setHikingMode(false); setHikingGoalType(""); setHikeCount("52"); setHikeMiles("300");
+    setHikeFeet("50000"); setPeakAltitude("14000"); setPeakName(""); setTrailListName("");
+    setTrailListCount("52"); setPlanTrails([]);
   }
   function handleClose() { reset(); onClose(); }
 
@@ -845,13 +948,36 @@ function PlanWizard({
     const hobbyName = selectedHobby?.name?.toLowerCase() ?? "";
     const isChessRating = t.id === "gp3" && hobbyName.includes("chess");
     const isPokerRating = t.id === "gp3" && hobbyName.includes("poker");
+    const hikingType = HIKING_GOAL_TYPE_MAP[t.id];
     setSelectedTemplate(t);
     if (isChessRating) { setChessEloMode(true); return; }
     if (isPokerRating) { setPokerMode(true); return; }
+    if (hikingType) { setHikingMode(true); setHikingGoalType(hikingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
     setStep(2);
+  }
+
+  function applyHikingSettings() {
+    if (!hikingGoalType) return;
+    const generatedSteps = generateHikingSteps(hikingGoalType, {
+      count: hikeCount, miles: hikeMiles, feet: hikeFeet,
+      altitude: peakAltitude, peakName, listName: trailListName,
+      listCount: trailListCount, planTrails,
+    });
+    let title = "";
+    let desc  = "";
+    let weeks = 52;
+    switch (hikingGoalType) {
+      case "frequency": title = `${hikeCount} Hikes This Year`;                   desc = `Complete ${hikeCount} hikes over the year — roughly ${(Number(hikeCount)/52).toFixed(1)} per week.`; break;
+      case "distance":  title = `Hike ${hikeMiles} Miles This Year`;               desc = `Cover ${hikeMiles} miles on trail over the year — about ${Math.round(Number(hikeMiles)/52)} miles per week.`; break;
+      case "elevation": title = `${Number(hikeFeet).toLocaleString()} Feet of Gain This Year`; desc = `Accumulate ${Number(hikeFeet).toLocaleString()} feet of elevation gain on trail.`; break;
+      case "peak":      title = peakName ? `Summit ${peakName}` : `First ${Number(peakAltitude).toLocaleString()}ft Summit`; desc = `Train and summit ${peakName || `a ${Number(peakAltitude).toLocaleString()}-foot peak`}.`; weeks = 16; break;
+      case "trails":    title = trailListName ? `Complete: ${trailListName}` : `Trail List (${trailListCount} trails)`; desc = `Work through the "${trailListName || "trail list"}" — ${planTrails.length > 0 ? planTrails.length : trailListCount} trails to complete.`; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setHikingMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -901,10 +1027,11 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || pokerMode) && (
+            {(step === 2 || chessEloMode || pokerMode || hikingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setSelectedTemplate(null); }
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
+                else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else setStep(1);
               }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
@@ -913,28 +1040,193 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !pokerMode ? "New Plan"
+                {step === 1 && !chessEloMode && !pokerMode && !hikingMode ? "New Plan"
                   : chessEloMode ? "Chess Rating Goal"
                   : pokerMode ? "Poker Improvement Plan"
+                  : hikingMode ? "Hiking Goal"
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !pokerMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !pokerMode && !hikingMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
+                  : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || pokerMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || pokerMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || pokerMode || hikingMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || pokerMode || hikingMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+          {/* ── HIKING GOAL WIZARD ── */}
+          {hikingMode && (() => {
+            const meta: Record<HikingGoalType, { emoji: string; example: string }> = {
+              frequency: { emoji: "🥾", example: "e.g. 52 hikes this year (1 per week)" },
+              distance:  { emoji: "📏", example: "e.g. Hike 300 miles this year" },
+              elevation: { emoji: "📈", example: "e.g. 50,000 feet of gain this year" },
+              peak:      { emoji: "🏔️", example: "e.g. First 14,000-foot summit" },
+              trails:    { emoji: "📋", example: "e.g. Finish local \"52 with a view\" list" },
+            };
+            const m = hikingGoalType ? meta[hikingGoalType] : null;
+            return (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                  <span className="text-2xl">{m?.emoji ?? "🥾"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{selectedTemplate?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* FREQUENCY */}
+                {hikingGoalType === "frequency" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target hike count *</label>
+                    <Input type="number" min={1} max={365} placeholder="e.g. 52" value={hikeCount} onChange={e => setHikeCount(e.target.value)} className="text-sm" />
+                    {Number(hikeCount) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {(Number(hikeCount) / 52).toFixed(1)} hikes per week over a year</p>}
+                  </div>
+                )}
+
+                {/* DISTANCE */}
+                {hikingGoalType === "distance" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target miles *</label>
+                    <Input type="number" min={1} placeholder="e.g. 300" value={hikeMiles} onChange={e => setHikeMiles(e.target.value)} className="text-sm" />
+                    {Number(hikeMiles) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {Math.round(Number(hikeMiles) / 52)} miles per week over a year</p>}
+                  </div>
+                )}
+
+                {/* ELEVATION */}
+                {hikingGoalType === "elevation" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target elevation gain (feet) *</label>
+                    <Input type="number" min={1000} step={1000} placeholder="e.g. 50000" value={hikeFeet} onChange={e => setHikeFeet(e.target.value)} className="text-sm" />
+                    {Number(hikeFeet) > 0 && <p className="text-[10px] text-muted-foreground mt-1">≈ {Math.round(Number(hikeFeet) / 52).toLocaleString()} ft/week over a year</p>}
+                  </div>
+                )}
+
+                {/* PEAK */}
+                {hikingGoalType === "peak" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target altitude (feet) *</label>
+                      <Input type="number" min={1000} step={100} placeholder="e.g. 14000" value={peakAltitude} onChange={e => setPeakAltitude(e.target.value)} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Peak name (optional)</label>
+                      <Input placeholder="e.g. Mount Elbert, Longs Peak…" value={peakName} onChange={e => setPeakName(e.target.value)} className="text-sm" />
+                    </div>
+                    {/* Trail search for finding the peak */}
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Find trail via search (optional)</label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Search trail near… (e.g. Rocky Mountain NP)"
+                          value={hikingTrailSearch.locationInput} onChange={e => hikingTrailSearch.setLocationInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") hikingTrailSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => hikingTrailSearch.runSearch()} disabled={hikingTrailSearch.searching || !hikingTrailSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                          {hikingTrailSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {hikingTrailSearch.searchError && <p className="text-xs text-destructive mt-1">{hikingTrailSearch.searchError}</p>}
+                      {hikingTrailSearch.searchResults.length > 0 && (
+                        <div className="mt-1.5 space-y-1 max-h-36 overflow-y-auto">
+                          {hikingTrailSearch.searchResults.map((t: any) => (
+                            <button key={t.id} onClick={() => { setPeakName(t.name); hikingTrailSearch.setSearchResults([]); }}
+                              className="w-full text-left p-2 rounded border text-xs hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors">
+                              <span className="font-medium">{t.name}</span>{t.length > 0 ? <span className="text-muted-foreground ml-1">({t.length} mi)</span> : ""}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TRAIL LIST */}
+                {hikingGoalType === "trails" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">List / challenge name</label>
+                        <Input placeholder='e.g. "52 with a View"' value={trailListName} onChange={e => setTrailListName(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Total trail count</label>
+                        <Input type="number" min={1} placeholder="e.g. 52" value={trailListCount} onChange={e => setTrailListCount(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                    {/* Trail search */}
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                        Add specific trails to the plan{planTrails.length > 0 ? ` (${planTrails.length} added)` : " (optional)"}
+                      </label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Search trail name or location…"
+                          value={hikingTrailSearch.locationInput} onChange={e => hikingTrailSearch.setLocationInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") hikingTrailSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => hikingTrailSearch.runSearch()} disabled={hikingTrailSearch.searching || !hikingTrailSearch.locationInput.trim()} className="h-8 gap-1 shrink-0">
+                          {hikingTrailSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                          {hikingTrailSearch.searching ? "…" : "Search"}
+                        </Button>
+                      </div>
+                      {hikingTrailSearch.searchError && <p className="text-xs text-destructive mt-1">{hikingTrailSearch.searchError}</p>}
+                      {hikingTrailSearch.searchResults.length > 0 && (
+                        <div className="mt-1.5 space-y-1 max-h-40 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">{hikingTrailSearch.searchResults.length} routes found — click to add</p>
+                          {hikingTrailSearch.searchResults.map((t: any) => {
+                            const added = planTrails.some(p => p.id === t.id);
+                            return (
+                              <button key={t.id} disabled={added} onClick={() => { setPlanTrails(p => [...p, t]); }}
+                                className={`w-full text-left flex items-center justify-between p-2 rounded border text-xs transition-colors ${added ? "opacity-50 cursor-not-allowed bg-secondary" : "hover:bg-emerald-50 dark:hover:bg-emerald-950/20"}`}>
+                                <span><span className="font-medium">{t.name}</span>{t.length > 0 ? <span className="text-muted-foreground ml-1">({t.length} mi)</span> : ""}</span>
+                                {added ? <Check size={11} className="text-emerald-600 shrink-0" /> : <Plus size={11} className="text-muted-foreground shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Added trails list */}
+                      {planTrails.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Added to plan ({planTrails.length})</p>
+                          {planTrails.map((t, i) => (
+                            <div key={t.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                              <span className="truncate">{i + 1}. {t.name}{t.length > 0 ? <span className="text-muted-foreground ml-1">({t.length} mi)</span> : ""}</span>
+                              <button onClick={() => setPlanTrails(p => p.filter(x => x.id !== t.id))} className="ml-2 text-muted-foreground hover:text-destructive shrink-0"><X size={11} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={applyHikingSettings}
+                  disabled={
+                    (hikingGoalType === "frequency" && !hikeCount) ||
+                    (hikingGoalType === "distance"  && !hikeMiles) ||
+                    (hikingGoalType === "elevation" && !hikeFeet)  ||
+                    (hikingGoalType === "peak"      && !peakAltitude)
+                  }
+                  className="w-full gap-2"
+                >
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* CHESS ELO STEP */}
           {chessEloMode && (
             <>
@@ -1092,7 +1384,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !pokerMode && (
+          {step === 1 && !chessEloMode && !pokerMode && !hikingMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
