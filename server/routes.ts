@@ -3492,15 +3492,16 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     try {
       const q = String(req.query.q || "").trim();
       if (!q) return res.json({ results: [] });
+      // Minimal query — avoid optional fields that may not exist in all schema versions
       const gql = `
         query SearchClimbs {
           search(query: ${JSON.stringify(q)}) {
             climbs {
               id
               name
-              type { sport trad boulder topRope tr }
+              type { sport trad boulder topRope }
               grades { yds vscale }
-              content { description location }
+              content { description }
             }
           }
         }
@@ -3513,8 +3514,21 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         },
         body: JSON.stringify({ query: gql }),
       });
-      if (!r.ok) return res.status(r.status).json({ error: "OpenBeta error" });
-      const data = await r.json() as any;
+      const rawText = await r.text();
+      if (!r.ok) {
+        console.error(`[OpenBeta] HTTP ${r.status}: ${rawText.slice(0, 400)}`);
+        return res.status(502).json({ error: `Route search unavailable (HTTP ${r.status}). Try again shortly.` });
+      }
+      let data: any;
+      try { data = JSON.parse(rawText); } catch {
+        console.error("[OpenBeta] Non-JSON response:", rawText.slice(0, 400));
+        return res.status(502).json({ error: "Route search returned an unexpected response." });
+      }
+      if (data.errors?.length) {
+        const msg = data.errors[0]?.message ?? "unknown error";
+        console.error("[OpenBeta] GraphQL errors:", JSON.stringify(data.errors).slice(0, 400));
+        return res.status(502).json({ error: `OpenBeta error: ${msg}` });
+      }
       const climbs: any[] = data?.data?.search?.climbs ?? [];
       const results = climbs.slice(0, 15).map((c: any) => ({
         id: c.id,
@@ -3523,10 +3537,10 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         climbType: c.type?.boulder ? "Boulder"
                  : c.type?.sport   ? "Sport"
                  : c.type?.trad    ? "Trad"
-                 : (c.type?.topRope || c.type?.tr) ? "Top Rope"
+                 : c.type?.topRope ? "Top Rope"
                  : "Route",
         description: (c.content?.description ?? "").slice(0, 200),
-        location:    (c.content?.location ?? "").slice(0, 100),
+        location: "",
       }));
       res.json({ results });
     } catch (e) { handleError(res, e); }
