@@ -702,6 +702,102 @@ function generateHikingSteps(
   }
 }
 
+// ── Playing an Instrument plan helpers ───────────────────────────────────────
+
+const INSTRUMENT_LIST = [
+  // Strings
+  "Acoustic Guitar", "Electric Guitar", "Bass Guitar", "Classical Guitar",
+  "Violin", "Viola", "Cello", "Double Bass", "Ukulele", "Banjo", "Mandolin", "Harp",
+  // Keys
+  "Piano", "Keyboard / Synth", "Organ", "Accordion",
+  // Wind – woodwind
+  "Flute", "Clarinet", "Alto Saxophone", "Tenor Saxophone", "Soprano Saxophone",
+  "Oboe", "Bassoon", "Recorder",
+  // Wind – brass
+  "Trumpet", "Trombone", "French Horn", "Tuba", "Flugelhorn",
+  // Percussion
+  "Drum Kit", "Cajon", "Djembe", "Hand Pan", "Xylophone / Marimba",
+  // Other
+  "Harmonica", "Bagpipes", "Sitar", "Oud", "Erhu", "Vocals / Singing",
+] as const;
+
+type InstrumentGoalType = "core" | "repertoire" | "technique" | "performance";
+
+const INSTRUMENT_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "inst-core",    emoji: "🎵", label: "Core playing ability",    description: "Play a simple song start to finish with good tone and steady rhythm",                   durationWeeks: 8,  defaultSteps: [] },
+  { id: "inst-rep",     emoji: "🎼", label: "Songs / repertoire",      description: "Learn 5–10 favourite songs you can play confidently from memory",                        durationWeeks: 16, defaultSteps: [] },
+  { id: "inst-tech",    emoji: "🎹", label: "Technique / musicianship", description: "Practice scales and chords daily for finger speed, accuracy, and basic theory",         durationWeeks: 12, defaultSteps: [] },
+  { id: "inst-perf",    emoji: "🎤", label: "Performance / enjoyment",  description: "Perform for friends or family and play at least twice a week for fun",                  durationWeeks: 12, defaultSteps: [] },
+];
+
+const INSTRUMENT_GOAL_TYPE_MAP: Record<string, InstrumentGoalType> = {
+  "inst-core": "core", "inst-rep": "repertoire", "inst-tech": "technique", "inst-perf": "performance",
+};
+
+function generateInstrumentSteps(
+  goalType: InstrumentGoalType,
+  opts: {
+    instrument: string;
+    song?: string;
+    songCount?: string;
+    practiceMinutes?: string;
+    practiceDays?: string;
+    performanceSong?: string;
+    sessionsPerWeek?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  const inst = opts.instrument || "your instrument";
+  switch (goalType) {
+    case "core": {
+      const song = opts.song?.trim() || "a simple song";
+      return [
+        g(`Get comfortable holding and producing sound on the ${inst} — posture, grip, and basic technique`),
+        g(`Learn the notes / chords needed for "${song}"`),
+        g(`Practice the first half slowly with a metronome — focus on tone quality`),
+        g(`Practice the second half and connect both sections at slow tempo`),
+        g(`Gradually bring the tempo up — aim for a steady, even rhythm throughout`),
+        g(`Play "${song}" from start to finish in one take — celebrate!`),
+      ];
+    }
+    case "repertoire": {
+      const n = Math.max(1, Number(opts.songCount ?? "7"));
+      return [
+        g(`Create your target list of ${n} songs — mix easy wins and stretch goals`),
+        g(`Learn songs 1–${Math.ceil(n / 3)}: focus on clean changes and basic dynamics`),
+        g(`Learn songs ${Math.ceil(n / 3) + 1}–${Math.ceil(2 * n / 3)}: introduce more variety in style or key`),
+        g(`Learn final songs ${Math.ceil(2 * n / 3) + 1}–${n}: choose at least one that challenges you`),
+        g(`Run through all ${n} songs without stopping — identify weak spots to polish`),
+        g(`Play all ${n} songs fully from memory — your repertoire is ready!`),
+      ];
+    }
+    case "technique": {
+      const mins = opts.practiceMinutes ?? "20";
+      const days = opts.practiceDays ?? "5";
+      return [
+        g(`Set up a daily practice block: ${mins} min warm-up + focused technique, ${days} days/week`),
+        g(`Week 1–2: Master your major scales in at least 3 keys — slow and precise`),
+        g(`Week 3–4: Add core chords / arpeggios — practice transitions until smooth`),
+        g(`Month 2: Increase tempo with a metronome — track BPM improvements weekly`),
+        g(`Month 3: Apply technique to a real piece — notice the improvement in tone and control`),
+        g(`End-of-month test: record yourself playing a scale run and a chord progression, compare to week 1`),
+      ];
+    }
+    case "performance": {
+      const song = opts.performanceSong?.trim() || "a piece";
+      const sessions = opts.sessionsPerWeek ?? "2";
+      return [
+        g(`Choose the piece for your performance: "${song || "your chosen song"}"`),
+        g(`Build a regular playing habit — ${sessions} casual sessions per week for enjoyment`),
+        g(`Polish "${song || "the piece"}" — smooth transitions, dynamics, and expression`),
+        g(`Informal run-through for yourself: play it as if an audience is watching`),
+        g(`Schedule the performance — tell a friend or family member the date`),
+        g(`Perform "${song || "the piece"}" live — enjoy the moment!`),
+      ];
+    }
+  }
+}
+
 // ── Language Learning plan helpers ────────────────────────────────────────────
 
 const WORLD_LANGUAGES = [
@@ -1324,6 +1420,17 @@ function PlanWizard({
   const [llWordsWeek,   setLlWordsWeek]   = useState("50");
   const [llTravelCountry, setLlTravelCountry] = useState("");
 
+  // Instrument wizard state
+  const [instrMode, setInstrMode] = useState(false);
+  const [instrGoalType, setInstrGoalType] = useState<InstrumentGoalType | "">("");
+  const [instrInstrument,    setInstrInstrument]    = useState("");
+  const [instrSong,          setInstrSong]          = useState("");
+  const [instrSongCount,     setInstrSongCount]     = useState("7");
+  const [instrPracticeMins,  setInstrPracticeMins]  = useState("20");
+  const [instrPracticeDays,  setInstrPracticeDays]  = useState("5");
+  const [instrPerfSong,      setInstrPerfSong]      = useState("");
+  const [instrSessions,      setInstrSessions]      = useState("2");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1332,11 +1439,13 @@ function PlanWizard({
   const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const isBirdHobby   = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
   const isLangHobby   = selectedHobby?.name?.toLowerCase().includes("language") ?? false;
+  const isInstrHobby  = selectedHobby?.name?.toLowerCase().includes("instrument") ?? false;
   const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
                   : isChessHobby  ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby  ? POKER_PLAN_TEMPLATES
                   : isBirdHobby   ? BIRD_PLAN_TEMPLATES
                   : isLangHobby   ? LANGUAGE_PLAN_TEMPLATES
+                  : isInstrHobby  ? INSTRUMENT_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
   // Chess ELO preview
@@ -1372,6 +1481,9 @@ function PlanWizard({
     setLangMode(false); setLangGoalType(""); setLlLanguage(""); setLlConvMins("10");
     setLlExamName(""); setLlExamLevel("B2"); setLlExamMonths("12");
     setLlStudyMins("30"); setLlStudyDays("5"); setLlWordsWeek("50"); setLlTravelCountry("");
+    setInstrMode(false); setInstrGoalType(""); setInstrInstrument(""); setInstrSong("");
+    setInstrSongCount("7"); setInstrPracticeMins("20"); setInstrPracticeDays("5");
+    setInstrPerfSong(""); setInstrSessions("2");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1397,6 +1509,8 @@ function PlanWizard({
     if (birdType) { setBirdMode(true); setBirdGoalType(birdType); return; }
     const langType = LANGUAGE_GOAL_TYPE_MAP[t.id];
     if (langType) { setLangMode(true); setLangGoalType(langType); return; }
+    const instrType = INSTRUMENT_GOAL_TYPE_MAP[t.id];
+    if (instrType) { setInstrMode(true); setInstrGoalType(instrType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1527,6 +1641,25 @@ function PlanWizard({
     setSteps(generatedSteps); setLangMode(false); setLangGoalType(""); setStep(2);
   }
 
+  function applyInstrumentSettings() {
+    if (!instrGoalType || !instrInstrument) return;
+    const generatedSteps = generateInstrumentSteps(instrGoalType, {
+      instrument: instrInstrument, song: instrSong, songCount: instrSongCount,
+      practiceMinutes: instrPracticeMins, practiceDays: instrPracticeDays,
+      performanceSong: instrPerfSong, sessionsPerWeek: instrSessions,
+    });
+    let planTitle = "", desc = "", weeks = 8;
+    const inst = instrInstrument;
+    switch (instrGoalType) {
+      case "core":        planTitle = instrSong ? `Play "${instrSong}" on ${inst}` : `Core playing ability — ${inst}`; desc = `Play a song from start to finish with good tone and rhythm.`; break;
+      case "repertoire":  planTitle = `${instrSongCount}-song repertoire on ${inst}`; desc = `Learn ${instrSongCount} songs you can play confidently from memory.`; weeks = 16; break;
+      case "technique":   planTitle = `${inst} technique — ${instrPracticeMins} min/day, ${instrPracticeDays}×/week`; desc = `Build daily practice for scales, chords, and music theory.`; weeks = 12; break;
+      case "performance": planTitle = instrPerfSong ? `Perform "${instrPerfSong}" on ${inst}` : `First performance on ${inst}`; desc = `Perform for friends or family and play ${instrSessions}×/week for fun.`; weeks = 12; break;
+    }
+    setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setInstrMode(false); setInstrGoalType(""); setStep(2);
+  }
+
   function addStep() {
     if (!stepInput.trim()) return;
     setSteps(s => [...s, { id: genId(), text: stepInput.trim(), done: false, dueDate: stepDate || undefined }]);
@@ -1550,7 +1683,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -1559,6 +1692,7 @@ function PlanWizard({
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
+                else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
                 else setStep(1);
               }} className="p-1 rounded-lg hover:bg-secondary transition-colors text-muted-foreground">
                 <ChevronLeft size={15} />
@@ -1567,7 +1701,7 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
@@ -1575,10 +1709,11 @@ function PlanWizard({
                   : hikingMode ? "Hiking Goal"
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
+                  : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
@@ -1586,13 +1721,14 @@ function PlanWizard({
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
+                  : instrMode ? "Choose your instrument and configure your goal"
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -2019,6 +2155,113 @@ function PlanWizard({
                 )}
 
                 <Button onClick={applyLanguageSettings} disabled={!langGoalType || !llLanguage} className="w-full">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── INSTRUMENT GOAL WIZARD ── */}
+          {instrMode && (() => {
+            const tplMeta = INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType);
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-violet-50/60 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "🎵"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* Instrument picker — always shown first */}
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Which instrument? *</label>
+                  <select value={instrInstrument} onChange={e => setInstrInstrument(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">Select an instrument…</option>
+                    {INSTRUMENT_LIST.map(i => <option key={i} value={i}>{i}</option>)}
+                    <option value="Other">Other…</option>
+                  </select>
+                  {instrInstrument === "Other" && (
+                    <Input className="text-sm mt-2" placeholder="Type your instrument…" onChange={e => setInstrInstrument(e.target.value)} />
+                  )}
+                </div>
+
+                {/* Core playing ability */}
+                {instrGoalType === "core" && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Which song will you learn? (optional)</label>
+                    <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "Wonderwall", "Für Elise", "Hallelujah"' />
+                    <p className="text-[11px] text-muted-foreground mt-1">Leave blank for a general beginner-song plan.</p>
+                  </div>
+                )}
+
+                {/* Songs / repertoire */}
+                {instrGoalType === "repertoire" && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">How many songs in your repertoire?</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["3", "5", "7", "10", "12", "15"].map(n => (
+                        <button key={n} onClick={() => setInstrSongCount(n)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrSongCount === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                          {n} songs
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Technique / musicianship */}
+                {instrGoalType === "technique" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Daily practice time</label>
+                      <div className="flex flex-wrap gap-2">
+                        {["10", "20", "30", "45", "60"].map(m => (
+                          <button key={m} onClick={() => setInstrPracticeMins(m)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {m} min
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Days per week</label>
+                      <div className="flex gap-2">
+                        {["3", "4", "5", "6", "7"].map(d => (
+                          <button key={d} onClick={() => setInstrPracticeDays(d)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeDays === d ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {d}×/wk
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Performance / enjoyment */}
+                {instrGoalType === "performance" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Song to perform (optional)</label>
+                      <Input value={instrPerfSong} onChange={e => setInstrPerfSong(e.target.value)} className="text-sm" placeholder='e.g. "Blackbird", "Canon in D"' />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Casual play sessions per week</label>
+                      <div className="flex gap-2">
+                        {["1", "2", "3", "4", "5"].map(s => (
+                          <button key={s} onClick={() => setInstrSessions(s)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrSessions === s ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {s}×/wk
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applyInstrumentSettings} disabled={!instrGoalType || !instrInstrument} className="w-full">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -2455,7 +2698,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !birdMode && !langMode && !instrMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -2494,6 +2737,20 @@ function PlanWizard({
                   </select>
                   {llLanguage === "Other" && (
                     <Input className="text-sm mt-2" placeholder="Type your language…" onChange={e => setLlLanguage(e.target.value)} />
+                  )}
+                </div>
+              )}
+              {selectedHobby && isInstrHobby && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which instrument? 🎵</label>
+                  <select value={instrInstrument} onChange={e => setInstrInstrument(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">Select an instrument…</option>
+                    {INSTRUMENT_LIST.map(i => <option key={i} value={i}>{i}</option>)}
+                    <option value="Other">Other…</option>
+                  </select>
+                  {instrInstrument === "Other" && (
+                    <Input className="text-sm mt-2" placeholder="Type your instrument…" onChange={e => setInstrInstrument(e.target.value)} />
                   )}
                 </div>
               )}
