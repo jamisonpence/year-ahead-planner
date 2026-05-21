@@ -1438,8 +1438,9 @@ function PlanWizard({
   const isChessHobby  = selectedHobby?.name?.toLowerCase().includes("chess")  ?? false;
   const isPokerHobby  = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const isBirdHobby   = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
-  const isLangHobby   = selectedHobby?.name?.toLowerCase().includes("language") ?? false;
-  const isInstrHobby  = selectedHobby?.name?.toLowerCase().includes("instrument") ?? false;
+  const isLangHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
+  // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
+  const isInstrHobby  = hobbyType === "performance";
   const templates = isHikingHobby ? HIKING_PLAN_TEMPLATES
                   : isChessHobby  ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby  ? POKER_PLAN_TEMPLATES
