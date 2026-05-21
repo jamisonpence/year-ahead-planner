@@ -3891,6 +3891,29 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  /** GET /api/fish/search?q=bass
+   *  Proxies to iNaturalist taxa API — no API key required.
+   *  Restricts results to ray-finned fish (Actinopterygii).
+   *  Returns { results: [{ id, name, sciName, photoUrl }] }
+   */
+  app.get("/api/fish/search", requireAuth, async (req, res) => {
+    try {
+      const { q = "" } = req.query as Record<string, string>;
+      if (!q.trim()) return res.json({ results: [] });
+      const url = `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(q)}&rank=species,subspecies&iconic_taxa=Actinopterygii&per_page=12&locale=en`;
+      const r = await fetch(url, { headers: { "User-Agent": "MyLifos/1.0 (hobby-fishing-feature)" } });
+      if (!r.ok) return res.status(r.status).json({ error: "iNaturalist API error" });
+      const data = await r.json();
+      const results = (data.results ?? []).map((t: any) => ({
+        id:       t.id,
+        name:     t.preferred_common_name ?? t.name,
+        sciName:  t.name,
+        photoUrl: t.default_photo?.square_url ?? null,
+      }));
+      res.json({ results });
+    } catch (e) { handleError(res, e); }
+  });
+
   /** GET /api/birds/search?name=robin&page=1
    *  Proxies to Nuthatch API (nuthatch.lastelm.software) — requires NUTHATCH_API_KEY env var.
    *  Returns { birds: [{ id, name, sciName, status, image }], total }

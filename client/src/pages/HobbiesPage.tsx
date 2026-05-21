@@ -1103,6 +1103,122 @@ function generateCyclingSteps(
   }
 }
 
+// ── Fishing plan helpers ──────────────────────────────────────────────────────
+
+interface FishCatchEntry {
+  id: string;
+  speciesId?: number;
+  speciesName: string;
+  sciName?: string;
+  photoUrl?: string;
+  userPhotoUrl?: string;
+  date: string;
+  weightLbs?: number;
+  lengthIn?: number;
+  location?: string;
+  lure?: string;
+  notes?: string;
+  isPersonalBest?: boolean;
+}
+
+interface FishBucketEntry {
+  id: string;
+  speciesId?: number;
+  speciesName: string;
+  sciName?: string;
+  photoUrl?: string;
+  addedAt: string;
+}
+
+function parseFishCatches(extraJson: string): FishCatchEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.fishCatches) ? o.fishCatches : []; } catch { return []; }
+}
+function parseFishBucket(extraJson: string): FishBucketEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.fishBucket) ? o.fishBucket : []; } catch { return []; }
+}
+function setFishingInExtra(extraJson: string, catches: FishCatchEntry[], bucket: FishBucketEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, fishCatches: catches, fishBucket: bucket }); }
+  catch { return JSON.stringify({ fishCatches: catches, fishBucket: bucket }); }
+}
+
+type FishingGoalType = "catch" | "skill" | "exploration" | "social";
+
+const FISHING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "fs-catch",   emoji: "🎣", label: "Catch / species goal",     description: "Land a new personal-best — e.g. bass over 5 lbs or catfish over 20 lbs",      durationWeeks: 26, defaultSteps: [] },
+  { id: "fs-skill",   emoji: "🧠", label: "Skill / knowledge",         description: "Learn seasonal patterns on your home lake and consistently find fish each season", durationWeeks: 52, defaultSteps: [] },
+  { id: "fs-explore", emoji: "🗺️", label: "Exploration / experience", description: "Fish 5 new lakes or rivers this year you've never tried before",                  durationWeeks: 52, defaultSteps: [] },
+  { id: "fs-social",  emoji: "🤝", label: "Social / enjoyment",        description: "Plan one relaxed fishing outing each month with friends or family",               durationWeeks: 52, defaultSteps: [] },
+];
+
+const FISHING_GOAL_TYPE_MAP: Record<string, FishingGoalType> = {
+  "fs-catch": "catch", "fs-skill": "skill", "fs-explore": "exploration", "fs-social": "social",
+};
+
+function generateFishingSteps(
+  goalType: FishingGoalType,
+  opts: {
+    targetSpecies?: string; targetWeight?: string; targetLength?: string;
+    homeLake?: string;
+    waterCount?: string; specificWaters?: string[];
+    outingPartner?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  switch (goalType) {
+    case "catch": {
+      const species = opts.targetSpecies?.trim() || "your target species";
+      const weight  = opts.targetWeight?.trim();
+      const length  = opts.targetLength?.trim();
+      const sizeStr = weight ? `${weight} lbs` : length ? `${length}"` : "personal-best size";
+      return [
+        g(`Research the best times, locations, and conditions for ${species}`),
+        g(`Study the habitat — cover types, depth ranges, and feeding patterns`),
+        g(`Refine your tackle: select rods, reels, line, and lures suited to ${species}`),
+        g(`Spend 4+ focused sessions targeting ${species} and recording observations`),
+        g(`Identify the most productive water/spot based on your sessions`),
+        g(`Land ${species} at ${sizeStr} — new personal best!`),
+      ];
+    }
+    case "skill": {
+      const lake = opts.homeLake?.trim() || "your home water";
+      return [
+        g(`Map ${lake} — identify structure, drop-offs, weed beds, and known hotspots`),
+        g(`Winter/early spring: study fish behaviour in cold water — slow presentations, deep structure`),
+        g(`Spring: learn spawning patterns and shallow-water opportunities`),
+        g(`Summer: follow fish to cooler, deeper water and adjust timing to early/late day`),
+        g(`Fall: capitalise on feeding frenzies as fish bulk up before winter`),
+        g(`Season review: log which patterns worked, which spots produced, and set next year's plan`),
+      ];
+    }
+    case "exploration": {
+      const count  = Number(opts.waterCount ?? "5");
+      const waters = opts.specificWaters?.filter(Boolean) ?? [];
+      if (waters.length > 0) {
+        return waters.map(w => g(`Fish: ${w} — research access, regulations, and target species`));
+      }
+      return [
+        g(`Research ${count} new waters — check regulations, access points, and target species`),
+        g(`First new water: scout and fish — note conditions and what worked`),
+        g(`Second and third new waters — compare to your home water`),
+        g(`Fourth new water — try somewhere further afield or a different habitat type`),
+        g(`Fifth new water — celebrate reaching the exploration goal`),
+        g(`Write up your favourite discovery and plan a return trip`),
+      ];
+    }
+    case "social": {
+      const partner = opts.outingPartner?.trim() || "friends or family";
+      return [
+        g(`Plan and confirm January outing with ${partner} — keep it relaxed and low pressure`),
+        g(`February–March: two more outings — try a different spot or technique together`),
+        g(`Spring outing — great time for beginners with active fish`),
+        g(`Summer: evening or early-morning session to beat the heat`),
+        g(`Autumn: take advantage of the fall feeding season together`),
+        g(`December: final outing of the year — reflect on the shared experiences`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1574,6 +1690,18 @@ function PlanWizard({
   const [planRoutes,      setPlanRoutes]      = useState<any[]>([]);
   const cycleRouteSearch = useCycleRouteSearch();
 
+  // Fishing wizard state
+  const [fishingMode, setFishingMode] = useState(false);
+  const [fishingGoalType, setFishingGoalType] = useState<FishingGoalType | "">("");
+  const [fsTargetSpecies,  setFsTargetSpecies]  = useState("");
+  const [fsTargetWeight,   setFsTargetWeight]   = useState("");
+  const [fsTargetLength,   setFsTargetLength]   = useState("");
+  const [fsHomeLake,       setFsHomeLake]       = useState("");
+  const [fsWaterCount,     setFsWaterCount]     = useState("5");
+  const [fsWaters,         setFsWaters]         = useState<string[]>(["", "", "", "", ""]);
+  const [fsPartner,        setFsPartner]        = useState("");
+  const fishWizardSearch = useFishSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1582,11 +1710,13 @@ function PlanWizard({
   const isPokerHobby   = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const isBirdHobby    = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
   const isCyclingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("biking") || n.includes("mtb") || n.includes("gravel riding"); })();
+  const isFishingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })();
   const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
   const templates = isHikingHobby  ? HIKING_PLAN_TEMPLATES
                   : isCyclingHobby ? CYCLING_PLAN_TEMPLATES
+                  : isFishingHobby ? FISHING_PLAN_TEMPLATES
                   : isChessHobby   ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
@@ -1633,6 +1763,9 @@ function PlanWizard({
     setCyclingMode(false); setCyclingGoalType(""); setCyCount("150"); setCyMiles("2000");
     setCyFeet("100000"); setCyEventName(""); setCyEventDist("100"); setCyEventDate("");
     setCyListName(""); setCyListCount("20"); setPlanRoutes([]);
+    setFishingMode(false); setFishingGoalType(""); setFsTargetSpecies(""); setFsTargetWeight("");
+    setFsTargetLength(""); setFsHomeLake(""); setFsWaterCount("5");
+    setFsWaters(["", "", "", "", ""]); setFsPartner("");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1662,6 +1795,8 @@ function PlanWizard({
     if (instrType) { setInstrMode(true); setInstrGoalType(instrType); return; }
     const cyclingType = CYCLING_GOAL_TYPE_MAP[t.id];
     if (cyclingType) { setCyclingMode(true); setCyclingGoalType(cyclingType); return; }
+    const fishingType = FISHING_GOAL_TYPE_MAP[t.id];
+    if (fishingType) { setFishingMode(true); setFishingGoalType(fishingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1724,6 +1859,40 @@ function PlanWizard({
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
     setSteps(generatedSteps); setCyclingMode(false); setStep(2);
+  }
+
+  function applyFishingSettings() {
+    if (!fishingGoalType) return;
+    const specificWaters = fsWaters.filter(Boolean);
+    const generatedSteps = generateFishingSteps(fishingGoalType, {
+      targetSpecies: fsTargetSpecies, targetWeight: fsTargetWeight, targetLength: fsTargetLength,
+      homeLake: fsHomeLake, waterCount: fsWaterCount, specificWaters,
+      outingPartner: fsPartner,
+    });
+    let title = "", desc = "", weeks = 52;
+    switch (fishingGoalType) {
+      case "catch":
+        title = fsTargetSpecies
+          ? `Land a Personal-Best ${fsTargetSpecies}${fsTargetWeight ? ` (${fsTargetWeight} lbs)` : ""}`
+          : "Land a Personal-Best Catch";
+        desc = `Work toward catching${fsTargetSpecies ? ` a ${fsTargetSpecies}` : ""} at personal-best size.`;
+        weeks = 26;
+        break;
+      case "skill":
+        title = fsHomeLake ? `Master Seasonal Patterns on ${fsHomeLake}` : "Master Seasonal Fishing Patterns";
+        desc = `Learn to find fish in every season on${fsHomeLake ? ` ${fsHomeLake}` : " your home water"}.`;
+        break;
+      case "exploration":
+        title = `Fish ${fsWaterCount} New Waters This Year`;
+        desc = `Explore ${fsWaterCount} lakes or rivers you've never fished before.`;
+        break;
+      case "social":
+        title = `Monthly Fishing Outings${fsPartner ? ` with ${fsPartner}` : ""}`;
+        desc = `One relaxed fishing trip per month${fsPartner ? ` with ${fsPartner}` : " with friends or family"}, all year long.`;
+        break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setFishingMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -1853,7 +2022,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -1861,6 +2030,7 @@ function PlanWizard({
                 else if (pokerMode) { setPokerMode(false); setSelectedTemplate(null); }
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else if (cyclingMode) { setCyclingMode(false); setCyclingGoalType(""); setSelectedTemplate(null); }
+                else if (fishingMode) { setFishingMode(false); setFishingGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -1872,26 +2042,28 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
                   : pokerGoalMode ? `Poker: ${POKER_PLAN_TEMPLATES.find(t => POKER_GOAL_TYPE_MAP[t.id] === pokerGoalType)?.label ?? "Goal"}`
                   : hikingMode ? "Hiking Goal"
                   : cyclingMode ? `Cycling: ${CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType)?.label ?? "Goal"}`
+                  : fishingMode ? `Fishing: ${FISHING_PLAN_TEMPLATES.find(t => FISHING_GOAL_TYPE_MAP[t.id] === fishingGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
                   : pokerGoalMode ? "Configure your poker goal to generate a personalised plan"
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : cyclingMode ? "Configure your cycling goal and optionally add specific routes"
+                  : fishingMode ? "Configure your fishing goal"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -1900,8 +2072,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -2435,6 +2607,132 @@ function PlanWizard({
                 )}
 
                 <Button onClick={applyInstrumentSettings} disabled={!instrGoalType || !instrInstrument} className="w-full">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── FISHING GOAL WIZARD ── */}
+          {fishingMode && (() => {
+            const tplMeta = FISHING_PLAN_TEMPLATES.find(t => FISHING_GOAL_TYPE_MAP[t.id] === fishingGoalType);
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-teal-50/60 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800">
+                  <span className="text-2xl">{tplMeta?.emoji ?? "🎣"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{tplMeta?.description}</p>
+                  </div>
+                </div>
+
+                {/* CATCH / SPECIES */}
+                {fishingGoalType === "catch" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target species *</label>
+                      {fsTargetSpecies ? (
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800">
+                          <p className="text-sm font-medium flex-1">{fsTargetSpecies}</p>
+                          <button onClick={() => { setFsTargetSpecies(""); fishWizardSearch.setResults([]); }} className="text-muted-foreground hover:text-destructive"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-2">
+                            <Input placeholder="Search (e.g. largemouth bass, catfish)…"
+                              value={fishWizardSearch.query} onChange={e => fishWizardSearch.setQuery(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter") fishWizardSearch.runSearch(); }}
+                              className="text-sm h-8 flex-1" />
+                            <Button size="sm" variant="outline" onClick={() => fishWizardSearch.runSearch()} disabled={fishWizardSearch.searching || !fishWizardSearch.query.trim()} className="h-8 gap-1 shrink-0">
+                              {fishWizardSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                            </Button>
+                          </div>
+                          {fishWizardSearch.error && <p className="text-xs text-destructive">{fishWizardSearch.error}</p>}
+                          {fishWizardSearch.results.length > 0 && (
+                            <div className="space-y-1 max-h-44 overflow-y-auto">
+                              <p className="text-[10px] text-muted-foreground">Powered by iNaturalist — click to select</p>
+                              {fishWizardSearch.results.map((fish: any) => (
+                                <button key={fish.id} onClick={() => { setFsTargetSpecies(fish.name); fishWizardSearch.setResults([]); }}
+                                  className="w-full text-left flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-teal-50 dark:hover:bg-teal-950/20 transition-colors">
+                                  {fish.photoUrl
+                                    ? <img src={fish.photoUrl} alt={fish.name} className="w-8 h-8 rounded object-cover shrink-0" />
+                                    : <div className="w-8 h-8 rounded bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center shrink-0 text-sm">🐟</div>}
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium truncate">{fish.name}</p>
+                                    <p className="text-[10px] text-muted-foreground italic truncate">{fish.sciName}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <Input placeholder="Or type species name manually…"
+                            value={fsTargetSpecies} onChange={e => setFsTargetSpecies(e.target.value)} className="text-sm h-8" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target weight (lbs)</label>
+                        <Input type="number" min={0} step={0.5} placeholder="e.g. 5" value={fsTargetWeight} onChange={e => setFsTargetWeight(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Target length (inches)</label>
+                        <Input type="number" min={0} step={0.5} placeholder="e.g. 24" value={fsTargetLength} onChange={e => setFsTargetLength(e.target.value)} className="text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SKILL / KNOWLEDGE */}
+                {fishingGoalType === "skill" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Home lake / river (optional)</label>
+                    <Input placeholder="e.g. Lake Cumberland, the local reservoir…" value={fsHomeLake} onChange={e => setFsHomeLake(e.target.value)} className="text-sm" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Your plan will be built around mastering all four seasons on this water.</p>
+                  </div>
+                )}
+
+                {/* EXPLORATION */}
+                {fishingGoalType === "exploration" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">How many new waters? *</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["3", "5", "8", "10", "12"].map(n => (
+                          <button key={n} onClick={() => { setFsWaterCount(n); setFsWaters(Array(Number(n)).fill("")); }}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${fsWaterCount === n ? "bg-teal-600 text-white border-teal-600" : "border-border hover:border-teal-400"}`}>
+                            {n} waters
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Name the waters (optional)</label>
+                      <div className="space-y-1.5">
+                        {fsWaters.slice(0, Number(fsWaterCount)).map((w, i) => (
+                          <Input key={i} placeholder={`Water ${i + 1} — e.g. Green River, Barren River Lake…`}
+                            value={w} onChange={e => setFsWaters(waters => { const next = [...waters]; next[i] = e.target.value; return next; })}
+                            className="text-sm h-8" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SOCIAL */}
+                {fishingGoalType === "social" && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Who will you fish with? (optional)</label>
+                    <Input placeholder="e.g. my dad, the family, fishing buddies…" value={fsPartner} onChange={e => setFsPartner(e.target.value)} className="text-sm" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Your plan will include one outing per month — no pressure on results, just time on the water.</p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={applyFishingSettings}
+                  disabled={fishingGoalType === "catch" && !fsTargetSpecies}
+                  className="w-full gap-2"
+                >
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -3038,7 +3336,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !birdMode && !langMode && !instrMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -4493,6 +4791,345 @@ function CyclingSection({ hobby, onUpdateExtra }: {
               <div className="text-center py-6 text-muted-foreground">
                 <span className="text-2xl block mb-2 opacity-20">🚲</span>
                 <p className="text-xs">No rides logged yet — click "Log a Ride" to add your first</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── FishingSection ────────────────────────────────────────────────────────────
+
+function useFishSearch() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState("");
+
+  async function runSearch(q?: string) {
+    const s = (q ?? query).trim();
+    if (!s) return;
+    setSearching(true); setResults([]); setError("");
+    try {
+      const r = await fetch(`/api/fish/search?q=${encodeURIComponent(s)}`);
+      const data = await r.json();
+      if (!data.results?.length) { setError("No fish found. Try a common name like 'bass', 'trout', or 'perch'."); }
+      else { setResults(data.results); }
+    } catch { setError("Search failed."); }
+    setSearching(false);
+  }
+
+  return { query, setQuery, searching, results, setResults, error, runSearch };
+}
+
+function FishingSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"log" | "bucket">("log");
+  const [showLogForm, setShowLogForm] = useState(false);
+
+  // Species search for the log form
+  const logSearch   = useFishSearch();
+  // Bucket list species search
+  const bucketSearch = useFishSearch();
+
+  // Log form state
+  const [logSpeciesName,  setLogSpeciesName]  = useState("");
+  const [logSciName,      setLogSciName]      = useState("");
+  const [logSpeciesId,    setLogSpeciesId]    = useState<number | undefined>();
+  const [logSpeciesPhoto, setLogSpeciesPhoto] = useState("");
+  const [logDate,         setLogDate]         = useState(new Date().toISOString().slice(0, 10));
+  const [logWeight,       setLogWeight]       = useState("");
+  const [logLength,       setLogLength]       = useState("");
+  const [logLocation,     setLogLocation]     = useState("");
+  const [logLure,         setLogLure]         = useState("");
+  const [logNotes,        setLogNotes]        = useState("");
+  const [logPhotoUrl,     setLogPhotoUrl]     = useState("");
+  const [logIsPB,         setLogIsPB]         = useState(false);
+
+  const catches = parseFishCatches(hobby.extraJson ?? "{}");
+  const bucket  = parseFishBucket(hobby.extraJson ?? "{}");
+
+  function saveFishing(c: FishCatchEntry[], b: FishBucketEntry[]) {
+    onUpdateExtra(setFishingInExtra(hobby.extraJson ?? "{}", c, b));
+  }
+
+  function selectLogSpecies(fish: any) {
+    setLogSpeciesName(fish.name);
+    setLogSciName(fish.sciName ?? "");
+    setLogSpeciesId(fish.id);
+    setLogSpeciesPhoto(fish.photoUrl ?? "");
+    logSearch.setResults([]);
+    logSearch.setQuery("");
+  }
+
+  function saveLog() {
+    if (!logSpeciesName.trim() || !logDate) return;
+    const entry: FishCatchEntry = {
+      id: genId(),
+      speciesId:  logSpeciesId,
+      speciesName: logSpeciesName.trim(),
+      sciName:    logSciName || undefined,
+      photoUrl:   logSpeciesPhoto || undefined,
+      userPhotoUrl: logPhotoUrl.trim() || undefined,
+      date:       logDate,
+      weightLbs:  logWeight ? Number(logWeight) : undefined,
+      lengthIn:   logLength ? Number(logLength) : undefined,
+      location:   logLocation.trim() || undefined,
+      lure:       logLure.trim() || undefined,
+      notes:      logNotes.trim() || undefined,
+      isPersonalBest: logIsPB || undefined,
+    };
+    saveFishing([...catches, entry], bucket);
+    setShowLogForm(false);
+    setLogSpeciesName(""); setLogSciName(""); setLogSpeciesId(undefined); setLogSpeciesPhoto("");
+    setLogDate(new Date().toISOString().slice(0,10));
+    setLogWeight(""); setLogLength(""); setLogLocation(""); setLogLure(""); setLogNotes(""); setLogPhotoUrl(""); setLogIsPB(false);
+    toast({ title: "Catch logged!" });
+  }
+
+  function deleteCatch(id: string) { saveFishing(catches.filter(c => c.id !== id), bucket); }
+
+  function addToBucket(fish: any) {
+    if (bucket.some(b => b.speciesId === fish.id)) { toast({ title: "Already on bucket list" }); return; }
+    const entry: FishBucketEntry = {
+      id: genId(), speciesId: fish.id, speciesName: fish.name,
+      sciName: fish.sciName ?? undefined, photoUrl: fish.photoUrl ?? undefined,
+      addedAt: new Date().toISOString(),
+    };
+    saveFishing(catches, [...bucket, entry]);
+    toast({ title: `"${fish.name}" added to bucket list` });
+  }
+
+  function removeFromBucket(id: string) { saveFishing(catches, bucket.filter(b => b.id !== id)); }
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-teal-50/60 dark:bg-teal-950/20 border-b border-teal-200 dark:border-teal-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🎣</span>
+          <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">Catches & Bucket List</span>
+          <span className="text-xs text-muted-foreground">{catches.length} caught · {bucket.length} to catch</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("log")}    className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log"    ? "bg-teal-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Catch Log</button>
+          <button onClick={() => setTab("bucket")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "bucket" ? "bg-teal-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Bucket List</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+
+        {/* ── CATCH LOG TAB ── */}
+        {tab === "log" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Catch
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border rounded-xl p-3">
+                <p className="text-xs font-semibold">Log a Catch</p>
+
+                {/* Species search */}
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Species *</label>
+                  {logSpeciesName ? (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800">
+                      {logSpeciesPhoto && <img src={logSpeciesPhoto} alt={logSpeciesName} className="w-8 h-8 rounded object-cover shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{logSpeciesName}</p>
+                        {logSciName && <p className="text-[10px] text-muted-foreground italic truncate">{logSciName}</p>}
+                      </div>
+                      <button onClick={() => { setLogSpeciesName(""); setLogSciName(""); setLogSpeciesId(undefined); setLogSpeciesPhoto(""); }} className="text-[10px] text-muted-foreground hover:text-destructive shrink-0"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <Input placeholder="Search species (e.g. largemouth bass, rainbow trout)…"
+                          value={logSearch.query} onChange={e => logSearch.setQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") logSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => logSearch.runSearch()} disabled={logSearch.searching || !logSearch.query.trim()} className="h-8 gap-1 shrink-0">
+                          {logSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {logSearch.error && <p className="text-xs text-destructive">{logSearch.error}</p>}
+                      {logSearch.results.length > 0 && (
+                        <div className="space-y-1 max-h-44 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">Powered by iNaturalist — click to select</p>
+                          {logSearch.results.map((fish: any) => (
+                            <button key={fish.id} onClick={() => selectLogSpecies(fish)}
+                              className="w-full text-left flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-teal-50 dark:hover:bg-teal-950/20 transition-colors">
+                              {fish.photoUrl
+                                ? <img src={fish.photoUrl} alt={fish.name} className="w-8 h-8 rounded object-cover shrink-0" />
+                                : <div className="w-8 h-8 rounded bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center shrink-0 text-sm">🐟</div>}
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{fish.name}</p>
+                                <p className="text-[10px] text-muted-foreground italic truncate">{fish.sciName}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Manual entry if search doesn't find it */}
+                      <Input placeholder="Or type species name manually…"
+                        value={logSpeciesName} onChange={e => setLogSpeciesName(e.target.value)}
+                        className="text-sm h-8" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Date *</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Weight (lbs)</label>
+                    <Input type="number" min={0} step={0.1} placeholder="e.g. 4.5" value={logWeight} onChange={e => setLogWeight(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Length (inches)</label>
+                    <Input type="number" min={0} step={0.25} placeholder="e.g. 18.5" value={logLength} onChange={e => setLogLength(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Location</label>
+                    <Input placeholder="e.g. Lake Cumberland" value={logLocation} onChange={e => setLogLocation(e.target.value)} className="text-sm h-8" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Lure / bait</label>
+                  <Input placeholder={'e.g. 5" Senko, Texas-rigged'} value={logLure} onChange={e => setLogLure(e.target.value)} className="text-sm h-8" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Photo URL (optional)</label>
+                  <Input placeholder="Paste an image URL for your catch photo…" value={logPhotoUrl} onChange={e => setLogPhotoUrl(e.target.value)} className="text-sm h-8" />
+                </div>
+                <Textarea placeholder="Notes (optional)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm min-h-[50px]" />
+                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                  <input type="checkbox" checked={logIsPB} onChange={e => setLogIsPB(e.target.checked)} className="rounded" />
+                  <span className="font-medium">🏆 Mark as personal best</span>
+                </label>
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                  <Button size="sm" disabled={!logSpeciesName.trim() || !logDate} onClick={saveLog} className="gap-1.5"><Check size={12} /> Save</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Catch list */}
+            {catches.length > 0 ? (
+              <div className="space-y-2">
+                {[...catches].sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
+                  <div key={entry.id} className="p-3 rounded-xl border bg-card space-y-2">
+                    <div className="flex items-start gap-2.5">
+                      {(entry.userPhotoUrl || entry.photoUrl) && (
+                        <img src={entry.userPhotoUrl || entry.photoUrl} alt={entry.speciesName}
+                          className="w-14 h-14 rounded-lg object-cover shrink-0 border" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{entry.speciesName}</p>
+                          {entry.isPersonalBest && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full border border-amber-200">🏆 PB</span>}
+                        </div>
+                        {entry.sciName && <p className="text-[10px] text-muted-foreground italic">{entry.sciName}</p>}
+                        <p className="text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}{entry.location ? ` · ${entry.location}` : ""}</p>
+                      </div>
+                      <button onClick={() => deleteCatch(entry.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"><Trash2 size={12} /></button>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      {entry.weightLbs && <span>⚖️ {entry.weightLbs} lbs</span>}
+                      {entry.lengthIn && <span>📏 {entry.lengthIn}"</span>}
+                      {entry.lure && <span>🪝 {entry.lure}</span>}
+                    </div>
+                    {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🎣</span>
+                <p className="text-xs">No catches logged yet — click "Log a Catch" above</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── BUCKET LIST TAB ── */}
+        {tab === "bucket" && (
+          <>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input placeholder="Search species to add (e.g. muskie, steelhead)…"
+                  value={bucketSearch.query} onChange={e => bucketSearch.setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") bucketSearch.runSearch(); }}
+                  className="text-sm h-8 flex-1" />
+                <Button size="sm" variant="outline" onClick={() => bucketSearch.runSearch()} disabled={bucketSearch.searching || !bucketSearch.query.trim()} className="h-8 gap-1.5 shrink-0">
+                  {bucketSearch.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                  {bucketSearch.searching ? "Searching…" : "Search"}
+                </Button>
+              </div>
+              {bucketSearch.error && <p className="text-xs text-destructive">{bucketSearch.error}</p>}
+              {bucketSearch.results.length > 0 && (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">iNaturalist results</p>
+                  {bucketSearch.results.map((fish: any) => {
+                    const already = bucket.some(b => b.speciesId === fish.id);
+                    const caught  = catches.some(c => c.speciesId === fish.id);
+                    return (
+                      <div key={fish.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                        {fish.photoUrl
+                          ? <img src={fish.photoUrl} alt={fish.name} className="w-9 h-9 rounded object-cover shrink-0" />
+                          : <div className="w-9 h-9 rounded bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center shrink-0 text-base">🐟</div>}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate">{fish.name}</p>
+                          <p className="text-[10px] text-muted-foreground italic truncate">{fish.sciName}</p>
+                        </div>
+                        <div className="shrink-0">
+                          {caught
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 font-medium">✓ Caught</span>
+                            : already
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-secondary text-muted-foreground">Added</span>
+                            : <button onClick={() => addToBucket(fish)} className="text-[10px] px-2 py-1 rounded bg-teal-600 text-white hover:bg-teal-700 transition-colors">+ Add</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {bucket.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your bucket list</p>
+                {bucket.map(b => {
+                  const caught = catches.some(c => c.speciesId === b.speciesId || c.speciesName.toLowerCase() === b.speciesName.toLowerCase());
+                  return (
+                    <div key={b.id} className={`flex items-center gap-2.5 p-2.5 rounded-lg border bg-card ${caught ? "opacity-60" : ""}`}>
+                      {b.photoUrl
+                        ? <img src={b.photoUrl} alt={b.speciesName} className="w-9 h-9 rounded object-cover shrink-0" />
+                        : <div className="w-9 h-9 rounded bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center shrink-0 text-base">🐟</div>}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className={`text-xs font-semibold truncate ${caught ? "line-through text-muted-foreground" : ""}`}>{b.speciesName}</p>
+                          {caught && <span className="text-[10px] text-teal-600 font-medium shrink-0">✓</span>}
+                        </div>
+                        {b.sciName && <p className="text-[10px] text-muted-foreground italic truncate">{b.sciName}</p>}
+                      </div>
+                      <button onClick={() => removeFromBucket(b.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"><X size={12} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🐟</span>
+                <p className="text-xs">Search for species above to build your fishing bucket list</p>
               </div>
             )}
           </>
