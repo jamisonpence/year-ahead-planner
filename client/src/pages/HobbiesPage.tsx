@@ -1325,6 +1325,121 @@ function generateGardeningSteps(
   }
 }
 
+// ── Rock Climbing types ───────────────────────────────────────────────────────
+
+interface ClimbLogEntry {
+  id: string;
+  routeId?: string;
+  routeName: string;
+  grade?: string;
+  climbType?: string;
+  date: string;
+  ascentType?: "Onsight" | "Flash" | "Redpoint" | "Attempt";
+  location?: string;
+  notes?: string;
+}
+
+interface ClimbProjectEntry {
+  id: string;
+  routeId?: string;
+  routeName: string;
+  grade?: string;
+  climbType?: string;
+  location?: string;
+  description?: string;
+  addedAt: string;
+}
+
+function parseClimbLog(extraJson: string): ClimbLogEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.climbLog) ? o.climbLog : []; } catch { return []; }
+}
+function parseClimbProjects(extraJson: string): ClimbProjectEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.climbProjects) ? o.climbProjects : []; } catch { return []; }
+}
+function setClimbingInExtra(extraJson: string, log: ClimbLogEntry[], projects: ClimbProjectEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, climbLog: log, climbProjects: projects }); }
+  catch { return JSON.stringify({ climbLog: log, climbProjects: projects }); }
+}
+
+type ClimbingGoalType = "grade" | "volume" | "strength" | "safety";
+
+const CLIMBING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "rc-grade",    emoji: "🧗", label: "Grade / performance",      description: "Send your first 5.11a sport route or V5 boulder this year",                              durationWeeks: 26, defaultSteps: [] },
+  { id: "rc-volume",   emoji: "📅", label: "Volume / experience",       description: "Climb at least twice a week and get outside on real rock once a month",                  durationWeeks: 52, defaultSteps: [] },
+  { id: "rc-strength", emoji: "💪", label: "Strength / technique",      description: "Do 10 strict pull-ups and complete a structured hangboard cycle",                        durationWeeks: 16, defaultSteps: [] },
+  { id: "rc-safety",   emoji: "🪢", label: "Safety / confidence",       description: "Lead 10 new routes without unsafe falls and feel calm placing clips or gear",            durationWeeks: 26, defaultSteps: [] },
+];
+
+const CLIMBING_GOAL_TYPE_MAP: Record<string, ClimbingGoalType> = {
+  "rc-grade": "grade", "rc-volume": "volume", "rc-strength": "strength", "rc-safety": "safety",
+};
+
+function generateClimbingSteps(
+  goalType: ClimbingGoalType,
+  opts: {
+    targetGrade?: string;
+    climbStyle?: string;
+    weeklyFreq?: string;
+    outdoorFreq?: string;
+    pullUpTarget?: string;
+    hangboard?: boolean;
+    leadRoutes?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  switch (goalType) {
+    case "grade": {
+      const grade = opts.targetGrade?.trim() || "your target grade";
+      const style = opts.climbStyle?.trim() || "sport";
+      return [
+        g(`Research the technique demands of ${grade} ${style} climbing — watch beta videos, study crux patterns`),
+        g(`Identify and project 3–5 routes at ${grade} — work each one section by section`),
+        g(`Build specific strength: finger boarding 2×/week, antagonist training, core`),
+        g(`Refine your sequence on your main project — link sections and practise the crux`),
+        g(`Send ${grade} — clean ascent, trust your training`),
+        g(`Reflect on what clicked, identify your next project and set a new grade goal`),
+      ];
+    }
+    case "volume": {
+      const freq  = opts.weeklyFreq?.trim()  || "2";
+      const outdoor = opts.outdoorFreq?.trim() || "monthly";
+      return [
+        g(`Establish your baseline: log your current gym schedule and nearest outdoor crags`),
+        g(`Month 1–2: hit ${freq} sessions per week consistently — mix grades, work weaknesses`),
+        g(`Book your first outdoor day: research crag access, grades, and safety considerations`),
+        g(`Month 3–5: ${outdoor} outdoor session — log every session with grade and notes`),
+        g(`Try a new crag or area each outdoor day — build route-reading on real rock`),
+        g(`Year-end review: total sessions, crags visited, new grades ticked, skills gained`),
+      ];
+    }
+    case "strength": {
+      const pullUps = opts.pullUpTarget?.trim() || "10";
+      const hangboard = opts.hangboard !== false;
+      return [
+        g(`Benchmark: test max pull-ups, max hang (20mm edge, 10 sec), and on-wall feel`),
+        hangboard
+          ? g(`Start a 4-week hangboard cycle: 7-3 repeaters on 20mm edge, twice a week`)
+          : g(`Begin a pull-up progression: 3×5 weighted or 5×3 max-effort sets, twice a week`),
+        g(`Technique focus: dedicate one session per week to footwork, slab, and precise movement`),
+        g(`Hangboard deload week, then start cycle 2 with increased load or smaller edge`),
+        g(`Achieve ${pullUps} strict pull-ups — track weekly, film reps for form check`),
+        g(`On-wall benchmark: climb your warm-up circuit feeling strong and precise — note the difference`),
+      ];
+    }
+    case "safety": {
+      const routes = opts.leadRoutes?.trim() || "10";
+      return [
+        g(`Review lead technique: correct clipping positions, body positioning, and fall zones`),
+        g(`Practise falling intentionally at comfortable grades — build trust in the system`),
+        g(`Lead 2–3 routes per session at 2–3 grades below your limit, focusing on calm clipping`),
+        g(`Progress to routes with more sustained sections or longer runouts — stay deliberate`),
+        g(`Lead ${routes} new routes without taking unsafe falls — log each one`),
+        g(`Reflect on confidence growth: where did you hesitate? Where did you feel solid?`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1817,6 +1932,18 @@ function PlanWizard({
   const [gdDays,            setGdDays]            = useState("3");
   const gardenWizardSearch = usePerenualSearch();
 
+  // Rock climbing wizard state
+  const [climbingMode,     setClimbingMode]     = useState(false);
+  const [climbingGoalType, setClimbingGoalType] = useState<ClimbingGoalType | "">("");
+  const [rcTargetGrade,    setRcTargetGrade]    = useState("");
+  const [rcClimbStyle,     setRcClimbStyle]     = useState("Sport");
+  const [rcWeeklyFreq,     setRcWeeklyFreq]     = useState("2");
+  const [rcOutdoorFreq,    setRcOutdoorFreq]    = useState("monthly");
+  const [rcPullUpTarget,   setRcPullUpTarget]   = useState("10");
+  const [rcHangboard,      setRcHangboard]      = useState(true);
+  const [rcLeadRoutes,     setRcLeadRoutes]     = useState("10");
+  const climbWizardSearch = useOpenBetaSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1827,13 +1954,15 @@ function PlanWizard({
   const isCyclingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("biking") || n.includes("mtb") || n.includes("gravel riding"); })();
   const isFishingHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })();
   const isGardeningHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })();
+  const isClimbingHobby  = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("climb") || n.includes("climbing") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })();
   const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
   const templates = isHikingHobby    ? HIKING_PLAN_TEMPLATES
                   : isCyclingHobby   ? CYCLING_PLAN_TEMPLATES
                   : isFishingHobby   ? FISHING_PLAN_TEMPLATES
-                  : isGardeningHobby ? GARDENING_PLAN_TEMPLATES
+                  : isGardeningHobby  ? GARDENING_PLAN_TEMPLATES
+                  : isClimbingHobby  ? CLIMBING_PLAN_TEMPLATES
                   : isChessHobby     ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
@@ -1885,6 +2014,8 @@ function PlanWizard({
     setFsWaters(["", "", "", "", ""]); setFsPartner("");
     setGardeningMode(false); setGardeningGoalType(""); setGdTargetCrops(""); setGdSeedVarieties("10");
     setGdMinutes("15"); setGdDays("3");
+    setClimbingMode(false); setClimbingGoalType(""); setRcTargetGrade(""); setRcClimbStyle("Sport");
+    setRcWeeklyFreq("2"); setRcOutdoorFreq("monthly"); setRcPullUpTarget("10"); setRcHangboard(true); setRcLeadRoutes("10");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1918,6 +2049,8 @@ function PlanWizard({
     if (fishingType) { setFishingMode(true); setFishingGoalType(fishingType); return; }
     const gardeningType = GARDENING_GOAL_TYPE_MAP[t.id];
     if (gardeningType) { setGardeningMode(true); setGardeningGoalType(gardeningType); return; }
+    const climbingType = CLIMBING_GOAL_TYPE_MAP[t.id];
+    if (climbingType) { setClimbingMode(true); setClimbingGoalType(climbingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -2043,6 +2176,37 @@ function PlanWizard({
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
     setSteps(generatedSteps); setGardeningMode(false); setStep(2);
+  }
+
+  function applyClimbingSettings() {
+    if (!climbingGoalType) return;
+    const generatedSteps = generateClimbingSteps(climbingGoalType, {
+      targetGrade: rcTargetGrade, climbStyle: rcClimbStyle,
+      weeklyFreq: rcWeeklyFreq, outdoorFreq: rcOutdoorFreq,
+      pullUpTarget: rcPullUpTarget, hangboard: rcHangboard,
+      leadRoutes: rcLeadRoutes,
+    });
+    let title = "", desc = "", weeks = 26;
+    switch (climbingGoalType) {
+      case "grade":
+        title = rcTargetGrade ? `Send ${rcTargetGrade} ${rcClimbStyle}` : "Reach Your Next Grade";
+        desc = `Work systematically toward${rcTargetGrade ? ` ${rcTargetGrade} ${rcClimbStyle.toLowerCase()}` : " your goal grade"}.`;
+        weeks = 26; break;
+      case "volume":
+        title = `Climb ${rcWeeklyFreq}×/Week + ${rcOutdoorFreq === "monthly" ? "Monthly" : rcOutdoorFreq} Outdoor Days`;
+        desc = `Build a consistent climbing habit with regular outdoor sessions on real rock.`;
+        weeks = 52; break;
+      case "strength":
+        title = `${rcPullUpTarget} Pull-Ups${rcHangboard ? " + Hangboard Cycle" : ""}`;
+        desc = `Structured strength training to reach ${rcPullUpTarget} strict pull-ups${rcHangboard ? " and complete a full hangboard protocol" : ""}.`;
+        weeks = 16; break;
+      case "safety":
+        title = `Lead ${rcLeadRoutes} New Routes with Confidence`;
+        desc = `Develop calm, competent lead climbing technique across ${rcLeadRoutes} new routes.`;
+        weeks = 26; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setClimbingMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -2172,7 +2336,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode || climbingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -2182,6 +2346,7 @@ function PlanWizard({
                 else if (cyclingMode) { setCyclingMode(false); setCyclingGoalType(""); setSelectedTemplate(null); }
                 else if (fishingMode) { setFishingMode(false); setFishingGoalType(""); setSelectedTemplate(null); }
                 else if (gardeningMode) { setGardeningMode(false); setGardeningGoalType(""); setSelectedTemplate(null); }
+                else if (climbingMode) { setClimbingMode(false); setClimbingGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -2193,7 +2358,7 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
@@ -2202,13 +2367,14 @@ function PlanWizard({
                   : cyclingMode ? `Cycling: ${CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType)?.label ?? "Goal"}`
                   : fishingMode ? `Fishing: ${FISHING_PLAN_TEMPLATES.find(t => FISHING_GOAL_TYPE_MAP[t.id] === fishingGoalType)?.label ?? "Goal"}`
                   : gardeningMode ? `Gardening: ${GARDENING_PLAN_TEMPLATES.find(t => GARDENING_GOAL_TYPE_MAP[t.id] === gardeningGoalType)?.label ?? "Goal"}`
+                  : climbingMode ? `Climbing: ${CLIMBING_PLAN_TEMPLATES.find(t => CLIMBING_GOAL_TYPE_MAP[t.id] === climbingGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
@@ -2217,6 +2383,7 @@ function PlanWizard({
                   : cyclingMode ? "Configure your cycling goal and optionally add specific routes"
                   : fishingMode ? "Configure your fishing goal"
                   : gardeningMode ? "Configure your gardening goal"
+                  : climbingMode ? "Configure your climbing goal and optionally search for routes"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -2225,8 +2392,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -3028,6 +3195,158 @@ function PlanWizard({
             );
           })()}
 
+          {/* ── CLIMBING GOAL WIZARD ── */}
+          {climbingMode && (() => {
+            const tplMeta = CLIMBING_PLAN_TEMPLATES.find(t => CLIMBING_GOAL_TYPE_MAP[t.id] === climbingGoalType);
+            const meta: Record<ClimbingGoalType, { emoji: string; example: string }> = {
+              grade:    { emoji: "🧗", example: "e.g. 5.11a sport, V5 boulder, 5.10d trad" },
+              volume:   { emoji: "📅", example: "e.g. 2× gym/week + outdoor day each month" },
+              strength: { emoji: "💪", example: "e.g. 10 strict pull-ups + 8-week hangboard cycle" },
+              safety:   { emoji: "🪢", example: "e.g. Lead 10 new routes, practise falling" },
+            };
+            const m = climbingGoalType ? meta[climbingGoalType] : null;
+            return (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-orange-50/60 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                  <span className="text-2xl">{m?.emoji ?? "🧗"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* grade: target grade + style + route search */}
+                {climbingGoalType === "grade" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Target grade</label>
+                        <Input placeholder="e.g. 5.11a or V5" value={rcTargetGrade} onChange={e => setRcTargetGrade(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Style</label>
+                        <div className="flex gap-1 flex-wrap">
+                          {["Sport", "Boulder", "Trad", "Top Rope"].map(s => (
+                            <button key={s} onClick={() => setRcClimbStyle(s)}
+                              className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${rcClimbStyle === s ? "bg-orange-600 text-white border-orange-600" : "bg-card hover:bg-secondary border-border"}`}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1.5">Search for a specific route to project</label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Search OpenBeta (e.g. 'The Nose', 'Sport Climbing Area')…"
+                          value={climbWizardSearch.query} onChange={e => climbWizardSearch.setQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") climbWizardSearch.runSearch(); }}
+                          className="text-sm flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => climbWizardSearch.runSearch()} disabled={climbWizardSearch.searching || !climbWizardSearch.query.trim()} className="gap-1 shrink-0">
+                          {climbWizardSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {climbWizardSearch.error && <p className="text-xs text-destructive mt-1">{climbWizardSearch.error}</p>}
+                      {climbWizardSearch.results.length > 0 && (
+                        <div className="space-y-1 mt-2 max-h-44 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">Powered by OpenBeta — click to set as target grade</p>
+                          {climbWizardSearch.results.map((r: any) => (
+                            <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{r.name}</p>
+                                <p className="text-[10px] text-muted-foreground">{r.climbType}{r.grade ? ` · ${r.grade}` : ""}{r.location ? ` · ${r.location}` : ""}</p>
+                              </div>
+                              <button onClick={() => { setRcTargetGrade(r.grade || rcTargetGrade); setRcClimbStyle(r.climbType || rcClimbStyle); climbWizardSearch.setResults([]); climbWizardSearch.setQuery(""); }}
+                                className="text-[10px] px-2 py-1 rounded bg-orange-600 text-white hover:bg-orange-700 transition-colors shrink-0">Use</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* volume: weekly frequency + outdoor frequency */}
+                {climbingGoalType === "volume" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Sessions per week</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["1", "2", "3", "4"].map(n => (
+                          <button key={n} onClick={() => setRcWeeklyFreq(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rcWeeklyFreq === n ? "bg-orange-600 text-white border-orange-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n}×/week
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Outdoor climbing frequency</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {[["monthly", "Once a month"], ["bi-monthly", "Every 2 months"], ["quarterly", "Quarterly"], ["seasonal", "Each season"]].map(([val, label]) => (
+                          <button key={val} onClick={() => setRcOutdoorFreq(val)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${rcOutdoorFreq === val ? "bg-orange-600 text-white border-orange-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan will include gym sessions, technique work, and regular outdoor crag days.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* strength: pull-up target + hangboard toggle */}
+                {climbingGoalType === "strength" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Pull-up target (strict reps)</label>
+                      <div className="flex gap-2 flex-wrap items-center">
+                        {["5", "8", "10", "15", "20"].map(n => (
+                          <button key={n} onClick={() => setRcPullUpTarget(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rcPullUpTarget === n ? "bg-orange-600 text-white border-orange-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} reps
+                          </button>
+                        ))}
+                        <Input type="number" min={1} max={50} value={rcPullUpTarget} onChange={e => setRcPullUpTarget(e.target.value)} className="w-16 text-sm h-8" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2.5 text-xs cursor-pointer select-none p-3 rounded-xl border bg-card">
+                      <input type="checkbox" checked={rcHangboard} onChange={e => setRcHangboard(e.target.checked)} className="rounded" />
+                      <div>
+                        <p className="font-medium">Include a structured hangboard cycle</p>
+                        <p className="text-muted-foreground">7-3 repeaters, 4 weeks on / 1 deload — builds finger strength and contact strength</p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* safety: lead routes target */}
+                {climbingGoalType === "safety" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Lead routes target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["5", "10", "15", "20"].map(n => (
+                          <button key={n} onClick={() => setRcLeadRoutes(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${rcLeadRoutes === n ? "bg-orange-600 text-white border-orange-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} routes
+                          </button>
+                        ))}
+                        <Input type="number" min={1} max={100} value={rcLeadRoutes} onChange={e => setRcLeadRoutes(e.target.value)} className="w-20 text-sm h-8" />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan covers fall practice, progressive clipping, and tracking clean leads.</p>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applyClimbingSettings} className="w-full gap-2">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* ── CYCLING GOAL WIZARD ── */}
           {cyclingMode && (() => {
             const tplMeta = CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType);
@@ -3625,7 +3944,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -5428,6 +5747,321 @@ function FishingSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── useOpenBetaSearch hook ────────────────────────────────────────────────────
+
+function useOpenBetaSearch() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState("");
+
+  async function runSearch(q?: string) {
+    const s = (q ?? query).trim();
+    if (!s) return;
+    setSearching(true); setResults([]); setError("");
+    try {
+      const r = await fetch(`/api/climbing/search?q=${encodeURIComponent(s)}`);
+      const data = await r.json();
+      if (data.error) { setError(data.error); }
+      else if (!data.results?.length) { setError("No routes found. Try a route name or area (e.g. 'Yosemite', 'sport 5.11')."); }
+      else { setResults(data.results); }
+    } catch { setError("Search failed."); }
+    setSearching(false);
+  }
+
+  return { query, setQuery, searching, results, setResults, error, runSearch };
+}
+
+// ── ClimbingSection ───────────────────────────────────────────────────────────
+
+function ClimbingSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"log" | "projects">("log");
+  const [showLogForm, setShowLogForm] = useState(false);
+
+  const logSearch      = useOpenBetaSearch();
+  const projectSearch  = useOpenBetaSearch();
+
+  // Log form state
+  const [logRouteName,  setLogRouteName]  = useState("");
+  const [logGrade,      setLogGrade]      = useState("");
+  const [logClimbType,  setLogClimbType]  = useState("Sport");
+  const [logDate,       setLogDate]       = useState(new Date().toISOString().slice(0, 10));
+  const [logAscentType, setLogAscentType] = useState<"Onsight" | "Flash" | "Redpoint" | "Attempt">("Redpoint");
+  const [logLocation,   setLogLocation]   = useState("");
+  const [logNotes,      setLogNotes]      = useState("");
+  const [logRouteId,    setLogRouteId]    = useState<string | undefined>();
+
+  const climbLog = parseClimbLog(hobby.extraJson ?? "{}");
+  const projects = parseClimbProjects(hobby.extraJson ?? "{}");
+
+  function saveClimbing(l: ClimbLogEntry[], p: ClimbProjectEntry[]) {
+    onUpdateExtra(setClimbingInExtra(hobby.extraJson ?? "{}", l, p));
+  }
+
+  function selectLogRoute(r: any) {
+    setLogRouteName(r.name ?? "");
+    setLogGrade(r.grade ?? "");
+    setLogClimbType(r.climbType ?? "Sport");
+    setLogRouteId(r.id);
+    logSearch.setResults([]);
+    logSearch.setQuery("");
+  }
+
+  function saveLog() {
+    if (!logRouteName.trim() || !logDate) return;
+    const entry: ClimbLogEntry = {
+      id: genId(), routeId: logRouteId, routeName: logRouteName.trim(),
+      grade: logGrade.trim() || undefined, climbType: logClimbType || undefined,
+      date: logDate, ascentType: logAscentType,
+      location: logLocation.trim() || undefined, notes: logNotes.trim() || undefined,
+    };
+    saveClimbing([...climbLog, entry], projects);
+    setShowLogForm(false);
+    setLogRouteName(""); setLogGrade(""); setLogClimbType("Sport"); setLogRouteId(undefined);
+    setLogDate(new Date().toISOString().slice(0, 10));
+    setLogAscentType("Redpoint"); setLogLocation(""); setLogNotes("");
+    toast({ title: "Ascent logged!" });
+  }
+
+  function deleteLog(id: string) { saveClimbing(climbLog.filter(e => e.id !== id), projects); }
+
+  function addToProjects(r: any) {
+    if (projects.some(p => p.routeId === r.id)) { toast({ title: "Already in project list" }); return; }
+    const entry: ClimbProjectEntry = {
+      id: genId(), routeId: r.id, routeName: r.name, grade: r.grade || undefined,
+      climbType: r.climbType || undefined, location: r.location || undefined,
+      description: r.description || undefined, addedAt: new Date().toISOString(),
+    };
+    saveClimbing(climbLog, [...projects, entry]);
+    toast({ title: `"${r.name}" added to projects` });
+  }
+
+  function removeProject(id: string) { saveClimbing(climbLog, projects.filter(p => p.id !== id)); }
+
+  const ASCENT_COLORS: Record<string, string> = {
+    Onsight: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
+    Flash:   "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
+    Redpoint:"bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400",
+    Attempt: "bg-secondary text-muted-foreground",
+  };
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-orange-50/60 dark:bg-orange-950/20 border-b border-orange-200 dark:border-orange-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🧗</span>
+          <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Send Log & Projects</span>
+          <span className="text-xs text-muted-foreground">{climbLog.filter(e => e.ascentType !== "Attempt").length} sends · {projects.length} projects</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("log")}      className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log"      ? "bg-orange-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Send Log</button>
+          <button onClick={() => setTab("projects")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "projects" ? "bg-orange-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Projects</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+
+        {/* ── SEND LOG TAB ── */}
+        {tab === "log" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log an Ascent
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border rounded-xl p-3">
+                <p className="text-xs font-semibold">Log an Ascent</p>
+
+                {/* Route search */}
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Route *</label>
+                  {logRouteName ? (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{logRouteName}</p>
+                        {(logGrade || logClimbType) && <p className="text-[10px] text-muted-foreground">{logClimbType}{logGrade ? ` · ${logGrade}` : ""}</p>}
+                      </div>
+                      <button onClick={() => { setLogRouteName(""); setLogGrade(""); setLogRouteId(undefined); }} className="text-[10px] text-muted-foreground hover:text-destructive shrink-0"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <Input placeholder="Search OpenBeta for a route or area…"
+                          value={logSearch.query} onChange={e => logSearch.setQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") logSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => logSearch.runSearch()} disabled={logSearch.searching || !logSearch.query.trim()} className="h-8 gap-1 shrink-0">
+                          {logSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {logSearch.error && <p className="text-xs text-destructive">{logSearch.error}</p>}
+                      {logSearch.results.length > 0 && (
+                        <div className="space-y-1 max-h-44 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">Powered by OpenBeta — click to select</p>
+                          {logSearch.results.map((r: any) => (
+                            <button key={r.id} onClick={() => selectLogRoute(r)}
+                              className="w-full text-left flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors">
+                              <div className="w-8 h-8 rounded bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0 text-sm">🪨</div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate">{r.name}</p>
+                                <p className="text-[10px] text-muted-foreground">{r.climbType}{r.grade ? ` · ${r.grade}` : ""}{r.location ? ` · ${r.location}` : ""}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <Input placeholder="Or type route name manually…"
+                        value={logRouteName} onChange={e => setLogRouteName(e.target.value)}
+                        className="text-sm h-8" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Grade</label>
+                    <Input placeholder="e.g. 5.11a or V5" value={logGrade} onChange={e => setLogGrade(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Style</label>
+                    <select value={logClimbType} onChange={e => setLogClimbType(e.target.value)} className="text-sm h-8 w-full rounded-md border border-input bg-background px-2">
+                      {["Sport", "Boulder", "Trad", "Top Rope", "Multi-pitch", "Aid", "Ice"].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Date *</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Ascent type</label>
+                    <select value={logAscentType} onChange={e => setLogAscentType(e.target.value as any)} className="text-sm h-8 w-full rounded-md border border-input bg-background px-2">
+                      {["Onsight", "Flash", "Redpoint", "Attempt"].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Location / Crag</label>
+                    <Input placeholder="e.g. Red River Gorge, Smith Rock" value={logLocation} onChange={e => setLogLocation(e.target.value)} className="text-sm h-8" />
+                  </div>
+                </div>
+                <Textarea placeholder="Notes (beta, conditions, what clicked, what to work…)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm min-h-[50px]" />
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                  <Button size="sm" disabled={!logRouteName.trim() || !logDate} onClick={saveLog} className="gap-1.5"><Check size={12} /> Save</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Log list */}
+            {climbLog.length > 0 ? (
+              <div className="space-y-2">
+                {[...climbLog].sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
+                  <div key={entry.id} className="p-3 rounded-xl border bg-card space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{entry.routeName}</p>
+                          {entry.grade && <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 px-1.5 py-0.5 rounded-full border border-orange-200 shrink-0">{entry.grade}</span>}
+                          {entry.ascentType && <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${ASCENT_COLORS[entry.ascentType]}`}>{entry.ascentType}</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}{entry.climbType ? ` · ${entry.climbType}` : ""}{entry.location ? ` · ${entry.location}` : ""}</p>
+                      </div>
+                      <button onClick={() => deleteLog(entry.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"><Trash2 size={12} /></button>
+                    </div>
+                    {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🧗</span>
+                <p className="text-xs">No ascents logged yet — click "Log an Ascent" above</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── PROJECTS TAB ── */}
+        {tab === "projects" && (
+          <>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input placeholder="Search OpenBeta for a route to project…"
+                  value={projectSearch.query} onChange={e => projectSearch.setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") projectSearch.runSearch(); }}
+                  className="text-sm h-8 flex-1" />
+                <Button size="sm" variant="outline" onClick={() => projectSearch.runSearch()} disabled={projectSearch.searching || !projectSearch.query.trim()} className="h-8 gap-1.5 shrink-0">
+                  {projectSearch.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                  {projectSearch.searching ? "Searching…" : "Search"}
+                </Button>
+              </div>
+              {projectSearch.error && <p className="text-xs text-destructive">{projectSearch.error}</p>}
+              {projectSearch.results.length > 0 && (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">OpenBeta results</p>
+                  {projectSearch.results.map((r: any) => {
+                    const alreadyProject = projects.some(p => p.routeId === r.id);
+                    const alreadySent    = climbLog.some(e => e.routeId === r.id && e.ascentType !== "Attempt");
+                    return (
+                      <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                        <div className="w-9 h-9 rounded bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0 text-base">🪨</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate">{r.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{r.climbType}{r.grade ? ` · ${r.grade}` : ""}{r.location ? ` · ${r.location}` : ""}</p>
+                        </div>
+                        <div className="shrink-0">
+                          {alreadySent
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium">✓ Sent</span>
+                            : alreadyProject
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-secondary text-muted-foreground">Added</span>
+                            : <button onClick={() => addToProjects(r)} className="text-[10px] px-2 py-1 rounded bg-orange-600 text-white hover:bg-orange-700 transition-colors">+ Project</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {projects.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your project list</p>
+                {projects.map(p => {
+                  const sent = climbLog.some(e => e.routeId === p.routeId && e.ascentType !== "Attempt");
+                  return (
+                    <div key={p.id} className={`flex items-center gap-2.5 p-2.5 rounded-lg border bg-card ${sent ? "opacity-60" : ""}`}>
+                      <div className="w-9 h-9 rounded bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0 text-base">🪨</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className={`text-xs font-semibold truncate ${sent ? "line-through text-muted-foreground" : ""}`}>{p.routeName}</p>
+                          {sent && <span className="text-[10px] text-orange-600 font-medium shrink-0">✓</span>}
+                          {p.grade && <span className="text-[10px] text-muted-foreground shrink-0">{p.grade}</span>}
+                        </div>
+                        {(p.climbType || p.location) && <p className="text-[10px] text-muted-foreground">{p.climbType}{p.location ? ` · ${p.location}` : ""}</p>}
+                        {p.description && <p className="text-[10px] text-muted-foreground line-clamp-2">{p.description}</p>}
+                      </div>
+                      <button onClick={() => removeProject(p.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"><X size={12} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🪨</span>
+                <p className="text-xs">Search for routes above to build your project list</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── usePerenualSearch hook ─────────────────────────────────────────────────────
 
 function usePerenualSearch() {
@@ -5979,6 +6613,13 @@ function HobbyDetailDialog({
         {(() => { const n = hobby.name.toLowerCase(); return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })() && (
           <div className="mt-4 border-t pt-4">
             <GardeningSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Rock climbing section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n.includes("climb") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <ClimbingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
       </DialogContent>

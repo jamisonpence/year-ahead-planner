@@ -3487,6 +3487,51 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── OpenBeta climbing route search ───────────────────────────────────────────
+  app.get("/api/climbing/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q) return res.json({ results: [] });
+      const gql = `
+        query SearchClimbs {
+          search(query: ${JSON.stringify(q)}) {
+            climbs {
+              id
+              name
+              type { sport trad boulder topRope tr }
+              grades { yds vscale }
+              content { description location }
+            }
+          }
+        }
+      `;
+      const r = await fetch("https://api.openbeta.io", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "MyLifos/1.0 (hobby-climbing-feature)",
+        },
+        body: JSON.stringify({ query: gql }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: "OpenBeta error" });
+      const data = await r.json() as any;
+      const climbs: any[] = data?.data?.search?.climbs ?? [];
+      const results = climbs.slice(0, 15).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        grade: c.grades?.yds ?? c.grades?.vscale ?? "",
+        climbType: c.type?.boulder ? "Boulder"
+                 : c.type?.sport   ? "Sport"
+                 : c.type?.trad    ? "Trad"
+                 : (c.type?.topRope || c.type?.tr) ? "Top Rope"
+                 : "Route",
+        description: (c.content?.description ?? "").slice(0, 200),
+        location:    (c.content?.location ?? "").slice(0, 100),
+      }));
+      res.json({ results });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Perenual plant API proxy ──────────────────────────────────────────────────
   app.get("/api/perenual/search", requireAuth, async (req, res) => {
     try {
