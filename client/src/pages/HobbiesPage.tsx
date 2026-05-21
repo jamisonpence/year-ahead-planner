@@ -3479,7 +3479,7 @@ function HobbyDetailDialog({
         {addingPlan && (
           <PlanWizard open={addingPlan} onClose={() => setAddingPlan(false)} hobbies={[hobby]} defaultHobbyId={hobby.id}
             onSave={(_, plan) => {
-              // Auto-generate a matching milestone goal alongside the plan
+              // Single atomic write so plan + auto-goal land together and neither overwrites the other
               const autoGoal: HobbyGoal = {
                 id: genId(),
                 title: plan.title,
@@ -3489,8 +3489,7 @@ function HobbyDetailDialog({
                 status: plan.isActive ? "active" : "paused",
                 createdAt: plan.createdAt,
               };
-              onUpdatePlans([...plans, plan]);
-              onUpdateGoals([...goals, autoGoal]);
+              onUpdateExtra(setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", [...plans, plan], [...goals, autoGoal]));
               setAddingPlan(false);
             }}
           />
@@ -4049,6 +4048,8 @@ export default function HobbiesPage() {
 
   const handleUpdateHobbyExtra = async (hobbyId: number, extraJson: string) => {
     await updateMut.mutateAsync({ id: hobbyId, data: { extraJson } });
+    // Keep detailHobby in sync so BirdSection/HikingSection re-render with the new data immediately
+    if (detailHobby?.id === hobbyId) setDetailHobby(h => h ? { ...h, extraJson } : h);
   };
 
   const counts = useMemo(() => { const c: Record<string, number> = {}; for (const h of hobbies) c[h.hobbyType] = (c[h.hobbyType] ?? 0) + 1; return c; }, [hobbies]);
