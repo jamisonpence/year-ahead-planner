@@ -1219,6 +1219,112 @@ function generateFishingSteps(
   }
 }
 
+// ── Gardening types ───────────────────────────────────────────────────────────
+
+interface GardenPlantEntry {
+  id: string;
+  perenualId?: number;
+  commonName: string;
+  sciName?: string;
+  photoUrl?: string;
+  plantedDate: string;
+  location?: string;
+  quantity?: string;
+  notes?: string;
+  isHarvested?: boolean;
+}
+
+interface GardenWishlistEntry {
+  id: string;
+  perenualId?: number;
+  commonName: string;
+  sciName?: string;
+  photoUrl?: string;
+  addedAt: string;
+}
+
+function parseGardenPlants(extraJson: string): GardenPlantEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.gardenPlants) ? o.gardenPlants : []; } catch { return []; }
+}
+function parseGardenWishlist(extraJson: string): GardenWishlistEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.gardenWishlist) ? o.gardenWishlist : []; } catch { return []; }
+}
+function setGardeningInExtra(extraJson: string, plants: GardenPlantEntry[], wishlist: GardenWishlistEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, gardenPlants: plants, gardenWishlist: wishlist }); }
+  catch { return JSON.stringify({ gardenPlants: plants, gardenWishlist: wishlist }); }
+}
+
+type GardeningGoalType = "harvest" | "aesthetics" | "skills" | "relaxation";
+
+const GARDENING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "gd-harvest",    emoji: "🍅", label: "Food & harvest",         description: "Grow enough tomatoes and herbs to use fresh all summer",                                durationWeeks: 26, defaultSteps: [] },
+  { id: "gd-aesthetics", emoji: "🌸", label: "Aesthetics & design",    description: "Create a flower bed with something blooming from early spring through fall",            durationWeeks: 52, defaultSteps: [] },
+  { id: "gd-skills",     emoji: "🌱", label: "Learning & skills",      description: "Successfully start 10+ varieties from seed and transplant outdoors",                    durationWeeks: 26, defaultSteps: [] },
+  { id: "gd-relaxation", emoji: "🧘", label: "Relaxation & enjoyment", description: "Spend 15–20 minutes in the garden 3 days a week, tending and relaxing",                 durationWeeks: 52, defaultSteps: [] },
+];
+
+const GARDENING_GOAL_TYPE_MAP: Record<string, GardeningGoalType> = {
+  "gd-harvest": "harvest", "gd-aesthetics": "aesthetics", "gd-skills": "skills", "gd-relaxation": "relaxation",
+};
+
+function generateGardeningSteps(
+  goalType: GardeningGoalType,
+  opts: {
+    targetCrops?: string;
+    seedVarieties?: string;
+    gardenMinutes?: string;
+    gardenDays?: string;
+  },
+): GoalStep[] {
+  const g = (s: string) => ({ id: genId(), done: false, text: s });
+  switch (goalType) {
+    case "harvest": {
+      const crops = opts.targetCrops?.trim() || "tomatoes, herbs, and vegetables";
+      return [
+        g(`Plan your harvest garden: choose varieties of ${crops} suited to your climate and space`),
+        g(`Start seeds indoors 6–8 weeks before last frost, or source quality seedlings`),
+        g(`Prepare beds: amend soil with compost, set up stakes and cages as needed`),
+        g(`Transplant and establish — water consistently and mulch to retain moisture`),
+        g(`First harvest! Begin picking ${crops} at peak ripeness throughout the season`),
+        g(`End-of-season harvest, seed saving, and soil prep for next year`),
+      ];
+    }
+    case "aesthetics": {
+      return [
+        g(`Design your bloom calendar: choose plants for early spring, late spring, summer, and fall`),
+        g(`Prepare the bed — clear, edge, amend soil, and plan layout for height and colour flow`),
+        g(`Plant spring bulbs (tulips, daffodils) and early-season perennials`),
+        g(`Add summer bloomers — rudbeckia, coneflower, salvia, zinnias`),
+        g(`Install fall colour: asters, sedums, ornamental grasses, and late dahlias`),
+        g(`Evaluate the full-season result, photograph key moments, and plan next year's tweaks`),
+      ];
+    }
+    case "skills": {
+      const count = opts.seedVarieties?.trim() || "10";
+      return [
+        g(`Research and select ${count} varieties to start from seed — mix vegetables, herbs, and flowers`),
+        g(`Set up seed-starting station: trays, grow lights or a bright window, heat mats`),
+        g(`Sow seeds and track germination rates for each variety`),
+        g(`Care for seedlings: thin, fertilise, and harden off outdoors over 1–2 weeks`),
+        g(`Transplant all ${count} varieties into the garden`),
+        g(`Document results: which germinated well, which transplanted easily, what to try next year`),
+      ];
+    }
+    case "relaxation": {
+      const mins = opts.gardenMinutes?.trim() || "15–20";
+      const days = opts.gardenDays?.trim() || "3";
+      return [
+        g(`Identify your garden's current state — what needs regular tending each visit`),
+        g(`Establish a weekly routine: schedule ${days} days a week for ${mins}-minute sessions`),
+        g(`Month 1–3: build the habit — note how the garden changes week to week`),
+        g(`Month 4–6: experiment with one new plant or technique each month`),
+        g(`Month 7–9: enjoy peak season — share harvests or simply sit and observe`),
+        g(`Year-end reflection: how did your time in the garden affect your wellbeing?`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -1702,6 +1808,15 @@ function PlanWizard({
   const [fsPartner,        setFsPartner]        = useState("");
   const fishWizardSearch = useFishSearch();
 
+  // Gardening wizard state
+  const [gardeningMode,     setGardeningMode]     = useState(false);
+  const [gardeningGoalType, setGardeningGoalType] = useState<GardeningGoalType | "">("");
+  const [gdTargetCrops,     setGdTargetCrops]     = useState("");
+  const [gdSeedVarieties,   setGdSeedVarieties]   = useState("10");
+  const [gdMinutes,         setGdMinutes]         = useState("15");
+  const [gdDays,            setGdDays]            = useState("3");
+  const gardenWizardSearch = usePerenualSearch();
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -1710,14 +1825,16 @@ function PlanWizard({
   const isPokerHobby   = selectedHobby?.name?.toLowerCase().includes("poker")  ?? false;
   const isBirdHobby    = (selectedHobby?.name?.toLowerCase().includes("bird") || selectedHobby?.name?.toLowerCase().includes("birding")) ?? false;
   const isCyclingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("biking") || n.includes("mtb") || n.includes("gravel riding"); })();
-  const isFishingHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })();
+  const isFishingHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })();
+  const isGardeningHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })();
   const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
-  const templates = isHikingHobby  ? HIKING_PLAN_TEMPLATES
-                  : isCyclingHobby ? CYCLING_PLAN_TEMPLATES
-                  : isFishingHobby ? FISHING_PLAN_TEMPLATES
-                  : isChessHobby   ? CHESS_PLAN_TEMPLATES
+  const templates = isHikingHobby    ? HIKING_PLAN_TEMPLATES
+                  : isCyclingHobby   ? CYCLING_PLAN_TEMPLATES
+                  : isFishingHobby   ? FISHING_PLAN_TEMPLATES
+                  : isGardeningHobby ? GARDENING_PLAN_TEMPLATES
+                  : isChessHobby     ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
                   : isLangHobby    ? LANGUAGE_PLAN_TEMPLATES
@@ -1766,6 +1883,8 @@ function PlanWizard({
     setFishingMode(false); setFishingGoalType(""); setFsTargetSpecies(""); setFsTargetWeight("");
     setFsTargetLength(""); setFsHomeLake(""); setFsWaterCount("5");
     setFsWaters(["", "", "", "", ""]); setFsPartner("");
+    setGardeningMode(false); setGardeningGoalType(""); setGdTargetCrops(""); setGdSeedVarieties("10");
+    setGdMinutes("15"); setGdDays("3");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -1797,6 +1916,8 @@ function PlanWizard({
     if (cyclingType) { setCyclingMode(true); setCyclingGoalType(cyclingType); return; }
     const fishingType = FISHING_GOAL_TYPE_MAP[t.id];
     if (fishingType) { setFishingMode(true); setFishingGoalType(fishingType); return; }
+    const gardeningType = GARDENING_GOAL_TYPE_MAP[t.id];
+    if (gardeningType) { setGardeningMode(true); setGardeningGoalType(gardeningType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -1893,6 +2014,35 @@ function PlanWizard({
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
     setSteps(generatedSteps); setFishingMode(false); setStep(2);
+  }
+
+  function applyGardeningSettings() {
+    if (!gardeningGoalType) return;
+    const generatedSteps = generateGardeningSteps(gardeningGoalType, {
+      targetCrops: gdTargetCrops, seedVarieties: gdSeedVarieties,
+      gardenMinutes: gdMinutes, gardenDays: gdDays,
+    });
+    let title = "", desc = "", weeks = 52;
+    switch (gardeningGoalType) {
+      case "harvest":
+        title = gdTargetCrops ? `Grow & Harvest ${gdTargetCrops}` : "Food Garden: Fresh Harvest All Summer";
+        desc = `Grow${gdTargetCrops ? ` ${gdTargetCrops}` : " vegetables and herbs"} for fresh use all season long.`;
+        weeks = 26; break;
+      case "aesthetics":
+        title = "Four-Season Flower Garden";
+        desc = "Design and plant a bed with continuous blooms from early spring through fall.";
+        weeks = 52; break;
+      case "skills":
+        title = `Start ${gdSeedVarieties} Varieties from Seed`;
+        desc = `Learn to germinate and transplant ${gdSeedVarieties} plant varieties successfully.`;
+        weeks = 26; break;
+      case "relaxation":
+        title = `Garden ${gdDays}× a Week for Mindful Tending`;
+        desc = `Spend ${gdMinutes} minutes in the garden ${gdDays} days a week — tending, observing, and relaxing.`;
+        weeks = 52; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setGardeningMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -2022,7 +2172,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -2031,6 +2181,7 @@ function PlanWizard({
                 else if (hikingMode) { setHikingMode(false); setSelectedTemplate(null); }
                 else if (cyclingMode) { setCyclingMode(false); setCyclingGoalType(""); setSelectedTemplate(null); }
                 else if (fishingMode) { setFishingMode(false); setFishingGoalType(""); setSelectedTemplate(null); }
+                else if (gardeningMode) { setGardeningMode(false); setGardeningGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -2042,7 +2193,7 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
@@ -2050,13 +2201,14 @@ function PlanWizard({
                   : hikingMode ? "Hiking Goal"
                   : cyclingMode ? `Cycling: ${CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType)?.label ?? "Goal"}`
                   : fishingMode ? `Fishing: ${FISHING_PLAN_TEMPLATES.find(t => FISHING_GOAL_TYPE_MAP[t.id] === fishingGoalType)?.label ?? "Goal"}`
+                  : gardeningMode ? `Gardening: ${GARDENING_PLAN_TEMPLATES.find(t => GARDENING_GOAL_TYPE_MAP[t.id] === gardeningGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
@@ -2064,6 +2216,7 @@ function PlanWizard({
                   : hikingMode ? "Configure your hiking goal and optionally add specific trails"
                   : cyclingMode ? "Configure your cycling goal and optionally add specific routes"
                   : fishingMode ? "Configure your fishing goal"
+                  : gardeningMode ? "Configure your gardening goal"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -2072,8 +2225,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -2739,6 +2892,142 @@ function PlanWizard({
             );
           })()}
 
+          {/* ── GARDENING GOAL WIZARD ── */}
+          {gardeningMode && (() => {
+            const tplMeta = GARDENING_PLAN_TEMPLATES.find(t => GARDENING_GOAL_TYPE_MAP[t.id] === gardeningGoalType);
+            const meta: Record<GardeningGoalType, { emoji: string; example: string }> = {
+              harvest:    { emoji: "🍅", example: "e.g. Tomatoes, cucumbers, basil, and mint" },
+              aesthetics: { emoji: "🌸", example: "e.g. Bulbs in spring, perennials in summer, asters in fall" },
+              skills:     { emoji: "🌱", example: "e.g. 10 varieties started from seed indoors" },
+              relaxation: { emoji: "🧘", example: "e.g. 20 minutes of tending 3 days a week" },
+            };
+            const m = gardeningGoalType ? meta[gardeningGoalType] : null;
+            return (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-green-50/60 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                  <span className="text-2xl">{m?.emoji ?? "🌿"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* harvest: target crops */}
+                {gardeningGoalType === "harvest" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">What do you want to grow? *</label>
+                      <Input
+                        placeholder="e.g. tomatoes, basil, cucumbers, zucchini"
+                        value={gdTargetCrops}
+                        onChange={e => setGdTargetCrops(e.target.value)}
+                        className="text-sm"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan will cover planning, planting, tending, and harvesting these crops through the growing season.</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1.5">Search for plants to add to your garden</label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Search by name (e.g. tomato, basil…)"
+                          value={gardenWizardSearch.query}
+                          onChange={e => gardenWizardSearch.setQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") gardenWizardSearch.runSearch(); }}
+                          className="text-sm flex-1"
+                        />
+                        <Button size="sm" variant="outline" onClick={() => gardenWizardSearch.runSearch()} disabled={gardenWizardSearch.searching || !gardenWizardSearch.query.trim()} className="gap-1 shrink-0">
+                          {gardenWizardSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {gardenWizardSearch.error && <p className="text-xs text-destructive mt-1">{gardenWizardSearch.error}</p>}
+                      {gardenWizardSearch.results.length > 0 && (
+                        <div className="space-y-1 mt-2 max-h-44 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">Powered by Perenual — results are for inspiration</p>
+                          {gardenWizardSearch.results.map((p: any) => (
+                            <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card">
+                              {p.default_image?.small_url
+                                ? <img src={p.default_image.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover shrink-0" />
+                                : <div className="w-8 h-8 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-sm">🌿</div>}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate">{p.common_name}</p>
+                                <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
+                              </div>
+                              <button onClick={() => setGdTargetCrops(prev => prev ? `${prev}, ${p.common_name}` : p.common_name)}
+                                className="text-[10px] px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 transition-colors shrink-0">+ Add</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* aesthetics: no extra inputs, just descriptive */}
+                {gardeningGoalType === "aesthetics" && (
+                  <div className="p-3 rounded-xl bg-secondary/50 text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">Your plan will include:</p>
+                    <p>• Designing a bloom-succession calendar for all four seasons</p>
+                    <p>• Selecting and planting spring bulbs, summer perennials, and fall colour</p>
+                    <p>• A year-end review with photos and notes for next season</p>
+                  </div>
+                )}
+
+                {/* skills: seed varieties count */}
+                {gardeningGoalType === "skills" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">How many varieties do you want to start from seed?</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["5", "10", "15", "20"].map(n => (
+                          <button key={n} onClick={() => setGdSeedVarieties(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${gdSeedVarieties === n ? "bg-green-600 text-white border-green-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} varieties
+                          </button>
+                        ))}
+                        <Input type="number" min={1} max={50} value={gdSeedVarieties} onChange={e => setGdSeedVarieties(e.target.value)} className="w-20 text-sm h-8" />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan will cover seed starting setup, germination tracking, hardening off, and transplanting.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* relaxation: time per session and days per week */}
+                {gardeningGoalType === "relaxation" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Minutes per session</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["10", "15", "20", "30"].map(n => (
+                          <button key={n} onClick={() => setGdMinutes(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${gdMinutes === n ? "bg-green-600 text-white border-green-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} min
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Days per week</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["2", "3", "4", "5"].map(n => (
+                          <button key={n} onClick={() => setGdDays(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${gdDays === n ? "bg-green-600 text-white border-green-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n}×/week
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan will help you build a consistent garden routine and track how it affects your sense of calm and wellbeing.</p>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applyGardeningSettings} className="w-full gap-2">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* ── CYCLING GOAL WIZARD ── */}
           {cyclingMode && (() => {
             const tplMeta = CYCLING_PLAN_TEMPLATES.find(t => CYCLING_GOAL_TYPE_MAP[t.id] === cyclingGoalType);
@@ -3336,7 +3625,7 @@ function PlanWizard({
           )}
 
           {/* STEP 1 */}
-          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !birdMode && !langMode && !instrMode && (
+          {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !birdMode && !langMode && !instrMode && (
             <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
@@ -5139,6 +5428,324 @@ function FishingSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── usePerenualSearch hook ─────────────────────────────────────────────────────
+
+function usePerenualSearch() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState("");
+
+  async function runSearch(q?: string) {
+    const s = (q ?? query).trim();
+    if (!s) return;
+    setSearching(true); setResults([]); setError("");
+    try {
+      const r = await fetch(`/api/perenual/search?q=${encodeURIComponent(s)}`);
+      const data = await r.json();
+      if (data.error) { setError(data.error); }
+      else if (!Array.isArray(data) || !data.length) { setError("No plants found. Try a common name like 'tomato', 'rose', or 'lavender'."); }
+      else { setResults(data); }
+    } catch { setError("Search failed."); }
+    setSearching(false);
+  }
+
+  return { query, setQuery, searching, results, setResults, error, runSearch };
+}
+
+// ── GardeningSection ──────────────────────────────────────────────────────────
+
+function GardeningSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"plants" | "wishlist">("plants");
+  const [showLogForm, setShowLogForm] = useState(false);
+
+  const plantSearch   = usePerenualSearch();
+  const wishlistSearch = usePerenualSearch();
+
+  // Log form state
+  const [logCommonName,  setLogCommonName]  = useState("");
+  const [logSciName,     setLogSciName]     = useState("");
+  const [logPerenualId,  setLogPerenualId]  = useState<number | undefined>();
+  const [logPhotoUrl,    setLogPhotoUrl]    = useState("");
+  const [logPlantedDate, setLogPlantedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [logLocation,    setLogLocation]    = useState("");
+  const [logQuantity,    setLogQuantity]    = useState("");
+  const [logNotes,       setLogNotes]       = useState("");
+
+  const plants   = parseGardenPlants(hobby.extraJson ?? "{}");
+  const wishlist = parseGardenWishlist(hobby.extraJson ?? "{}");
+
+  function saveGardening(p: GardenPlantEntry[], w: GardenWishlistEntry[]) {
+    onUpdateExtra(setGardeningInExtra(hobby.extraJson ?? "{}", p, w));
+  }
+
+  function selectPlant(p: any) {
+    setLogCommonName(p.common_name ?? "");
+    setLogSciName(Array.isArray(p.scientific_name) ? p.scientific_name[0] : (p.scientific_name ?? ""));
+    setLogPerenualId(p.id);
+    setLogPhotoUrl(p.default_image?.small_url ?? "");
+    plantSearch.setResults([]);
+    plantSearch.setQuery("");
+  }
+
+  function savePlant() {
+    if (!logCommonName.trim() || !logPlantedDate) return;
+    const entry: GardenPlantEntry = {
+      id: genId(),
+      perenualId:  logPerenualId,
+      commonName:  logCommonName.trim(),
+      sciName:     logSciName || undefined,
+      photoUrl:    logPhotoUrl || undefined,
+      plantedDate: logPlantedDate,
+      location:    logLocation.trim() || undefined,
+      quantity:    logQuantity.trim() || undefined,
+      notes:       logNotes.trim() || undefined,
+    };
+    saveGardening([...plants, entry], wishlist);
+    setShowLogForm(false);
+    setLogCommonName(""); setLogSciName(""); setLogPerenualId(undefined); setLogPhotoUrl("");
+    setLogPlantedDate(new Date().toISOString().slice(0, 10));
+    setLogLocation(""); setLogQuantity(""); setLogNotes("");
+    toast({ title: "Plant logged!" });
+  }
+
+  function deletePlant(id: string) { saveGardening(plants.filter(p => p.id !== id), wishlist); }
+  function toggleHarvested(id: string) {
+    saveGardening(plants.map(p => p.id === id ? { ...p, isHarvested: !p.isHarvested } : p), wishlist);
+  }
+
+  function addToWishlist(p: any) {
+    const cn = p.common_name ?? "";
+    if (wishlist.some(w => w.perenualId === p.id)) { toast({ title: "Already on wishlist" }); return; }
+    const entry: GardenWishlistEntry = {
+      id: genId(), perenualId: p.id, commonName: cn,
+      sciName: Array.isArray(p.scientific_name) ? p.scientific_name[0] : (p.scientific_name ?? undefined),
+      photoUrl: p.default_image?.small_url ?? undefined,
+      addedAt: new Date().toISOString(),
+    };
+    saveGardening(plants, [...wishlist, entry]);
+    toast({ title: `"${cn}" added to wishlist` });
+  }
+
+  function removeFromWishlist(id: string) { saveGardening(plants, wishlist.filter(w => w.id !== id)); }
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-green-50/60 dark:bg-green-950/20 border-b border-green-200 dark:border-green-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🌿</span>
+          <span className="text-sm font-semibold text-green-800 dark:text-green-300">Garden Log & Wishlist</span>
+          <span className="text-xs text-muted-foreground">{plants.length} planted · {wishlist.length} wanted</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("plants")}   className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "plants"   ? "bg-green-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>My Garden</button>
+          <button onClick={() => setTab("wishlist")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "wishlist" ? "bg-green-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>Wishlist</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+
+        {/* ── MY GARDEN TAB ── */}
+        {tab === "plants" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Plant
+              </Button>
+            ) : (
+              <div className="space-y-2.5 border rounded-xl p-3">
+                <p className="text-xs font-semibold">Log a Plant</p>
+
+                {/* Plant search */}
+                <div>
+                  <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Plant *</label>
+                  {logCommonName ? (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50/60 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                      {logPhotoUrl && <img src={logPhotoUrl} alt={logCommonName} className="w-8 h-8 rounded object-cover shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{logCommonName}</p>
+                        {logSciName && <p className="text-[10px] text-muted-foreground italic truncate">{logSciName}</p>}
+                      </div>
+                      <button onClick={() => { setLogCommonName(""); setLogSciName(""); setLogPerenualId(undefined); setLogPhotoUrl(""); }} className="text-[10px] text-muted-foreground hover:text-destructive shrink-0"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <Input placeholder="Search plants (e.g. tomato, lavender, rose)…"
+                          value={plantSearch.query} onChange={e => plantSearch.setQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") plantSearch.runSearch(); }}
+                          className="text-sm h-8 flex-1" />
+                        <Button size="sm" variant="outline" onClick={() => plantSearch.runSearch()} disabled={plantSearch.searching || !plantSearch.query.trim()} className="h-8 gap-1 shrink-0">
+                          {plantSearch.searching ? <RefreshCw size={11} className="animate-spin" /> : <Search size={11} />}
+                        </Button>
+                      </div>
+                      {plantSearch.error && <p className="text-xs text-destructive">{plantSearch.error}</p>}
+                      {plantSearch.results.length > 0 && (
+                        <div className="space-y-1 max-h-44 overflow-y-auto">
+                          <p className="text-[10px] text-muted-foreground">Powered by Perenual — click to select</p>
+                          {plantSearch.results.map((p: any) => (
+                            <button key={p.id} onClick={() => selectPlant(p)}
+                              className="w-full text-left flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors">
+                              {p.default_image?.small_url
+                                ? <img src={p.default_image.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover shrink-0" />
+                                : <div className="w-8 h-8 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-sm">🌿</div>}
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{p.common_name}</p>
+                                <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <Input placeholder="Or type plant name manually…"
+                        value={logCommonName} onChange={e => setLogCommonName(e.target.value)}
+                        className="text-sm h-8" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Date planted *</label>
+                    <Input type="date" value={logPlantedDate} onChange={e => setLogPlantedDate(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Quantity</label>
+                    <Input placeholder="e.g. 4 plants" value={logQuantity} onChange={e => setLogQuantity(e.target.value)} className="text-sm h-8" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Location</label>
+                    <Input placeholder="e.g. Raised bed 1, Container, Back border" value={logLocation} onChange={e => setLogLocation(e.target.value)} className="text-sm h-8" />
+                  </div>
+                </div>
+                <Textarea placeholder="Notes (optional — soil prep, variety notes, observations…)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm min-h-[50px]" />
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                  <Button size="sm" disabled={!logCommonName.trim() || !logPlantedDate} onClick={savePlant} className="gap-1.5"><Check size={12} /> Save</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Plant list */}
+            {plants.length > 0 ? (
+              <div className="space-y-2">
+                {[...plants].sort((a, b) => b.plantedDate.localeCompare(a.plantedDate)).map(entry => (
+                  <div key={entry.id} className={`p-3 rounded-xl border bg-card space-y-1.5 ${entry.isHarvested ? "opacity-60" : ""}`}>
+                    <div className="flex items-start gap-2.5">
+                      {entry.photoUrl && (
+                        <img src={entry.photoUrl} alt={entry.commonName} className="w-12 h-12 rounded-lg object-cover shrink-0 border" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm font-semibold truncate ${entry.isHarvested ? "line-through text-muted-foreground" : ""}`}>{entry.commonName}</p>
+                          {entry.isHarvested && <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-950/30 px-1.5 py-0.5 rounded-full border border-green-200">✓ Harvested</span>}
+                        </div>
+                        {entry.sciName && <p className="text-[10px] text-muted-foreground italic">{entry.sciName}</p>}
+                        <p className="text-xs text-muted-foreground">Planted {format(parseISO(entry.plantedDate), "MMM d, yyyy")}{entry.location ? ` · ${entry.location}` : ""}{entry.quantity ? ` · ${entry.quantity}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => toggleHarvested(entry.id)} title={entry.isHarvested ? "Mark as growing" : "Mark as harvested"}
+                          className="p-1 text-muted-foreground hover:text-green-600 transition-colors"><Check size={12} /></button>
+                        <button onClick={() => deletePlant(entry.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🌱</span>
+                <p className="text-xs">Nothing logged yet — click "Log a Plant" above</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── WISHLIST TAB ── */}
+        {tab === "wishlist" && (
+          <>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input placeholder="Search plants to add (e.g. peony, fig, lemon balm)…"
+                  value={wishlistSearch.query} onChange={e => wishlistSearch.setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") wishlistSearch.runSearch(); }}
+                  className="text-sm h-8 flex-1" />
+                <Button size="sm" variant="outline" onClick={() => wishlistSearch.runSearch()} disabled={wishlistSearch.searching || !wishlistSearch.query.trim()} className="h-8 gap-1.5 shrink-0">
+                  {wishlistSearch.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                  {wishlistSearch.searching ? "Searching…" : "Search"}
+                </Button>
+              </div>
+              {wishlistSearch.error && <p className="text-xs text-destructive">{wishlistSearch.error}</p>}
+              {wishlistSearch.results.length > 0 && (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Perenual results</p>
+                  {wishlistSearch.results.map((p: any) => {
+                    const alreadyWished = wishlist.some(w => w.perenualId === p.id);
+                    const alreadyPlanted = plants.some(pl => pl.perenualId === p.id);
+                    return (
+                      <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                        {p.default_image?.small_url
+                          ? <img src={p.default_image.small_url} alt={p.common_name} className="w-9 h-9 rounded object-cover shrink-0" />
+                          : <div className="w-9 h-9 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-base">🌿</div>}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate">{p.common_name}</p>
+                          <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
+                        </div>
+                        <div className="shrink-0">
+                          {alreadyPlanted
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium">✓ Planted</span>
+                            : alreadyWished
+                            ? <span className="text-[10px] px-2 py-1 rounded bg-secondary text-muted-foreground">Added</span>
+                            : <button onClick={() => addToWishlist(p)} className="text-[10px] px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 transition-colors">+ Add</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {wishlist.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your wishlist</p>
+                {wishlist.map(w => {
+                  const planted = plants.some(p => p.perenualId === w.perenualId || p.commonName.toLowerCase() === w.commonName.toLowerCase());
+                  return (
+                    <div key={w.id} className={`flex items-center gap-2.5 p-2.5 rounded-lg border bg-card ${planted ? "opacity-60" : ""}`}>
+                      {w.photoUrl
+                        ? <img src={w.photoUrl} alt={w.commonName} className="w-9 h-9 rounded object-cover shrink-0" />
+                        : <div className="w-9 h-9 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-base">🌿</div>}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className={`text-xs font-semibold truncate ${planted ? "line-through text-muted-foreground" : ""}`}>{w.commonName}</p>
+                          {planted && <span className="text-[10px] text-green-600 font-medium shrink-0">✓</span>}
+                        </div>
+                        {w.sciName && <p className="text-[10px] text-muted-foreground italic truncate">{w.sciName}</p>}
+                      </div>
+                      <button onClick={() => removeFromWishlist(w.id)} className="p-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"><X size={12} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🌸</span>
+                <p className="text-xs">Search for plants above to build your garden wishlist</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HobbyDetailDialog({
   hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra,
 }: {
@@ -5358,6 +5965,20 @@ function HobbyDetailDialog({
               <p className="text-sm font-semibold">Sightings & Wishlist</p>
             </div>
             <BirdSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Fishing section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n.includes("fishing") || n.includes("angling") || n.includes("fly fishing") || n.includes("bass fishing"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <FishingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Gardening section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <GardeningSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
       </DialogContent>
