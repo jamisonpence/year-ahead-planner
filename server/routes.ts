@@ -3492,16 +3492,15 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     try {
       const q = String(req.query.q || "").trim();
       if (!q) return res.json({ results: [] });
-      // Minimal query — avoid optional fields that may not exist in all schema versions
+      // Use GraphQL variables (not inline interpolation) and only request known-stable fields
       const gql = `
-        query SearchClimbs {
-          search(query: ${JSON.stringify(q)}) {
+        query SearchClimbs($q: String!) {
+          search(query: $q) {
             climbs {
               id
               name
               type { sport trad boulder topRope }
               grades { yds vscale }
-              content { description }
             }
           }
         }
@@ -3512,7 +3511,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
           "Content-Type": "application/json",
           "User-Agent": "MyLifos/1.0 (hobby-climbing-feature)",
         },
-        body: JSON.stringify({ query: gql }),
+        body: JSON.stringify({ query: gql, variables: { q } }),
       });
       const rawText = await r.text();
       if (!r.ok) {
