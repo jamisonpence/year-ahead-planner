@@ -283,7 +283,6 @@ const COLLECTION_GROUPS = [
     subtitle: "You control visibility",
     tiles: [
       { path: "/workouts", emoji: "💪", label: "Workouts" },
-      { path: "/plants",   emoji: "🌿", label: "Plants"   },
       { path: "/health",   emoji: "❤️", label: "Health"   },
     ],
   },
@@ -301,7 +300,6 @@ const COLLECTION_GROUPS = [
       { path: "/housekeeping",  emoji: "🏠", label: "Housekeeping" },
       { path: "/kids",          emoji: "👨‍👩‍👧", label: "Family"      },
       { path: "/journal",       emoji: "📓", label: "Journal"      },
-      { path: "/quotes",        emoji: "💬", label: "Quotes"       },
       { path: "/faith",         emoji: "🕊️", label: "Faith"       },
       { path: "/politics",      emoji: "🏛️", label: "Politics"    },
     ],
