@@ -340,28 +340,70 @@ function _setGoalInExtra(extraJson: string, goalId: string, update: Record<strin
 }
 
 // ── HobbyPlanEditor ───────────────────────────────────────────────────────────
-function HobbyPlanEditor({ plan, hobby, friends, steps, done, total, pct, currentBuddy, onSave }: {
+function HobbyPlanEditor({ plan, hobby, friends, onSave }: {
   plan: any;
   hobby: any;
   friends: PublicUser[];
-  steps: any[];
-  done: number;
-  total: number;
-  pct: number;
-  currentBuddy: PublicUser | null;
-  onSave: (buddyUserId: number | null) => void;
+  onSave: (updates: Record<string, any>) => void;
 }) {
+  const [localSteps, setLocalSteps] = useState<any[]>(() => plan.steps ?? []);
   const [buddyUserId, setBuddyUserId] = useState<number | null>(plan.buddyUserId ?? null);
-  const isDirty = (buddyUserId ?? null) !== (plan.buddyUserId ?? null);
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [newStepText, setNewStepText] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  // Sync if plan prop changes (after save)
+  useEffect(() => {
+    setLocalSteps(plan.steps ?? []);
+    setBuddyUserId(plan.buddyUserId ?? null);
+  }, [plan.id]);
 
   const typeColors: Record<string, string> = { creative: "#ec4899", collection: "#f97316", outdoor: "#10b981", games: "#6366f1", learning: "#3b82f6", performance: "#8b5cf6" };
   const color = typeColors[hobby.hobbyType] ?? "#6366f1";
+  const doneCount = localSteps.filter((s: any) => s.done).length;
+  const pct = localSteps.length ? Math.round((doneCount / localSteps.length) * 100) : 0;
+  const buddyDirty = (buddyUserId ?? null) !== (plan.buddyUserId ?? null);
+
+  function saveSteps(steps: any[]) {
+    setLocalSteps(steps);
+    onSave({ steps });
+  }
+
+  function toggleStep(id: string) {
+    const updated = localSteps.map((s: any) => s.id === id ? { ...s, done: !s.done } : s);
+    saveSteps(updated);
+  }
+
+  function deleteStep(id: string) {
+    saveSteps(localSteps.filter((s: any) => s.id !== id));
+  }
+
+  function startEdit(step: any) {
+    setEditingStepId(step.id);
+    setEditingText(step.text ?? step.title ?? "");
+  }
+
+  function commitEdit(id: string) {
+    if (!editingText.trim()) { setEditingStepId(null); return; }
+    const updated = localSteps.map((s: any) => s.id === id ? { ...s, text: editingText.trim() } : s);
+    saveSteps(updated);
+    setEditingStepId(null);
+  }
+
+  function addStep() {
+    if (!newStepText.trim()) return;
+    const newStep = { id: `step_${Date.now()}`, text: newStepText.trim(), done: false };
+    saveSteps([...localSteps, newStep]);
+    setNewStepText("");
+    setShowAdd(false);
+  }
 
   return (
     <div className="space-y-3 p-1">
       {/* Plan header */}
       <div className="p-3 rounded-xl border bg-secondary/30">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-1.5">
           <ClipboardList size={14} style={{ color }} className="shrink-0" />
           <p className="text-sm font-semibold leading-tight flex-1 truncate">{plan.title}</p>
         </div>
@@ -370,32 +412,90 @@ function HobbyPlanEditor({ plan, hobby, friends, steps, done, total, pct, curren
           <span>{hobby.name}</span>
           {plan.durationWeeks && <span>· {plan.durationWeeks}w plan</span>}
         </div>
-        {total > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Progress value={pct} className="h-1.5 flex-1" />
-              <span className="text-xs text-muted-foreground shrink-0">{done}/{total} steps</span>
-            </div>
+        {localSteps.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Progress value={pct} className="h-1.5 flex-1" />
+            <span className="text-xs text-muted-foreground shrink-0">{doneCount}/{localSteps.length} steps</span>
           </div>
         )}
       </div>
 
       {/* Steps list */}
-      {steps.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Steps</p>
-          <div className="space-y-1">
-            {steps.map((step: any, i: number) => (
-              <div key={i} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors ${step.done ? "opacity-60" : ""}`}>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${step.done ? "border-emerald-500 bg-emerald-500" : "border-muted-foreground/30"}`}>
-                  {step.done && <Check size={10} className="text-white" />}
-                </div>
-                <p className={`text-sm flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.text ?? step.title}</p>
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Steps</p>
+        <div className="space-y-1">
+          {localSteps.map((step: any) => (
+            <div key={step.id} className={`group flex items-start gap-2.5 px-2 py-2 rounded-lg hover:bg-secondary/40 transition-colors ${step.done ? "opacity-60" : ""}`}>
+              {/* Toggle checkbox */}
+              <button
+                type="button"
+                onClick={() => toggleStep(step.id)}
+                className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                  step.done
+                    ? "border-emerald-500 bg-emerald-500 hover:bg-emerald-600 hover:border-emerald-600"
+                    : "border-muted-foreground/30 hover:border-emerald-400"
+                }`}
+              >
+                {step.done && <Check size={10} className="text-white" />}
+              </button>
+
+              {/* Step text / inline editor */}
+              {editingStepId === step.id ? (
+                <input
+                  autoFocus
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onBlur={() => commitEdit(step.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitEdit(step.id); if (e.key === "Escape") setEditingStepId(null); }}
+                  className="flex-1 text-sm bg-transparent border-b border-primary outline-none pb-0.5"
+                />
+              ) : (
+                <p
+                  className={`text-sm flex-1 cursor-text ${step.done ? "line-through text-muted-foreground" : ""}`}
+                  onClick={() => startEdit(step)}
+                  title="Click to edit"
+                >
+                  {step.text ?? step.title}
+                </p>
+              )}
+
+              {/* Actions (visible on hover) */}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button type="button" onClick={() => startEdit(step)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                  <Pencil size={11} />
+                </button>
+                <button type="button" onClick={() => deleteStep(step.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-500 transition-colors">
+                  <Trash2 size={11} />
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+
+          {/* Add new step */}
+          {showAdd ? (
+            <div className="flex gap-1.5 px-2 pt-1">
+              <input
+                autoFocus
+                value={newStepText}
+                onChange={(e) => setNewStepText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addStep(); if (e.key === "Escape") { setShowAdd(false); setNewStepText(""); } }}
+                placeholder="New step..."
+                className="flex-1 h-8 text-sm bg-transparent border rounded-lg px-2 outline-none focus:border-primary"
+              />
+              <Button size="sm" className="h-8 px-2" onClick={addStep}><Check size={12} /></Button>
+              <Button size="sm" variant="ghost" className="h-8 px-1" onClick={() => { setShowAdd(false); setNewStepText(""); }}><X size={12} /></Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 mt-0.5"
+            >
+              <Plus size={12} /> Add step
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Buddy */}
       {friends.length > 0 && (
@@ -408,9 +508,9 @@ function HobbyPlanEditor({ plan, hobby, friends, steps, done, total, pct, curren
         </div>
       )}
 
-      {isDirty && (
-        <Button size="sm" className="w-full h-8 text-xs" onClick={() => onSave(buddyUserId)}>
-          Save Changes
+      {buddyDirty && (
+        <Button size="sm" className="w-full h-8 text-xs" onClick={() => onSave({ buddyUserId })}>
+          Save Buddy
         </Button>
       )}
 
@@ -1359,23 +1459,13 @@ export default function GoalsPage() {
             isHobbyGoalsSelected && selectedHobbyPlan ? (() => {
               const plan = selectedHobbyPlan;
               const hobby = plan.hobby;
-              const steps: any[] = plan.steps ?? [];
-              const done = steps.filter((s: any) => s.done).length;
-              const total = steps.length;
-              const pct = total ? Math.round((done / total) * 100) : 0;
-              const currentBuddy = friends.find(f => f.id === plan.buddyUserId) ?? null;
               return (
                 <HobbyPlanEditor
                   plan={plan}
                   hobby={hobby}
                   friends={friends}
-                  steps={steps}
-                  done={done}
-                  total={total}
-                  pct={pct}
-                  currentBuddy={currentBuddy}
-                  onSave={(buddyUserId) => {
-                    const newExtra = _setPlanInExtra(hobby.extraJson ?? "{}", plan.id, { buddyUserId });
+                  onSave={(updates) => {
+                    const newExtra = _setPlanInExtra(hobby.extraJson ?? "{}", plan.id, updates);
                     updateHobby.mutate({ id: hobby.id, extraJson: newExtra });
                   }}
                 />
