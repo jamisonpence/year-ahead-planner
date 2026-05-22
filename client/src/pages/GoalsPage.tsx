@@ -22,7 +22,7 @@ import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
   ProjectTask, InsertProject, InsertProjectTask,
   GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, Plant,
-  NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby,
+  NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
@@ -136,6 +136,10 @@ export default function GoalsPage() {
   const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
   const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
   const { data: hobbies = [] } = useQuery<Hobby[]>({ queryKey: ["/api/hobbies"] });
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => (await apiRequest("GET", "/api/friends")).json(),
+  });
 
   const inv = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
@@ -390,6 +394,7 @@ export default function GoalsPage() {
               const pct = goalPct(g);
               const isSelected = g.id === selectedGoalId;
               const d = g.targetDate ? daysUntil(g.targetDate) : null;
+              const buddy = g.buddyUserId ? friends.find((f) => f.id === g.buddyUserId) : null;
               return (
                 <div key={g.id}
                   onClick={() => { setSelectedGoalId(isSelected ? null : g.id); setSelectedProjectId(null); if (!isSelected) setMobileTab("projects"); }}
@@ -427,6 +432,23 @@ export default function GoalsPage() {
                     <Progress value={pct} className="h-1.5 flex-1" />
                     <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
                   </div>
+
+                  {/* Accountabilibuddy chip */}
+                  {buddy && (
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      {buddy.avatarUrl ? (
+                        <img src={buddy.avatarUrl} alt={buddy.name} className="w-4 h-4 rounded-full object-cover border border-background" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[8px] font-bold flex items-center justify-center border border-background">
+                          {buddy.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        <span className="text-primary/80 font-medium">{buddy.name.split(" ")[0]}</span>
+                        {" "}is your buddy
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${PRIORITY_COLORS[g.priority]}`}>{g.priority}</span>
