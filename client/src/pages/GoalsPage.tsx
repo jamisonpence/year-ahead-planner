@@ -149,7 +149,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   friends: PublicUser[];
   onSave: (data: { id: number } & Partial<InsertGoal>) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [title, setTitle] = useState(goal.title);
   const [priority, setPriority] = useState(goal.priority);
   const [current, setCurrent] = useState(goal.progressCurrent.toString());
@@ -166,7 +166,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
     setBuddyUserId((goal as any).buddyUserId ?? null);
   }, [goal]);
 
-  useEffect(() => { reset(); setExpanded(false); }, [goal.id]);
+  useEffect(() => { reset(); setExpanded(true); }, [goal.id]);
 
   const isDirty =
     title.trim() !== goal.title ||

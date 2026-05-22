@@ -31,7 +31,7 @@ export const RECURRENCE_OPTIONS = [
 ];
 
 export const GOAL_CATEGORIES = [
-  "general","reading","fitness","career","finance","health","personal","house","other"
+  "general","fitness","health","nutrition","career","finance","hobby","reading","personal","house","other"
 ];
 
 export const PROGRESS_TYPES = [
