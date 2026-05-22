@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser } from "@shared/schema";
+import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser, PetWithVisits, PetVetVisit } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Baby, Plus, Pencil, Trash2, Check, Users, ChevronDown,
+  PawPrint, Stethoscope, Calendar, Heart,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1304,11 +1305,326 @@ function ChildDetail({ child }: { child: ChildWithDetails }) {
   );
 }
 
+// ── Pets ──────────────────────────────────────────────────────────────────────
+
+const PET_SPECIES = [
+  { value: "dog",     label: "Dog",     emoji: "🐶" },
+  { value: "cat",     label: "Cat",     emoji: "🐱" },
+  { value: "rabbit",  label: "Rabbit",  emoji: "🐰" },
+  { value: "bird",    label: "Bird",    emoji: "🐦" },
+  { value: "fish",    label: "Fish",    emoji: "🐟" },
+  { value: "reptile", label: "Reptile", emoji: "🦎" },
+  { value: "other",   label: "Other",   emoji: "🐾" },
+];
+
+function petEmoji(species: string) {
+  return PET_SPECIES.find((s) => s.value === species)?.emoji ?? "🐾";
+}
+
+function calcPetAge(birthday: string | null | undefined): string {
+  if (!birthday) return "";
+  const [y, m, d] = birthday.split("-").map(Number);
+  const birth = new Date(y, m - 1, d);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 0) return "";
+  if (years === 0) return months <= 1 ? `${months} mo` : `${months} months`;
+  return months === 0 ? `${years}y` : `${years}y ${months}m`;
+}
+
+function PetsSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
+  const [petDialog, setPetDialog] = useState(false);
+  const [editingPet, setEditingPet] = useState<PetWithVisits | null>(null);
+  const [petForm, setPetForm] = useState({ name: "", species: "dog", breed: "", birthday: "", notes: "", accentColor: ACCENT_COLORS[0] });
+  const [vetDialog, setVetDialog] = useState(false);
+  const [editingVisit, setEditingVisit] = useState<PetVetVisit | null>(null);
+  const [vetForm, setVetForm] = useState({ date: new Date().toISOString().slice(0, 10), reason: "", notes: "", vetName: "" });
+
+  const { data: allPets = [] } = useQuery<PetWithVisits[]>({
+    queryKey: ["/api/pets"],
+    queryFn: async () => (await apiRequest("GET", "/api/pets")).json(),
+  });
+
+  const invPets = () => qc.invalidateQueries({ queryKey: ["/api/pets"] });
+
+  const selectedPet = allPets.find((p) => p.id === selectedPetId) ?? allPets[0] ?? null;
+
+  const createPetMut = useMutation({
+    mutationFn: (d: any) => apiRequest("POST", "/api/pets", d),
+    onSuccess: async (r) => { const created = await r.json(); invPets(); setSelectedPetId(created.id); setPetDialog(false); },
+    onError: () => toast({ title: "Error saving", variant: "destructive" }),
+  });
+  const updatePetMut = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/pets/${id}`, d),
+    onSuccess: () => { invPets(); setPetDialog(false); setEditingPet(null); },
+  });
+  const deletePetMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/pets/${id}`),
+    onSuccess: () => { invPets(); setSelectedPetId(null); },
+  });
+
+  const createVisitMut = useMutation({
+    mutationFn: ({ petId, d }: { petId: number; d: any }) => apiRequest("POST", `/api/pets/${petId}/vet-visits`, d),
+    onSuccess: () => { invPets(); setVetDialog(false); setEditingVisit(null); },
+  });
+  const updateVisitMut = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: any }) => apiRequest("PATCH", `/api/pet-vet-visits/${id}`, d),
+    onSuccess: () => { invPets(); setVetDialog(false); setEditingVisit(null); },
+  });
+  const deleteVisitMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/pet-vet-visits/${id}`),
+    onSuccess: () => invPets(),
+  });
+
+  function openAddPet() {
+    setEditingPet(null);
+    setPetForm({ name: "", species: "dog", breed: "", birthday: "", notes: "", accentColor: ACCENT_COLORS[0] });
+    setPetDialog(true);
+  }
+  function openEditPet(p: PetWithVisits) {
+    setEditingPet(p);
+    setPetForm({ name: p.name, species: p.species, breed: p.breed ?? "", birthday: p.birthday ?? "", notes: p.notes ?? "", accentColor: p.accentColor ?? ACCENT_COLORS[0] });
+    setPetDialog(true);
+  }
+  function savePet() {
+    if (!petForm.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+    const payload = { ...petForm, name: petForm.name.trim(), breed: petForm.breed.trim() || null, notes: petForm.notes.trim() || null, birthday: petForm.birthday || null };
+    if (editingPet) updatePetMut.mutate({ id: editingPet.id, d: payload });
+    else createPetMut.mutate(payload);
+  }
+
+  function openAddVisit() {
+    setEditingVisit(null);
+    setVetForm({ date: new Date().toISOString().slice(0, 10), reason: "", notes: "", vetName: "" });
+    setVetDialog(true);
+  }
+  function openEditVisit(v: PetVetVisit) {
+    setEditingVisit(v);
+    setVetForm({ date: v.date, reason: v.reason, notes: v.notes ?? "", vetName: v.vetName ?? "" });
+    setVetDialog(true);
+  }
+  function saveVisit() {
+    if (!vetForm.reason.trim() || !selectedPet) return;
+    const payload = { ...vetForm, reason: vetForm.reason.trim(), notes: vetForm.notes.trim() || null, vetName: vetForm.vetName.trim() || null };
+    if (editingVisit) updateVisitMut.mutate({ id: editingVisit.id, d: payload });
+    else createVisitMut.mutate({ petId: selectedPet.id, d: payload });
+  }
+
+  if (allPets.length === 0) return (
+    <div>
+      <div className="text-center py-16 text-muted-foreground">
+        <PawPrint size={48} className="mx-auto mb-4 opacity-20" />
+        <p className="text-sm mb-4">Add a pet to track their info and vet visits.</p>
+        <Button variant="outline" onClick={openAddPet} className="gap-1.5"><Plus size={14} /> Add Pet</Button>
+      </div>
+      <PetFormDialog open={petDialog} onClose={() => setPetDialog(false)} form={petForm} setForm={setPetForm} onSave={savePet} editing={editingPet} />
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Pet selector pills */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          {allPets.map((p) => (
+            <button key={p.id} onClick={() => setSelectedPetId(p.id)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                selectedPet?.id === p.id ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary"
+              }`}
+            >
+              <span>{petEmoji(p.species)}</span>
+              <span>{p.name}</span>
+              {p.birthday && <span className="text-xs opacity-70">· {calcPetAge(p.birthday)}</span>}
+            </button>
+          ))}
+        </div>
+        <Button size="sm" variant="outline" onClick={openAddPet} className="gap-1.5 shrink-0"><Plus size={13} /> Add Pet</Button>
+      </div>
+
+      {selectedPet && (
+        <div>
+          {/* Pet header card */}
+          <div className="rounded-xl border bg-card overflow-hidden mb-5">
+            <div className="h-1.5" style={{ background: selectedPet.accentColor ?? "#6366f1" }} />
+            <div className="p-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl leading-none">{petEmoji(selectedPet.species)}</span>
+                <div>
+                  <h2 className="text-lg font-bold">{selectedPet.name}</h2>
+                  <p className="text-sm text-muted-foreground capitalize">
+                    {selectedPet.species}{selectedPet.breed ? ` · ${selectedPet.breed}` : ""}
+                    {selectedPet.birthday ? ` · Born ${selectedPet.birthday}${calcPetAge(selectedPet.birthday) ? ` (${calcPetAge(selectedPet.birthday)})` : ""}` : ""}
+                  </p>
+                  {selectedPet.notes && <p className="text-xs text-muted-foreground mt-1">{selectedPet.notes}</p>}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => openEditPet(selectedPet)} className="p-2 rounded hover:bg-secondary transition-colors">
+                  <Pencil size={14} className="text-muted-foreground" />
+                </button>
+                <button onClick={() => { if (confirm(`Delete ${selectedPet.name} and all their data?`)) deletePetMut.mutate(selectedPet.id); }}
+                  className="p-2 rounded hover:bg-secondary transition-colors">
+                  <Trash2 size={14} className="text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Vet Visits */}
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Stethoscope size={15} className="text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Vet Visits</h3>
+                <span className="text-xs text-muted-foreground">({selectedPet.vetVisits.length})</span>
+              </div>
+              <Button size="sm" variant="outline" onClick={openAddVisit} className="gap-1 h-7 text-xs px-2.5">
+                <Plus size={12} /> Log Visit
+              </Button>
+            </div>
+            {selectedPet.vetVisits.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No vet visits logged yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedPet.vetVisits.map((v) => (
+                  <div key={v.id} className="flex items-start gap-3 p-2.5 rounded-lg bg-secondary/40 group">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold">{v.reason}</span>
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Calendar size={10} /> {v.date}
+                        </span>
+                        {v.vetName && <span className="text-[10px] text-muted-foreground">· {v.vetName}</span>}
+                      </div>
+                      {v.notes && <p className="text-xs text-muted-foreground mt-0.5">{v.notes}</p>}
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button onClick={() => openEditVisit(v)} className="p-1 rounded hover:bg-muted transition-colors">
+                        <Pencil size={12} className="text-muted-foreground" />
+                      </button>
+                      <button onClick={() => { if (confirm("Delete this vet visit?")) deleteVisitMut.mutate(v.id); }}
+                        className="p-1 rounded hover:bg-muted transition-colors">
+                        <Trash2 size={12} className="text-muted-foreground hover:text-destructive" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pet Form Dialog */}
+      <PetFormDialog open={petDialog} onClose={() => { setPetDialog(false); setEditingPet(null); }} form={petForm} setForm={setPetForm} onSave={savePet} editing={editingPet} />
+
+      {/* Vet Visit Dialog */}
+      <Dialog open={vetDialog} onOpenChange={(o) => { if (!o) { setVetDialog(false); setEditingVisit(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingVisit ? "Edit Vet Visit" : "Log Vet Visit"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Reason *</label>
+              <Input value={vetForm.reason} onChange={(e) => setVetForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Annual checkup, Vaccination" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Date</label>
+                <Input type="date" value={vetForm.date} onChange={(e) => setVetForm((f) => ({ ...f, date: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Vet / Clinic</label>
+                <Input value={vetForm.vetName} onChange={(e) => setVetForm((f) => ({ ...f, vetName: e.target.value }))} placeholder="Optional" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Notes</label>
+              <Textarea value={vetForm.notes} onChange={(e) => setVetForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Medications, follow-up, observations…" />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={saveVisit} disabled={!vetForm.reason.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => { setVetDialog(false); setEditingVisit(null); }}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function PetFormDialog({ open, onClose, form, setForm, onSave, editing }: {
+  open: boolean; onClose: () => void;
+  form: { name: string; species: string; breed: string; birthday: string; notes: string; accentColor: string };
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+  onSave: () => void;
+  editing: PetWithVisits | null;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>{editing ? "Edit Pet" : "Add Pet"}</DialogTitle></DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Name *</label>
+              <Input value={form.name} onChange={(e) => setForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="Pet's name" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Species</label>
+              <Select value={form.species} onValueChange={(v) => setForm((f: any) => ({ ...f, species: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{PET_SPECIES.map((s) => <SelectItem key={s.value} value={s.value}>{s.emoji} {s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Breed</label>
+              <Input value={form.breed} onChange={(e) => setForm((f: any) => ({ ...f, breed: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Birthday</label>
+              <Input type="date" value={form.birthday} onChange={(e) => setForm((f: any) => ({ ...f, birthday: e.target.value }))} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Notes</label>
+            <Textarea value={form.notes} onChange={(e) => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Allergies, medications, favorite things…" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Color</label>
+            <div className="flex gap-2 flex-wrap">
+              {ACCENT_COLORS.map((c) => (
+                <button key={c} type="button" onClick={() => setForm((f: any) => ({ ...f, accentColor: c }))}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${form.accentColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+                  style={{ background: c }} />
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={onSave} disabled={!form.name.trim()}>
+              {editing ? "Save" : "Add Pet"}
+            </Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function KidsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [section, setSection] = useState<"children" | "pets">("children");
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [childDialog, setChildDialog] = useState(false);
   const [editingChild, setEditingChild] = useState<ChildWithDetails | null>(null);
@@ -1375,20 +1691,42 @@ export default function KidsPage() {
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Baby size={22} /> Kids
+            <Heart size={22} /> Family
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {allChildren.length} {allChildren.length === 1 ? "child" : "children"}
           </p>
         </div>
-        <Button onClick={openAddChild} size="sm" className="gap-1.5">
-          <Plus size={15} /> Add Child
-        </Button>
+        {section === "children" && (
+          <Button onClick={openAddChild} size="sm" className="gap-1.5">
+            <Plus size={15} /> Add Child
+          </Button>
+        )}
       </div>
 
+      {/* Section tabs */}
+      <div className="flex gap-1 mb-5 p-1 bg-secondary/50 rounded-lg w-fit">
+        <button
+          onClick={() => setSection("children")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${section === "children" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Baby size={14} /> Children
+        </button>
+        <button
+          onClick={() => setSection("pets")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${section === "pets" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <PawPrint size={14} /> Pets
+        </button>
+      </div>
+
+      {section === "pets" ? (
+        <PetsSection />
+      ) : (
+        <>
       {kidsCollab && (
         <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
           <Users size={14} className="shrink-0" />
@@ -1464,6 +1802,8 @@ export default function KidsPage() {
               <ChildDetail child={selectedChild} />
             </div>
           )}
+        </>
+      )}
         </>
       )}
 

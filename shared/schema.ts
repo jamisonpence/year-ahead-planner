@@ -853,6 +853,39 @@ export type ChildWithDetails = Child & {
   prepItems: ChildPrepItem[];
 };
 
+// ── PETS ───────────────────────────────────────────────────────────────────────
+export const pets = pgTable("pets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  name: text("name").notNull(),
+  species: text("species").notNull().default("dog"), // dog|cat|rabbit|bird|fish|reptile|other
+  breed: text("breed"),
+  birthday: text("birthday"), // YYYY-MM-DD
+  notes: text("notes"),
+  accentColor: text("accent_color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const petVetVisits = pgTable("pet_vet_visits", {
+  id: serial("id").primaryKey(),
+  petId: integer("pet_id").notNull(),
+  userId: integer("user_id"),
+  date: text("date").notNull(), // YYYY-MM-DD
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  vetName: text("vet_name"),
+});
+
+export const insertPetSchema = createInsertSchema(pets).omit({ id: true });
+export type InsertPet = z.infer<typeof insertPetSchema>;
+export type Pet = typeof pets.$inferSelect;
+
+export const insertPetVetVisitSchema = createInsertSchema(petVetVisits).omit({ id: true });
+export type InsertPetVetVisit = z.infer<typeof insertPetVetVisitSchema>;
+export type PetVetVisit = typeof petVetVisits.$inferSelect;
+
+export type PetWithVisits = Pet & { vetVisits: PetVetVisit[] };
+
 // ── QUOTES ─────────────────────────────────────────────────────────────────────
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),

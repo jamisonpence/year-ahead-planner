@@ -25,6 +25,7 @@ import {
   insertMusicArtistSchema, insertMusicSongSchema,
   insertChoreSchema, insertHouseProjectSchema, insertApplianceSchema, insertSpotSchema,
   insertChildSchema, insertChildMilestoneSchema, insertChildMemorySchema, insertChildPrepItemSchema,
+  insertPetSchema, insertPetVetVisitSchema,
   insertQuoteSchema,
   insertMantraSchema,
   insertArtPieceSchema,
@@ -3210,6 +3211,47 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   app.delete("/api/child-prep-items/:id", requireAuth, async (req, res) => {
     try {
       (await storage.deleteChildPrepItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Pets ─────────────────────────────────────────────────────────────────────
+  app.get("/api/pets", requireAuth, async (req, res) => {
+    try { res.json(await storage.getAllPetsWithVisits((req.user as User).id)); } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/pets", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertPetSchema.parse({ ...req.body, userId: uid });
+      res.status(201).json(await storage.createPet(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/pets/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePet(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/pets/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePet(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/pets/:petId/vet-visits", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const data = insertPetVetVisitSchema.parse({ ...req.body, petId: +req.params.petId, userId: uid });
+      res.status(201).json(await storage.createPetVetVisit(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/pet-vet-visits/:id", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updatePetVetVisit(+req.params.id, req.body);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/pet-vet-visits/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deletePetVetVisit(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 

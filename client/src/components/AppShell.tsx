@@ -90,7 +90,7 @@ const ALL_TABS = [
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
   { path: "/spots",         label: "Places",                   icon: MapPin          },
-  { path: "/kids",          label: "Kids",                    icon: Baby            },
+  { path: "/kids",          label: "Family",                  icon: Baby            },
   { path: "/quotes",        label: "Quotes",                  icon: Quote           },
   { path: "/art",           label: "Art",                     icon: Palette         },
   { path: "/journal",       label: "Journal",                 icon: BookOpen        },
@@ -297,7 +297,7 @@ const COLLECTION_GROUPS = [
       { path: "/budget",        emoji: "💰", label: "Budget"       },
       { path: "/relationships", emoji: "👥", label: "Relationships"},
       { path: "/housekeeping",  emoji: "🏠", label: "Housekeeping" },
-      { path: "/kids",          emoji: "👶", label: "Kids"         },
+      { path: "/kids",          emoji: "👨‍👩‍👧", label: "Family"      },
       { path: "/journal",       emoji: "📓", label: "Journal"      },
       { path: "/quotes",        emoji: "💬", label: "Quotes"       },
       { path: "/faith",         emoji: "🕊️", label: "Faith"       },
@@ -728,7 +728,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium">Collaboration Requests</span>
                           <p className="text-xs text-muted-foreground">
-                            {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Kids or Housekeeping
+                            {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Housekeeping
                           </p>
                         </div>
                         <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
@@ -948,7 +948,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">Collaboration Requests</span>
                       <p className="text-xs text-muted-foreground">
-                        {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Kids or Housekeeping
+                        {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Housekeeping
                       </p>
                     </div>
                     <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">

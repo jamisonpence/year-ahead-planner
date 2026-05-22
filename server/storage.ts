@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -30,6 +30,7 @@ import type {
   InsertChildMilestone, ChildMilestone,
   InsertChildMemory, ChildMemory,
   InsertChildPrepItem, ChildPrepItem,
+  InsertPet, Pet, PetWithVisits, InsertPetVetVisit, PetVetVisit,
   InsertQuote, Quote,
   InsertMantra, Mantra,
   InsertArtPiece, ArtPiece,
@@ -644,6 +645,32 @@ export async function initializeStorage() {
       completed BOOLEAN NOT NULL DEFAULT FALSE,
       notes TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      species TEXT NOT NULL DEFAULT 'dog',
+      breed TEXT,
+      birthday TEXT,
+      notes TEXT,
+      accent_color TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pet_vet_visits (
+      id SERIAL PRIMARY KEY,
+      pet_id INTEGER NOT NULL,
+      user_id INTEGER,
+      date TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      notes TEXT,
+      vet_name TEXT
     )
   `);
 
@@ -1572,6 +1599,14 @@ export interface IStorage {
   createChildPrepItem(data: InsertChildPrepItem, userId: number): Promise<ChildPrepItem>;
   updateChildPrepItem(id: number, data: Partial<InsertChildPrepItem>): Promise<ChildPrepItem | undefined>;
   deleteChildPrepItem(id: number): Promise<boolean>;
+  // Pets
+  getAllPetsWithVisits(userId: number): Promise<PetWithVisits[]>;
+  createPet(data: InsertPet, userId: number): Promise<Pet>;
+  updatePet(id: number, data: Partial<InsertPet>): Promise<Pet | undefined>;
+  deletePet(id: number): Promise<boolean>;
+  createPetVetVisit(data: InsertPetVetVisit, userId: number): Promise<PetVetVisit>;
+  updatePetVetVisit(id: number, data: Partial<InsertPetVetVisit>): Promise<PetVetVisit | undefined>;
+  deletePetVetVisit(id: number): Promise<boolean>;
   // Quotes
   getAllQuotes(userId: number): Promise<Quote[]>;
   createQuote(data: InsertQuote, userId: number): Promise<Quote>;
@@ -2864,6 +2899,38 @@ export const storage: IStorage = {
   },
   async deleteChildPrepItem(id) {
     const result = await db.delete(childPrepItems).where(eq(childPrepItems.id, id));
+    return result.rowCount > 0;
+  },
+
+  // ── Pets ──────────────────────────────────────────────────────────────────────
+  async getAllPetsWithVisits(userId: number): Promise<PetWithVisits[]> {
+    const petList = await db.select().from(pets).where(eq(pets.userId, userId)).orderBy(asc(pets.sortOrder), asc(pets.name));
+    const visits = await db.select().from(petVetVisits).where(eq(petVetVisits.userId, userId)).orderBy(desc(petVetVisits.date));
+    return petList.map((p) => ({ ...p, vetVisits: visits.filter((v) => v.petId === p.id) }));
+  },
+  async createPet(data: InsertPet, userId: number): Promise<Pet> {
+    const result = await db.insert(pets).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePet(id: number, data: Partial<InsertPet>): Promise<Pet | undefined> {
+    const result = await db.update(pets).set(data).where(eq(pets.id, id)).returning();
+    return result[0];
+  },
+  async deletePet(id: number): Promise<boolean> {
+    await db.delete(petVetVisits).where(eq(petVetVisits.petId, id));
+    const result = await db.delete(pets).where(eq(pets.id, id));
+    return result.rowCount > 0;
+  },
+  async createPetVetVisit(data: InsertPetVetVisit, userId: number): Promise<PetVetVisit> {
+    const result = await db.insert(petVetVisits).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updatePetVetVisit(id: number, data: Partial<InsertPetVetVisit>): Promise<PetVetVisit | undefined> {
+    const result = await db.update(petVetVisits).set(data).where(eq(petVetVisits.id, id)).returning();
+    return result[0];
+  },
+  async deletePetVetVisit(id: number): Promise<boolean> {
+    const result = await db.delete(petVetVisits).where(eq(petVetVisits.id, id));
     return result.rowCount > 0;
   },
 
