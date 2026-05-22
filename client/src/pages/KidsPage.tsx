@@ -1080,12 +1080,12 @@ function ChildDetail({ child }: { child: ChildWithDetails }) {
   return (
     <div>
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="development">Development</TabsTrigger>
-          <TabsTrigger value="sleep">Sleep</TabsTrigger>
-          <TabsTrigger value="milestones">Milestones <span className="ml-1 text-xs opacity-60">{child.milestones.length}</span></TabsTrigger>
-          <TabsTrigger value="memories">Memories <span className="ml-1 text-xs opacity-60">{child.memories.length}</span></TabsTrigger>
-          <TabsTrigger value="prep">Prep <span className="ml-1 text-xs opacity-60">{child.prepItems.length}</span></TabsTrigger>
+        <TabsList className="mb-4 w-full overflow-x-auto flex-nowrap justify-start scrollbar-none">
+          <TabsTrigger value="development" className="shrink-0">Development</TabsTrigger>
+          <TabsTrigger value="sleep" className="shrink-0">Sleep</TabsTrigger>
+          <TabsTrigger value="milestones" className="shrink-0">Milestones <span className="ml-1 text-xs opacity-60">{child.milestones.length}</span></TabsTrigger>
+          <TabsTrigger value="memories" className="shrink-0">Memories <span className="ml-1 text-xs opacity-60">{child.memories.length}</span></TabsTrigger>
+          <TabsTrigger value="prep" className="shrink-0">Prep <span className="ml-1 text-xs opacity-60">{child.prepItems.length}</span></TabsTrigger>
         </TabsList>
 
         {/* ── Development ── */}
