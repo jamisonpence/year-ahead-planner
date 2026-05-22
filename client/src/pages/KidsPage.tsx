@@ -57,6 +57,16 @@ interface DevMilestoneGroup {
   items: string[];
 }
 
+interface FoodDailyRow {
+  label: string;
+  amount: string;
+}
+
+interface FoodGuide {
+  bullets: string[];
+  dailyPattern?: FoodDailyRow[];
+}
+
 interface DevStage {
   label: string;
   minMonths: number;
@@ -64,6 +74,7 @@ interface DevStage {
   icon: string;
   color: string;
   careTips: string[];
+  foodGuide: FoodGuide;
   milestones: DevMilestoneGroup[];
 }
 
@@ -77,11 +88,19 @@ const DEV_STAGES: DevStage[] = [
       "Skin-to-skin contact builds bonding and helps regulate temperature",
       "Start short tummy time sessions a few times a day to build neck strength",
     ],
+    foodGuide: {
+      bullets: [
+        "Breastmilk or infant formula only — no water, juice, or solid food",
+        "Typical intake is 8–12 feeds per 24 hours, roughly every 2–3 hours",
+        "Watch for hunger and fullness cues rather than feeding by the clock",
+        "Vitamin D supplement is often recommended for breastfed babies — ask your pediatrician",
+      ],
+    },
     milestones: [
       { category: "Social & Emotional", emoji: "💛", items: ["Social smiling appears around 6 weeks", "Calms when picked up or spoken to"] },
       { category: "Communication", emoji: "💬", items: ["Coos and makes soft sounds", "Reacts to familiar voices"] },
       { category: "Cognitive", emoji: "🧠", items: ["Tracks a moving object with eyes", "Begins to recognise familiar faces"] },
-      { category: "Motor", emoji: "🏃", items: ["Lifts head briefly during tummy time", "Grasps a finger when placed in palm"] },
+      { category: "Motor", emoji: "🏃", items: ["Lifts head briefly during tummy time", "Moves arms and legs actively"] },
     ],
   },
   {
@@ -93,6 +112,13 @@ const DEV_STAGES: DevStage[] = [
       "Establish a consistent sleep routine with predictable calming cues",
       "Offer high-contrast toys and mobiles to stimulate developing vision",
     ],
+    foodGuide: {
+      bullets: [
+        "Breastmilk or formula is still the only food — it provides all nutrition needed",
+        "Many babies stretch to 3–4 hours between feeds but still feed frequently",
+        "No juice or water unless specifically advised by your doctor",
+      ],
+    },
     milestones: [
       { category: "Social & Emotional", emoji: "💛", items: ["Laughs out loud", "Recognises and prefers familiar caregivers"] },
       { category: "Communication", emoji: "💬", items: ["Babbles and coos more expressively", "Turns toward sounds"] },
@@ -105,15 +131,24 @@ const DEV_STAGES: DevStage[] = [
     icon: "🌼", color: "#fde68a",
     careTips: [
       "Give plenty of safe floor time to encourage rolling and early crawling",
-      "Introduce solid foods around 6 months — start with purées, then soft finger foods",
+      "Introduce solid foods when ready — good head control, interest in food, can sit with support",
       "Play peek-a-boo and hiding games to build object permanence",
       "Talk about everything you do together to rapidly expand vocabulary",
     ],
+    foodGuide: {
+      bullets: [
+        "Continue breastmilk or formula as the main source of nutrition",
+        "Start solids around 4–6 months with pediatrician approval — look for readiness signs",
+        "Begin with iron-rich foods: iron-fortified baby cereal, pureed meats, beans, plus pureed fruits and vegetables",
+        "Introduce one new food at a time to watch for reactions",
+        "Progress textures gradually from smooth purées toward thicker purées and soft mashed foods",
+      ],
+    },
     milestones: [
       { category: "Social & Emotional", emoji: "💛", items: ["Stranger anxiety begins to appear", "Shows clear affection for familiar caregivers"] },
-      { category: "Communication", emoji: "💬", items: ["Babbles chains like 'mamama', 'dadada' (not yet meaningful)", "Responds to their own name"] },
+      { category: "Communication", emoji: "💬", items: ["Babbles ('ba-ba', 'da-da') — not yet meaningful", "Responds to their own name"] },
       { category: "Cognitive", emoji: "🧠", items: ["Looks for a dropped object", "Explores by banging and shaking objects"] },
-      { category: "Motor", emoji: "🏃", items: ["Sits without support", "May begin crawling or commando crawling"] },
+      { category: "Motor", emoji: "🏃", items: ["Sits with less support", "Transfers objects hand-to-hand; may start crawling"] },
     ],
   },
   {
@@ -125,11 +160,19 @@ const DEV_STAGES: DevStage[] = [
       "Baby-proof low shelves and sharp corners — mobility is about to take off",
       "Offer soft finger foods to build pincer grasp and mealtime independence",
     ],
+    foodGuide: {
+      bullets: [
+        "Breastmilk or formula still important — most babies have 3 solid meals plus 1–2 snacks by this age",
+        "Offer soft finger foods: small pieces of soft fruits and veg, well-cooked pasta, soft meats, scrambled egg (once allergy-cleared)",
+        "Encourage self-feeding with hands and practice sipping from a small cup of water at meals",
+        "Avoid honey before age 1 and choking hazards: whole grapes, nuts, popcorn, large chunks of raw veg or meat",
+      ],
+    },
     milestones: [
-      { category: "Social & Emotional", emoji: "💛", items: ["Separation anxiety peaks", "Shows clear preferences for people and favourite objects"] },
+      { category: "Social & Emotional", emoji: "💛", items: ["Separation anxiety peaks", "Plays simple interactive games (pat-a-cake)"] },
       { category: "Communication", emoji: "💬", items: ["Says 1–2 words with meaning (e.g. 'mama', 'dada', 'no')", "Waves bye-bye and points to things they want"] },
       { category: "Cognitive", emoji: "🧠", items: ["Finds a hidden object after watching you hide it", "Imitates gestures and simple actions"] },
-      { category: "Motor", emoji: "🏃", items: ["Pulls to standing independently", "May take first independent steps"] },
+      { category: "Motor", emoji: "🏃", items: ["Pulls to standing independently", "May stand or walk with help — or independently"] },
     ],
   },
   {
@@ -141,11 +184,24 @@ const DEV_STAGES: DevStage[] = [
       "Keep a consistent daily routine — predictability significantly reduces tantrums",
       "Read together every day; point to pictures and name them as you go",
     ],
+    foodGuide: {
+      bullets: [
+        "Transition from formula to whole cow's milk (or an appropriate fortified alternative) around 12 months, as recommended by your pediatrician",
+        "Aim for about 2–3 cups of milk per day — too much crowds out iron-rich foods",
+        "Shift toward family foods in toddler-size portions: fruits, vegetables, grains, protein, and dairy",
+        "Offer 3 meals and 1–2 snacks daily; avoid frequent grazing and limit added sugars and highly processed foods",
+      ],
+      dailyPattern: [
+        { label: "🍎 Fruits & Vegetables", amount: "Several small servings across the day (a few tablespoons per meal/snack)" },
+        { label: "🌾 Grains", amount: "3–4 toddler-size servings; aim for at least half whole grains" },
+        { label: "🍗 Protein", amount: "Small portions of meat, fish, eggs, beans, tofu, or yogurt spread over meals" },
+      ],
+    },
     milestones: [
-      { category: "Social & Emotional", emoji: "💛", items: ["Tantrums emerge as independence grows", "Shows affection to familiar people (hugs, kisses)"] },
+      { category: "Social & Emotional", emoji: "💛", items: ["Tantrums emerge as independence grows", "Simple pretend play begins"] },
       { category: "Communication", emoji: "💬", items: ["Vocabulary grows to 10–50+ words by 24 months", "Begins combining 2 words ('more milk', 'daddy go')"] },
       { category: "Cognitive", emoji: "🧠", items: ["Pretend play begins (feeding a doll, 'talking' on a phone)", "Sorts shapes and colours"] },
-      { category: "Motor", emoji: "🏃", items: ["Walks confidently and begins to run", "Scribbles with crayons"] },
+      { category: "Motor", emoji: "🏃", items: ["Walks well and begins to run, climbs, kicks and throws a ball", "Scribbles with crayons"] },
     ],
   },
   {
@@ -157,11 +213,25 @@ const DEV_STAGES: DevStage[] = [
       "Begin toilet training when they show readiness signs (interest, staying dry longer)",
       "Use simple, consistent rules and explain the reason behind them",
     ],
+    foodGuide: {
+      bullets: [
+        "Kids this age can follow the same overall pattern as the family, just in smaller portions",
+        "Keep offering new foods repeatedly in small amounts — picky eating is very common at this stage",
+        "Limit sugary drinks; water and milk are the best choices",
+      ],
+      dailyPattern: [
+        { label: "🍎 Fruits", amount: "About 1 to 1.5 cups/day" },
+        { label: "🥦 Vegetables", amount: "About 1 to 2 cups/day" },
+        { label: "🌾 Grains", amount: "About 3–5 oz/day (half as whole grains)" },
+        { label: "🍗 Protein", amount: "Roughly 2–5 oz/day" },
+        { label: "🥛 Dairy", amount: "About 2 to 2.5 cups/day" },
+      ],
+    },
     milestones: [
       { category: "Social & Emotional", emoji: "💛", items: ["Engages in parallel play alongside other children", "Increasing independence — may say 'no' frequently"] },
-      { category: "Communication", emoji: "💬", items: ["Uses 2–3 word phrases and simple sentences", "Follows 2-step instructions ('get your shoes and bring them here')"] },
+      { category: "Communication", emoji: "💬", items: ["Uses 2–3 word phrases; rapidly growing vocabulary", "Follows 2-step instructions"] },
       { category: "Cognitive", emoji: "🧠", items: ["Sorts objects by colour or shape", "Understands 'mine' vs. 'yours'"] },
-      { category: "Motor", emoji: "🏃", items: ["Runs well and climbs on furniture and playground equipment", "Stacks blocks and turns book pages one at a time"] },
+      { category: "Motor", emoji: "🏃", items: ["Runs confidently, climbs, walks stairs with support", "Draws simple lines and circles"] },
     ],
   },
   {
@@ -173,11 +243,24 @@ const DEV_STAGES: DevStage[] = [
       "Keep house rules consistent and always explain the 'why' behind them",
       "Arrange regular playdates to develop cooperative social skills",
     ],
+    foodGuide: {
+      bullets: [
+        "Continue a balanced pattern of fruits, vegetables, grains, protein, and dairy; limit sugary drinks and snacks",
+        "Aim for meals with 3+ food groups and snacks with at least 2 food groups (e.g. fruit + yogurt)",
+      ],
+      dailyPattern: [
+        { label: "🥦 Vegetables", amount: "About 1.5–2.5 cups/day" },
+        { label: "🍎 Fruits", amount: "About 1–1.5 cups/day" },
+        { label: "🌾 Grains", amount: "About 4–6 oz/day (focus on whole grains)" },
+        { label: "🍗 Protein", amount: "About 3–5 oz/day" },
+        { label: "🥛 Dairy", amount: "About 2–3 cups/day" },
+      ],
+    },
     milestones: [
-      { category: "Social & Emotional", emoji: "💛", items: ["Plays cooperatively with peers (taking turns, sharing)", "Shows empathy ('Are you okay? Are you sad?')"] },
+      { category: "Social & Emotional", emoji: "💛", items: ["Plays cooperatively with peers (taking turns, sharing)", "Shows empathy; understands simple rules"] },
       { category: "Communication", emoji: "💬", items: ["Uses longer, more complex sentences", "Asks lots of 'why' questions"] },
       { category: "Cognitive", emoji: "🧠", items: ["Draws a person with 2–4 body parts", "Counts to 5 and understands the concept"] },
-      { category: "Motor", emoji: "🏃", items: ["Rides a tricycle confidently", "Hops on one foot"] },
+      { category: "Motor", emoji: "🏃", items: ["Pedals a tricycle; hops on one foot", "Draws simple shapes; dresses with some help"] },
     ],
   },
   {
@@ -189,11 +272,25 @@ const DEV_STAGES: DevStage[] = [
       "Foster self-care skills: dressing, brushing teeth, washing hands independently",
       "Play simple board games together to build turn-taking and rule-following",
     ],
+    foodGuide: {
+      bullets: [
+        "Similar pattern to 3–4 years but portions may increase slightly with growth and activity",
+        "Encourage kids to help plan and prepare simple foods — it builds enthusiasm for healthy eating",
+        "Continue limiting sugary drinks and highly processed snacks",
+      ],
+      dailyPattern: [
+        { label: "🥦 Vegetables", amount: "Around 1.5–2.5 cups/day" },
+        { label: "🍎 Fruits", amount: "About 1–2 cups/day" },
+        { label: "🌾 Grains", amount: "About 4–6 oz/day (half whole grains)" },
+        { label: "🍗 Protein", amount: "About 3–5 oz/day" },
+        { label: "🥛 Dairy", amount: "About 2.5–3 cups/day" },
+      ],
+    },
     milestones: [
-      { category: "Social & Emotional", emoji: "💛", items: ["Follows rules in simple games and understands fairness", "Can distinguish fantasy from reality in most situations"] },
-      { category: "Communication", emoji: "💬", items: ["Tells stories and retells events in sequence", "Names several letters and numbers"] },
+      { category: "Social & Emotional", emoji: "💛", items: ["Follows game rules with guidance; likes to 'perform'", "May help with simple chores; distinguishes fantasy from reality"] },
+      { category: "Communication", emoji: "💬", items: ["Tells stories and retells events in sequence", "Names some letters and numbers"] },
       { category: "Cognitive", emoji: "🧠", items: ["Counts to 10 and beyond", "Names basic colours and shapes accurately"] },
-      { category: "Motor", emoji: "🏃", items: ["Catches a bounced ball with two hands", "Hops, skips, and jumps with coordination"] },
+      { category: "Motor", emoji: "🏃", items: ["Hops, skips, catches a bounced ball", "Buttons some buttons"] },
     ],
   },
 ];
@@ -275,6 +372,36 @@ function DevelopmentTab({ child }: { child: ChildWithDetails }) {
               <p className="text-sm leading-snug">{tip}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Food Guide */}
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">
+          🍽️ Feeding &amp; Food Guide
+        </h4>
+        <div className="rounded-lg border bg-card p-3 space-y-3">
+          <ul className="space-y-1.5">
+            {stage.foodGuide.bullets.map((b, i) => (
+              <li key={i} className="flex gap-2 text-sm">
+                <span className="text-muted-foreground/50 shrink-0 mt-0.5">•</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+          {stage.foodGuide.dailyPattern && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Typical daily amounts</p>
+              <div className="space-y-1">
+                {stage.foodGuide.dailyPattern.map((row, i) => (
+                  <div key={i} className="flex items-baseline justify-between gap-3 text-sm py-1 border-t border-border/50 first:border-t-0">
+                    <span className="font-medium shrink-0">{row.label}</span>
+                    <span className="text-muted-foreground text-right text-xs">{row.amount}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
