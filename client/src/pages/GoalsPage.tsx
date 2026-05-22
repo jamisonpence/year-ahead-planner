@@ -6,6 +6,7 @@ import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
   ClipboardList, Flag, X, Inbox, Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
+  Users, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -20,7 +21,7 @@ import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks, Project,
-  ProjectTask, InsertProject, InsertProjectTask,
+  ProjectTask, InsertProject, InsertProjectTask, InsertGoal,
   GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, Plant,
   NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
@@ -60,6 +61,223 @@ function projectPct(p: ProjectWithTasks): number {
   if (!p.tasks.length) return p.status === "done" ? 100 : 0;
   const done = p.tasks.filter((t) => t.completed).length;
   return Math.round((done / p.tasks.length) * 100);
+}
+
+// ── Buddy helpers ─────────────────────────────────────────────────────────────
+const INLINE_PRIORITIES = ["low", "medium", "high"] as const;
+
+function BuddyAvatarSm({ user, size = 24 }: { user: PublicUser; size?: number }) {
+  const initials = user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  if (user.avatarUrl) return <img src={user.avatarUrl} alt={user.name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  return (
+    <div className="rounded-full bg-primary/15 text-primary font-semibold flex items-center justify-center shrink-0" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>
+      {initials}
+    </div>
+  );
+}
+
+function BuddySearchPicker({ value, onChange, friends }: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+  friends: PublicUser[];
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = friends.find((f) => f.id === value) ?? null;
+  const filtered = query
+    ? friends.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()) || f.email.toLowerCase().includes(query.toLowerCase()))
+    : friends;
+
+  if (selected) {
+    return (
+      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-primary/5 border-primary/20">
+        <BuddyAvatarSm user={selected} size={22} />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium leading-tight">{selected.name}</p>
+          <p className="text-[10px] text-muted-foreground">Accountabilibuddy</p>
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="p-1 rounded hover:bg-muted transition-colors" aria-label="Remove buddy">
+          <X size={12} className="text-muted-foreground" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search friends…"
+          className="h-8 text-xs pl-7"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-20 top-full mt-1 w-full rounded-lg border bg-popover shadow-md overflow-hidden">
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onMouseDown={() => { onChange(f.id); setQuery(""); setOpen(false); }}
+              className="flex items-center gap-2 w-full px-3 py-2 hover:bg-accent text-left transition-colors"
+            >
+              <BuddyAvatarSm user={f} size={22} />
+              <div className="min-w-0">
+                <p className="text-xs font-medium leading-tight">{f.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{f.email}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query && filtered.length === 0 && (
+        <div className="absolute z-20 top-full mt-1 w-full rounded-lg border bg-popover shadow-md p-3">
+          <p className="text-xs text-muted-foreground text-center">No friends found</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Inline goal editor (shown at top of Projects column) ──────────────────────
+function InlineGoalEditor({ goal, friends, onSave }: {
+  goal: GoalWithProjects;
+  friends: PublicUser[];
+  onSave: (data: { id: number } & Partial<InsertGoal>) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [title, setTitle] = useState(goal.title);
+  const [priority, setPriority] = useState(goal.priority);
+  const [current, setCurrent] = useState(goal.progressCurrent.toString());
+  const [target, setTarget] = useState(goal.progressTarget.toString());
+  const [targetDate, setTargetDate] = useState(goal.targetDate ?? "");
+  const [buddyUserId, setBuddyUserId] = useState<number | null>((goal as any).buddyUserId ?? null);
+
+  const reset = useCallback(() => {
+    setTitle(goal.title);
+    setPriority(goal.priority);
+    setCurrent(goal.progressCurrent.toString());
+    setTarget(goal.progressTarget.toString());
+    setTargetDate(goal.targetDate ?? "");
+    setBuddyUserId((goal as any).buddyUserId ?? null);
+  }, [goal]);
+
+  useEffect(() => { reset(); setExpanded(false); }, [goal.id]);
+
+  const isDirty =
+    title.trim() !== goal.title ||
+    priority !== goal.priority ||
+    parseFloat(current) !== goal.progressCurrent ||
+    parseFloat(target) !== goal.progressTarget ||
+    (targetDate || null) !== (goal.targetDate ?? null) ||
+    (buddyUserId ?? null) !== ((goal as any).buddyUserId ?? null);
+
+  const handleSave = () => {
+    onSave({
+      id: goal.id,
+      title: title.trim() || goal.title,
+      priority,
+      progressCurrent: parseFloat(current) || 0,
+      progressTarget: parseFloat(target) || goal.progressTarget,
+      targetDate: targetDate || null,
+      buddyUserId: buddyUserId ?? null,
+    });
+    setExpanded(false);
+  };
+
+  const buddy = friends.find((f) => f.id === ((goal as any).buddyUserId ?? null)) ?? null;
+
+  if (!expanded) {
+    return (
+      <div className="rounded-xl border bg-secondary/30 p-3 mb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight truncate">{goal.title}</p>
+            <p className="text-xs text-muted-foreground capitalize mt-0.5">
+              {goal.category} · <span className={PRIORITY_COLORS[goal.priority]}>{goal.priority}</span>
+            </p>
+            {buddy && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <BuddyAvatarSm user={buddy} size={16} />
+                <span className="text-xs text-muted-foreground">
+                  <span className="text-primary/80 font-medium">{buddy.name.split(" ")[0]}</span> is your buddy
+                </span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border rounded-lg px-2 py-1 hover:bg-muted transition-all shrink-0"
+          >
+            <Pencil size={10} /> Edit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border bg-secondary/30 p-3 mb-2 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Edit Goal</p>
+        <button onClick={() => { setExpanded(false); reset(); }} className="p-1 hover:bg-muted rounded transition-colors">
+          <X size={12} className="text-muted-foreground" />
+        </button>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Title</Label>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-xs" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Priority</Label>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {INLINE_PRIORITIES.map((p) => (
+                <SelectItem key={p} value={p} className="text-xs">{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Target Date</Label>
+          <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="h-8 text-xs" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Current</Label>
+          <Input type="number" value={current} onChange={(e) => setCurrent(e.target.value)} step="0.1" className="h-8 text-xs" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Target</Label>
+          <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} step="0.1" className="h-8 text-xs" />
+        </div>
+      </div>
+
+      {friends.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <Users size={11} className="text-muted-foreground" />
+            <Label className="text-xs">Accountabilibuddy</Label>
+          </div>
+          <BuddySearchPicker value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
+        </div>
+      )}
+
+      <Button size="sm" className="w-full h-8 text-xs" onClick={handleSave} disabled={!isDirty}>
+        Save Changes
+      </Button>
+    </div>
+  );
 }
 
 // ── Inline quick-add row ──────────────────────────────────────────────────────
@@ -181,6 +399,11 @@ export default function GoalsPage() {
   const deleteGoal = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/goals/${id}`),
     onSuccess: () => { inv(); toast({ title: "Goal deleted" }); setSelectedGoalId(null); setSelectedProjectId(null); },
+  });
+  const updateGoal = useMutation({
+    mutationFn: ({ id, ...data }: { id: number } & Partial<InsertGoal>) =>
+      apiRequest("PATCH", `/api/goals/${id}`, data),
+    onSuccess: () => { inv(); toast({ title: "Goal updated" }); },
   });
 
   // ── Project mutations ────────────────────────────────────────────────────
@@ -1033,6 +1256,15 @@ export default function GoalsPage() {
               </div>
             ) : isPlantsSelected ? null : (
               <>
+                {/* ── Inline goal editor ─────────────────────────────────── */}
+                {selectedGoal && !isStandaloneSelected && (
+                  <InlineGoalEditor
+                    goal={selectedGoal}
+                    friends={friends}
+                    onSave={(data) => updateGoal.mutate(data)}
+                  />
+                )}
+
                 {/* Resolve the projects list based on mode */}
                 {(() => {
                   const projectList = isStandaloneSelected ? standaloneProjects : (selectedGoal?.projects ?? []);

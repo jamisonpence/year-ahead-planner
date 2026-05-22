@@ -176,15 +176,20 @@ function BuddyPickerInline({
   onChange: (id: number | null) => void;
   friends: PublicUser[];
 }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
   const selected = friends.find((f) => f.id === value) ?? null;
+  const filtered = query
+    ? friends.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()) || f.email.toLowerCase().includes(query.toLowerCase()))
+    : friends;
 
-  function avatar(f: PublicUser, size = 20) {
+  function avatar(f: PublicUser, size = 22) {
     const initials = f.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
     if (f.avatarUrl)
-      return <img src={f.avatarUrl} alt={f.name} className="rounded-full object-cover border border-background shrink-0" style={{ width: size, height: size }} />;
+      return <img src={f.avatarUrl} alt={f.name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
     return (
-      <div className="rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center border border-background shrink-0"
-        style={{ width: size, height: size, fontSize: size * 0.38 }}>
+      <div className="rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0"
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>
         {initials}
       </div>
     );
@@ -193,6 +198,7 @@ function BuddyPickerInline({
   if (friends.length === 0) {
     return <p className="text-[11px] text-muted-foreground">Add friends to assign an Accountabilibuddy.</p>;
   }
+
   if (selected) {
     return (
       <div className="flex items-center gap-2 rounded-lg border bg-primary/5 border-primary/30 px-2.5 py-1.5">
@@ -207,15 +213,43 @@ function BuddyPickerInline({
       </div>
     );
   }
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {friends.map((f) => (
-        <button type="button" key={f.id} onClick={() => onChange(f.id)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-card hover:bg-muted/50 hover:border-primary/40 transition-all text-xs">
-          {avatar(f, 18)}
-          <span className="font-medium">{f.name.split(" ")[0]}</span>
-        </button>
-      ))}
+    <div className="relative">
+      <div className="relative">
+        <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search friends…"
+          className="h-8 text-xs pl-7"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-20 top-full mt-1 w-full rounded-lg border bg-popover shadow-md overflow-hidden">
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onMouseDown={() => { onChange(f.id); setQuery(""); setOpen(false); }}
+              className="flex items-center gap-2 w-full px-3 py-2 hover:bg-accent text-left transition-colors"
+            >
+              {avatar(f, 22)}
+              <div className="min-w-0">
+                <p className="text-xs font-medium leading-tight">{f.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{f.email}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query && filtered.length === 0 && (
+        <div className="absolute z-20 top-full mt-1 w-full rounded-lg border bg-popover shadow-md p-3 text-center">
+          <p className="text-xs text-muted-foreground">No friends found</p>
+        </div>
+      )}
     </div>
   );
 }

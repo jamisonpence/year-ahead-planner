@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { GOAL_CATEGORIES, PROGRESS_TYPES, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
 import type { Goal, InsertGoal, BookWithSessions, WorkoutTemplate, PublicUser } from "@shared/schema";
-import { Users, X } from "lucide-react";
+import { Users, X, Search } from "lucide-react";
 
 const PRIORITIES = ["low","medium","high"];
 
@@ -32,6 +32,73 @@ function BuddyAvatar({ user, size = 32 }: { user: PublicUser; size?: number }) {
       style={{ width: size, height: size, fontSize: size * 0.35 }}
     >
       {initials}
+    </div>
+  );
+}
+
+function BuddySearchPickerModal({ value, onChange, friends }: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+  friends: PublicUser[];
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = friends.find((f) => f.id === value) ?? null;
+  const filtered = query
+    ? friends.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()) || f.email.toLowerCase().includes(query.toLowerCase()))
+    : friends;
+
+  if (selected) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg border bg-primary/5 border-primary/30 px-3 py-2">
+        <BuddyAvatar user={selected} size={30} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-tight">{selected.name}</p>
+          <p className="text-xs text-muted-foreground">Accountabilibuddy</p>
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="p-1 rounded hover:bg-muted transition-colors" aria-label="Remove buddy">
+          <X size={13} className="text-muted-foreground" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search friends…"
+          className="pl-8"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border bg-popover shadow-md overflow-hidden">
+          {filtered.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onMouseDown={() => { onChange(f.id); setQuery(""); setOpen(false); }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-accent text-left transition-colors"
+            >
+              <BuddyAvatar user={f} size={28} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-tight">{f.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query && filtered.length === 0 && (
+        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border bg-popover shadow-md p-3 text-center">
+          <p className="text-xs text-muted-foreground">No friends found</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -96,8 +163,6 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
     editGoal ? updateMut.mutate(p) : createMut.mutate(p);
   };
 
-  const selectedBuddy = friends.find((f) => f.id === buddyUserId) ?? null;
-
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -137,39 +202,8 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
               <p className="text-xs text-muted-foreground border rounded-lg px-3 py-2.5 bg-muted/30">
                 Add friends to assign an accountabilibuddy to this goal.
               </p>
-            ) : selectedBuddy ? (
-              /* ── Selected state ── */
-              <div className="flex items-center gap-2.5 rounded-lg border bg-primary/5 border-primary/30 px-3 py-2">
-                <BuddyAvatar user={selectedBuddy} size={30} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight">{selectedBuddy.name}</p>
-                  <p className="text-xs text-muted-foreground">Accountabilibuddy</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBuddyUserId(null)}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                  aria-label="Remove buddy"
-                >
-                  <X size={13} className="text-muted-foreground" />
-                </button>
-              </div>
             ) : (
-              /* ── Unselected: friend avatar grid ── */
-              <div className="flex flex-wrap gap-2">
-                {friends.map((f) => (
-                  <button
-                    type="button"
-                    key={f.id}
-                    onClick={() => setBuddyUserId(f.id)}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border bg-card hover:bg-muted/50 hover:border-primary/40 transition-all text-xs"
-                    title={`Set ${f.name} as buddy`}
-                  >
-                    <BuddyAvatar user={f} size={20} />
-                    <span className="font-medium">{f.name.split(" ")[0]}</span>
-                  </button>
-                ))}
-              </div>
+              <BuddySearchPickerModal value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
             )}
           </div>
 
