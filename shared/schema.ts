@@ -630,6 +630,7 @@ export const workoutPlans = pgTable("workout_plans", {
   isActive: boolean("is_active").notNull().default(false),
   // [{ week: number, description: string, targetValue?: number }]
   milestonesJson: text("milestones_json").notNull().default("[]"),
+  buddyUserId: integer("buddy_user_id"),
 });
 
 export const insertWorkoutPlanSchema = createInsertSchema(workoutPlans).omit({ id: true });

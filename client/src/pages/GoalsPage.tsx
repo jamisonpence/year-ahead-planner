@@ -720,6 +720,12 @@ export default function GoalsPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/nutrition/goals"] }); toast({ title: "Nutrition goal updated" }); },
   });
 
+  const updateWorkoutPlan = useMutation({
+    mutationFn: ({ id, ...data }: { id: number } & Record<string, any>) =>
+      apiRequest("PATCH", `/api/workout-plans/${id}`, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Workout plan updated" }); },
+  });
+
   // ── Project mutations ────────────────────────────────────────────────────
   const addProject = useMutation({
     mutationFn: ({ goalId, title }: { goalId: number; title: string }) =>
@@ -1391,6 +1397,13 @@ export default function GoalsPage() {
                         })}
                       </div>
                     </div>
+                  )}
+                  {friends.length > 0 && (
+                    <GoalBuddyPicker
+                      currentBuddyId={(activePlan as any).buddyUserId ?? null}
+                      friends={friends}
+                      onSave={(buddyUserId) => updateWorkoutPlan.mutate({ id: activePlan.id, buddyUserId })}
+                    />
                   )}
                   <Link href="/workouts"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Dumbbell size={11} /> Manage in Workouts</a></Link>
                 </div>
