@@ -608,11 +608,11 @@ export default function MoviesPage() {
 
       {/* Movies / Shows: secondary tabs + content */}
       {!isVideoView && (<>
-        {/* Secondary tabs: Watchlist | Films | Lists */}
+        {/* Secondary tabs: Watchlist | Films (or Shows) | Lists */}
         <div className="flex gap-1 bg-secondary/60 rounded-lg p-1 mb-4">
           {([
             { key: "watchlist" as const, icon: <Clock size={13} />, label: "Watchlist" },
-            { key: "films"     as const, icon: <Check size={13} />, label: "Films" },
+            { key: "films"     as const, icon: isShowView ? <Tv2 size={13} /> : <Film size={13} />, label: isShowView ? "Shows" : "Films" },
             { key: "lists"     as const, icon: <Clapperboard size={13} />, label: "Lists" },
           ]).map(({ key, icon, label }) => (
             <button key={key} onClick={() => setMainTab(key)}
@@ -699,7 +699,7 @@ export default function MoviesPage() {
             );
           })()}
 
-          {/* Films = watched + favorites */}
+          {/* Films / Shows = all watched/finished, filtered by favorites toggle */}
           {mainTab === "films" && (() => {
             const allFilms = [...watched, ...favorites.filter((m) => !watched.find((w) => w.id === m.id))];
             return allFilms.length === 0 ? (
@@ -708,23 +708,8 @@ export default function MoviesPage() {
                 <p className="text-sm">No {isShowView ? "finished shows" : "watched films"} yet.</p>
               </div>
             ) : (
-              <div className="space-y-6">
-                {favorites.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><Heart size={13} /> Favorites</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {favorites.map((m) => <MediaCard key={m.id} movie={m} />)}
-                    </div>
-                  </div>
-                )}
-                {watched.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><Check size={13} /> {watchedLabel}</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {watched.map((m) => <MediaCard key={m.id} movie={m} />)}
-                    </div>
-                  </div>
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {allFilms.map((m) => <MediaCard key={m.id} movie={m} />)}
               </div>
             );
           })()}
