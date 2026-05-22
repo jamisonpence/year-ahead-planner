@@ -8096,11 +8096,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
 
   // Plans state
   const [pendingPlans, setPendingPlans] = useState<HobbyPlan[]>(() => parsePlans(initial.extraJson ?? "{}"));
-  const [showPlanForm, setShowPlanForm] = useState(false);
-  const [planTitle, setPlanTitle] = useState("");
-  const [planDesc, setPlanDesc] = useState("");
-  const [planWeeks, setPlanWeeks] = useState("");
-  const [planActivate, setPlanActivate] = useState(true);
+  const [showPlanWizard, setShowPlanWizard] = useState(false);
 
   // Goals state
   const [pendingGoals, setPendingGoals] = useState<HobbyGoal[]>(() => parseGoals(initial.extraJson ?? "{}"));
@@ -8112,21 +8108,6 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const [goalFreqTimes, setGoalFreqTimes] = useState("3");
   const [goalFreqPeriod, setGoalFreqPeriod] = useState<"week" | "month">("week");
   const [goalTargetDate, setGoalTargetDate] = useState("");
-
-  function addPlan() {
-    if (!planTitle.trim()) return;
-    const plan: HobbyPlan = {
-      id: genId(), title: planTitle.trim(),
-      description: planDesc.trim() || undefined,
-      durationWeeks: planWeeks ? Number(planWeeks) : undefined,
-      isActive: planActivate,
-      startDate: planActivate ? new Date().toISOString().slice(0, 10) : undefined,
-      steps: [], createdAt: new Date().toISOString(),
-    };
-    setPendingPlans(p => [...p, plan]);
-    setPlanTitle(""); setPlanDesc(""); setPlanWeeks(""); setPlanActivate(true);
-    setShowPlanForm(false);
-  }
 
   function addGoal() {
     if (!goalTitle.trim()) return;
@@ -8235,14 +8216,11 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
                 <ClipboardList size={13} /> Plans
                 {pendingPlans.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 font-bold">{pendingPlans.length}</span>}
               </p>
-              {!showPlanForm && (
-                <button type="button" onClick={() => setShowPlanForm(true)} className="text-xs text-blue-600 dark:text-blue-400 hover:opacity-80 flex items-center gap-0.5">
-                  <Plus size={11} /> Add plan
-                </button>
-              )}
+              <button type="button" onClick={() => setShowPlanWizard(true)} className="text-xs text-blue-600 dark:text-blue-400 hover:opacity-80 flex items-center gap-0.5">
+                <Plus size={11} /> Add plan
+              </button>
             </div>
 
-            {/* Existing plans list */}
             {pendingPlans.map(p => (
               <div key={p.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-card text-xs">
                 <ClipboardList size={11} className="text-blue-500 shrink-0" />
@@ -8255,31 +8233,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
               </div>
             ))}
 
-            {/* Inline plan form */}
-            {showPlanForm && (
-              <div className="space-y-2 pt-1">
-                <Input placeholder="Plan title *" value={planTitle} onChange={e => setPlanTitle(e.target.value)} className="text-sm" autoFocus />
-                <Input placeholder="Description (optional)" value={planDesc} onChange={e => setPlanDesc(e.target.value)} className="text-sm" />
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-muted-foreground block mb-0.5">Duration (weeks)</label>
-                    <Input type="number" min={1} placeholder="e.g. 12" value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} className="text-sm" />
-                  </div>
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer mt-4">
-                    <input type="checkbox" checked={planActivate} onChange={e => setPlanActivate(e.target.checked)} className="rounded" />
-                    Activate now
-                  </label>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={addPlan} disabled={!planTitle.trim()} className="flex-1 gap-1 bg-blue-600 hover:bg-blue-700 text-white">
-                    <Check size={12} /> Add Plan
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowPlanForm(false); setPlanTitle(""); setPlanDesc(""); setPlanWeeks(""); }}>Cancel</Button>
-                </div>
-              </div>
-            )}
-
-            {pendingPlans.length === 0 && !showPlanForm && (
+            {pendingPlans.length === 0 && (
               <p className="text-[11px] text-muted-foreground">Add step-by-step plans to work toward your hobby goals.</p>
             )}
           </div>
@@ -8384,6 +8338,31 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
           </div>
         </div>
       </DialogContent>
+
+      {/* Full PlanWizard — opens on top of this dialog, uses a mock Hobby built from current form state */}
+      {showPlanWizard && (() => {
+        const mockHobby: Hobby = {
+          id: -1, userId: null,
+          name: form.name?.trim() || "New Hobby",
+          hobbyType: (form.hobbyType as string) ?? "creative",
+          category: form.category ?? null, description: null,
+          skillLevel: form.skillLevel ?? null, dateStarted: null,
+          status: "active", notes: null,
+          extraJson: "{}", isFavorite: false, coverUrl: null,
+        };
+        return (
+          <PlanWizard
+            open={showPlanWizard}
+            onClose={() => setShowPlanWizard(false)}
+            hobbies={[mockHobby]}
+            defaultHobbyId={-1}
+            onSave={(_id, plan) => {
+              setPendingPlans(p => [...p, plan]);
+              setShowPlanWizard(false);
+            }}
+          />
+        );
+      })()}
     </Dialog>
   );
 }
