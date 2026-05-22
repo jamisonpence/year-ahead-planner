@@ -11,7 +11,7 @@ import {
   Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, User, Plus,
+  Search, User, Plus, MessageSquare,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -78,6 +78,7 @@ function PrivacyBanner({ path }: { path: string }) {
 const ALL_TABS = [
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
+  { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
@@ -102,7 +103,7 @@ const ALL_TABS = [
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",     label: null,        paths: ["/discover", "/dashboard"] },
+  { key: "core",     label: null,        paths: ["/discover", "/dashboard", "/messenger"] },
   { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/art", "/hobbies", "/journal"] },
   { key: "wellness", label: "Wellness",  paths: ["/workouts", "/health"] },
   { key: "life",     label: "Life",      paths: ["/goals", "/calendar", "/budget", "/relationships", "/housekeeping", "/kids", "/faith", "/politics"] },
@@ -292,6 +293,7 @@ const COLLECTION_GROUPS = [
     subtitle: "Private by default",
     tiles: [
       { path: "/dashboard",     emoji: "📊", label: "Dashboard"    },
+      { path: "/messenger",     emoji: "💬", label: "Messenger"    },
       { path: "/goals",         emoji: "🎯", label: "Goals"        },
       { path: "/calendar",      emoji: "📅", label: "Calendar"     },
       { path: "/budget",        emoji: "💰", label: "Budget"       },
@@ -528,6 +530,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   });
   const unreadSharesTotal = sharesCountData?.total ?? 0;
   const totalNotifCount = unreadSharesTotal + pendingFriendCount + pendingCollabCount;
+
+  // Unread messenger count
+  const { data: messengerCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messenger/unread-count"],
+    queryFn: async () => (await apiRequest("GET", "/api/messenger/unread-count")).json(),
+    refetchInterval: 15_000,
+    enabled: !!user,
+  });
+  const unreadMessengerCount = messengerCountData?.count ?? 0;
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -644,7 +655,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           label={tab.label}
                           icon={tab.icon}
                           active={location === tab.path}
-                          badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
+                          badge={tab.path === "/relationships" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
                         />
                       ))}
                     </div>

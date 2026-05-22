@@ -6744,4 +6744,98 @@ Rules:
       res.json(data);
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Messenger ────────────────────────────────────────────────────────────────
+
+  // List all conversations for the current user
+  app.get("/api/messenger/conversations", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const convs = await storage.getConversationsForUser(userId);
+      res.json(convs);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Get or create a DM with a friend
+  app.post("/api/messenger/dm", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { friendId } = req.body;
+      if (!friendId) return res.status(400).json({ error: "friendId required" });
+      // Verify friendship
+      const friends = await storage.getFriends(userId);
+      if (!friends.find(f => f.id === +friendId)) return res.status(403).json({ error: "Not friends" });
+      const conv = await storage.getOrCreateDM(userId, +friendId);
+      res.json(conv);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Create a group conversation
+  app.post("/api/messenger/groups", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { name, participantIds } = req.body;
+      if (!name?.trim()) return res.status(400).json({ error: "name required" });
+      if (!Array.isArray(participantIds) || participantIds.length === 0) return res.status(400).json({ error: "participantIds required" });
+      // Verify all are friends
+      const friends = await storage.getFriends(userId);
+      const friendIds = new Set(friends.map(f => f.id));
+      for (const pid of participantIds) {
+        if (!friendIds.has(+pid)) return res.status(403).json({ error: `User ${pid} is not a friend` });
+      }
+      const conv = await storage.createGroupConversation(userId, name.trim(), participantIds.map(Number));
+      res.status(201).json(conv);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Get messages for a conversation
+  app.get("/api/messenger/conversations/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const convId = +req.params.id;
+      const limit = Math.min(+(req.query.limit ?? 50), 100);
+      const beforeId = req.query.before ? +req.query.before : undefined;
+      const msgs = await storage.getMessages(convId, userId, limit, beforeId);
+      res.json(msgs);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Send a message
+  app.post("/api/messenger/conversations/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const convId = +req.params.id;
+      const { content } = req.body;
+      if (!content?.trim()) return res.status(400).json({ error: "content required" });
+      const msg = await storage.createMessage(convId, userId, content.trim());
+      res.status(201).json(msg);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Mark conversation as read
+  app.post("/api/messenger/conversations/:id/read", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      await storage.markConversationRead(+req.params.id, userId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Unread message count (for badge)
+  app.get("/api/messenger/unread-count", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const count = await storage.getUnreadMessageCount(userId);
+      res.json({ count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Soft-delete a message
+  app.delete("/api/messenger/messages/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const ok = await storage.softDeleteMessage(+req.params.id, userId);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found or not authorized" });
+    } catch (e) { handleError(res, e); }
+  });
 }

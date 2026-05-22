@@ -1704,3 +1704,44 @@ export const readingGoals = pgTable("reading_goals", {
 export const insertReadingGoalSchema = createInsertSchema(readingGoals).omit({ id: true });
 export type InsertReadingGoal = z.infer<typeof insertReadingGoalSchema>;
 export type ReadingGoal = typeof readingGoals.$inferSelect;
+
+// ── MESSENGER ──────────────────────────────────────────────────────────────────
+
+export const conversations = pgTable("conversations", {
+  id:            serial("id").primaryKey(),
+  name:          text("name"),                                   // null = DM, set = group name
+  isGroup:       boolean("is_group").notNull().default(false),
+  createdBy:     integer("created_by"),
+  createdAt:     text("created_at").notNull(),
+  lastMessageAt: text("last_message_at"),
+});
+
+export const conversationParticipants = pgTable("conversation_participants", {
+  id:             serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  userId:         integer("user_id").notNull(),
+  joinedAt:       text("joined_at").notNull(),
+  lastReadAt:     text("last_read_at"),
+});
+
+export const messages = pgTable("messages", {
+  id:             serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  senderId:       integer("sender_id").notNull(),
+  content:        text("content").notNull(),
+  createdAt:      text("created_at").notNull(),
+  isDeleted:      boolean("is_deleted").notNull().default(false),
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type ConversationParticipant = typeof conversationParticipants.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+
+export type MessageWithSender = Message & { sender: PublicUser };
+export type ConversationWithDetails = Conversation & {
+  participants: (PublicUser & { lastReadAt: string | null })[];
+  lastMessage: MessageWithSender | null;
+  unreadCount: number;
+};

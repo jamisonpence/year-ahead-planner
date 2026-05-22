@@ -1392,6 +1392,37 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS end_date TEXT`);
   // Accountabilibuddy — link a friend to a goal
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
+
+  // Messenger tables
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id SERIAL PRIMARY KEY,
+      name TEXT,
+      is_group BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by INTEGER,
+      created_at TEXT NOT NULL,
+      last_message_at TEXT
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_participants (
+      id SERIAL PRIMARY KEY,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL,
+      joined_at TEXT NOT NULL,
+      last_read_at TEXT
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      sender_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -5023,6 +5054,237 @@ export const storage: IStorage = {
     const defaults = { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 };
     const [r] = await db.insert(nutritionGoals).values({ userId, ...defaults, ...data }).returning();
     return r;
+  },
+
+  // ── Messenger ────────────────────────────────────────────────────────────────
+
+  async ensureMessengerTables() {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        is_group BOOLEAN NOT NULL DEFAULT FALSE,
+        created_by INTEGER,
+        created_at TEXT NOT NULL,
+        last_message_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS conversation_participants (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_read_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+      );
+    `);
+  },
+
+  async getConversationsForUser(userId: number): Promise<any[]> {
+    const rows = await pool.query(`
+      SELECT
+        c.id, c.name, c.is_group AS "isGroup", c.created_by AS "createdBy",
+        c.created_at AS "createdAt", c.last_message_at AS "lastMessageAt"
+      FROM conversations c
+      JOIN conversation_participants cp ON cp.conversation_id = c.id
+      WHERE cp.user_id = $1
+      ORDER BY COALESCE(c.last_message_at, c.created_at) DESC
+    `, [userId]);
+
+    if (rows.rows.length === 0) return [];
+
+    const convIds = rows.rows.map((r: any) => r.id);
+    const placeholders = convIds.map((_: any, i: number) => `$${i + 1}`).join(",");
+
+    // Participants with user info
+    const partRows = await pool.query(`
+      SELECT cp.conversation_id AS "conversationId", cp.last_read_at AS "lastReadAt",
+             u.id, u.name, u.email, u.avatar_url AS "avatarUrl"
+      FROM conversation_participants cp
+      JOIN users u ON u.id = cp.user_id
+      WHERE cp.conversation_id IN (${placeholders})
+    `, convIds);
+
+    // Last message per conversation
+    const msgRows = await pool.query(`
+      SELECT DISTINCT ON (m.conversation_id)
+        m.id, m.conversation_id AS "conversationId", m.sender_id AS "senderId",
+        m.content, m.created_at AS "createdAt", m.is_deleted AS "isDeleted",
+        u.id AS "sUid", u.name AS "sName", u.email AS "sEmail", u.avatar_url AS "sAvatarUrl"
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE m.conversation_id IN (${placeholders}) AND m.is_deleted = FALSE
+      ORDER BY m.conversation_id, m.created_at DESC
+    `, convIds);
+
+    // Unread count per conversation
+    const unreadRows = await pool.query(`
+      SELECT m.conversation_id AS "conversationId", COUNT(*)::int AS "count"
+      FROM messages m
+      JOIN conversation_participants cp
+        ON cp.conversation_id = m.conversation_id AND cp.user_id = $1
+      WHERE m.conversation_id IN (${placeholders.replace(/\$(\d+)/g, (_, n) => `$${+n + 1}`)})
+        AND m.is_deleted = FALSE
+        AND m.sender_id != $1
+        AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+      GROUP BY m.conversation_id
+    `, [userId, ...convIds]);
+
+    const partMap: Record<number, any[]> = {};
+    for (const p of partRows.rows) {
+      if (!partMap[p.conversationId]) partMap[p.conversationId] = [];
+      partMap[p.conversationId].push({ id: p.id, name: p.name, email: p.email, avatarUrl: p.avatarUrl, lastReadAt: p.lastReadAt });
+    }
+    const msgMap: Record<number, any> = {};
+    for (const m of msgRows.rows) {
+      msgMap[m.conversationId] = {
+        id: m.id, conversationId: m.conversationId, senderId: m.senderId,
+        content: m.content, createdAt: m.createdAt, isDeleted: m.isDeleted,
+        sender: { id: m.sUid, name: m.sName, email: m.sEmail, avatarUrl: m.sAvatarUrl },
+      };
+    }
+    const unreadMap: Record<number, number> = {};
+    for (const u of unreadRows.rows) unreadMap[u.conversationId] = u.count;
+
+    return rows.rows.map((c: any) => ({
+      ...c,
+      participants: partMap[c.id] ?? [],
+      lastMessage: msgMap[c.id] ?? null,
+      unreadCount: unreadMap[c.id] ?? 0,
+    }));
+  },
+
+  async getOrCreateDM(userId1: number, userId2: number): Promise<any> {
+    // Check if a DM already exists between these two users
+    const existing = await pool.query(`
+      SELECT c.id FROM conversations c
+      JOIN conversation_participants cp1 ON cp1.conversation_id = c.id AND cp1.user_id = $1
+      JOIN conversation_participants cp2 ON cp2.conversation_id = c.id AND cp2.user_id = $2
+      WHERE c.is_group = FALSE
+      LIMIT 1
+    `, [userId1, userId2]);
+    if (existing.rows[0]) return existing.rows[0];
+
+    const now = new Date().toISOString();
+    const conv = await pool.query(
+      `INSERT INTO conversations (is_group, created_by, created_at) VALUES (FALSE, $1, $2) RETURNING id`,
+      [userId1, now]
+    );
+    const convId = conv.rows[0].id;
+    await pool.query(
+      `INSERT INTO conversation_participants (conversation_id, user_id, joined_at) VALUES ($1,$2,$3),($1,$4,$3)`,
+      [convId, userId1, now, userId2]
+    );
+    return { id: convId };
+  },
+
+  async createGroupConversation(createdBy: number, name: string, participantIds: number[]): Promise<any> {
+    const now = new Date().toISOString();
+    const conv = await pool.query(
+      `INSERT INTO conversations (name, is_group, created_by, created_at) VALUES ($1, TRUE, $2, $3) RETURNING id`,
+      [name, createdBy, now]
+    );
+    const convId = conv.rows[0].id;
+    const allIds = Array.from(new Set([createdBy, ...participantIds]));
+    const vals = allIds.map((uid, i) => `($1,$${i + 2},$3)`).join(",");
+    await pool.query(`INSERT INTO conversation_participants (conversation_id, user_id, joined_at) VALUES ${vals}`, [convId, ...allIds, now]);
+    return { id: convId };
+  },
+
+  async getMessages(conversationId: number, userId: number, limit = 50, beforeId?: number): Promise<any[]> {
+    // Verify user is a participant
+    const check = await pool.query(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [conversationId, userId]
+    );
+    if (!check.rows[0]) throw new Error("Not a participant");
+
+    const beforeClause = beforeId ? `AND m.id < ${beforeId}` : "";
+    const rows = await pool.query(`
+      SELECT m.id, m.conversation_id AS "conversationId", m.sender_id AS "senderId",
+             m.content, m.created_at AS "createdAt", m.is_deleted AS "isDeleted",
+             u.id AS "sUid", u.name AS "sName", u.email AS "sEmail", u.avatar_url AS "sAvatarUrl"
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE m.conversation_id = $1 ${beforeClause}
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT $2
+    `, [conversationId, limit]);
+
+    return rows.rows.reverse().map((m: any) => ({
+      id: m.id, conversationId: m.conversationId, senderId: m.senderId,
+      content: m.content, createdAt: m.createdAt, isDeleted: m.isDeleted,
+      sender: { id: m.sUid, name: m.sName, email: m.sEmail, avatarUrl: m.sAvatarUrl },
+    }));
+  },
+
+  async createMessage(conversationId: number, senderId: number, content: string): Promise<any> {
+    // Verify sender is a participant
+    const check = await pool.query(
+      `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
+      [conversationId, senderId]
+    );
+    if (!check.rows[0]) throw new Error("Not a participant");
+
+    const now = new Date().toISOString();
+    const msg = await pool.query(
+      `INSERT INTO messages (conversation_id, sender_id, content, created_at) VALUES ($1,$2,$3,$4) RETURNING id`,
+      [conversationId, senderId, content, now]
+    );
+    await pool.query(
+      `UPDATE conversations SET last_message_at = $1 WHERE id = $2`,
+      [now, conversationId]
+    );
+    const senderRow = await pool.query(
+      `SELECT id, name, email, avatar_url AS "avatarUrl" FROM users WHERE id = $1`, [senderId]
+    );
+    return {
+      id: msg.rows[0].id, conversationId, senderId, content, createdAt: now, isDeleted: false,
+      sender: senderRow.rows[0],
+    };
+  },
+
+  async markConversationRead(conversationId: number, userId: number): Promise<void> {
+    const now = new Date().toISOString();
+    await pool.query(
+      `UPDATE conversation_participants SET last_read_at = $1 WHERE conversation_id = $2 AND user_id = $3`,
+      [now, conversationId, userId]
+    );
+  },
+
+  async getUnreadMessageCount(userId: number): Promise<number> {
+    const rows = await pool.query(`
+      SELECT COUNT(*)::int AS count
+      FROM messages m
+      JOIN conversation_participants cp
+        ON cp.conversation_id = m.conversation_id AND cp.user_id = $1
+      WHERE m.is_deleted = FALSE
+        AND m.sender_id != $1
+        AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+    `, [userId]);
+    return rows.rows[0]?.count ?? 0;
+  },
+
+  async softDeleteMessage(messageId: number, userId: number): Promise<boolean> {
+    const result = await pool.query(
+      `UPDATE messages SET is_deleted = TRUE WHERE id = $1 AND sender_id = $2`,
+      [messageId, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async addConversationParticipant(conversationId: number, userId: number): Promise<void> {
+    const now = new Date().toISOString();
+    await pool.query(
+      `INSERT INTO conversation_participants (conversation_id, user_id, joined_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+      [conversationId, userId, now]
+    );
   },
 };
 

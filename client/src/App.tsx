@@ -31,6 +31,7 @@ import PoliticsPage from "@/pages/PoliticsPage";
 import LoginPage from "@/pages/LoginPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ProfilePage from "@/pages/ProfilePage";
+import MessengerPage from "@/pages/MessengerPage";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 import OnboardingModal from "@/components/OnboardingModal";
@@ -64,6 +65,7 @@ function AuthenticatedApp() {
         <Route path="/faith" component={FaithPage} />
         <Route path="/health" component={HealthPage} />
         <Route path="/politics" component={PoliticsPage} />
+        <Route path="/messenger" component={MessengerPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/profile/:userId" component={ProfilePage} />
         <Route component={NotFound} />
