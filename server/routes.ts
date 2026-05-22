@@ -608,6 +608,33 @@ Return exactly this structure:
 
   // ── Books ────────────────────────────────────────────────────────────────────
   // ── Reading Goal ─────────────────────────────────────────────────────────────
+  // Multi-goal reading endpoints
+  app.get("/api/reading/goals", requireAuth, async (req, res) => {
+    try { res.json(await storage.getReadingGoals((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/reading/goals", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { booksTarget, year, label, startDate, endDate, buddyUserId } = req.body;
+      const goal = await storage.createReadingGoal(uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null, buddyUserId: buddyUserId ?? null });
+      res.status(201).json(goal);
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/reading/goals/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { booksTarget, year, label, startDate, endDate, buddyUserId } = req.body;
+      res.json(await storage.updateReadingGoalById(+req.params.id, uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null, buddyUserId: buddyUserId ?? null }));
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/reading/goals/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteReadingGoalById(+req.params.id, (req.user as User).id);
+      res.status(204).end();
+    } catch (e) { handleError(res, e); }
+  });
+  // Legacy single-goal endpoints (kept for backwards compat)
   app.get("/api/reading/goal", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;

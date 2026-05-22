@@ -1696,7 +1696,7 @@ export type NutritionSummary = {
 // ── READING GOALS ──────────────────────────────────────────────────────────────
 export const readingGoals = pgTable("reading_goals", {
   id:           serial("id").primaryKey(),
-  userId:       integer("user_id").notNull().unique(),
+  userId:       integer("user_id").notNull(),
   booksTarget:  integer("books_target").notNull().default(12),
   year:         integer("year").notNull().default(2026),
   label:        text("label"),           // e.g. "Summer Reading 2026"

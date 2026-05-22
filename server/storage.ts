@@ -1397,6 +1397,8 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE nutrition_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
   // Accountabilibuddy on workout plans
   await db.execute(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
+  // Allow multiple reading goals per user (drop old unique constraint)
+  await db.execute(`ALTER TABLE reading_goals DROP CONSTRAINT IF EXISTS reading_goals_user_id_unique`);
 
   // Messenger tables
   await pool.query(`
@@ -5025,21 +5027,35 @@ export const storage: IStorage = {
     return r;
   },
 
-  // ── Reading Goal ─────────────────────────────────────────────────────────────
-  async getReadingGoal(userId: number): Promise<ReadingGoal | null> {
-    const [r] = await db.select().from(readingGoals).where(eq(readingGoals.userId, userId));
-    return r ?? null;
+  // ── Reading Goals (multi) ────────────────────────────────────────────────────
+  async getReadingGoals(userId: number): Promise<ReadingGoal[]> {
+    return db.select().from(readingGoals).where(eq(readingGoals.userId, userId));
   },
+  /** @deprecated use getReadingGoals */
+  async getReadingGoal(userId: number): Promise<ReadingGoal | null> {
+    const rows = await storage.getReadingGoals(userId);
+    return rows[0] ?? null;
+  },
+  async createReadingGoal(userId: number, data: Partial<Omit<ReadingGoal, 'id' | 'userId'>>): Promise<ReadingGoal> {
+    const currentYear = new Date().getFullYear();
+    const defaults = { booksTarget: 12, year: currentYear, label: null, startDate: null, endDate: null, buddyUserId: null };
+    const [r] = await db.insert(readingGoals).values({ userId, ...defaults, ...data }).returning();
+    return r;
+  },
+  async updateReadingGoalById(id: number, userId: number, data: Partial<Omit<ReadingGoal, 'id' | 'userId'>>): Promise<ReadingGoal> {
+    const [r] = await db.update(readingGoals).set(data).where(and(eq(readingGoals.id, id), eq(readingGoals.userId, userId))).returning();
+    return r;
+  },
+  async deleteReadingGoalById(id: number, userId: number): Promise<void> {
+    await db.delete(readingGoals).where(and(eq(readingGoals.id, id), eq(readingGoals.userId, userId)));
+  },
+  /** @deprecated use deleteReadingGoalById */
   async upsertReadingGoal(userId: number, data: Partial<Omit<ReadingGoal, 'id' | 'userId'>>): Promise<ReadingGoal> {
     const existing = await storage.getReadingGoal(userId);
     if (existing) {
-      const [r] = await db.update(readingGoals).set(data).where(eq(readingGoals.userId, userId)).returning();
-      return r;
+      return storage.updateReadingGoalById(existing.id, userId, data);
     }
-    const currentYear = new Date().getFullYear();
-    const defaults = { booksTarget: 12, year: currentYear, label: null, startDate: null, endDate: null };
-    const [r] = await db.insert(readingGoals).values({ userId, ...defaults, ...data }).returning();
-    return r;
+    return storage.createReadingGoal(userId, data);
   },
   async deleteReadingGoal(userId: number): Promise<void> {
     await db.delete(readingGoals).where(eq(readingGoals.userId, userId));

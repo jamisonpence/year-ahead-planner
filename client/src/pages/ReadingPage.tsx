@@ -562,6 +562,7 @@ export default function ReadingPage() {
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
   const [recommendBook, setRecommendBook] = useState<BookWithSessions | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<number | null>(null); // null = new
   // Goal form state
   const [gLabel, setGLabel]         = useState("");
   const [gTarget, setGTarget]       = useState("12");
@@ -574,46 +575,27 @@ export default function ReadingPage() {
   const [bookSearch, setBookSearch]         = useState("");
 
   const { data: books = [] } = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
-  const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
+  const { data: readingGoals = [] } = useQuery<ReadingGoal[]>({ queryKey: ["/api/reading/goals"] });
 
-  // Compute effective date range from goal
+  // For backward-compat memos, use the first goal if any
   const currentYear = new Date().getFullYear();
-  const goalStartDate = readingGoal?.startDate ?? `${currentYear}-01-01`;
-  const goalEndDate   = readingGoal?.endDate   ?? `${currentYear}-12-31`;
-
-  // Books finished within goal window
-  const booksFinishedInGoal = useMemo(() => {
-    if (!readingGoal) return [];
-    return books.filter((b) => {
-      if (b.status !== "finished") return false;
-      const fd = (b as any).finishDate as string | null;
-      return fd && fd >= goalStartDate && fd <= goalEndDate;
-    });
-  }, [books, readingGoal, goalStartDate, goalEndDate]);
-
-  // Books planned in goal window (backlog/current/paused with targetFinishDate in range)
-  const booksPlannedInGoal = useMemo(() => {
-    if (!readingGoal) return [];
-    return books.filter((b) => {
-      if (b.status === "finished") return false;
-      const tfd = b.targetFinishDate;
-      return tfd && tfd >= goalStartDate && tfd <= goalEndDate;
-    });
-  }, [books, readingGoal, goalStartDate, goalEndDate]);
 
   const saveGoalMut = useMutation({
-    mutationFn: (payload: object) => apiRequest("PATCH", "/api/reading/goal", payload),
+    mutationFn: (payload: object) =>
+      editingGoalId !== null
+        ? apiRequest("PATCH", `/api/reading/goals/${editingGoalId}`, payload)
+        : apiRequest("POST", "/api/reading/goals", payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] });
-      toast({ title: "Reading goal saved!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/reading/goals"] });
+      toast({ title: editingGoalId !== null ? "Reading goal saved!" : "Reading goal created!" });
       setGoalModalOpen(false);
     },
   });
 
   const deleteGoalMut = useMutation({
-    mutationFn: () => apiRequest("DELETE", "/api/reading/goal"),
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/reading/goals/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reading/goals"] });
       toast({ title: "Reading goal deleted" });
       setGoalModalOpen(false);
     },
@@ -643,14 +625,21 @@ export default function ReadingPage() {
     return { start: gStart, end: gEnd };
   }
 
-  function openGoalModal() {
-    const rg = readingGoal;
-    setGLabel(rg?.label ?? "");
-    setGTarget(String(rg?.booksTarget ?? 12));
-    if (rg?.startDate && rg?.endDate) {
-      // Detect preset
-      const now = new Date();
-      const y = now.getFullYear(); const m = now.getMonth(); const q = Math.floor(m / 3);
+  function openNewGoalModal() {
+    setEditingGoalId(null);
+    setGLabel("");
+    setGTarget("12");
+    setGTimeframe("year");
+    setGStart("");
+    setGEnd("");
+    setGoalModalOpen(true);
+  }
+
+  function openEditGoalModal(rg: ReadingGoal) {
+    setEditingGoalId(rg.id);
+    setGLabel(rg.label ?? "");
+    setGTarget(String(rg.booksTarget ?? 12));
+    if (rg.startDate && rg.endDate) {
       const yd = getTimeframeDates("year"); const md = getTimeframeDates("month"); const qd = getTimeframeDates("quarter");
       if (rg.startDate === yd.start && rg.endDate === yd.end) setGTimeframe("year");
       else if (rg.startDate === md.start && rg.endDate === md.end) setGTimeframe("month");
@@ -707,18 +696,18 @@ export default function ReadingPage() {
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5 overflow-x-hidden w-full">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-2xl font-bold">Reading</h1>
           {streak > 0 && (
-            <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
+            <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800 shrink-0">
               <Flame size={13} />{streak}d streak
             </span>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={openGoalModal} className="gap-1.5">
-            <Target size={13} /> {readingGoal ? "Edit Goal" : "Set Goal"}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={openNewGoalModal} className="gap-1.5">
+            <Target size={13} /> Add Goal
           </Button>
           <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
             <Search size={13} /> Find Books
@@ -732,44 +721,71 @@ export default function ReadingPage() {
         </div>
       </div>
 
-      {/* Reading Goal Banner */}
-      {readingGoal && (() => {
-        const finished = booksFinishedInGoal.length;
-        const planned  = booksPlannedInGoal.length;
-        const total    = readingGoal.booksTarget;
-        const pct      = Math.min(100, Math.round((finished / total) * 100));
-        const rangeLabel = readingGoal.startDate && readingGoal.endDate
-          ? `${format(parseISO(readingGoal.startDate), "MMM d")} – ${format(parseISO(readingGoal.endDate), "MMM d, yyyy")}`
-          : String(currentYear);
-        return (
-          <div
-            className="p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 cursor-pointer hover:border-amber-400 transition-colors"
-            onClick={openGoalModal}
-          >
-            <div className="flex items-start gap-3">
-              <Target size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-sm font-semibold text-amber-900 dark:text-amber-200 truncate">
-                    {readingGoal.label || "Reading Goal"}
-                  </span>
-                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 shrink-0">{pct}%</span>
-                </div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Calendar size={11} className="text-amber-600/70 dark:text-amber-400/70 shrink-0" />
-                  <span className="text-xs text-amber-700/80 dark:text-amber-300/80">{rangeLabel}</span>
-                </div>
-                <Progress value={pct} className="h-1.5 mb-1.5" />
-                <div className="flex items-center gap-3 text-xs text-amber-700/80 dark:text-amber-300/80">
-                  <span><span className="font-bold text-amber-900 dark:text-amber-200">{finished}</span> finished</span>
-                  <span>of {total} goal</span>
-                  {planned > 0 && <span className="ml-auto">{planned} planned</span>}
+      {/* Reading Goal Banners */}
+      {readingGoals.length > 0 && (
+        <div className="space-y-2">
+          {readingGoals.map((rg) => {
+            const start = rg.startDate ?? `${currentYear}-01-01`;
+            const end   = rg.endDate   ?? `${currentYear}-12-31`;
+            const finished = books.filter((b) => {
+              if (b.status !== "finished") return false;
+              const fd = (b as any).finishDate as string | null;
+              return fd && fd >= start && fd <= end;
+            }).length;
+            const planned = books.filter((b) => {
+              if (b.status === "finished") return false;
+              const tfd = b.targetFinishDate;
+              return tfd && tfd >= start && tfd <= end;
+            }).length;
+            const total = rg.booksTarget;
+            const pct = Math.min(100, Math.round((finished / total) * 100));
+            const rangeLabel = rg.startDate && rg.endDate
+              ? `${format(parseISO(rg.startDate), "MMM d")} – ${format(parseISO(rg.endDate), "MMM d, yyyy")}`
+              : String(currentYear);
+            return (
+              <div key={rg.id} className="p-3 rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-3">
+                  <Target size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-sm font-semibold text-amber-900 dark:text-amber-200 truncate">
+                        {rg.label || "Reading Goal"}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{pct}%</span>
+                        <button
+                          onClick={() => openEditGoalModal(rg)}
+                          className="p-1 rounded hover:bg-amber-200 dark:hover:bg-amber-800/40 text-amber-600 dark:text-amber-400 transition-colors"
+                          title="Edit goal"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          onClick={() => { if (confirm("Delete this reading goal? Books won't be removed.")) deleteGoalMut.mutate(rg.id); }}
+                          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-amber-600/60 dark:text-amber-400/60 hover:text-red-500 transition-colors"
+                          title="Delete goal"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Calendar size={11} className="text-amber-600/70 dark:text-amber-400/70 shrink-0" />
+                      <span className="text-xs text-amber-700/80 dark:text-amber-300/80">{rangeLabel}</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5 mb-1.5" />
+                    <div className="flex items-center gap-3 text-xs text-amber-700/80 dark:text-amber-300/80">
+                      <span><span className="font-bold text-amber-900 dark:text-amber-200">{finished}</span> finished</span>
+                      <span>of {total} goal</span>
+                      {planned > 0 && <span className="ml-auto">{planned} planned</span>}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
@@ -916,7 +932,7 @@ export default function ReadingPage() {
         <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
           <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
-              <Target size={16} /> Reading Goal
+              <Target size={16} /> {editingGoalId !== null ? "Edit Reading Goal" : "New Reading Goal"}
             </DialogTitle>
           </DialogHeader>
 
@@ -1138,11 +1154,11 @@ export default function ReadingPage() {
 
           <div className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              {readingGoal && (
+              {editingGoalId !== null && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { if (confirm("Delete your reading goal? This won't remove your books.")) deleteGoalMut.mutate(); }}
+                  onClick={() => { if (confirm("Delete this reading goal? Books won't be removed.")) deleteGoalMut.mutate(editingGoalId); }}
                   disabled={deleteGoalMut.isPending}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 text-xs"
                 >
@@ -1158,7 +1174,7 @@ export default function ReadingPage() {
                 disabled={saveGoalMut.isPending || !gTarget || parseInt(gTarget) < 1 || (gTimeframe === "custom" && (!gStart || !gEnd))}
                 className="gap-1.5"
               >
-                <Check size={13} /> Save Goal
+                <Check size={13} /> {editingGoalId !== null ? "Save Goal" : "Create Goal"}
               </Button>
             </div>
           </div>
