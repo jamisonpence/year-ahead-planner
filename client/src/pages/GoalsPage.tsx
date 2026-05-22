@@ -618,6 +618,196 @@ function NutritionBuddyPicker(props: { currentBuddyId: number | null; friends: P
   return <GoalBuddyPicker {...props} />;
 }
 
+// ── WorkoutMilestonesEditor ───────────────────────────────────────────────────
+function WorkoutMilestonesEditor({ plan, currentWeek, metric, onSave }: {
+  plan: WorkoutPlan;
+  currentWeek: number | null;
+  metric: { label?: string; unit?: string } | null;
+  onSave: (milestonesJson: string) => void;
+}) {
+  type Milestone = { week: number; description: string; targetValue?: number; done?: boolean };
+  const [milestones, setMilestones] = useState<Milestone[]>(() => {
+    try { return JSON.parse(plan.milestonesJson || "[]"); } catch { return []; }
+  });
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editDesc, setEditDesc] = useState("");
+  const [editWeek, setEditWeek] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newDesc, setNewDesc] = useState("");
+  const [newWeek, setNewWeek] = useState("");
+
+  useEffect(() => {
+    try { setMilestones(JSON.parse(plan.milestonesJson || "[]")); } catch {}
+  }, [plan.id]);
+
+  function save(updated: Milestone[]) {
+    setMilestones(updated);
+    onSave(JSON.stringify(updated));
+  }
+
+  function toggleDone(idx: number) {
+    const autoComplete = currentWeek !== null && currentWeek > milestones[idx].week;
+    const currentDone = milestones[idx].done ?? autoComplete;
+    save(milestones.map((m, i) => i === idx ? { ...m, done: !currentDone } : m));
+  }
+
+  function startEdit(idx: number) {
+    setEditingIdx(idx);
+    setEditDesc(milestones[idx].description);
+    setEditWeek(String(milestones[idx].week));
+  }
+
+  function commitEdit() {
+    if (editingIdx === null) return;
+    if (!editDesc.trim()) { setEditingIdx(null); return; }
+    save(milestones.map((m, i) => i === editingIdx
+      ? { ...m, description: editDesc.trim(), week: parseInt(editWeek) || m.week }
+      : m
+    ));
+    setEditingIdx(null);
+  }
+
+  function deleteMilestone(idx: number) {
+    save(milestones.filter((_, i) => i !== idx));
+  }
+
+  function addMilestone() {
+    if (!newDesc.trim() || !newWeek) return;
+    const updated = [...milestones, { week: parseInt(newWeek), description: newDesc.trim() }]
+      .sort((a, b) => a.week - b.week);
+    save(updated);
+    setNewDesc(""); setNewWeek(""); setShowAdd(false);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 px-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Milestones</p>
+      </div>
+      <div className="space-y-1.5">
+        {milestones.map((m, i) => {
+          const autoComplete = currentWeek !== null && currentWeek > m.week;
+          const isDone = m.done ?? autoComplete;
+          const isCurrent = !isDone && currentWeek !== null && (currentWeek === m.week || (i === 0 && currentWeek < m.week));
+          const isEditing = editingIdx === i;
+
+          return (
+            <div key={i} className={`group flex items-start gap-3 px-2.5 py-2.5 rounded-xl border transition-colors ${
+              isDone ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+              : isCurrent ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+              : "bg-card border-border hover:border-muted-foreground/30"
+            }`}>
+              {/* Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleDone(i)}
+                className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                  isDone ? "border-emerald-500 bg-emerald-500 hover:bg-emerald-600"
+                  : isCurrent ? "border-blue-500 hover:border-blue-600"
+                  : "border-muted-foreground/30 hover:border-emerald-400"
+                }`}
+              >
+                {isDone && <Check size={10} className="text-white" />}
+              </button>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                {isEditing ? (
+                  <div className="space-y-1.5">
+                    <input
+                      autoFocus
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
+                      className="w-full text-xs bg-transparent border-b border-primary outline-none pb-0.5"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground">Week:</span>
+                      <input
+                        type="number"
+                        value={editWeek}
+                        onChange={(e) => setEditWeek(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); }}
+                        className="w-12 text-xs bg-transparent border-b border-primary outline-none pb-0.5"
+                        min={1}
+                      />
+                      <button type="button" onClick={commitEdit} className="text-[10px] text-primary font-medium hover:underline ml-1">Save</button>
+                      <button type="button" onClick={() => setEditingIdx(null)} className="text-[10px] text-muted-foreground hover:underline">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className={`text-xs font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`}
+                      onClick={() => startEdit(i)} title="Click to edit" style={{ cursor: "text" }}>
+                      {m.description}
+                    </p>
+                    {m.targetValue !== undefined && (
+                      <p className="text-[10px] text-muted-foreground">Target: {m.targetValue}{metric?.unit ? ` ${metric.unit}` : ""}</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Week badge + actions */}
+              <div className="flex items-center gap-1 shrink-0">
+                {!isEditing && <span className="text-[10px] text-muted-foreground">Wk {m.week}</span>}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button type="button" onClick={() => startEdit(i)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    <Pencil size={10} />
+                  </button>
+                  <button type="button" onClick={() => deleteMilestone(i)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-500 transition-colors">
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Add milestone */}
+        {showAdd ? (
+          <div className="flex flex-col gap-1.5 px-1 pt-1">
+            <input
+              autoFocus
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") { setShowAdd(false); setNewDesc(""); setNewWeek(""); } }}
+              placeholder="Milestone description..."
+              className="h-8 text-sm bg-transparent border rounded-lg px-2 outline-none focus:border-primary w-full"
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground shrink-0">Week:</span>
+              <input
+                type="number"
+                value={newWeek}
+                onChange={(e) => setNewWeek(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addMilestone(); }}
+                placeholder="e.g. 4"
+                min={1}
+                className="h-8 text-sm bg-transparent border rounded-lg px-2 outline-none focus:border-primary w-20"
+              />
+              <Button size="sm" className="h-8 px-3 text-xs flex-1" onClick={addMilestone} disabled={!newDesc.trim() || !newWeek}>
+                <Check size={12} className="mr-1" /> Add
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setShowAdd(false); setNewDesc(""); setNewWeek(""); }}>
+                <X size={12} />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
+          >
+            <Plus size={12} /> Add milestone
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Plant watering helpers
 function plantWateringDays(plant: Plant): number | null {
   if (!plant.lastWatered) return null;
@@ -1368,36 +1558,13 @@ export default function GoalsPage() {
                       )}
                     </div>
                   )}
-                  {/* Milestones as phases */}
-                  {milestones.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Milestones</p>
-                      <div className="space-y-1.5">
-                        {milestones.map((m, i) => {
-                          const done = currentWeek !== null && currentWeek > m.week;
-                          const current = currentWeek !== null && (currentWeek === m.week || (i === 0 && currentWeek < m.week));
-                          return (
-                            <div key={i} className={`flex items-center gap-3 px-2.5 py-2.5 rounded-xl border transition-colors ${
-                              done ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
-                              : current ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
-                              : "bg-card border-border"
-                            }`}>
-                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                done ? "border-emerald-500 bg-emerald-500" : current ? "border-blue-500" : "border-muted-foreground/30"
-                              }`}>
-                                {done && <Check size={10} className="text-white" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{m.description}</p>
-                                {m.targetValue !== undefined && <p className="text-[10px] text-muted-foreground">Target: {m.targetValue}{metric?.unit ? ` ${metric.unit}` : ""}</p>}
-                              </div>
-                              <span className="text-[10px] text-muted-foreground shrink-0">Wk {m.week}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Milestones — interactive editor */}
+                  <WorkoutMilestonesEditor
+                    plan={activePlan}
+                    currentWeek={currentWeek}
+                    metric={metric}
+                    onSave={(milestonesJson) => updateWorkoutPlan.mutate({ id: activePlan.id, milestonesJson })}
+                  />
                   {friends.length > 0 && (
                     <GoalBuddyPicker
                       currentBuddyId={(activePlan as any).buddyUserId ?? null}
