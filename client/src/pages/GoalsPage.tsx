@@ -705,47 +705,54 @@ export default function GoalsPage() {
               </div>
             </div>
 
-            {/* Housekeeping card */}
-            <div
-              onClick={() => { setSelectedGoalId(selectedGoalId === HOUSEKEEPING_ID ? null : HOUSEKEEPING_ID); setSelectedProjectId(null); }}
-              className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
-                selectedGoalId === HOUSEKEEPING_ID ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20" : "bg-card border-dashed hover:border-orange-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Home size={15} className="text-orange-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">Housekeeping</p>
-                  <p className="text-xs text-muted-foreground">{houseProjects.length} project{houseProjects.length !== 1 ? "s" : ""} · {chores.filter(c => c.isActive).length} chore{chores.filter(c => c.isActive).length !== 1 ? "s" : ""}</p>
-                </div>
-                <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === HOUSEKEEPING_ID ? "rotate-90" : ""}`} />
-              </div>
-            </div>
-
-            {/* Plants card */}
-            {plants.length > 0 && (() => {
-              const needsWater = plants.filter(p => { const d = plantWateringDays(p); return d === null || d <= 0; }).length;
-              return (
-                <div
-                  onClick={() => { setSelectedGoalId(selectedGoalId === PLANTS_ID ? null : PLANTS_ID); setSelectedProjectId(null); }}
-                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${
-                    selectedGoalId === PLANTS_ID ? "border-green-400 bg-green-50 dark:bg-green-950/20" : "bg-card border-dashed hover:border-green-300"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Leaf size={15} className="text-green-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">Plants</p>
-                      <p className="text-xs text-muted-foreground">
-                        {plants.length} plant{plants.length !== 1 ? "s" : ""}
-                        {needsWater > 0 && <span className="text-amber-600 font-medium"> · {needsWater} need water</span>}
-                      </p>
-                    </div>
-                    <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === PLANTS_ID ? "rotate-90" : ""}`} />
+            {/* Housekeeping card (with Plants sub-row) */}
+            <div className={`rounded-xl border overflow-hidden mt-1 transition-colors ${
+              selectedGoalId === HOUSEKEEPING_ID ? "border-orange-400" :
+              selectedGoalId === PLANTS_ID ? "border-green-400" :
+              "border-dashed"
+            }`}>
+              {/* Main housekeeping row */}
+              <div
+                onClick={() => { setSelectedGoalId(selectedGoalId === HOUSEKEEPING_ID ? null : HOUSEKEEPING_ID); setSelectedProjectId(null); }}
+                className={`group p-3 cursor-pointer transition-all hover:shadow-sm ${
+                  selectedGoalId === HOUSEKEEPING_ID ? "bg-orange-50 dark:bg-orange-950/20" : "bg-card hover:bg-orange-50/30 dark:hover:bg-orange-950/10"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Home size={15} className="text-orange-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">Housekeeping</p>
+                    <p className="text-xs text-muted-foreground">{houseProjects.length} project{houseProjects.length !== 1 ? "s" : ""} · {chores.filter(c => c.isActive).length} chore{chores.filter(c => c.isActive).length !== 1 ? "s" : ""}</p>
                   </div>
+                  <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === HOUSEKEEPING_ID ? "rotate-90" : ""}`} />
                 </div>
-              );
-            })()}
+              </div>
+
+              {/* Plants sub-row */}
+              {plants.length > 0 && (() => {
+                const needsWater = plants.filter(p => { const d = plantWateringDays(p); return d === null || d <= 0; }).length;
+                return (
+                  <div
+                    onClick={(e) => { e.stopPropagation(); setSelectedGoalId(selectedGoalId === PLANTS_ID ? null : PLANTS_ID); setSelectedProjectId(null); }}
+                    className={`border-t px-3 py-2 cursor-pointer transition-all ${
+                      selectedGoalId === PLANTS_ID ? "bg-green-50 dark:bg-green-950/20" : "bg-muted/30 hover:bg-green-50/40 dark:hover:bg-green-950/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 pl-1">
+                      <Leaf size={13} className="text-green-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium">Plants</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {plants.length} plant{plants.length !== 1 ? "s" : ""}
+                          {needsWater > 0 && <span className="text-amber-600 font-medium"> · {needsWater} need water</span>}
+                        </p>
+                      </div>
+                      <ChevronRight size={11} className={`text-muted-foreground transition-transform ${selectedGoalId === PLANTS_ID ? "rotate-90" : ""}`} />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* Nutrition Goals card */}
             {nutritionGoal && (
@@ -917,7 +924,7 @@ export default function GoalsPage() {
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               {isAllTasksSelected ? "Overview"
-                : isPlantsSelected ? "Overview"
+                : isPlantsSelected ? "Plants"
                 : isNutritionSelected ? "Overview"
                 : isWorkoutGoalsSelected ? "Overview"
                 : isReadingGoalSelected ? "Overview"

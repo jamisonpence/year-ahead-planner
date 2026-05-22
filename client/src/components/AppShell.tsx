@@ -272,7 +272,6 @@ const COLLECTION_GROUPS = [
       { path: "/music",    emoji: "🎵", label: "Music"         },
       { path: "/recipes",  emoji: "🍽️", label: "Recipes"      },
       { path: "/spots",    emoji: "📍", label: "Places"         },
-      { path: "/quotes",   emoji: "💬", label: "Quotes"        },
       { path: "/art",      emoji: "🎨", label: "Art"           },
       { path: "/hobbies",  emoji: "✨", label: "Hobbies"       },
     ],
@@ -300,6 +299,7 @@ const COLLECTION_GROUPS = [
       { path: "/housekeeping",  emoji: "🏠", label: "Housekeeping" },
       { path: "/kids",          emoji: "👶", label: "Kids"         },
       { path: "/journal",       emoji: "📓", label: "Journal"      },
+      { path: "/quotes",        emoji: "💬", label: "Quotes"       },
       { path: "/faith",         emoji: "🕊️", label: "Faith"       },
       { path: "/politics",      emoji: "🏛️", label: "Politics"    },
     ],
@@ -637,16 +637,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       </p>
                     )}
                     <div className="space-y-0.5">
-                      {groupTabs.map((tab) => (
-                        <NavLink
-                          key={tab.path}
-                          path={tab.path}
-                          label={tab.label}
-                          icon={tab.icon}
-                          active={location === tab.path}
-                          badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
-                        />
-                      ))}
+                      {groupTabs.flatMap((tab) => {
+                        // Quotes is rendered as a sub-item under Journal — skip standalone
+                        if (tab.path === "/quotes") return [];
+                        const items: React.ReactNode[] = [
+                          <NavLink
+                            key={tab.path}
+                            path={tab.path}
+                            label={tab.label}
+                            icon={tab.icon}
+                            active={location === tab.path}
+                            badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
+                          />,
+                        ];
+                        // Inject Quotes sub-link under Journal
+                        if (tab.path === "/journal" && groupTabs.some((t) => t.path === "/quotes")) {
+                          items.push(
+                            <Link key="/quotes-sub" href="/quotes">
+                              <div className={`cursor-pointer flex items-center gap-2 pl-7 pr-2 py-1.5 rounded-lg text-xs transition-colors ${
+                                location === "/quotes"
+                                  ? "bg-primary/10 text-primary font-semibold"
+                                  : "text-muted-foreground hover:bg-secondary/60"
+                              }`}>
+                                <Quote size={13} />
+                                <span>Quotes</span>
+                              </div>
+                            </Link>
+                          );
+                        }
+                        return items;
+                      })}
                     </div>
                   </div>
                 );
