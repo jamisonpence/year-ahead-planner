@@ -482,6 +482,42 @@ function HobbyGoalInlineEditor({ goal, friends, onSave }: {
   );
 }
 
+// ── Shared goal buddy picker (Reading + Nutrition) ───────────────────────────
+function GoalBuddyPicker({ currentBuddyId, friends, onSave, label = "Accountabilibuddy" }: {
+  currentBuddyId: number | null;
+  friends: PublicUser[];
+  onSave: (buddyUserId: number | null) => void;
+  label?: string;
+}) {
+  const [buddyUserId, setBuddyUserId] = useState<number | null>(currentBuddyId);
+  const isDirty = (buddyUserId ?? null) !== (currentBuddyId ?? null);
+
+  // sync if prop changes (after save)
+  useEffect(() => { setBuddyUserId(currentBuddyId); }, [currentBuddyId]);
+
+  return (
+    <div className="space-y-1.5 p-3 rounded-xl border bg-secondary/20">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Users size={11} className="text-muted-foreground" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+      </div>
+      <BuddySearchPicker value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
+      {isDirty && (
+        <Button size="sm" className="w-full h-8 text-xs mt-1" onClick={() => onSave(buddyUserId)}>
+          Save Buddy
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ReadingBuddyPicker(props: { currentBuddyId: number | null; friends: PublicUser[]; onSave: (id: number | null) => void }) {
+  return <GoalBuddyPicker {...props} />;
+}
+function NutritionBuddyPicker(props: { currentBuddyId: number | null; friends: PublicUser[]; onSave: (id: number | null) => void }) {
+  return <GoalBuddyPicker {...props} />;
+}
+
 // Plant watering helpers
 function plantWateringDays(plant: Plant): number | null {
   if (!plant.lastWatered) return null;
@@ -572,6 +608,16 @@ export default function GoalsPage() {
     mutationFn: ({ id, extraJson }: { id: number; extraJson: string }) =>
       apiRequest("PATCH", `/api/hobbies/${id}`, { extraJson }),
     onSuccess: () => { inv(); toast({ title: "Updated" }); },
+  });
+
+  const updateReadingGoal = useMutation({
+    mutationFn: (data: Record<string, any>) => apiRequest("PATCH", "/api/reading/goal", data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] }); toast({ title: "Reading goal updated" }); },
+  });
+
+  const updateNutritionGoal = useMutation({
+    mutationFn: (data: Record<string, any>) => apiRequest("PATCH", "/api/nutrition/goals", data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/nutrition/goals"] }); toast({ title: "Nutrition goal updated" }); },
   });
 
   // ── Project mutations ────────────────────────────────────────────────────
@@ -1156,6 +1202,13 @@ export default function GoalsPage() {
                     ))}
                   </div>
                 )}
+                {friends.length > 0 && (
+                  <NutritionBuddyPicker
+                    currentBuddyId={(nutritionGoal as any)?.buddyUserId ?? null}
+                    friends={friends}
+                    onSave={(buddyUserId) => updateNutritionGoal.mutate({ buddyUserId })}
+                  />
+                )}
                 <Link href="/health"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"><Heart size={11} /> Manage in Health</a></Link>
               </div>
             ) : /* Active Workout Plan: show goal overview with milestones as phases */
@@ -1289,6 +1342,13 @@ export default function GoalsPage() {
                           <p className="text-lg font-bold">{planned}</p>
                           <p className="text-[10px] text-muted-foreground">books planned</p>
                         </div>
+                      )}
+                      {friends.length > 0 && (
+                        <ReadingBuddyPicker
+                          currentBuddyId={(readingGoal as any).buddyUserId ?? null}
+                          friends={friends}
+                          onSave={(buddyUserId) => updateReadingGoal.mutate({ buddyUserId })}
+                        />
                       )}
                       <Link href="/reading"><a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"><BookOpen size={11} /> Edit goal in Reading</a></Link>
                     </div>

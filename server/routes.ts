@@ -617,8 +617,8 @@ Return exactly this structure:
   app.patch("/api/reading/goal", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      const { booksTarget, year, label, startDate, endDate } = req.body;
-      res.json(await storage.upsertReadingGoal(uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null }));
+      const { booksTarget, year, label, startDate, endDate, buddyUserId } = req.body;
+      res.json(await storage.upsertReadingGoal(uid, { booksTarget, year, label: label ?? null, startDate: startDate ?? null, endDate: endDate ?? null, buddyUserId: buddyUserId ?? null }));
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/reading/goal", requireAuth, async (req, res) => {
@@ -1292,8 +1292,8 @@ Return exactly this structure:
   app.patch("/api/nutrition/goals", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      const { calories, protein, carbs, fat, waterGlasses } = req.body;
-      res.json(await storage.upsertNutritionGoals(uid, { calories, protein, carbs, fat, waterGlasses }));
+      const { calories, protein, carbs, fat, waterGlasses, buddyUserId } = req.body;
+      res.json(await storage.upsertNutritionGoals(uid, { calories, protein, carbs, fat, waterGlasses, buddyUserId: buddyUserId ?? null }));
     } catch (e) { handleError(res, e); }
   });
 

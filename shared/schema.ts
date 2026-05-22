@@ -1679,6 +1679,7 @@ export const nutritionGoals = pgTable("nutrition_goals", {
   carbs:        integer("carbs").notNull().default(250),
   fat:          integer("fat").notNull().default(65),
   waterGlasses: integer("water_glasses").notNull().default(8),
+  buddyUserId:  integer("buddy_user_id"),
 });
 export const insertNutritionGoalSchema = createInsertSchema(nutritionGoals).omit({ id: true });
 export type InsertNutritionGoal = z.infer<typeof insertNutritionGoalSchema>;
@@ -1700,6 +1701,7 @@ export const readingGoals = pgTable("reading_goals", {
   label:        text("label"),           // e.g. "Summer Reading 2026"
   startDate:    text("start_date"),      // ISO date "2026-01-01"
   endDate:      text("end_date"),        // ISO date "2026-12-31"
+  buddyUserId:  integer("buddy_user_id"),
 });
 export const insertReadingGoalSchema = createInsertSchema(readingGoals).omit({ id: true });
 export type InsertReadingGoal = z.infer<typeof insertReadingGoalSchema>;

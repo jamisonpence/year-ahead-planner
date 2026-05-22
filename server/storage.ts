@@ -1392,6 +1392,9 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS end_date TEXT`);
   // Accountabilibuddy — link a friend to a goal
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
+  // Accountabilibuddy on reading + nutrition goals
+  await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
+  await db.execute(`ALTER TABLE nutrition_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
 
   // Messenger tables
   await pool.query(`
