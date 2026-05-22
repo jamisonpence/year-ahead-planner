@@ -73,6 +73,7 @@ export default function MoviesPage() {
   const [editingList, setEditingList] = useState<any | null>(null);
   const [listForm, setListForm] = useState({ name: "", visibility: "friends", isRanked: false });
   const [listSelectedMovieIds, setListSelectedMovieIds] = useState<Set<number>>(new Set());
+  const [listMovieOrder, setListMovieOrder] = useState<number[]>([]); // ranked order of selected movie IDs
   const [listMovieSearch, setListMovieSearch] = useState("");
   const [listSaving, setListSaving] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -134,14 +135,24 @@ export default function MoviesPage() {
     setEditingList(lst ?? null);
     setListForm({ name: lst?.name ?? "", visibility: lst?.visibility ?? "friends", isRanked: lst?.isRanked ?? false });
     if (lst) {
-      const inList = new Set<number>(
-        allItems.filter((m) => {
-          try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
-        }).map((m) => m.id)
-      );
-      setListSelectedMovieIds(inList);
+      const inListMovies = allItems.filter((m) => {
+        try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
+      });
+      setListSelectedMovieIds(new Set<number>(inListMovies.map((m) => m.id)));
+      // Use saved moviesJson order for ranked lists, else fall back to movie insertion order
+      let savedOrder: number[] = [];
+      try { savedOrder = JSON.parse(lst.moviesJson ?? "[]"); } catch {}
+      if (savedOrder.length > 0) {
+        // Use saved order, but also include any movies in list that might not be in saved order
+        const inListIds = new Set(inListMovies.map((m) => m.id));
+        const missing = inListMovies.filter((m) => !savedOrder.includes(m.id)).map((m) => m.id);
+        setListMovieOrder([...savedOrder.filter((id: number) => inListIds.has(id)), ...missing]);
+      } else {
+        setListMovieOrder(inListMovies.map((m) => m.id));
+      }
     } else {
       setListSelectedMovieIds(new Set());
+      setListMovieOrder([]);
     }
     setListMovieSearch("");
     setListModalOpen(true);
@@ -151,7 +162,8 @@ export default function MoviesPage() {
     if (!listForm.name.trim()) return;
     setListSaving(true);
     try {
-      const data = { name: listForm.name.trim(), visibility: listForm.visibility, isRanked: listForm.isRanked };
+      const moviesJson = JSON.stringify(listForm.isRanked ? listMovieOrder : Array.from(listSelectedMovieIds));
+      const data = { name: listForm.name.trim(), visibility: listForm.visibility, isRanked: listForm.isRanked, moviesJson };
       if (editingList) {
         await apiRequest("PATCH", `/api/movie-lists/${editingList.id}`, data);
       } else {
@@ -740,38 +752,72 @@ export default function MoviesPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {savedLists.map((lst) => {
-                  const count = allItems.filter((m) => {
+                  const listMovies = allItems.filter((m) => {
                     try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
-                  }).length;
+                  });
+                  const count = listMovies.length;
+                  // Get ordered list for ranked lists
+                  let rankedMovies: typeof allItems = [];
+                  if (lst.isRanked) {
+                    let order: number[] = [];
+                    try { order = JSON.parse(lst.moviesJson ?? "[]"); } catch {}
+                    if (order.length > 0) {
+                      rankedMovies = order
+                        .map((id: number) => allItems.find((m) => m.id === id))
+                        .filter(Boolean) as typeof allItems;
+                      // Add any in list not in order
+                      const missing = listMovies.filter((m) => !order.includes(m.id));
+                      rankedMovies = [...rankedMovies, ...missing];
+                    } else {
+                      rankedMovies = listMovies;
+                    }
+                  }
                   return (
-                    <div key={lst.id} className="rounded-xl border bg-card p-4 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">{lst.name}</p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                            lst.visibility === "public"
-                              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-                              : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                          }`}>
-                            {lst.visibility === "public" ? "🌐 Public" : "👥 Friends"}
-                          </span>
-                          {lst.isRanked && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                              🏆 Ranked
+                    <div key={lst.id} className="rounded-xl border bg-card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm truncate">{lst.name}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                              lst.visibility === "public"
+                                ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                                : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                            }`}>
+                              {lst.visibility === "public" ? "🌐 Public" : "👥 Friends"}
                             </span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground">{count} item{count !== 1 ? "s" : ""}</span>
+                            {lst.isRanked && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                🏆 Ranked
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">{count} item{count !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => openListModal(lst)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                            <Pencil size={13} className="text-muted-foreground" />
+                          </button>
+                          <button onClick={() => { if (confirm(`Delete "${lst.name}"?`)) deleteListMut.mutate(lst.id); }}
+                            className="p-1.5 rounded hover:bg-secondary transition-colors">
+                            <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => openListModal(lst)} className="p-1.5 rounded hover:bg-secondary transition-colors">
-                          <Pencil size={13} className="text-muted-foreground" />
-                        </button>
-                        <button onClick={() => { if (confirm(`Delete "${lst.name}"?`)) deleteListMut.mutate(lst.id); }}
-                          className="p-1.5 rounded hover:bg-secondary transition-colors">
-                          <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
-                        </button>
-                      </div>
+                      {/* Ranked preview */}
+                      {lst.isRanked && rankedMovies.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {rankedMovies.slice(0, 5).map((m, idx) => (
+                            <div key={m.id} className="flex items-center gap-2 text-xs">
+                              <span className="font-bold text-muted-foreground w-4 text-right shrink-0">#{idx + 1}</span>
+                              <span className="truncate">{m.title}</span>
+                              {m.year && <span className="text-muted-foreground shrink-0">{m.year}</span>}
+                            </div>
+                          ))}
+                          {rankedMovies.length > 5 && (
+                            <p className="text-[10px] text-muted-foreground pl-6">+{rankedMovies.length - 5} more</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -824,11 +870,60 @@ export default function MoviesPage() {
               </button>
             </div>
 
+            {/* Ranked order section — shown when isRanked is on and items are selected */}
+            {listForm.isRanked && listMovieOrder.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Ranked Order
+                </label>
+                <div className="border rounded-lg divide-y overflow-hidden">
+                  {listMovieOrder.map((movieId, idx) => {
+                    const movie = allItems.find((m) => m.id === movieId);
+                    if (!movie) return null;
+                    return (
+                      <div key={movieId} className="flex items-center gap-2 px-3 py-2 bg-card">
+                        <span className="text-xs font-bold text-muted-foreground w-5 text-center shrink-0">#{idx + 1}</span>
+                        <span className="flex-1 truncate text-xs font-medium">{movie.title}</span>
+                        {movie.year && <span className="text-[10px] text-muted-foreground shrink-0">{movie.year}</span>}
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => setListMovieOrder((prev) => {
+                              const next = [...prev];
+                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              return next;
+                            })}
+                            className="p-0.5 rounded hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === listMovieOrder.length - 1}
+                            onClick={() => setListMovieOrder((prev) => {
+                              const next = [...prev];
+                              [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                              return next;
+                            })}
+                            className="p-0.5 rounded hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">Use the arrows to reorder. Add or remove titles below.</p>
+              </div>
+            )}
+
             {/* Movie / Show picker */}
             {allItems.filter((m) => (m.mediaType ?? "movie") !== "video").length > 0 && (
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Add to List {listSelectedMovieIds.size > 0 && <span className="normal-case font-normal text-foreground ml-1">({listSelectedMovieIds.size} selected)</span>}
+                  {listForm.isRanked ? "Add Titles" : "Add to List"} {listSelectedMovieIds.size > 0 && <span className="normal-case font-normal text-foreground ml-1">({listSelectedMovieIds.size} selected)</span>}
                 </label>
                 <div className="relative">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -839,7 +934,7 @@ export default function MoviesPage() {
                     className="pl-7 h-8 text-xs"
                   />
                 </div>
-                <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+                <div className="border rounded-lg max-h-44 overflow-y-auto divide-y">
                   {(() => {
                     const pool = allItems
                       .filter((m) => (m.mediaType ?? "movie") !== "video")
@@ -850,15 +945,26 @@ export default function MoviesPage() {
                     );
                     return pool.map((m) => {
                       const inList = listSelectedMovieIds.has(m.id);
+                      const rank = listForm.isRanked ? listMovieOrder.indexOf(m.id) : -1;
                       return (
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => setListSelectedMovieIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
-                            return next;
-                          })}
+                          onClick={() => {
+                            setListSelectedMovieIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(m.id)) {
+                                next.delete(m.id);
+                                // Also remove from order
+                                setListMovieOrder((o) => o.filter((id) => id !== m.id));
+                              } else {
+                                next.add(m.id);
+                                // Append to end of order
+                                setListMovieOrder((o) => [...o, m.id]);
+                              }
+                              return next;
+                            });
+                          }}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-secondary transition-colors ${inList ? "bg-primary/5" : ""}`}
                         >
                           <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${inList ? "bg-primary border-primary" : "border-border"}`}>
@@ -866,6 +972,9 @@ export default function MoviesPage() {
                           </div>
                           <span className="flex-1 truncate font-medium">{m.title}</span>
                           {m.year && <span className="text-muted-foreground shrink-0">{m.year}</span>}
+                          {listForm.isRanked && inList && rank >= 0 && (
+                            <span className="text-[10px] font-bold text-primary shrink-0">#{rank + 1}</span>
+                          )}
                           {m.mediaType === "show" && <Tv2 size={11} className="text-muted-foreground shrink-0" />}
                         </button>
                       );

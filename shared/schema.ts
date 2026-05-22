@@ -338,6 +338,7 @@ export const movieLists = pgTable("movie_lists", {
   name:       text("name").notNull(),
   visibility: text("visibility").notNull().default("friends"), // "public" | "friends" | "private"
   isRanked:   boolean("is_ranked").notNull().default(false),
+  moviesJson: text("movies_json").default("[]"), // ordered array of movie IDs for ranked lists
   createdAt:  text("created_at").notNull(),
 });
 export type MovieList = typeof movieLists.$inferSelect;

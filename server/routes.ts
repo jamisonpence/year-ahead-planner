@@ -1440,14 +1440,14 @@ Return exactly this structure:
   });
   app.post("/api/movie-lists", requireAuth, async (req, res) => {
     try {
-      const { name, visibility, isRanked } = req.body;
-      res.status(201).json(await storage.createMovieList((req.user as User).id, { name, visibility: visibility ?? "friends", isRanked: !!isRanked }));
+      const { name, visibility, isRanked, moviesJson } = req.body;
+      res.status(201).json(await storage.createMovieList((req.user as User).id, { name, visibility: visibility ?? "friends", isRanked: !!isRanked, moviesJson: moviesJson ?? "[]" }));
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/movie-lists/:id", requireAuth, async (req, res) => {
     try {
-      const { name, visibility, isRanked } = req.body;
-      res.json(await storage.updateMovieList(+req.params.id, (req.user as User).id, { name, visibility, isRanked }));
+      const { name, visibility, isRanked, moviesJson } = req.body;
+      res.json(await storage.updateMovieList(+req.params.id, (req.user as User).id, { name, visibility, isRanked, ...(moviesJson !== undefined ? { moviesJson } : {}) }));
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/movie-lists/:id", requireAuth, async (req, res) => {

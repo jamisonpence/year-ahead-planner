@@ -370,6 +370,7 @@ export async function initializeStorage() {
       created_at TEXT NOT NULL
     )
   `);
+  await pool.query(`ALTER TABLE movie_lists ADD COLUMN IF NOT EXISTS movies_json TEXT DEFAULT '[]'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS budget_categories (
@@ -2231,11 +2232,11 @@ export const storage: IStorage = {
   async getMovieLists(userId: number): Promise<MovieList[]> {
     return db.select().from(movieLists).where(eq(movieLists.userId, userId)).orderBy(asc(movieLists.name));
   },
-  async createMovieList(userId: number, data: { name: string; visibility: string; isRanked: boolean }): Promise<MovieList> {
-    const [r] = await db.insert(movieLists).values({ ...data, userId, createdAt: new Date().toISOString() }).returning();
+  async createMovieList(userId: number, data: { name: string; visibility: string; isRanked: boolean; moviesJson?: string }): Promise<MovieList> {
+    const [r] = await db.insert(movieLists).values({ ...data, moviesJson: data.moviesJson ?? "[]", userId, createdAt: new Date().toISOString() }).returning();
     return r;
   },
-  async updateMovieList(id: number, userId: number, data: Partial<{ name: string; visibility: string; isRanked: boolean }>): Promise<MovieList> {
+  async updateMovieList(id: number, userId: number, data: Partial<{ name: string; visibility: string; isRanked: boolean; moviesJson: string }>): Promise<MovieList> {
     const [r] = await db.update(movieLists).set(data).where(and(eq(movieLists.id, id), eq(movieLists.userId, userId))).returning();
     return r;
   },
