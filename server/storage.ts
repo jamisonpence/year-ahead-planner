@@ -733,6 +733,7 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
+  await pool.query(`ALTER TABLE art_pieces ADD COLUMN IF NOT EXISTS rating INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spots (

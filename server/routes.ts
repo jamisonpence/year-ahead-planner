@@ -1903,6 +1903,90 @@ Return exactly this structure:
     };
   }
 
+  // Combined search — queries both The Met and AIC in parallel
+  app.get("/api/museum/art/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      const metDeptId = req.query.metDeptId ? parseInt(String(req.query.metDeptId)) : null;
+      const aicType = String(req.query.aicType ?? "").trim() || null;
+      if (!q && !metDeptId && !aicType) return res.json([]);
+
+      const AIC_FIELDS = "id,title,artist_display,date_display,medium_display,style_title,department_title,image_id,artwork_type_title,place_of_origin";
+      const aicHeaders = { "Accept": "application/json", "AIC-User-Agent": "MyLifos/1.0 (personal life planner app)" };
+
+      const [metRes, aicRes] = await Promise.allSettled([
+        // Met
+        (async (): Promise<any[]> => {
+          if (!q && !metDeptId) return [];
+          let objectIds: number[] = [];
+          if (metDeptId && !q) {
+            const r = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects?departmentIds=${metDeptId}`);
+            if (!r.ok) return [];
+            const d = await r.json() as { objectIDs: number[] | null };
+            const all = d.objectIDs ?? [];
+            const stride = Math.max(1, Math.floor(all.length / 9));
+            const offset = Math.floor(Math.random() * stride);
+            for (let i = offset; objectIds.length < 9 && i < all.length; i += stride) objectIds.push(all[i]);
+          } else {
+            const url = new URL("https://collectionapi.metmuseum.org/public/collection/v1/search");
+            url.searchParams.set("q", q); url.searchParams.set("hasImages", "true");
+            if (metDeptId) url.searchParams.set("departmentId", String(metDeptId));
+            const r = await fetch(url.toString());
+            if (!r.ok) return [];
+            const d = await r.json() as { objectIDs: number[] | null };
+            objectIds = (d.objectIDs ?? []).slice(0, 9);
+          }
+          const details = await Promise.all(objectIds.map(async (id) => {
+            try { const r = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`); return r.ok ? await r.json() : null; }
+            catch { return null; }
+          }));
+          return details.filter((d) => d?.primaryImageSmall).slice(0, 9).map(mapMetObject);
+        })(),
+        // AIC
+        (async (): Promise<any[]> => {
+          if (!q && !aicType) return [];
+          let data: any[] = [];
+          if (aicType && !q) {
+            const page = Math.floor(Math.random() * 8) + 1;
+            const url = `https://api.artic.edu/api/v1/artworks/search?fields=${AIC_FIELDS}&limit=9&page=${page}`;
+            const body = JSON.stringify({ query: { term: { artwork_type_title: aicType } }, fields: AIC_FIELDS.split(","), limit: 9, from: (page - 1) * 9 });
+            const r = await fetch(url, { method: "POST", headers: { ...aicHeaders, "Content-Type": "application/json" }, body });
+            if (!r.ok) return [];
+            data = ((await r.json()) as { data: any[] }).data ?? [];
+          } else {
+            const url = new URL("https://api.artic.edu/api/v1/artworks/search");
+            url.searchParams.set("q", q); url.searchParams.set("limit", "9"); url.searchParams.set("fields", AIC_FIELDS);
+            const r = await fetch(url.toString(), { headers: aicHeaders });
+            if (!r.ok) return [];
+            let all = ((await r.json()) as { data: any[] }).data ?? [];
+            if (aicType) all = all.filter((d: any) => d.artwork_type_title === aicType);
+            data = all;
+          }
+          return data.filter((d: any) => d.image_id).slice(0, 9).map((d: any) => ({
+            id: `aic-${d.id}`, title: d.title || "Untitled",
+            artistName: d.artist_display ? d.artist_display.split("\n")[0] : null,
+            yearCreated: d.date_display || null, medium: d.medium_display || null,
+            movement: d.style_title || d.department_title || null,
+            imageUrl: `https://www.artic.edu/iiif/2/${d.image_id}/full/400,/0/default.jpg`,
+            sourceUrl: `https://www.artic.edu/artworks/${d.id}`,
+            museum: "Art Institute of Chicago", city: "Chicago",
+          }));
+        })(),
+      ]);
+
+      const met = metRes.status === "fulfilled" ? metRes.value : [];
+      const aic = aicRes.status === "fulfilled" ? aicRes.value : [];
+      // Interleave results from both museums
+      const merged: any[] = [];
+      const maxLen = Math.max(met.length, aic.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < met.length) merged.push(met[i]);
+        if (i < aic.length) merged.push(aic[i]);
+      }
+      res.json(merged.slice(0, 18));
+    } catch (e) { handleError(res, e); }
+  });
+
   // The Metropolitan Museum of Art
   app.get("/api/museum/met/search", requireAuth, async (req, res) => {
     try {

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format, parseISO } from "date-fns";
 import {
   Palette, Plus, Pencil, Trash2, Search, Heart, X, Upload, Download, HelpCircle, Landmark, Loader2, ExternalLink,
-  Send, Inbox, CornerUpRight, Check,
+  Send, Inbox, CornerUpRight, Check, Star,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -47,12 +47,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const FILTER_TABS = [
-  { value: "all",         label: "All"         },
-  { value: "want_to_see", label: "Want to See" },
-  { value: "seen",        label: "Seen"        },
-  { value: "own",         label: "Own"         },
-  { value: "favorites",   label: "Favorites"   },
-  { value: "shared",      label: "Shared"      },
+  { value: "favourites", label: "Favourites" },
+  { value: "reviews",    label: "Reviews"    },
+  { value: "rated",      label: "Rated"      },
 ];
 
 const EMPTY_FORM = {
@@ -65,10 +62,29 @@ const EMPTY_FORM = {
   city: "",
   status: "want_to_see",
   notes: "",
+  rating: 0,
   isFavorite: false,
   accentColor: ACCENT_COLORS[0],
   imageUrl: "",
 };
+
+function ArtStarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button"
+          onClick={() => onChange?.(n === value ? 0 : n)}
+          onMouseEnter={() => onChange && setHover(n)}
+          onMouseLeave={() => onChange && setHover(0)}
+          className={`transition-colors ${(hover || value) >= n ? "text-amber-400" : "text-muted-foreground/30"}`}
+        >
+          <Star size={16} fill={(hover || value) >= n ? "currentColor" : "none"} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ── Museum Search ─────────────────────────────────────────────────────────────
 
@@ -78,32 +94,21 @@ type MuseumResult = {
   sourceUrl: string | null; museum: string; city: string;
 };
 
-type BrowseCategory = { id?: number; type?: string; label: string; emoji: string };
+type BrowseCategory = { metDeptId?: number; aicType?: string; label: string; emoji: string };
 
-const MET_DEPARTMENTS: BrowseCategory[] = [
-  { id: 11, label: "European Paintings",        emoji: "🖼️" },
-  { id: 21, label: "Modern Art",                emoji: "🎨" },
-  { id: 19, label: "Photographs",               emoji: "📷" },
-  { id: 9,  label: "Drawings & Prints",         emoji: "✏️" },
-  { id: 6,  label: "Asian Art",                 emoji: "🏮" },
-  { id: 10, label: "Egyptian Art",              emoji: "🏺" },
-  { id: 13, label: "Greek & Roman Art",         emoji: "⚱️" },
-  { id: 17, label: "Medieval Art",              emoji: "⚔️" },
-  { id: 14, label: "Islamic Art",               emoji: "☪️" },
-  { id: 5,  label: "African, Oceanic & Americas", emoji: "🌍" },
-  { id: 4,  label: "Arms & Armor",              emoji: "🛡️" },
-  { id: 1,  label: "American Decorative Arts",  emoji: "🏛️" },
-];
-
-const AIC_TYPES: BrowseCategory[] = [
-  { type: "Painting",               label: "Paintings",            emoji: "🖼️" },
-  { type: "Drawing and Watercolor", label: "Drawings & Watercolors", emoji: "✏️" },
-  { type: "Print",                  label: "Prints",               emoji: "🖨️" },
-  { type: "Photograph",             label: "Photography",          emoji: "📷" },
-  { type: "Sculpture",              label: "Sculpture",            emoji: "🗿" },
-  { type: "Decorative Arts",        label: "Decorative Arts",      emoji: "🏺" },
-  { type: "Textile",                label: "Textiles",             emoji: "🧶" },
-  { type: "Architecture",           label: "Architecture",         emoji: "🏛️" },
+const ART_CATEGORIES: BrowseCategory[] = [
+  { metDeptId: 11, aicType: "Painting",               label: "Paintings",        emoji: "🖼️" },
+  { metDeptId: 21,                                     label: "Modern Art",       emoji: "🎨" },
+  { metDeptId: 19, aicType: "Photograph",              label: "Photography",      emoji: "📷" },
+  { metDeptId: 9,  aicType: "Drawing and Watercolor",  label: "Drawings & Prints",emoji: "✏️" },
+  {                aicType: "Sculpture",               label: "Sculpture",        emoji: "🗿" },
+  { metDeptId: 6,                                      label: "Asian Art",        emoji: "🏮" },
+  { metDeptId: 10, aicType: "Decorative Arts",         label: "Decorative Arts",  emoji: "🏺" },
+  { metDeptId: 17,                                     label: "Medieval Art",     emoji: "⚔️" },
+  { metDeptId: 13,                                     label: "Greek & Roman",    emoji: "⚱️" },
+  {                aicType: "Textile",                 label: "Textiles",         emoji: "🧶" },
+  { metDeptId: 14,                                     label: "Islamic Art",      emoji: "☪️" },
+  { metDeptId: 5,                                      label: "African & Oceanic",emoji: "🌍" },
 ];
 
 function inferMedium(raw: string | null): string {
@@ -120,15 +125,11 @@ function inferMedium(raw: string | null): string {
 }
 
 function MuseumSearchModal({
-  open,
-  onClose,
-  onSelect,
+  open, onClose, onSelect,
 }: {
-  open: boolean;
-  onClose: () => void;
+  open: boolean; onClose: () => void;
   onSelect: (prefill: Partial<typeof EMPTY_FORM>) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"met" | "aic">("met");
   const [draftQuery, setDraftQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<BrowseCategory | null>(null);
   const [results, setResults] = useState<MuseumResult[]>([]);
@@ -145,22 +146,15 @@ function MuseumSearchModal({
     }
   }, [open]);
 
-  // Reset category + results when switching tabs
-  function switchTab(tab: "met" | "aic") {
-    setActiveTab(tab);
-    setResults([]); setSelected(null); setActiveCategory(null); setDraftQuery("");
-  }
-
-  async function doSearch(q = draftQuery, cat = activeCategory) {
+  async function doSearch(q = draftQuery, cat: BrowseCategory | null = activeCategory) {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
-    if (cat?.id) params.set("departmentId", String(cat.id));
-    if (cat?.type) params.set("artworkType", cat.type);
+    if (cat?.metDeptId) params.set("metDeptId", String(cat.metDeptId));
+    if (cat?.aicType) params.set("aicType", cat.aicType);
     if (!params.toString()) return;
     setLoading(true); setResults([]); setSelected(null);
     try {
-      const endpoint = activeTab === "met" ? "/api/museum/met/search" : "/api/museum/aic/search";
-      const res = await apiRequest("GET", `${endpoint}?${params.toString()}`);
+      const res = await apiRequest("GET", `/api/museum/art/search?${params.toString()}`);
       const data: MuseumResult[] = await res.json();
       setResults(data);
       if (data.length > 0) setSelected(data[0]);
@@ -187,37 +181,24 @@ function MuseumSearchModal({
     onClose();
   }
 
-  const categories = activeTab === "met" ? MET_DEPARTMENTS : AIC_TYPES;
-
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <Landmark size={16} /> Browse Museum Collections
+            <Landmark size={16} /> Search Art
           </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Searches The Met & Art Institute of Chicago</p>
         </DialogHeader>
 
-        {/* Museum tabs */}
-        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mx-5 mt-3 mb-1 shrink-0">
-          {([["met", "The Met"], ["aic", "Art Institute of Chicago"]] as const).map(([key, label]) => (
-            <button key={key} onClick={() => switchTab(key)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                activeTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Search bar */}
-        <div className="flex gap-2 px-5 py-2.5 shrink-0">
+        <div className="flex gap-2 px-5 py-3 shrink-0">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input ref={inputRef} value={draftQuery}
               onChange={(e) => setDraftQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { setActiveCategory(null); doSearch(draftQuery, null); } }}
-              placeholder={activeTab === "met" ? "Search The Met collection…" : "Search Art Institute of Chicago…"}
+              placeholder="Search both museums — artist, title, movement…"
               className="pl-8 h-8 text-sm"
             />
           </div>
@@ -248,14 +229,12 @@ function MuseumSearchModal({
 
         {/* Body */}
         <div className="flex-1 min-h-0 border-t overflow-hidden flex flex-col">
-          {/* Category browse grid — shown when nothing loaded yet */}
+          {/* Category browse grid */}
           {browsing && (
             <div className="flex-1 overflow-y-auto p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Browse by {activeTab === "met" ? "Department" : "Category"}
-              </p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Browse by Category</p>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {categories.map((cat) => (
+                {ART_CATEGORIES.map((cat) => (
                   <button key={cat.label} onClick={() => handleBrowseCategory(cat)}
                     className="flex flex-col items-center gap-1.5 p-3 rounded-xl border bg-card hover:bg-secondary hover:border-primary/30 transition-all text-center group">
                     <span className="text-2xl">{cat.emoji}</span>
@@ -267,15 +246,14 @@ function MuseumSearchModal({
             </div>
           )}
 
-          {/* Results + preview (two-panel) — shown when loading or results available */}
+          {/* Results + preview */}
           {!browsing && (
             <div className="flex flex-1 min-h-0">
-              {/* Results list */}
               <div className="w-52 shrink-0 border-r overflow-y-auto">
                 {loading && (
                   <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground">
                     <Loader2 size={18} className="animate-spin" />
-                    <p className="text-xs">{activeCategory ? `Loading ${activeCategory.label}…` : "Searching…"}</p>
+                    <p className="text-xs">{activeCategory ? `Loading ${activeCategory.label}…` : "Searching both museums…"}</p>
                   </div>
                 )}
                 {!loading && results.length === 0 && (
@@ -290,7 +268,7 @@ function MuseumSearchModal({
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium line-clamp-2 leading-snug">{r.title}</p>
                       {r.artistName && <p className="text-xs text-muted-foreground truncate mt-0.5">{r.artistName}</p>}
-                      {r.yearCreated && <p className="text-xs text-muted-foreground">{r.yearCreated}</p>}
+                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">{r.museum}</p>
                     </div>
                   </button>
                 ))}
@@ -409,8 +387,15 @@ function ArtCard({
           )}
         </div>
 
+        {(piece as any).rating > 0 && (
+          <div className="flex gap-0.5 mt-2">
+            {[1,2,3,4,5].map((n) => (
+              <Star key={n} size={12} className={(piece as any).rating >= n ? "text-amber-400 fill-amber-400" : "text-muted-foreground/20"} />
+            ))}
+          </div>
+        )}
         {piece.notes && (
-          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{piece.notes}</p>
+          <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 italic">"{piece.notes}"</p>
         )}
       </div>
     </div>
@@ -567,6 +552,7 @@ export default function ArtPage() {
       city: p.city ?? "",
       status: p.status,
       notes: p.notes ?? "",
+      rating: (p as any).rating ?? 0,
       isFavorite: p.isFavorite,
       accentColor: p.accentColor ?? ACCENT_COLORS[0],
       imageUrl: p.imageUrl ?? "",
@@ -587,6 +573,7 @@ export default function ArtPage() {
       city: form.city.trim() || null,
       status: form.status,
       notes: form.notes.trim() || null,
+      rating: form.rating || null,
       isFavorite: form.isFavorite,
       accentColor: form.accentColor,
       imageUrl: form.imageUrl.trim() || null,
@@ -606,10 +593,12 @@ export default function ArtPage() {
         (p.city ?? "").toLowerCase().includes(q),
       );
     }
-    if (filterTab === "favorites") {
+    if (filterTab === "favourites") {
       result = result.filter((p) => p.isFavorite);
-    } else if (filterTab !== "all") {
-      result = result.filter((p) => p.status === filterTab);
+    } else if (filterTab === "reviews") {
+      result = result.filter((p) => p.notes && p.notes.trim().length > 0);
+    } else if (filterTab === "rated") {
+      result = result.filter((p) => (p as any).rating && (p as any).rating > 0);
     }
     if (mediumFilter) {
       result = result.filter((p) => p.medium === mediumFilter);
@@ -618,11 +607,9 @@ export default function ArtPage() {
   }, [allPieces, search, filterTab, mediumFilter]);
 
   const counts = useMemo(() => ({
-    all:         allPieces.length,
-    want_to_see: allPieces.filter((p) => p.status === "want_to_see").length,
-    seen:        allPieces.filter((p) => p.status === "seen").length,
-    own:         allPieces.filter((p) => p.status === "own").length,
-    favorites:   allPieces.filter((p) => p.isFavorite).length,
+    favourites: allPieces.filter((p) => p.isFavorite).length,
+    reviews:    allPieces.filter((p) => p.notes && p.notes.trim().length > 0).length,
+    rated:      allPieces.filter((p) => (p as any).rating && (p as any).rating > 0).length,
   }), [allPieces]);
 
   return (
@@ -639,7 +626,7 @@ export default function ArtPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => setMuseumOpen(true)} className="gap-1.5">
-            <Landmark size={13} /> Search Museums
+            <Landmark size={13} /> Search Art
           </Button>
           <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="gap-1.5">
             <Download size={13} /> Template
@@ -658,7 +645,7 @@ export default function ArtPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-4 flex-wrap">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-4">
         {FILTER_TABS.map((t) => (
           <button
             key={t.value}
@@ -668,9 +655,7 @@ export default function ArtPage() {
             }`}
           >
             {t.label}
-            <span className="text-xs opacity-60 ml-0.5">
-              {counts[t.value as keyof typeof counts]}
-            </span>
+            <span className="text-xs opacity-60 ml-0.5">{counts[t.value as keyof typeof counts]}</span>
           </button>
         ))}
       </div>
@@ -716,13 +701,18 @@ export default function ArtPage() {
         ))}
       </div>
 
-      {/* Art grid / Shared tab */}
-      {filterTab === "shared" ? (
-        <SharedArtTab />
-      ) : filtered.length === 0 ? (
+      {/* Art grid */}
+      {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Palette size={48} className="mx-auto mb-4 opacity-20" />
-          <p className="text-sm">{allPieces.length === 0 ? "No artworks yet. Add your first one!" : "No artworks match your filters."}</p>
+          <p className="text-sm">
+            {allPieces.length === 0
+              ? "No artworks yet. Add your first one!"
+              : filterTab === "favourites" ? "No favourites yet — heart an artwork to add it here."
+              : filterTab === "reviews" ? "No reviews yet — add notes to an artwork to see it here."
+              : filterTab === "rated" ? "No rated artworks yet — add a star rating to an artwork."
+              : "No artworks match your filters."}
+          </p>
           {allPieces.length === 0 && (
             <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={openAdd}>
               <Plus size={14} /> Add Artwork
@@ -816,8 +806,13 @@ export default function ArtPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Notes</label>
-              <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
+              <label className="text-xs font-medium text-muted-foreground">Review / Notes</label>
+              <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Write your review or thoughts…" />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Rating</label>
+              <ArtStarRating value={form.rating} onChange={(v) => setForm((f) => ({ ...f, rating: v }))} />
             </div>
 
             <div className="space-y-1.5">

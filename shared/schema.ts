@@ -1028,6 +1028,7 @@ export const artPieces = pgTable("art_pieces", {
   city: text("city"),
   status: text("status").notNull().default("want_to_see"), // want_to_see|seen|own
   notes: text("notes"),
+  rating: integer("rating"),  // 1-5 stars, null = unrated
   isFavorite: boolean("is_favorite").notNull().default(false),
   accentColor: text("accent_color"),
   imageUrl: text("image_url"),
