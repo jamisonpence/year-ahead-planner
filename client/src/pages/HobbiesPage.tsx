@@ -7539,7 +7539,6 @@ function HobbyDetailDialog({
           </div>
 
           {hobby.coverUrl && <img src={hobby.coverUrl} alt={hobby.name} className="w-full h-48 object-cover rounded-lg" />}
-          {hobby.description && <div><h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Why I Love It</h4><p className="text-sm">{hobby.description}</p></div>}
           {Object.values(extra).some(v => v !== "" && v != null && !Array.isArray(v)) && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Details</h4>
@@ -7547,7 +7546,29 @@ function HobbyDetailDialog({
             </div>
           )}
 
-          {/* ── Plans section ── */}
+          {/* ── Get started banner (shown only when no plans + no goals yet) ── */}
+          {plans.length === 0 && goals.length === 0 && (
+            <div className="rounded-xl border-2 border-dashed p-4 text-center space-y-3" style={{ borderColor: typeInfo.color + "55", backgroundColor: typeInfo.color + "08" }}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: typeInfo.color + "20" }}>
+                <TypeIcon size={18} style={{ color: typeInfo.color }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Make the most of {hobby.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Add a plan with step-by-step milestones, or set a goal to track your progress.</p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <Button size="sm" onClick={() => setAddingPlan(true)} className="gap-1.5" style={{ backgroundColor: typeInfo.color }}>
+                  <ClipboardList size={13} /> Add a Plan
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setAddingGoal(true)} className="gap-1.5">
+                  <Target size={13} /> Add a Goal
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Plans section (shown when there are plans, or goals exist to keep the layout consistent) ── */}
+          {(plans.length > 0 || goals.length > 0) && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -7589,8 +7610,10 @@ function HobbyDetailDialog({
               </div>
             )}
           </div>
+          )}
 
           {/* ── Goals section ── */}
+          {(plans.length > 0 || goals.length > 0) && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -7632,6 +7655,7 @@ function HobbyDetailDialog({
               </div>
             )}
           </div>
+          )}
 
           {hobby.notes && <div><h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Notes</h4><p className="text-sm text-muted-foreground">{hobby.notes}</p></div>}
           <div className="flex justify-end pt-2">
@@ -8139,10 +8163,6 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Date Started</label>
             <Input type="date" className="text-sm" value={form.dateStarted ?? ""} onChange={e => set("dateStarted", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Why You Love It</label>
-            <Textarea className="text-sm min-h-[70px]" placeholder="What drew you to this hobby? What do you enjoy about it?" value={form.description ?? ""} onChange={e => set("description", e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Cover Photo URL</label>
