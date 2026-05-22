@@ -1547,6 +1547,105 @@ function generateRunningSteps(
   }
 }
 
+// ── Surfing types ────────────────────────────────────────────────────────────
+
+interface SurfSessionEntry {
+  id: string;
+  stravaId?: string;
+  name: string;
+  date: string;
+  break?: string;
+  conditions?: string;
+  durationSec?: number;
+  waveHeight?: string;
+  notes?: string;
+  addedAt: string;
+}
+
+function parseSurfLog(extraJson: string): SurfSessionEntry[] {
+  try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.surfLog) ? o.surfLog : []; } catch { return []; }
+}
+function setSurfingInExtra(extraJson: string, log: SurfSessionEntry[]): string {
+  try { const o = JSON.parse(extraJson || "{}"); return JSON.stringify({ ...o, surfLog: log }); }
+  catch { return JSON.stringify({ surfLog: log }); }
+}
+
+type SurfingGoalType = "consistency" | "skill" | "technique" | "exploration";
+
+const SURFING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "sf-consistency", emoji: "🗓️", label: "Consistency / sessions",   description: "Log 30 surf sessions by end of summer — about 2–3 sessions per week",           durationWeeks: 16, defaultSteps: [] },
+  { id: "sf-skill",       emoji: "🌊", label: "Wave & skill level",        description: "Progress from whitewater to consistently catching clean green waves down the line", durationWeeks: 26, defaultSteps: [] },
+  { id: "sf-technique",   emoji: "🏄", label: "Technique & fitness",       description: "Dial in your pop-up and paddle strength for smooth sessions every time",            durationWeeks: 12, defaultSteps: [] },
+  { id: "sf-exploration", emoji: "🗺️", label: "Exploration / experience",  description: "Surf a new break and paddle out in a bigger-than-usual but safe swell this season", durationWeeks: 26, defaultSteps: [] },
+];
+
+const SURFING_GOAL_TYPE_MAP: Record<string, SurfingGoalType> = {
+  "sf-consistency": "consistency", "sf-skill": "skill", "sf-technique": "technique", "sf-exploration": "exploration",
+};
+
+function generateSurfingSteps(
+  goalType: SurfingGoalType,
+  opts: {
+    sessionTarget?: string;
+    currentLevel?: string;
+    popUpTarget?: string;
+    newBreakTarget?: string;
+    swellTarget?: string;
+  }
+): PlanStep[] {
+  const g = (text: string): PlanStep => ({ id: genId(), text, done: false });
+  switch (goalType) {
+    case "consistency": {
+      const target = opts.sessionTarget?.trim() || "30";
+      return [
+        g(`Set a regular surf schedule — aim for ${Math.round(Number(target) / 16)} sessions per week`),
+        g(`Log every session, even short ones — building the habit matters more than conditions`),
+        g(`Month 1: focus on getting in the water consistently, not on performance`),
+        g(`Find a reliable local break you can reach easily for weekday sessions`),
+        g(`Month 3: review your log — how many sessions in? Adjust if needed`),
+        g(`Hit ${target} sessions logged — celebrate the commitment to the ocean`),
+      ];
+    }
+    case "skill": {
+      const current = opts.currentLevel?.trim() || "whitewater";
+      return [
+        g(`Assess your current level: can you consistently catch and ride ${current}?`),
+        g(`Whiteboard session: study how green waves peel and where to position for them`),
+        g(`Practice paddle technique — good paddling is 80% of catching unbroken waves`),
+        g(`Work on reading the lineup: watch where locals sit and how they time their takeoffs`),
+        g(`First green wave goal: catch and ride one clean unbroken wave down the line`),
+        g(`Build consistency: aim to catch 3+ green waves in a session before moving on`),
+        g(`Celebrate the progression — riding down the line is a genuinely big milestone`),
+      ];
+    }
+    case "technique": {
+      const popUp = opts.popUpTarget || "smooth";
+      return [
+        g(`Film your pop-up on land — check hand placement, back foot position, and head height`),
+        g(`Practice pop-ups on land daily (10 reps) until the movement is fully automatic`),
+        g(`Paddle fitness: 3× per week out-of-water paddling (SUP, outrigger, or swim)`),
+        g(`In the water: focus exclusively on pop-up mechanics for 2 weeks — ignore wave selection`),
+        g(`Progress check: can you pop up ${popUp} without hesitation or stumbling?`),
+        g(`Combine good pop-up with correct foot placement — front foot over fins, toes angled`),
+        g(`Benchmark session: paddle out, pop up 5 times cleanly — that's your new baseline`),
+      ];
+    }
+    case "exploration": {
+      const newBreak = opts.newBreakTarget || "a new break";
+      const swell = opts.swellTarget || "overhead";
+      return [
+        g(`Research ${newBreak}: check surf reports, watch videos, talk to locals about etiquette`),
+        g(`Visit ${newBreak} first on a small day — learn the paddle-out, rips, and lineup`),
+        g(`Build up your paddle fitness specifically for new, potentially longer paddle-outs`),
+        g(`Track swell forecasts with Surfline or Magicseaweed — learn to read forecast charts`),
+        g(`Identify a "stretch swell" target: ${swell} but manageable — pick a day with friends`),
+        g(`Paddle out in that bigger swell — commit to the experience even if you don't catch much`),
+        g(`Reflect: what did ${newBreak} and the bigger swell teach you about your surfing?`),
+      ];
+    }
+  }
+}
+
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
 function parsePlans(extraJson: string): HobbyPlan[] {
@@ -2062,6 +2161,15 @@ function PlanWizard({
   const [rnFunRunCount,   setRnFunRunCount]   = useState("6");
   const [rnTrailRuns,     setRnTrailRuns]     = useState("3");
 
+  // Surfing wizard state
+  const [surfingMode,      setSurfingMode]      = useState(false);
+  const [surfingGoalType,  setSurfingGoalType]  = useState<SurfingGoalType | "">("");
+  const [sfSessionTarget,  setSfSessionTarget]  = useState("30");
+  const [sfCurrentLevel,   setSfCurrentLevel]   = useState("whitewater");
+  const [sfPopUpTarget,    setSfPopUpTarget]    = useState("smooth");
+  const [sfNewBreak,       setSfNewBreak]       = useState("");
+  const [sfSwellTarget,    setSfSwellTarget]    = useState("overhead");
+
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const typeInfo = HOBBY_TYPE_MAP[hobbyType];
@@ -2074,6 +2182,7 @@ function PlanWizard({
   const isGardeningHobby = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("garden") || n.includes("gardening") || n.includes("horticulture"); })();
   const isClimbingHobby  = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("climb") || n.includes("climbing") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })();
   const isRunningHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n === "running" || n.includes("running") || n.includes("marathon") || n.includes("5k") || n.includes("10k") || n.includes("trail run"); })();
+  const isSurfingHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n === "surfing" || n.includes("surfing") || n.includes("surf") || n.includes("longboard") || n.includes("shortboard"); })();
   const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
@@ -2083,6 +2192,7 @@ function PlanWizard({
                   : isGardeningHobby  ? GARDENING_PLAN_TEMPLATES
                   : isClimbingHobby  ? CLIMBING_PLAN_TEMPLATES
                   : isRunningHobby   ? RUNNING_PLAN_TEMPLATES
+                  : isSurfingHobby   ? SURFING_PLAN_TEMPLATES
                   : isChessHobby     ? CHESS_PLAN_TEMPLATES
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
@@ -2138,6 +2248,8 @@ function PlanWizard({
     setRcWeeklyFreq("2"); setRcOutdoorFreq("monthly"); setRcPullUpTarget("10"); setRcHangboard(true); setRcLeadRoutes("10");
     setRunningMode(false); setRunningGoalType(""); setRnRunsPerWeek("3"); setRnDistanceTarget("");
     setRnRaceType("5K"); setRnTargetTime(""); setRnCurrentTime(""); setRnFunRunCount("6"); setRnTrailRuns("3");
+    setSurfingMode(false); setSurfingGoalType(""); setSfSessionTarget("30"); setSfCurrentLevel("whitewater");
+    setSfPopUpTarget("smooth"); setSfNewBreak(""); setSfSwellTarget("overhead");
   }
   function handleClose() { reset(); onClose(); }
 
@@ -2175,6 +2287,8 @@ function PlanWizard({
     if (climbingType) { setClimbingMode(true); setClimbingGoalType(climbingType); return; }
     const runningType = RUNNING_GOAL_TYPE_MAP[t.id];
     if (runningType) { setRunningMode(true); setRunningGoalType(runningType); return; }
+    const surfingType = SURFING_GOAL_TYPE_MAP[t.id];
+    if (surfingType) { setSurfingMode(true); setSurfingGoalType(surfingType); return; }
     setTitle(t.label);
     setDurationWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
     setSteps(t.defaultSteps.map(text => ({ id: genId(), text, done: false })));
@@ -2364,6 +2478,35 @@ function PlanWizard({
     setSteps(generatedSteps); setRunningMode(false); setStep(2);
   }
 
+  function applySurfingSettings() {
+    if (!surfingGoalType) return;
+    const generatedSteps = generateSurfingSteps(surfingGoalType, {
+      sessionTarget: sfSessionTarget, currentLevel: sfCurrentLevel,
+      popUpTarget: sfPopUpTarget, newBreakTarget: sfNewBreak, swellTarget: sfSwellTarget,
+    });
+    let title = "", desc = "", weeks = 16;
+    switch (surfingGoalType) {
+      case "consistency":
+        title = `Log ${sfSessionTarget} Surf Sessions`;
+        desc = `Build a regular surf habit — hit ${sfSessionTarget} sessions in the water.`;
+        weeks = 16; break;
+      case "skill":
+        title = "Catch Clean Green Waves Down the Line";
+        desc = `Progress from ${sfCurrentLevel} to consistently riding unbroken waves.`;
+        weeks = 26; break;
+      case "technique":
+        title = "Dial In Pop-Up & Paddle Strength";
+        desc = `Build the physical foundation — smooth pop-up and strong paddling every session.`;
+        weeks = 12; break;
+      case "exploration":
+        title = `New Break${sfNewBreak ? ` — ${sfNewBreak}` : ""} + Bigger Swell`;
+        desc = `Push your comfort zone: surf somewhere new and paddle out in a ${sfSwellTarget} swell.`;
+        weeks = 26; break;
+    }
+    setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
+    setSteps(generatedSteps); setSurfingMode(false); setStep(2);
+  }
+
   function applyEloSettings() {
     if (!eloDuration) return;
     const cur = Number(currentElo);
@@ -2491,7 +2634,7 @@ function PlanWizard({
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <div className="px-5 pt-5 pb-3 border-b shrink-0">
           <div className="flex items-center gap-2 mb-3">
-            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode) && (
+            {(step === 2 || chessEloMode || (chessMode && !chessEloMode) || pokerMode || pokerGoalMode || hikingMode || birdMode || langMode || instrMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || surfingMode) && (
               <button onClick={() => {
                 if (chessEloMode) { setChessEloMode(false); setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
                 else if (chessMode) { setChessMode(false); setChessGoalType(""); setSelectedTemplate(null); }
@@ -2503,6 +2646,7 @@ function PlanWizard({
                 else if (gardeningMode) { setGardeningMode(false); setGardeningGoalType(""); setSelectedTemplate(null); }
                 else if (climbingMode) { setClimbingMode(false); setClimbingGoalType(""); setSelectedTemplate(null); }
                 else if (runningMode) { setRunningMode(false); setRunningGoalType(""); setSelectedTemplate(null); }
+                else if (surfingMode) { setSurfingMode(false); setSurfingGoalType(""); setSelectedTemplate(null); }
                 else if (birdMode) { setBirdMode(false); setBirdGoalType(""); setSelectedTemplate(null); }
                 else if (langMode) { setLangMode(false); setLangGoalType(""); setSelectedTemplate(null); }
                 else if (instrMode) { setInstrMode(false); setInstrGoalType(""); setSelectedTemplate(null); }
@@ -2514,7 +2658,7 @@ function PlanWizard({
             <div className="flex-1">
               <DialogTitle className="text-base flex items-center gap-2">
                 <ClipboardList size={15} className="text-primary" />
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !birdMode && !langMode && !instrMode ? "New Plan"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !surfingMode && !birdMode && !langMode && !instrMode ? "New Plan"
                   : chessEloMode ? "Chess: Rating Goal"
                   : chessMode ? `Chess: ${CHESS_PLAN_TEMPLATES.find(t => CHESS_GOAL_TYPE_MAP[t.id] === chessGoalType)?.label ?? "Goal"}`
                   : pokerMode ? "Poker: Stakes Plan"
@@ -2525,13 +2669,14 @@ function PlanWizard({
                   : gardeningMode ? `Gardening: ${GARDENING_PLAN_TEMPLATES.find(t => GARDENING_GOAL_TYPE_MAP[t.id] === gardeningGoalType)?.label ?? "Goal"}`
                   : climbingMode ? `Climbing: ${CLIMBING_PLAN_TEMPLATES.find(t => CLIMBING_GOAL_TYPE_MAP[t.id] === climbingGoalType)?.label ?? "Goal"}`
                   : runningMode ? `Running: ${RUNNING_PLAN_TEMPLATES.find(t => RUNNING_GOAL_TYPE_MAP[t.id] === runningGoalType)?.label ?? "Goal"}`
+                  : surfingMode ? `Surfing: ${SURFING_PLAN_TEMPLATES.find(t => SURFING_GOAL_TYPE_MAP[t.id] === surfingGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
                   : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
+                {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !runningMode && !surfingMode && !birdMode && !langMode && !instrMode ? "Pick a hobby and choose a template"
                   : chessEloMode ? "Set your current and target ELO to generate a personalised plan"
                   : chessMode ? "Configure your goal to generate a personalised plan"
                   : pokerMode ? "Set your current and target stake to generate a personalised plan"
@@ -2542,6 +2687,7 @@ function PlanWizard({
                   : gardeningMode ? "Configure your gardening goal"
                   : climbingMode ? "Configure your climbing goal and optionally search for routes"
                   : runningMode ? "Configure your running goal"
+                  : surfingMode ? "Configure your surfing goal"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
                   : instrMode ? "Choose your instrument and configure your goal"
@@ -2550,8 +2696,8 @@ function PlanWizard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
-              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
+            {((chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || surfingMode || birdMode || langMode || instrMode) ? [1, 2, 3] : [1, 2]).map((n, idx) => {
+              const filled = (chessEloMode || chessMode || pokerMode || pokerGoalMode || hikingMode || cyclingMode || fishingMode || gardeningMode || climbingMode || runningMode || surfingMode || birdMode || langMode || instrMode) ? idx <= 1 : n <= step;
               return <div key={n} className={`h-1 rounded-full flex-1 transition-colors ${filled ? "bg-primary" : "bg-secondary"}`} />;
             })}
           </div>
@@ -3499,6 +3645,114 @@ function PlanWizard({
                 )}
 
                 <Button onClick={applyClimbingSettings} className="w-full gap-2">
+                  Build My Plan <ChevronRight size={14} />
+                </Button>
+              </div>
+            );
+          })()}
+
+          {/* ── SURFING GOAL WIZARD ── */}
+          {surfingMode && (() => {
+            const tplMeta = SURFING_PLAN_TEMPLATES.find(t => SURFING_GOAL_TYPE_MAP[t.id] === surfingGoalType);
+            const meta: Record<SurfingGoalType, { emoji: string; example: string }> = {
+              consistency: { emoji: "🗓️", example: "e.g. 30 sessions by end of summer" },
+              skill:       { emoji: "🌊", example: "e.g. Whitewater → catching green waves" },
+              technique:   { emoji: "🏄", example: "e.g. Smooth pop-up every session" },
+              exploration: { emoji: "🗺️", example: "e.g. New break + a bigger swell day" },
+            };
+            const m = surfingGoalType ? meta[surfingGoalType] : null;
+            return (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="flex items-center gap-3 p-3 rounded-xl border bg-cyan-50/60 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800">
+                  <span className="text-2xl">{m?.emoji ?? "🏄"}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{tplMeta?.label}</p>
+                    <p className="text-xs text-muted-foreground">{m?.example}</p>
+                  </div>
+                </div>
+
+                {/* consistency: session target */}
+                {surfingGoalType === "consistency" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Session target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["20", "30", "40", "52"].map(n => (
+                          <button key={n} onClick={() => setSfSessionTarget(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${sfSessionTarget === n ? "bg-cyan-600 text-white border-cyan-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {n} sessions
+                          </button>
+                        ))}
+                        <Input type="number" min={1} max={365} value={sfSessionTarget} onChange={e => setSfSessionTarget(e.target.value)} className="w-20 text-sm h-8" />
+                      </div>
+                      {Number(sfSessionTarget) > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-1">≈ {(Number(sfSessionTarget) / 16).toFixed(1)} sessions per week over 16 weeks</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* skill: current level */}
+                {surfingGoalType === "skill" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Current level</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["whitewater", "foamball only", "catching some green waves", "riding down the line"].map(lvl => (
+                          <button key={lvl} onClick={() => setSfCurrentLevel(lvl)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${sfCurrentLevel === lvl ? "bg-cyan-600 text-white border-cyan-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan will bridge from your current level to consistently catching unbroken green waves.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* technique: pop-up target + note */}
+                {surfingGoalType === "technique" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Pop-up goal</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["smooth and automatic", "consistent every time", "no hesitation or stumble"].map(g => (
+                          <button key={g} onClick={() => setSfPopUpTarget(g)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${sfPopUpTarget === g ? "bg-cyan-600 text-white border-cyan-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Your plan includes land drills, paddle fitness, and in-water technique work.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* exploration: new break + swell target */}
+                {surfingGoalType === "exploration" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium block mb-1">New break to surf (optional)</label>
+                      <Input placeholder="e.g. Rincon, Pipeline, your local point break" value={sfNewBreak}
+                        onChange={e => setSfNewBreak(e.target.value)} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Stretch swell target</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["waist-high", "shoulder-high", "overhead", "overhead+"].map(s => (
+                          <button key={s} onClick={() => setSfSwellTarget(s)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${sfSwellTarget === s ? "bg-cyan-600 text-white border-cyan-600" : "bg-card hover:bg-secondary border-border"}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Pick a swell that's bigger than you'd normally paddle out in — but still safe for your level.</p>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={applySurfingSettings} className="w-full gap-2">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
@@ -6664,6 +6918,272 @@ function GardeningSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── SurfingSection ────────────────────────────────────────────────────────────
+
+function SurfingSection({ hobby, onUpdateExtra }: {
+  hobby: Hobby;
+  onUpdateExtra: (newExtraJson: string) => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"log" | "strava">("log");
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [stravaActivities, setStravaActivities] = useState<any[]>([]);
+  const [stravaLoading, setStravaLoading] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState<boolean | null>(null);
+  const [stravaAthlete, setStravaAthlete] = useState<any>(null);
+
+  // Manual log form
+  const [logName,    setLogName]    = useState("");
+  const [logDate,    setLogDate]    = useState(new Date().toISOString().slice(0, 10));
+  const [logBreak,   setLogBreak]   = useState("");
+  const [logDurMin,  setLogDurMin]  = useState("");
+  const [logWave,    setLogWave]    = useState("");
+  const [logCond,    setLogCond]    = useState("");
+  const [logNotes,   setLogNotes]   = useState("");
+
+  const surfLog = parseSurfLog(hobby.extraJson ?? "{}");
+
+  function saveLog(newLog: SurfSessionEntry[]) {
+    onUpdateExtra(setSurfingInExtra(hobby.extraJson ?? "{}", newLog));
+  }
+
+  useEffect(() => {
+    apiRequest("GET", "/api/strava/status")
+      .then(r => r.json())
+      .then(d => { setStravaConnected(d.connected); setStravaAthlete(d.athlete ?? null); })
+      .catch(() => setStravaConnected(false));
+  }, []);
+
+  function loadStravaSessions() {
+    setStravaLoading(true);
+    apiRequest("GET", "/api/strava/activities?sport=surf&per_page=20")
+      .then(r => r.json())
+      .then(d => { setStravaActivities(d.sessions ?? []); setStravaLoading(false); })
+      .catch(() => { setStravaLoading(false); toast({ title: "Could not load Strava activities", variant: "destructive" }); });
+  }
+
+  function importStravaSession(s: any) {
+    if (surfLog.some(r => r.stravaId === String(s.id))) { toast({ title: "Already imported" }); return; }
+    const entry: SurfSessionEntry = {
+      id: genId(), stravaId: String(s.id), name: s.name, date: s.date,
+      durationSec: s.durationSec, stravaUrl: s.stravaUrl,
+      addedAt: new Date().toISOString(),
+    };
+    saveLog([...surfLog, entry]);
+    toast({ title: `"${s.name}" imported!` });
+  }
+
+  function addManualSession() {
+    if (!logName.trim() || !logDate) return;
+    const entry: SurfSessionEntry = {
+      id: genId(), name: logName.trim(), date: logDate,
+      break: logBreak.trim() || undefined,
+      durationSec: logDurMin ? Math.round(parseFloat(logDurMin) * 60) : undefined,
+      waveHeight: logWave.trim() || undefined,
+      conditions: logCond.trim() || undefined,
+      notes: logNotes.trim() || undefined,
+      addedAt: new Date().toISOString(),
+    };
+    saveLog([...surfLog, entry]);
+    setShowLogForm(false);
+    setLogName(""); setLogDate(new Date().toISOString().slice(0, 10));
+    setLogBreak(""); setLogDurMin(""); setLogWave(""); setLogCond(""); setLogNotes("");
+    toast({ title: "Session logged! 🤙" });
+  }
+
+  function deleteSession(id: string) { saveLog(surfLog.filter(s => s.id !== id)); }
+
+  function formatDuration(sec?: number) {
+    if (!sec) return "";
+    const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  }
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-cyan-50/60 dark:bg-cyan-950/20 border-b border-cyan-200 dark:border-cyan-800">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🏄</span>
+          <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-300">Session Log</span>
+          <span className="text-xs text-muted-foreground">{surfLog.length} sessions</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setTab("log")} className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${tab === "log" ? "bg-cyan-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>My Sessions</button>
+          <button onClick={() => { setTab("strava"); if (stravaConnected && stravaActivities.length === 0) loadStravaSessions(); }}
+            className={`text-xs px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${tab === "strava" ? "bg-cyan-600 text-white" : "text-muted-foreground hover:bg-secondary"}`}>
+            <Zap size={10} /> Strava
+          </button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {tab === "log" && (
+          <>
+            {!showLogForm ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLogForm(true)} className="gap-1.5 w-full">
+                <Plus size={13} /> Log a Session
+              </Button>
+            ) : (
+              <div className="space-y-2 p-3 rounded-xl border bg-cyan-50/40 dark:bg-cyan-950/10">
+                <p className="text-xs font-semibold text-cyan-800 dark:text-cyan-300">Log a Session</p>
+                <Input placeholder="Session name (e.g. 'Dawn patrol at Blacks')" value={logName} onChange={e => setLogName(e.target.value)} className="text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Date</label>
+                    <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Duration (min)</label>
+                    <Input type="number" placeholder="e.g. 90" value={logDurMin} onChange={e => setLogDurMin(e.target.value)} className="text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Break / spot</label>
+                    <Input placeholder="e.g. Huntington, local beach" value={logBreak} onChange={e => setLogBreak(e.target.value)} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Wave height</label>
+                    <Input placeholder="e.g. waist-high, 3ft" value={logWave} onChange={e => setLogWave(e.target.value)} className="text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5">Conditions</label>
+                  <Input placeholder="e.g. offshore, glassy, choppy" value={logCond} onChange={e => setLogCond(e.target.value)} className="text-sm" />
+                </div>
+                <Textarea placeholder="Notes (optional)" value={logNotes} onChange={e => setLogNotes(e.target.value)} className="text-sm resize-none" rows={2} />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={addManualSession} disabled={!logName.trim()} className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white gap-1">
+                    <Check size={12} /> Save Session
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowLogForm(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
+            {surfLog.length > 0 ? (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {[...surfLog].sort((a, b) => b.date.localeCompare(a.date)).map(s => (
+                  <div key={s.id} className="flex items-start gap-2.5 p-2.5 rounded-lg border bg-card">
+                    <div className="text-lg leading-none mt-0.5">🏄</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{s.name}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">{s.date}</span>
+                        {s.break && <span className="text-[10px] text-cyan-700 dark:text-cyan-400">{s.break}</span>}
+                        {s.durationSec && <span className="text-[10px] text-muted-foreground">{formatDuration(s.durationSec)}</span>}
+                        {s.waveHeight && <span className="text-[10px] text-muted-foreground">🌊 {s.waveHeight}</span>}
+                        {s.conditions && <span className="text-[10px] text-muted-foreground">{s.conditions}</span>}
+                        {s.stravaUrl && <a href={s.stravaUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-orange-600 hover:underline flex items-center gap-0.5"><Zap size={9} />Strava</a>}
+                      </div>
+                      {s.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.notes}</p>}
+                    </div>
+                    <button onClick={() => deleteSession(s.id)} className="text-muted-foreground hover:text-destructive transition-colors p-0.5 mt-0.5">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <span className="text-2xl block mb-2 opacity-20">🏄</span>
+                <p className="text-xs">No sessions yet — log your first surf or connect Strava</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "strava" && (
+          <div className="space-y-3">
+            {stravaConnected === null && <p className="text-xs text-muted-foreground text-center py-4">Checking Strava connection…</p>}
+
+            {stravaConnected === false && (
+              <div className="text-center space-y-3 py-4">
+                <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-950/30 flex items-center justify-center mx-auto">
+                  <Zap size={22} className="text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Connect Strava</p>
+                  <p className="text-xs text-muted-foreground mt-1">Import your surf sessions recorded in Strava</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Log your surfs in Strava as <span className="font-medium">Surfing</span> activities</p>
+                </div>
+                <Button size="sm" onClick={() => window.location.href = "/api/strava/connect"}
+                  className="gap-2 bg-orange-600 hover:bg-orange-700 text-white">
+                  <Power size={13} /> Connect Strava
+                </Button>
+              </div>
+            )}
+
+            {stravaConnected === true && (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-950/30 flex items-center justify-center">
+                      <Zap size={13} className="text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold">{stravaAthlete?.name ?? "Strava"}</p>
+                      <p className="text-[10px] text-emerald-600">Connected</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" onClick={loadStravaSessions} disabled={stravaLoading} className="gap-1 h-7 text-xs">
+                      {stravaLoading ? <RefreshCw size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                      Refresh
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => {
+                      apiRequest("DELETE", "/api/strava/disconnect").then(() => {
+                        setStravaConnected(false); setStravaAthlete(null); setStravaActivities([]);
+                        toast({ title: "Strava disconnected" });
+                      });
+                    }} className="h-7 text-xs text-muted-foreground gap-1"><PowerOff size={11} /></Button>
+                  </div>
+                </div>
+
+                {stravaActivities.length === 0 && !stravaLoading && (
+                  <div className="space-y-2">
+                    <Button size="sm" variant="outline" onClick={loadStravaSessions} className="w-full gap-1.5">
+                      <RefreshCw size={12} /> Load Recent Surf Sessions
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">Make sure your surfs are logged in Strava as <span className="font-medium">Surfing</span> activities</p>
+                  </div>
+                )}
+
+                {stravaActivities.length > 0 && (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    <p className="text-[10px] text-muted-foreground">Click Import to add a session to your log</p>
+                    {stravaActivities.map((s: any) => {
+                      const alreadyImported = surfLog.some(r => r.stravaId === String(s.id));
+                      return (
+                        <div key={s.id} className="flex items-start gap-2.5 p-2.5 rounded-lg border bg-card">
+                          <div className="text-lg leading-none mt-0.5">🏄</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{s.name}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                              <span className="text-[10px] text-muted-foreground">{s.date}</span>
+                              {s.durationSec && <span className="text-[10px] text-muted-foreground">{formatDuration(s.durationSec)}</span>}
+                            </div>
+                          </div>
+                          {alreadyImported ? (
+                            <span className="text-[10px] text-emerald-600 px-1.5 py-0.5 shrink-0 flex items-center gap-0.5"><Check size={9} /> Logged</span>
+                          ) : (
+                            <button onClick={() => importStravaSession(s)}
+                              className="text-[10px] px-2 py-1 rounded bg-cyan-600 text-white hover:bg-cyan-700 transition-colors shrink-0">Import</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── RunningSection ────────────────────────────────────────────────────────────
 
 function RunningSection({ hobby, onUpdateExtra }: {
@@ -7197,6 +7717,13 @@ function HobbyDetailDialog({
         {(() => { const n = hobby.name.toLowerCase(); return n === "running" || n.includes("running") || n.includes("marathon") || n.includes("trail run"); })() && (
           <div className="mt-4 border-t pt-4">
             <RunningSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
+          </div>
+        )}
+
+        {/* ── Surfing section ── */}
+        {(() => { const n = hobby.name.toLowerCase(); return n === "surfing" || n.includes("surfing") || n.includes("surf") || n.includes("longboard") || n.includes("shortboard"); })() && (
+          <div className="mt-4 border-t pt-4">
+            <SurfingSection hobby={hobby} onUpdateExtra={onUpdateExtra} />
           </div>
         )}
       </DialogContent>

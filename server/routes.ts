@@ -3576,10 +3576,12 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { console.error("[Strava callback]", e); res.redirect("/?strava=error"); }
   });
 
-  // GET /api/strava/activities — fetch recent runs
+  // GET /api/strava/activities — fetch recent activities filtered by sport
+  // ?sport=run (default) | surf
   app.get("/api/strava/activities", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as User).id;
+      const sport = ((req.query.sport as string) ?? "run").toLowerCase();
       const accessToken = await getValidStravaToken(userId);
       if (!accessToken) return res.status(401).json({ error: "Not connected to Strava" });
       const perPage = Math.min(Number(req.query.per_page ?? 20), 50);
@@ -3592,6 +3594,23 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         return res.status(r.status).json({ error: "Strava API error" });
       }
       const activities = await r.json() as any[];
+
+      if (sport === "surf") {
+        const sessions = activities
+          .filter((a: any) => a.type === "Surfing" || a.sport_type === "Surfing" || a.sport_type === "Surf")
+          .map((a: any) => ({
+            id: String(a.id),
+            name: a.name,
+            date: a.start_date_local?.slice(0, 10) ?? "",
+            durationSec: a.moving_time,
+            distanceKm: Math.round((a.distance / 1000) * 100) / 100,
+            elevationGain: Math.round(a.total_elevation_gain ?? 0),
+            stravaUrl: `https://www.strava.com/activities/${a.id}`,
+          }));
+        return res.json({ sessions });
+      }
+
+      // Default: running
       const runs = activities
         .filter((a: any) => a.type === "Run" || a.sport_type === "Run" || a.sport_type === "TrailRun")
         .map((a: any) => ({
