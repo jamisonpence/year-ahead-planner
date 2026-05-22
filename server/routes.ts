@@ -1433,6 +1433,30 @@ Return exactly this structure:
     (await storage.deleteMovie(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
+  // ── Movie Lists ─────────────────────────────────────────────────────────────
+  app.get("/api/movie-lists", requireAuth, async (req, res) => {
+    try { res.json(await storage.getMovieLists((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/movie-lists", requireAuth, async (req, res) => {
+    try {
+      const { name, visibility, isRanked } = req.body;
+      res.status(201).json(await storage.createMovieList((req.user as User).id, { name, visibility: visibility ?? "friends", isRanked: !!isRanked }));
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/movie-lists/:id", requireAuth, async (req, res) => {
+    try {
+      const { name, visibility, isRanked } = req.body;
+      res.json(await storage.updateMovieList(+req.params.id, (req.user as User).id, { name, visibility, isRanked }));
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/movie-lists/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteMovieList(+req.params.id, (req.user as User).id);
+      res.status(204).end();
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Budget Categories ───────────────────────────────────────────────────────
   app.get("/api/budget-categories", async (req, res) => {
     try {

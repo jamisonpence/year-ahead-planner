@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -61,6 +61,7 @@ import type {
   insertNutritionGoalSchema,
   InsertBodyCompPlan, BodyCompPlan, BodyCompCheckIn, InsertBodyCompCheckIn,
   InsertReadingGoal, ReadingGoal,
+  MovieList,
 } from "@shared/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
@@ -358,6 +359,17 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'movie'`);
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS total_seasons INTEGER`);
   await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS current_season INTEGER`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS movie_lists (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      visibility TEXT NOT NULL DEFAULT 'friends',
+      is_ranked BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TEXT NOT NULL
+    )
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS budget_categories (
@@ -2212,6 +2224,22 @@ export const storage: IStorage = {
   async deleteMovie(id) {
     const result = await db.delete(movies).where(eq(movies.id, id));
     return result.rowCount > 0;
+  },
+
+  // ── Movie Lists ───────────────────────────────────────────────────────────────
+  async getMovieLists(userId: number): Promise<MovieList[]> {
+    return db.select().from(movieLists).where(eq(movieLists.userId, userId)).orderBy(asc(movieLists.name));
+  },
+  async createMovieList(userId: number, data: { name: string; visibility: string; isRanked: boolean }): Promise<MovieList> {
+    const [r] = await db.insert(movieLists).values({ ...data, userId, createdAt: new Date().toISOString() }).returning();
+    return r;
+  },
+  async updateMovieList(id: number, userId: number, data: Partial<{ name: string; visibility: string; isRanked: boolean }>): Promise<MovieList> {
+    const [r] = await db.update(movieLists).set(data).where(and(eq(movieLists.id, id), eq(movieLists.userId, userId))).returning();
+    return r;
+  },
+  async deleteMovieList(id: number, userId: number): Promise<void> {
+    await db.delete(movieLists).where(and(eq(movieLists.id, id), eq(movieLists.userId, userId)));
   },
 
   // ── Budget Categories ──────────────────────────────────────────────────────────

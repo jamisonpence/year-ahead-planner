@@ -61,18 +61,17 @@ export default function MoviesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [mediaTypeView, setMediaTypeView] = useState<"movie" | "show" | "video">("movie");
-  const [tab, setTab] = useState("backlog");
+  const [mainTab, setMainTab] = useState<"watchlist" | "films" | "lists">("watchlist");
   const [search, setSearch] = useState("");
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("shared") === "1") setTab("shared");
+    if (new URLSearchParams(window.location.search).get("shared") === "1") setMainTab("watchlist");
   }, []);
-  useEffect(() => {
-    if (tab !== "shared") return;
-    apiRequest("POST", "/api/shares/mark-read", { type: "movies" })
-      .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
-  }, [tab]);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [listFilter, setListFilter] = useState<string | null>(null);
+  // Lists tab state
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [editingList, setEditingList] = useState<any | null>(null);
+  const [listForm, setListForm] = useState({ name: "", visibility: "friends", isRanked: false });
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movie | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -83,6 +82,7 @@ export default function MoviesPage() {
   const [shareMovie, setShareMovie] = useState<Movie | null>(null);
 
   const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
+  const { data: savedLists = [] } = useQuery<any[]>({ queryKey: ["/api/movie-lists"] });
 
   // Split by type
   const items = useMemo(
@@ -119,6 +119,23 @@ export default function MoviesPage() {
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       apiRequest("PATCH", `/api/movies/${id}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movies"] }),
+  });
+
+  const saveListMut = useMutation({
+    mutationFn: (data: { name: string; visibility: string; isRanked: boolean }) =>
+      editingList
+        ? apiRequest("PATCH", `/api/movie-lists/${editingList.id}`, data)
+        : apiRequest("POST", "/api/movie-lists", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/movie-lists"] });
+      setListModalOpen(false);
+      setEditingList(null);
+      setListForm({ name: "", visibility: "friends", isRanked: false });
+    },
+  });
+  const deleteListMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/movie-lists/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movie-lists"] }),
   });
 
   const allCustomLists = useMemo(() => {
@@ -318,10 +335,10 @@ export default function MoviesPage() {
     return map;
   }, [favorites]);
 
-  // Switch type view — reset to backlog tab
+  // Switch type view — reset to watchlist tab
   function switchView(v: "movie" | "show" | "video") {
     setMediaTypeView(v);
-    setTab("backlog");
+    setMainTab("watchlist");
     setSearch(""); setGenreFilter(null); setListFilter(null);
   }
 
@@ -501,167 +518,282 @@ export default function MoviesPage() {
         </div>
       </div>
 
-      {/* Type toggle */}
-      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-5">
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-max sm:w-fit">
-        <button
-          onClick={() => switchView("movie")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-            mediaTypeView === "movie" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Film size={15} /> Movies
-        </button>
-        <button
-          onClick={() => switchView("show")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-            mediaTypeView === "show" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Tv2 size={15} /> Shows
-        </button>
-        <button
-          onClick={() => switchView("video")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-            mediaTypeView === "video" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Video size={15} /> Clips
-        </button>
-      </div>
+      {/* Main 3-tab nav: Watchlist | Films | Lists */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1 mb-5">
+        {([
+          { key: "watchlist", icon: <Clock size={14} />, label: "Watchlist" },
+          { key: "films",     icon: <Film size={14} />,  label: "Films" },
+          { key: "lists",     icon: <Clapperboard size={14} />, label: "Lists" },
+        ] as const).map(({ key, icon, label }) => (
+          <button
+            key={key}
+            onClick={() => setMainTab(key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+              mainTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {icon} {label}
+          </button>
+        ))}
       </div>
 
-      {/* Clips view */}
-      {isVideoView && (
-        <ClipsSection
-          clips={items}
-          mediaForSearch={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
-          onDelete={(id) => deleteMut.mutate(id)}
-        />
-      )}
-
-      {/* Search + filters + tabs (Movies / Shows only) */}
-      {!isVideoView && <>
-      <div className="flex flex-wrap gap-2 mb-4">
-        <div className="relative flex-1 min-w-[100px]">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search by title or ${isShowView ? "creator" : "director"}…`}
-            className="pl-8 h-8 text-sm" />
-        </div>
-        <Select value={genreFilter ?? "__none__"} onValueChange={(v) => setGenreFilter(v === "__none__" ? null : v)}>
-          <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="Genre" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">All genres</SelectItem>
-            {GENRES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {allCustomLists.length > 0 && (
-          <Select value={listFilter ?? "__none__"} onValueChange={(v) => setListFilter(v === "__none__" ? null : v)}>
-            <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="List" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">All lists</SelectItem>
-              {allCustomLists.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        {(genreFilter || listFilter || search) && (
-          <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); }}>
-            <X size={13} /> Clear
-          </Button>
-        )}
-      </div>
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-        <TabsList className="mb-4 w-max sm:w-auto flex-nowrap">
-          <TabsTrigger value="backlog" className="gap-1.5">
-            <Clock size={14} /> Backlog <span className="ml-1 text-xs opacity-60">{backlog.length}</span>
-          </TabsTrigger>
-          {isShowView && (
-            <TabsTrigger value="watching" className="gap-1.5">
-              <PlayCircle size={14} /> Watching <span className="ml-1 text-xs opacity-60">{watching.length}</span>
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="watched" className="gap-1.5">
-            <Check size={14} /> {watchedLabel} <span className="ml-1 text-xs opacity-60">{watchedCount}</span>
-          </TabsTrigger>
-          <TabsTrigger value="favorites" className="gap-1.5">
-            <Heart size={14} /> Favorites <span className="ml-1 text-xs opacity-60">{favorites.length}</span>
-          </TabsTrigger>
-          <TabsTrigger value="shared" className="gap-1.5">
-            <Inbox size={14} /> Shared
-          </TabsTrigger>
-        </TabsList>
+      {/* Watchlist & Films share the type switcher + search + grid */}
+      {(mainTab === "watchlist" || mainTab === "films") && (<>
+        {/* Type toggle */}
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
+          <div className="flex gap-1 bg-secondary/60 rounded-lg p-1 w-max sm:w-fit">
+            {([
+              { v: "movie" as const, icon: <Film size={13} />, label: "Movies" },
+              { v: "show"  as const, icon: <Tv2 size={13} />,  label: "Shows" },
+              { v: "video" as const, icon: <Video size={13} />, label: "Clips" },
+            ]).map(({ v, icon, label }) => (
+              <button key={v} onClick={() => switchView(v)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  mediaTypeView === v ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {icon} {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <TabsContent value="backlog">
-          {backlog.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              {emptyIcon}
-              <p className="text-sm">No {singularLabel}s in your backlog yet.</p>
-              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add one</Button>
+        {/* Clips view */}
+        {isVideoView ? (
+          <ClipsSection
+            clips={items}
+            mediaForSearch={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
+            onDelete={(id) => deleteMut.mutate(id)}
+          />
+        ) : (<>
+          {/* Search + genre filter */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <div className="relative flex-1 min-w-[120px]">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search by title or ${isShowView ? "creator" : "director"}…`}
+                className="pl-8 h-8 text-sm" />
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {backlog.map((m) => <MediaCard key={m.id} movie={m} />)}
-            </div>
-          )}
-        </TabsContent>
+            <Select value={genreFilter ?? "__none__"} onValueChange={(v) => setGenreFilter(v === "__none__" ? null : v)}>
+              <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="Genre" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">All genres</SelectItem>
+                {GENRES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {allCustomLists.length > 0 && (
+              <Select value={listFilter ?? "__none__"} onValueChange={(v) => setListFilter(v === "__none__" ? null : v)}>
+                <SelectTrigger className="w-full sm:w-36 h-8 text-sm"><SelectValue placeholder="Filter by list" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">All lists</SelectItem>
+                  {allCustomLists.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {(genreFilter || listFilter || search) && (
+              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); }}>
+                <X size={13} /> Clear
+              </Button>
+            )}
+          </div>
 
-        {isShowView && (
-          <TabsContent value="watching">
-            {watching.length === 0 ? (
+          {/* Watchlist = backlog + watching */}
+          {mainTab === "watchlist" && (() => {
+            const queue = [...backlog, ...watching];
+            return queue.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
-                <PlayCircle size={40} className="mx-auto mb-3 opacity-20" />
-                <p className="text-sm">No shows in progress. Move one from your backlog!</p>
+                {emptyIcon}
+                <p className="text-sm">Your watchlist is empty.</p>
+                <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={open_add}><Plus size={14} /> Add one</Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {watching.map((m) => <MediaCard key={m.id} movie={m} />)}
-              </div>
-            )}
-          </TabsContent>
-        )}
-
-        <TabsContent value="watched">
-          {watched.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Check size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No {isShowView ? "finished shows" : "watched movies"} yet.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {watched.map((m) => <MediaCard key={m.id} movie={m} />)}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="favorites">
-          {favorites.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Heart size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No favorites yet — heart a {singularLabel} to add it here.</p>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {Object.entries(favByGenre).sort(([a], [b]) => a.localeCompare(b)).map(([genre, ms]) => (
-                <div key={genre}>
-                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">{genre}</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {ms.map((m) => <MediaCard key={m.id} movie={m} />)}
+              <div className="space-y-6">
+                {watching.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><PlayCircle size={13} /> In Progress</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {watching.map((m) => <MediaCard key={m.id} movie={m} />)}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )}
+                {backlog.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><Clock size={13} /> Up Next</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {backlog.map((m) => <MediaCard key={m.id} movie={m} />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Films = watched + favorites */}
+          {mainTab === "films" && (() => {
+            const allFilms = [...watched, ...favorites.filter((m) => !watched.find((w) => w.id === m.id))];
+            return allFilms.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Check size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No {isShowView ? "finished shows" : "watched films"} yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {favorites.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><Heart size={13} /> Favorites</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {favorites.map((m) => <MediaCard key={m.id} movie={m} />)}
+                    </div>
+                  </div>
+                )}
+                {watched.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5"><Check size={13} /> {watchedLabel}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {watched.map((m) => <MediaCard key={m.id} movie={m} />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </>)}
+      </>)}
+
+      {/* Lists tab */}
+      {mainTab === "lists" && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">{savedLists.length} list{savedLists.length !== 1 ? "s" : ""}</p>
+            <Button size="sm" className="gap-1.5" onClick={() => {
+              setEditingList(null);
+              setListForm({ name: "", visibility: "friends", isRanked: false });
+              setListModalOpen(true);
+            }}>
+              <Plus size={14} /> New List
+            </Button>
+          </div>
+
+          {savedLists.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Clapperboard size={40} className="mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No lists yet</p>
+              <p className="text-sm mt-1">Create lists to organize your watchlist — Date Night, Must-See Classics, etc.</p>
+              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => {
+                setEditingList(null);
+                setListForm({ name: "", visibility: "friends", isRanked: false });
+                setListModalOpen(true);
+              }}><Plus size={14} /> Create a list</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {savedLists.map((lst) => {
+                const count = allItems.filter((m) => {
+                  try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
+                }).length;
+                return (
+                  <div key={lst.id} className="rounded-xl border bg-card p-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{lst.name}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                          lst.visibility === "public"
+                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                            : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                        }`}>
+                          {lst.visibility === "public" ? "🌐 Public" : "👥 Friends"}
+                        </span>
+                        {lst.isRanked && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                            🏆 Ranked
+                          </span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground">{count} item{count !== 1 ? "s" : ""}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => {
+                        setEditingList(lst);
+                        setListForm({ name: lst.name, visibility: lst.visibility, isRanked: lst.isRanked });
+                        setListModalOpen(true);
+                      }} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                        <Pencil size={13} className="text-muted-foreground" />
+                      </button>
+                      <button onClick={() => { if (confirm(`Delete "${lst.name}"?`)) deleteListMut.mutate(lst.id); }}
+                        className="p-1.5 rounded hover:bg-secondary transition-colors">
+                        <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="shared">
-          <SharedMoviesTab />
-        </TabsContent>
-      </Tabs>
-      </>}
+      {/* List Create/Edit Modal */}
+      <Dialog open={listModalOpen} onOpenChange={(o) => { if (!o) { setListModalOpen(false); setEditingList(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clapperboard size={16} /> {editingList ? "Edit List" : "New List"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">List Name / Tag</label>
+              <Input
+                placeholder="e.g. Date Night, Must-See Classics…"
+                value={listForm.name}
+                onChange={(e) => setListForm((f) => ({ ...f, name: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Who Can View</label>
+              <Select value={listForm.visibility} onValueChange={(v) => setListForm((f) => ({ ...f, visibility: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="public">🌐 Anyone — Public List</SelectItem>
+                  <SelectItem value="friends">👥 Friends</SelectItem>
+                  <SelectItem value="private">🔒 Only Me</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Ranked List</p>
+                <p className="text-xs text-muted-foreground">Order items by rank #1, #2, #3…</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setListForm((f) => ({ ...f, isRanked: !f.isRanked }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${listForm.isRanked ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${listForm.isRanked ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+          </div>
+          <div className="flex justify-between items-center pt-2">
+            <div>
+              {editingList && (
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive gap-1.5 text-xs"
+                  onClick={() => { if (confirm("Delete this list?")) { deleteListMut.mutate(editingList.id); setListModalOpen(false); } }}>
+                  <Trash2 size={12} /> Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setListModalOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={!listForm.name.trim() || saveListMut.isPending}
+                onClick={() => saveListMut.mutate(listForm)} className="gap-1.5">
+                <Check size={13} /> {editingList ? "Save" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add / Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) close_modal(); }}>

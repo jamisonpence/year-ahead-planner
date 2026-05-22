@@ -332,6 +332,16 @@ export const insertMovieSchema = createInsertSchema(movies).omit({ id: true });
 export type InsertMovie = z.infer<typeof insertMovieSchema>;
 export type Movie = typeof movies.$inferSelect;
 
+export const movieLists = pgTable("movie_lists", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").notNull(),
+  name:       text("name").notNull(),
+  visibility: text("visibility").notNull().default("friends"), // "public" | "friends" | "private"
+  isRanked:   boolean("is_ranked").notNull().default(false),
+  createdAt:  text("created_at").notNull(),
+});
+export type MovieList = typeof movieLists.$inferSelect;
+
 // ── MUSIC ─────────────────────────────────────────────────────────────────────
 // Artists to explore or that you love
 export const musicArtists = pgTable("music_artists", {
