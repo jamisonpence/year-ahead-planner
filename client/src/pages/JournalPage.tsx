@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import QuotesPage from "@/pages/QuotesPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { JournalEntry } from "@shared/schema";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BookOpen, Plus, Heart, Search, Pencil, Trash2,
-  ChevronDown, ChevronRight, Star, Calendar, Tag,
+  ChevronDown, ChevronRight, Star, Calendar, Tag, Quote,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -174,6 +175,8 @@ export default function JournalPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  const [section, setSection] = useState<"journal" | "quotes" | "mantras">("journal");
+
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("all");
   const [favOnly, setFavOnly] = useState(false);
@@ -299,20 +302,60 @@ export default function JournalPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BookOpen size={22} /> Journal
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {allEntries.length} {allEntries.length === 1 ? "entry" : "entries"}
-            {favoriteCount > 0 && ` · ${favoriteCount} favorited`}
-          </p>
+          {section === "journal" && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {allEntries.length} {allEntries.length === 1 ? "entry" : "entries"}
+              {favoriteCount > 0 && ` · ${favoriteCount} favorited`}
+            </p>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openAdd(todayISO())}>
-            <Calendar size={14} /> Today
-          </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => openAdd()}>
-            <Plus size={15} /> New Entry
-          </Button>
-        </div>
+        {section === "journal" && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openAdd(todayISO())}>
+              <Calendar size={14} /> Today
+            </Button>
+            <Button size="sm" className="gap-1.5" onClick={() => openAdd()}>
+              <Plus size={15} /> New Entry
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Section tab switcher */}
+      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-5">
+        <button
+          onClick={() => setSection("journal")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            section === "journal" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <BookOpen size={14} /> Journal
+        </button>
+        <button
+          onClick={() => setSection("quotes")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            section === "quotes" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Quote size={14} /> Quotes
+        </button>
+        <button
+          onClick={() => setSection("mantras")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            section === "mantras" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          🔥 Mantras
+        </button>
+      </div>
+
+      {/* Quotes / Mantras sections */}
+      {section === "quotes" && <QuotesPage embedded embeddedTab="quotes" />}
+      {section === "mantras" && <QuotesPage embedded embeddedTab="mantras" />}
+
+      {/* Journal content */}
+      {section === "journal" && <>
+
 
       {/* Search + filters */}
       <div className="space-y-3 mb-6">
@@ -509,6 +552,7 @@ export default function JournalPage() {
           </div>
         </DialogContent>
       </Dialog>
+      </>}
     </div>
   );
 }

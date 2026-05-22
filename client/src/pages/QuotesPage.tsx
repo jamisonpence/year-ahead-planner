@@ -486,7 +486,7 @@ function MantraCard({ mantra, onEdit, onDelete, onToggleFav, onToggleActive }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function QuotesPage() {
+export default function QuotesPage({ embedded = false, embeddedTab }: { embedded?: boolean; embeddedTab?: "quotes" | "mantras" } = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -744,12 +744,12 @@ export default function QuotesPage() {
   }, [allQuotes, search, categoryFilter, favOnly, sortBy]);
 
   const favoriteCount = allQuotes.filter((q) => q.isFavorite).length;
-  const [mainTab, setMainTab] = useState<"quotes" | "mantras">("quotes");
+  const [mainTab, setMainTab] = useState<"quotes" | "mantras">(embeddedTab ?? "quotes");
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+    <div className={embedded ? "" : "p-3 sm:p-6 max-w-4xl mx-auto"}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+      {!embedded && <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <QuoteIcon size={22} /> Quotes &amp; Mantras
         </h1>
@@ -777,10 +777,30 @@ export default function QuotesPage() {
             <Plus size={15} /> Add Mantra
           </Button>
         )}
-      </div>
+      </div>}
 
-      {/* Main tab switcher */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-5">
+      {/* Embedded action buttons (shown when header is hidden) */}
+      {embedded && (
+        <div className="flex items-center justify-end mb-4">
+          {mainTab === "quotes" ? (
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" variant="outline" onClick={() => setQuotableOpen(true)} className="gap-1.5">
+                <Search size={13} /> Find Quotes
+              </Button>
+              <Button onClick={openAdd} size="sm" className="gap-1.5">
+                <Plus size={15} /> Add Quote
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={openAddMantra} size="sm" className="gap-1.5">
+              <Plus size={15} /> Add Mantra
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Main tab switcher — only shown on standalone page */}
+      {!embedded && <div className="flex gap-1 bg-muted rounded-xl p-1 mb-5">
         <button
           onClick={() => setMainTab("quotes")}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -799,7 +819,7 @@ export default function QuotesPage() {
           🔥 Mantras
           <span className="text-xs opacity-60">({allMantras.length})</span>
         </button>
-      </div>
+      </div>}
 
       {/* ── Quotes tab ── */}
       {mainTab === "quotes" && <>

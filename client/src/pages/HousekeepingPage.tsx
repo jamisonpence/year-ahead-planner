@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import PlantsPage from "@/pages/PlantsPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Chore, HouseProjectWithTasks, HouseProjectTask, Appliance, TabCollaborationWithUser } from "@shared/schema";
@@ -12,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock, Check, X, Circle,
-  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users,
+  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users, Leaf,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1006,10 +1007,12 @@ export default function HousekeepingPage() {
           <TabsTrigger value="chores">Chores</TabsTrigger>
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="appliances">Appliances</TabsTrigger>
+          <TabsTrigger value="plants" className="gap-1.5"><Leaf size={13} />Plants</TabsTrigger>
         </TabsList>
         <TabsContent value="chores"><ChoresTab /></TabsContent>
         <TabsContent value="projects"><ProjectsTab /></TabsContent>
         <TabsContent value="appliances"><AppliancesTab /></TabsContent>
+        <TabsContent value="plants"><PlantsPage embedded /></TabsContent>
       </Tabs>
     </div>
   );

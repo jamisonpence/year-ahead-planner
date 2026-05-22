@@ -103,8 +103,8 @@ const ALL_TABS = [
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
   { key: "core",     label: null,        paths: ["/discover", "/dashboard"] },
-  { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/quotes", "/art", "/hobbies", "/journal"] },
-  { key: "wellness", label: "Wellness",  paths: ["/workouts", "/plants", "/health"] },
+  { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/art", "/hobbies", "/journal"] },
+  { key: "wellness", label: "Wellness",  paths: ["/workouts", "/health"] },
   { key: "life",     label: "Life",      paths: ["/goals", "/calendar", "/budget", "/relationships", "/housekeeping", "/kids", "/faith", "/politics"] },
 ];
 
@@ -637,36 +637,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       </p>
                     )}
                     <div className="space-y-0.5">
-                      {groupTabs.flatMap((tab) => {
-                        // Quotes is rendered as a sub-item under Journal — skip standalone
-                        if (tab.path === "/quotes") return [];
-                        const items: React.ReactNode[] = [
-                          <NavLink
-                            key={tab.path}
-                            path={tab.path}
-                            label={tab.label}
-                            icon={tab.icon}
-                            active={location === tab.path}
-                            badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
-                          />,
-                        ];
-                        // Inject Quotes sub-link under Journal
-                        if (tab.path === "/journal" && groupTabs.some((t) => t.path === "/quotes")) {
-                          items.push(
-                            <Link key="/quotes-sub" href="/quotes">
-                              <div className={`cursor-pointer flex items-center gap-2 pl-7 pr-2 py-1.5 rounded-lg text-xs transition-colors ${
-                                location === "/quotes"
-                                  ? "bg-primary/10 text-primary font-semibold"
-                                  : "text-muted-foreground hover:bg-secondary/60"
-                              }`}>
-                                <Quote size={13} />
-                                <span>Quotes</span>
-                              </div>
-                            </Link>
-                          );
-                        }
-                        return items;
-                      })}
+                      {groupTabs.map((tab) => (
+                        <NavLink
+                          key={tab.path}
+                          path={tab.path}
+                          label={tab.label}
+                          icon={tab.icon}
+                          active={location === tab.path}
+                          badge={tab.path === "/relationships" ? pendingFriendCount : undefined}
+                        />
+                      ))}
                     </div>
                   </div>
                 );

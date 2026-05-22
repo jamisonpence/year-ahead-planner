@@ -371,7 +371,7 @@ function PerenualSearchModal({ open, onClose, onAdd }: {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function PlantsPage() {
+export default function PlantsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -507,11 +507,10 @@ export default function PlantsPage() {
   }).length;
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-6">
+    <div className={embedded ? "space-y-6" : "p-3 sm:p-6 max-w-6xl mx-auto space-y-6"}>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <Leaf className="text-green-600" size={24} />
-          <h1 className="text-2xl font-bold">Plants</h1>
+          {!embedded && <><Leaf className="text-green-600" size={24} /><h1 className="text-2xl font-bold">Plants</h1></>}
           {overdueCount > 0 && (
             <Badge variant="destructive" className="ml-1">
               {overdueCount} overdue
