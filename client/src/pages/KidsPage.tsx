@@ -49,6 +49,266 @@ const PREP_CATEGORIES = [
   { value: "other",    label: "Other"    },
 ];
 
+// ── Developmental Stages ──────────────────────────────────────────────────────
+
+interface DevMilestoneGroup {
+  category: string;
+  emoji: string;
+  items: string[];
+}
+
+interface DevStage {
+  label: string;
+  minMonths: number;
+  maxMonths: number;
+  icon: string;
+  color: string;
+  careTips: string[];
+  milestones: DevMilestoneGroup[];
+}
+
+const DEV_STAGES: DevStage[] = [
+  {
+    label: "Birth – 3 months", minMonths: 0, maxMonths: 3,
+    icon: "🍼", color: "#f9a8d4",
+    careTips: [
+      "Follow safe sleep guidelines — always on their back on a firm, flat surface",
+      "Feed on demand (every 2–3 hours); watch for hunger cues",
+      "Skin-to-skin contact builds bonding and helps regulate temperature",
+      "Start short tummy time sessions a few times a day to build neck strength",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Social smiling appears around 6 weeks", "Calms when picked up or spoken to"] },
+      { category: "Communication", emoji: "💬", items: ["Coos and makes soft sounds", "Reacts to familiar voices"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Tracks a moving object with eyes", "Begins to recognise familiar faces"] },
+      { category: "Motor", emoji: "🏃", items: ["Lifts head briefly during tummy time", "Grasps a finger when placed in palm"] },
+    ],
+  },
+  {
+    label: "3 – 6 months", minMonths: 3, maxMonths: 6,
+    icon: "🌱", color: "#86efac",
+    careTips: [
+      "Increase tummy time to strengthen core muscles and prepare for rolling",
+      "Sing, read aloud, and narrate daily activities — language starts now",
+      "Establish a consistent sleep routine with predictable calming cues",
+      "Offer high-contrast toys and mobiles to stimulate developing vision",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Laughs out loud", "Recognises and prefers familiar caregivers"] },
+      { category: "Communication", emoji: "💬", items: ["Babbles and coos more expressively", "Turns toward sounds"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Reaches for interesting objects", "Explores things by putting them in their mouth"] },
+      { category: "Motor", emoji: "🏃", items: ["Holds head steady when upright", "Rolls from tummy to back"] },
+    ],
+  },
+  {
+    label: "6 – 9 months", minMonths: 6, maxMonths: 9,
+    icon: "🌼", color: "#fde68a",
+    careTips: [
+      "Give plenty of safe floor time to encourage rolling and early crawling",
+      "Introduce solid foods around 6 months — start with purées, then soft finger foods",
+      "Play peek-a-boo and hiding games to build object permanence",
+      "Talk about everything you do together to rapidly expand vocabulary",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Stranger anxiety begins to appear", "Shows clear affection for familiar caregivers"] },
+      { category: "Communication", emoji: "💬", items: ["Babbles chains like 'mamama', 'dadada' (not yet meaningful)", "Responds to their own name"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Looks for a dropped object", "Explores by banging and shaking objects"] },
+      { category: "Motor", emoji: "🏃", items: ["Sits without support", "May begin crawling or commando crawling"] },
+    ],
+  },
+  {
+    label: "9 – 12 months", minMonths: 9, maxMonths: 12,
+    icon: "🚶", color: "#c4b5fd",
+    careTips: [
+      "Encourage cruising (walking while holding furniture) and standing practice",
+      "Read simple picture books daily and point to objects, naming them",
+      "Baby-proof low shelves and sharp corners — mobility is about to take off",
+      "Offer soft finger foods to build pincer grasp and mealtime independence",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Separation anxiety peaks", "Shows clear preferences for people and favourite objects"] },
+      { category: "Communication", emoji: "💬", items: ["Says 1–2 words with meaning (e.g. 'mama', 'dada', 'no')", "Waves bye-bye and points to things they want"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Finds a hidden object after watching you hide it", "Imitates gestures and simple actions"] },
+      { category: "Motor", emoji: "🏃", items: ["Pulls to standing independently", "May take first independent steps"] },
+    ],
+  },
+  {
+    label: "12 – 24 months", minMonths: 12, maxMonths: 24,
+    icon: "🧒", color: "#fdba74",
+    careTips: [
+      "Create a safe, open space for walking and exploring freely",
+      "Offer simple choices ('red cup or blue cup?') to build autonomy and decision-making",
+      "Keep a consistent daily routine — predictability significantly reduces tantrums",
+      "Read together every day; point to pictures and name them as you go",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Tantrums emerge as independence grows", "Shows affection to familiar people (hugs, kisses)"] },
+      { category: "Communication", emoji: "💬", items: ["Vocabulary grows to 10–50+ words by 24 months", "Begins combining 2 words ('more milk', 'daddy go')"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Pretend play begins (feeding a doll, 'talking' on a phone)", "Sorts shapes and colours"] },
+      { category: "Motor", emoji: "🏃", items: ["Walks confidently and begins to run", "Scribbles with crayons"] },
+    ],
+  },
+  {
+    label: "2 – 3 years", minMonths: 24, maxMonths: 36,
+    icon: "🌟", color: "#67e8f9",
+    careTips: [
+      "Encourage outdoor play every day for gross motor development",
+      "Read aloud daily and ask open questions like 'what do you think happens next?'",
+      "Begin toilet training when they show readiness signs (interest, staying dry longer)",
+      "Use simple, consistent rules and explain the reason behind them",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Engages in parallel play alongside other children", "Increasing independence — may say 'no' frequently"] },
+      { category: "Communication", emoji: "💬", items: ["Uses 2–3 word phrases and simple sentences", "Follows 2-step instructions ('get your shoes and bring them here')"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Sorts objects by colour or shape", "Understands 'mine' vs. 'yours'"] },
+      { category: "Motor", emoji: "🏃", items: ["Runs well and climbs on furniture and playground equipment", "Stacks blocks and turns book pages one at a time"] },
+    ],
+  },
+  {
+    label: "3 – 4 years", minMonths: 36, maxMonths: 48,
+    icon: "🎨", color: "#a5b4fc",
+    careTips: [
+      "Encourage rich imaginative and pretend play — it builds creativity and empathy",
+      "Assign simple age-appropriate tasks (tidying toys, setting napkins out)",
+      "Keep house rules consistent and always explain the 'why' behind them",
+      "Arrange regular playdates to develop cooperative social skills",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Plays cooperatively with peers (taking turns, sharing)", "Shows empathy ('Are you okay? Are you sad?')"] },
+      { category: "Communication", emoji: "💬", items: ["Uses longer, more complex sentences", "Asks lots of 'why' questions"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Draws a person with 2–4 body parts", "Counts to 5 and understands the concept"] },
+      { category: "Motor", emoji: "🏃", items: ["Rides a tricycle confidently", "Hops on one foot"] },
+    ],
+  },
+  {
+    label: "4 – 5 years", minMonths: 48, maxMonths: 72,
+    icon: "🎓", color: "#6ee7b7",
+    careTips: [
+      "Encourage group play and early friendships with peers",
+      "Read longer, more complex stories and discuss characters and their feelings",
+      "Foster self-care skills: dressing, brushing teeth, washing hands independently",
+      "Play simple board games together to build turn-taking and rule-following",
+    ],
+    milestones: [
+      { category: "Social & Emotional", emoji: "💛", items: ["Follows rules in simple games and understands fairness", "Can distinguish fantasy from reality in most situations"] },
+      { category: "Communication", emoji: "💬", items: ["Tells stories and retells events in sequence", "Names several letters and numbers"] },
+      { category: "Cognitive", emoji: "🧠", items: ["Counts to 10 and beyond", "Names basic colours and shapes accurately"] },
+      { category: "Motor", emoji: "🏃", items: ["Catches a bounced ball with two hands", "Hops, skips, and jumps with coordination"] },
+    ],
+  },
+];
+
+function calcTotalMonths(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const ref = new Date();
+  if (isNaN(birth.getTime())) return null;
+  let years = ref.getFullYear() - birth.getFullYear();
+  let months = ref.getMonth() - birth.getMonth();
+  if (months < 0) { years--; months += 12; }
+  if (ref.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  return years * 12 + months;
+}
+
+function getDevStage(birthDate: string | null | undefined): DevStage | null {
+  const totalMonths = calcTotalMonths(birthDate);
+  if (totalMonths === null || totalMonths < 0) return null;
+  return DEV_STAGES.find((s) => totalMonths >= s.minMonths && totalMonths < s.maxMonths) ?? null;
+}
+
+// ── Development Tab ───────────────────────────────────────────────────────────
+
+function DevelopmentTab({ child }: { child: ChildWithDetails }) {
+  if (!child.birthDate) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <span className="text-4xl block mb-3">📅</span>
+        <p className="text-sm">Add a birth date to see age-appropriate development tips and milestones.</p>
+      </div>
+    );
+  }
+  const stage = getDevStage(child.birthDate);
+  if (!stage) {
+    const totalMonths = calcTotalMonths(child.birthDate) ?? 0;
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <span className="text-4xl block mb-3">🎉</span>
+        <p className="text-sm font-medium">
+          {totalMonths >= 72 ? "Beyond our age guide!" : "Not yet in our age guide."}
+        </p>
+        <p className="text-xs mt-1 max-w-xs mx-auto">
+          {totalMonths >= 72
+            ? "Our developmental guide covers birth through 5 years. Keep celebrating every milestone!"
+            : "Birth date looks very recent — check back soon!"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Stage banner */}
+      <div
+        className="rounded-xl p-4 text-center"
+        style={{ background: stage.color + "25", border: `1.5px solid ${stage.color}60` }}
+      >
+        <span className="text-3xl block mb-1">{stage.icon}</span>
+        <h3 className="font-bold text-base">{stage.label}</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">{calcAge(child.birthDate)} old</p>
+      </div>
+
+      {/* Care Tips */}
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">
+          💡 Care Tips
+        </h4>
+        <div className="space-y-2">
+          {stage.careTips.map((tip, i) => (
+            <div key={i} className="flex gap-3 rounded-lg border bg-card p-3">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold"
+                style={{ background: stage.color + "40", color: stage.color }}
+              >
+                {i + 1}
+              </div>
+              <p className="text-sm leading-snug">{tip}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Common Milestones */}
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">
+          🎯 Common Milestones
+        </h4>
+        <div className="space-y-2.5">
+          {stage.milestones.map((group) => (
+            <div key={group.category} className="rounded-lg border bg-card p-3">
+              <h5 className="text-xs font-semibold text-muted-foreground mb-2">
+                {group.emoji} {group.category}
+              </h5>
+              <ul className="space-y-1.5">
+                {group.items.map((item, i) => (
+                  <li key={i} className="flex gap-2 text-sm">
+                    <span className="text-muted-foreground/50 shrink-0 mt-0.5">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center pb-1">
+        Milestones are typical ranges — every child develops at their own pace.
+      </p>
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcAge(birthDate: string | null | undefined, atDate?: string): string {
@@ -341,7 +601,7 @@ function PrepDialog({
 function ChildDetail({ child }: { child: ChildWithDetails }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("milestones");
+  const [activeTab, setActiveTab] = useState("development");
   const [milestoneDialog, setMilestoneDialog] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ChildMilestone | null>(null);
   const [memoryDialog, setMemoryDialog] = useState(false);
@@ -395,10 +655,16 @@ function ChildDetail({ child }: { child: ChildWithDetails }) {
     <div>
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
+          <TabsTrigger value="development">Development</TabsTrigger>
           <TabsTrigger value="milestones">Milestones <span className="ml-1 text-xs opacity-60">{child.milestones.length}</span></TabsTrigger>
           <TabsTrigger value="memories">Memories <span className="ml-1 text-xs opacity-60">{child.memories.length}</span></TabsTrigger>
           <TabsTrigger value="prep">Prep <span className="ml-1 text-xs opacity-60">{child.prepItems.length}</span></TabsTrigger>
         </TabsList>
+
+        {/* ── Development ── */}
+        <TabsContent value="development">
+          <DevelopmentTab child={child} />
+        </TabsContent>
 
         {/* ── Milestones ── */}
         <TabsContent value="milestones">
