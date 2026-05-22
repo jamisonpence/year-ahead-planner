@@ -72,6 +72,10 @@ export default function MoviesPage() {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<any | null>(null);
   const [listForm, setListForm] = useState({ name: "", visibility: "friends", isRanked: false });
+  const [listSelectedMovieIds, setListSelectedMovieIds] = useState<Set<number>>(new Set());
+  const [listMovieSearch, setListMovieSearch] = useState("");
+  const [listSaving, setListSaving] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movie | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -121,22 +125,67 @@ export default function MoviesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movies"] }),
   });
 
-  const saveListMut = useMutation({
-    mutationFn: (data: { name: string; visibility: string; isRanked: boolean }) =>
-      editingList
-        ? apiRequest("PATCH", `/api/movie-lists/${editingList.id}`, data)
-        : apiRequest("POST", "/api/movie-lists", data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/movie-lists"] });
-      setListModalOpen(false);
-      setEditingList(null);
-      setListForm({ name: "", visibility: "friends", isRanked: false });
-    },
-  });
   const deleteListMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/movie-lists/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movie-lists"] }),
   });
+
+  function openListModal(lst?: any) {
+    setEditingList(lst ?? null);
+    setListForm({ name: lst?.name ?? "", visibility: lst?.visibility ?? "friends", isRanked: lst?.isRanked ?? false });
+    if (lst) {
+      const inList = new Set<number>(
+        allItems.filter((m) => {
+          try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
+        }).map((m) => m.id)
+      );
+      setListSelectedMovieIds(inList);
+    } else {
+      setListSelectedMovieIds(new Set());
+    }
+    setListMovieSearch("");
+    setListModalOpen(true);
+  }
+
+  async function saveListWithMovies() {
+    if (!listForm.name.trim()) return;
+    setListSaving(true);
+    try {
+      const data = { name: listForm.name.trim(), visibility: listForm.visibility, isRanked: listForm.isRanked };
+      if (editingList) {
+        await apiRequest("PATCH", `/api/movie-lists/${editingList.id}`, data);
+      } else {
+        await apiRequest("POST", "/api/movie-lists", data);
+      }
+      const newName = data.name;
+      const oldName = editingList?.name ?? newName;
+      const updates: Promise<any>[] = [];
+      for (const movie of allItems) {
+        if ((movie.mediaType ?? "movie") === "video") continue;
+        let lists: string[] = [];
+        try { lists = JSON.parse(movie.listsJson); } catch {}
+        const wasIn = lists.includes(oldName);
+        const isIn = listSelectedMovieIds.has(movie.id);
+        if (wasIn && !isIn) {
+          updates.push(apiRequest("PATCH", `/api/movies/${movie.id}`, { listsJson: JSON.stringify(lists.filter((l) => l !== oldName)) }));
+        } else if (!wasIn && isIn) {
+          updates.push(apiRequest("PATCH", `/api/movies/${movie.id}`, { listsJson: JSON.stringify([...lists, newName]) }));
+        } else if (wasIn && isIn && oldName !== newName) {
+          updates.push(apiRequest("PATCH", `/api/movies/${movie.id}`, { listsJson: JSON.stringify(lists.map((l) => l === oldName ? newName : l)) }));
+        }
+      }
+      await Promise.all(updates);
+      qc.invalidateQueries({ queryKey: ["/api/movies"] });
+      qc.invalidateQueries({ queryKey: ["/api/movie-lists"] });
+      setListModalOpen(false);
+      setEditingList(null);
+      setListForm({ name: "", visibility: "friends", isRanked: false });
+    } catch {
+      toast({ title: "Error saving list", variant: "destructive" });
+    } finally {
+      setListSaving(false);
+    }
+  }
 
   const allCustomLists = useMemo(() => {
     const set = new Set<string>();
@@ -316,9 +365,10 @@ export default function MoviesPage() {
       const matchList = !listFilter || (() => {
         try { return (JSON.parse(m.listsJson) as string[]).includes(listFilter); } catch { return false; }
       })();
-      return matchSearch && matchGenre && matchList;
+      const matchFav = !showFavoritesOnly || m.isFavorite;
+      return matchSearch && matchGenre && matchList && matchFav;
     });
-  }, [items, search, genreFilter, listFilter]);
+  }, [items, search, genreFilter, listFilter, showFavoritesOnly]);
 
   const isShowView = mediaTypeView === "show";
   const backlog = filtered.filter((m) => m.status === "backlog");
@@ -339,7 +389,7 @@ export default function MoviesPage() {
   function switchView(v: "movie" | "show" | "video") {
     setMediaTypeView(v);
     setMainTab("watchlist");
-    setSearch(""); setGenreFilter(null); setListFilter(null);
+    setSearch(""); setGenreFilter(null); setListFilter(null); setShowFavoritesOnly(false);
   }
 
   function MediaCard({ movie }: { movie: Movie }) {
@@ -518,18 +568,16 @@ export default function MoviesPage() {
         </div>
       </div>
 
-      {/* Main 3-tab nav: Watchlist | Films | Lists */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 mb-5">
+      {/* Top-level nav: Movies | Shows | Clips */}
+      <div className="flex gap-1 bg-muted rounded-lg p-1 mb-4">
         {([
-          { key: "watchlist", icon: <Clock size={14} />, label: "Watchlist" },
-          { key: "films",     icon: <Film size={14} />,  label: "Films" },
-          { key: "lists",     icon: <Clapperboard size={14} />, label: "Lists" },
-        ] as const).map(({ key, icon, label }) => (
-          <button
-            key={key}
-            onClick={() => setMainTab(key)}
+          { v: "movie" as const, icon: <Film size={14} />, label: "Movies" },
+          { v: "show"  as const, icon: <Tv2 size={14} />,  label: "Shows" },
+          { v: "video" as const, icon: <Video size={14} />, label: "Clips" },
+        ]).map(({ v, icon, label }) => (
+          <button key={v} onClick={() => switchView(v)}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-              mainTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              mediaTypeView === v ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {icon} {label}
@@ -537,36 +585,37 @@ export default function MoviesPage() {
         ))}
       </div>
 
-      {/* Watchlist & Films share the type switcher + search + grid */}
-      {(mainTab === "watchlist" || mainTab === "films") && (<>
-        {/* Type toggle */}
-        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
-          <div className="flex gap-1 bg-secondary/60 rounded-lg p-1 w-max sm:w-fit">
-            {([
-              { v: "movie" as const, icon: <Film size={13} />, label: "Movies" },
-              { v: "show"  as const, icon: <Tv2 size={13} />,  label: "Shows" },
-              { v: "video" as const, icon: <Video size={13} />, label: "Clips" },
-            ]).map(({ v, icon, label }) => (
-              <button key={v} onClick={() => switchView(v)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  mediaTypeView === v ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {icon} {label}
-              </button>
-            ))}
-          </div>
+      {/* Clips view */}
+      {isVideoView && (
+        <ClipsSection
+          clips={items}
+          mediaForSearch={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
+          onDelete={(id) => deleteMut.mutate(id)}
+        />
+      )}
+
+      {/* Movies / Shows: secondary tabs + content */}
+      {!isVideoView && (<>
+        {/* Secondary tabs: Watchlist | Films | Lists */}
+        <div className="flex gap-1 bg-secondary/60 rounded-lg p-1 mb-4">
+          {([
+            { key: "watchlist" as const, icon: <Clock size={13} />, label: "Watchlist" },
+            { key: "films"     as const, icon: <Check size={13} />, label: "Films" },
+            { key: "lists"     as const, icon: <Clapperboard size={13} />, label: "Lists" },
+          ]).map(({ key, icon, label }) => (
+            <button key={key} onClick={() => setMainTab(key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                mainTab === key ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {icon} {label}
+            </button>
+          ))}
         </div>
 
-        {/* Clips view */}
-        {isVideoView ? (
-          <ClipsSection
-            clips={items}
-            mediaForSearch={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
-            onDelete={(id) => deleteMut.mutate(id)}
-          />
-        ) : (<>
-          {/* Search + genre filter */}
+        {/* Watchlist & Films */}
+        {(mainTab === "watchlist" || mainTab === "films") && (<>
+          {/* Search + genre filter + favorites toggle */}
           <div className="flex flex-wrap gap-2 mb-4">
             <div className="relative flex-1 min-w-[120px]">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -590,8 +639,18 @@ export default function MoviesPage() {
                 </SelectContent>
               </Select>
             )}
-            {(genreFilter || listFilter || search) && (
-              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); }}>
+            <button
+              onClick={() => setShowFavoritesOnly((v) => !v)}
+              className={`flex items-center gap-1.5 h-8 px-3 rounded-md text-sm border transition-colors ${
+                showFavoritesOnly
+                  ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400"
+                  : "border-border text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              <Heart size={13} fill={showFavoritesOnly ? "currentColor" : "none"} /> Favorites
+            </button>
+            {(genreFilter || listFilter || search || showFavoritesOnly) && (
+              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); setShowFavoritesOnly(false); }}>
                 <X size={13} /> Clear
               </Button>
             )}
@@ -599,7 +658,7 @@ export default function MoviesPage() {
 
           {/* Watchlist = backlog + watching */}
           {mainTab === "watchlist" && (() => {
-            const queue = [...backlog, ...watching];
+            const queue = [...watching, ...backlog];
             return queue.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 {emptyIcon}
@@ -658,83 +717,73 @@ export default function MoviesPage() {
             );
           })()}
         </>)}
-      </>)}
 
-      {/* Lists tab */}
-      {mainTab === "lists" && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted-foreground">{savedLists.length} list{savedLists.length !== 1 ? "s" : ""}</p>
-            <Button size="sm" className="gap-1.5" onClick={() => {
-              setEditingList(null);
-              setListForm({ name: "", visibility: "friends", isRanked: false });
-              setListModalOpen(true);
-            }}>
-              <Plus size={14} /> New List
-            </Button>
-          </div>
-
-          {savedLists.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Clapperboard size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium">No lists yet</p>
-              <p className="text-sm mt-1">Create lists to organize your watchlist — Date Night, Must-See Classics, etc.</p>
-              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => {
-                setEditingList(null);
-                setListForm({ name: "", visibility: "friends", isRanked: false });
-                setListModalOpen(true);
-              }}><Plus size={14} /> Create a list</Button>
+        {/* Lists tab */}
+        {mainTab === "lists" && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">{savedLists.length} list{savedLists.length !== 1 ? "s" : ""}</p>
+              <Button size="sm" className="gap-1.5" onClick={() => openListModal()}>
+                <Plus size={14} /> New List
+              </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {savedLists.map((lst) => {
-                const count = allItems.filter((m) => {
-                  try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
-                }).length;
-                return (
-                  <div key={lst.id} className="rounded-xl border bg-card p-4 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate">{lst.name}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                          lst.visibility === "public"
-                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-                            : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                        }`}>
-                          {lst.visibility === "public" ? "🌐 Public" : "👥 Friends"}
-                        </span>
-                        {lst.isRanked && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                            🏆 Ranked
+
+            {savedLists.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Clapperboard size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No lists yet</p>
+                <p className="text-sm mt-1">Create lists to organize your watchlist — Date Night, Must-See Classics, etc.</p>
+                <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => openListModal()}>
+                  <Plus size={14} /> Create a list
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {savedLists.map((lst) => {
+                  const count = allItems.filter((m) => {
+                    try { return (JSON.parse(m.listsJson) as string[]).includes(lst.name); } catch { return false; }
+                  }).length;
+                  return (
+                    <div key={lst.id} className="rounded-xl border bg-card p-4 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">{lst.name}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                            lst.visibility === "public"
+                              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                              : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                          }`}>
+                            {lst.visibility === "public" ? "🌐 Public" : "👥 Friends"}
                           </span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground">{count} item{count !== 1 ? "s" : ""}</span>
+                          {lst.isRanked && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                              🏆 Ranked
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">{count} item{count !== 1 ? "s" : ""}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openListModal(lst)} className="p-1.5 rounded hover:bg-secondary transition-colors">
+                          <Pencil size={13} className="text-muted-foreground" />
+                        </button>
+                        <button onClick={() => { if (confirm(`Delete "${lst.name}"?`)) deleteListMut.mutate(lst.id); }}
+                          className="p-1.5 rounded hover:bg-secondary transition-colors">
+                          <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => {
-                        setEditingList(lst);
-                        setListForm({ name: lst.name, visibility: lst.visibility, isRanked: lst.isRanked });
-                        setListModalOpen(true);
-                      }} className="p-1.5 rounded hover:bg-secondary transition-colors">
-                        <Pencil size={13} className="text-muted-foreground" />
-                      </button>
-                      <button onClick={() => { if (confirm(`Delete "${lst.name}"?`)) deleteListMut.mutate(lst.id); }}
-                        className="p-1.5 rounded hover:bg-secondary transition-colors">
-                        <Trash2 size={13} className="text-muted-foreground hover:text-destructive" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </>)}
 
       {/* List Create/Edit Modal */}
       <Dialog open={listModalOpen} onOpenChange={(o) => { if (!o) { setListModalOpen(false); setEditingList(null); } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clapperboard size={16} /> {editingList ? "Edit List" : "New List"}
@@ -774,6 +823,57 @@ export default function MoviesPage() {
                 <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${listForm.isRanked ? "translate-x-6" : "translate-x-1"}`} />
               </button>
             </div>
+
+            {/* Movie / Show picker */}
+            {allItems.filter((m) => (m.mediaType ?? "movie") !== "video").length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Add to List {listSelectedMovieIds.size > 0 && <span className="normal-case font-normal text-foreground ml-1">({listSelectedMovieIds.size} selected)</span>}
+                </label>
+                <div className="relative">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={listMovieSearch}
+                    onChange={(e) => setListMovieSearch(e.target.value)}
+                    placeholder="Search titles…"
+                    className="pl-7 h-8 text-xs"
+                  />
+                </div>
+                <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+                  {(() => {
+                    const pool = allItems
+                      .filter((m) => (m.mediaType ?? "movie") !== "video")
+                      .filter((m) => !listMovieSearch || m.title.toLowerCase().includes(listMovieSearch.toLowerCase()))
+                      .slice(0, 100);
+                    if (pool.length === 0) return (
+                      <p className="text-xs text-muted-foreground p-3 text-center">No titles found.</p>
+                    );
+                    return pool.map((m) => {
+                      const inList = listSelectedMovieIds.has(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setListSelectedMovieIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                            return next;
+                          })}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-secondary transition-colors ${inList ? "bg-primary/5" : ""}`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${inList ? "bg-primary border-primary" : "border-border"}`}>
+                            {inList && <Check size={10} className="text-primary-foreground" />}
+                          </div>
+                          <span className="flex-1 truncate font-medium">{m.title}</span>
+                          {m.year && <span className="text-muted-foreground shrink-0">{m.year}</span>}
+                          {m.mediaType === "show" && <Tv2 size={11} className="text-muted-foreground shrink-0" />}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex justify-between items-center pt-2">
             <div>
@@ -786,8 +886,8 @@ export default function MoviesPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setListModalOpen(false)}>Cancel</Button>
-              <Button size="sm" disabled={!listForm.name.trim() || saveListMut.isPending}
-                onClick={() => saveListMut.mutate(listForm)} className="gap-1.5">
+              <Button size="sm" disabled={!listForm.name.trim() || listSaving}
+                onClick={saveListWithMovies} className="gap-1.5">
                 <Check size={13} /> {editingList ? "Save" : "Create"}
               </Button>
             </div>
