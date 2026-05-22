@@ -390,7 +390,7 @@ function HobbyPlanEditor({ plan, hobby, friends, steps, done, total, pct, curren
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${step.done ? "border-emerald-500 bg-emerald-500" : "border-muted-foreground/30"}`}>
                   {step.done && <Check size={10} className="text-white" />}
                 </div>
-                <p className={`text-sm flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.title}</p>
+                <p className={`text-sm flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.text ?? step.title}</p>
               </div>
             ))}
           </div>
