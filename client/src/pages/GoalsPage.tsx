@@ -320,6 +320,167 @@ function _parsePlans(extraJson: string): any[] {
 function _parseGoals(extraJson: string): any[] {
   try { const o = JSON.parse(extraJson || "{}"); return Array.isArray(o.goals) ? o.goals : []; } catch { return []; }
 }
+function _setPlanInExtra(extraJson: string, planId: string, update: Record<string, any>): string {
+  try {
+    const o = JSON.parse(extraJson || "{}");
+    const plans = Array.isArray(o.plans) ? o.plans : [];
+    const idx = plans.findIndex((p: any) => p.id === planId);
+    if (idx >= 0) plans[idx] = { ...plans[idx], ...update };
+    return JSON.stringify({ ...o, plans });
+  } catch { return extraJson; }
+}
+function _setGoalInExtra(extraJson: string, goalId: string, update: Record<string, any>): string {
+  try {
+    const o = JSON.parse(extraJson || "{}");
+    const goals = Array.isArray(o.goals) ? o.goals : [];
+    const idx = goals.findIndex((g: any) => g.id === goalId);
+    if (idx >= 0) goals[idx] = { ...goals[idx], ...update };
+    return JSON.stringify({ ...o, goals });
+  } catch { return extraJson; }
+}
+
+// ── HobbyPlanEditor ───────────────────────────────────────────────────────────
+function HobbyPlanEditor({ plan, hobby, friends, steps, done, total, pct, currentBuddy, onSave }: {
+  plan: any;
+  hobby: any;
+  friends: PublicUser[];
+  steps: any[];
+  done: number;
+  total: number;
+  pct: number;
+  currentBuddy: PublicUser | null;
+  onSave: (buddyUserId: number | null) => void;
+}) {
+  const [buddyUserId, setBuddyUserId] = useState<number | null>(plan.buddyUserId ?? null);
+  const isDirty = (buddyUserId ?? null) !== (plan.buddyUserId ?? null);
+
+  const typeColors: Record<string, string> = { creative: "#ec4899", collection: "#f97316", outdoor: "#10b981", games: "#6366f1", learning: "#3b82f6", performance: "#8b5cf6" };
+  const color = typeColors[hobby.hobbyType] ?? "#6366f1";
+
+  return (
+    <div className="space-y-3 p-1">
+      {/* Plan header */}
+      <div className="p-3 rounded-xl border bg-secondary/30">
+        <div className="flex items-center gap-2 mb-2">
+          <ClipboardList size={14} style={{ color }} className="shrink-0" />
+          <p className="text-sm font-semibold leading-tight flex-1 truncate">{plan.title}</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+          <Heart size={10} style={{ color }} />
+          <span>{hobby.name}</span>
+          {plan.durationWeeks && <span>· {plan.durationWeeks}w plan</span>}
+        </div>
+        {total > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Progress value={pct} className="h-1.5 flex-1" />
+              <span className="text-xs text-muted-foreground shrink-0">{done}/{total} steps</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Steps list */}
+      {steps.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Steps</p>
+          <div className="space-y-1">
+            {steps.map((step: any, i: number) => (
+              <div key={i} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors ${step.done ? "opacity-60" : ""}`}>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${step.done ? "border-emerald-500 bg-emerald-500" : "border-muted-foreground/30"}`}>
+                  {step.done && <Check size={10} className="text-white" />}
+                </div>
+                <p className={`text-sm flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.title}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Buddy */}
+      {friends.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <Users size={11} className="text-muted-foreground" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Accountabilibuddy</p>
+          </div>
+          <BuddySearchPicker value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
+        </div>
+      )}
+
+      {isDirty && (
+        <Button size="sm" className="w-full h-8 text-xs" onClick={() => onSave(buddyUserId)}>
+          Save Changes
+        </Button>
+      )}
+
+      {plan.notes && (
+        <div className="p-2.5 rounded-lg bg-secondary/40 text-xs text-muted-foreground">
+          <p className="font-semibold mb-0.5">Notes</p>
+          <p>{plan.notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── HobbyGoalInlineEditor ─────────────────────────────────────────────────────
+function HobbyGoalInlineEditor({ goal, friends, onSave }: {
+  goal: any;
+  friends: PublicUser[];
+  onSave: (updates: Record<string, any>) => void;
+}) {
+  const [title, setTitle] = useState(goal.title ?? "");
+  const [currentValue, setCurrentValue] = useState(String(goal.currentValue ?? ""));
+  const [buddyUserId, setBuddyUserId] = useState<number | null>(goal.buddyUserId ?? null);
+
+  const isDirty =
+    title.trim() !== (goal.title ?? "") ||
+    (goal.goalType === "count" && parseFloat(currentValue) !== (goal.currentValue ?? 0)) ||
+    (buddyUserId ?? null) !== (goal.buddyUserId ?? null);
+
+  const handleSave = () => {
+    const updates: Record<string, any> = { title: title.trim() || goal.title, buddyUserId: buddyUserId ?? null };
+    if (goal.goalType === "count") updates.currentValue = parseFloat(currentValue) || 0;
+    onSave(updates);
+  };
+
+  return (
+    <div className="space-y-2.5 pt-1">
+      <div className="space-y-1">
+        <Label className="text-xs">Title</Label>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-xs" />
+      </div>
+
+      {goal.goalType === "count" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Current ({goal.unit || "count"})</Label>
+            <Input type="number" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} step="1" min="0" className="h-8 text-xs" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Target</Label>
+            <Input type="number" value={String(goal.targetValue ?? "")} readOnly className="h-8 text-xs bg-secondary/40" />
+          </div>
+        </div>
+      )}
+
+      {friends.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <Users size={11} className="text-muted-foreground" />
+            <Label className="text-xs">Accountabilibuddy</Label>
+          </div>
+          <BuddySearchPicker value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
+        </div>
+      )}
+
+      <Button size="sm" className="w-full h-8 text-xs" onClick={handleSave} disabled={!isDirty}>
+        Save Changes
+      </Button>
+    </div>
+  );
+}
 
 // Plant watering helpers
 function plantWateringDays(plant: Plant): number | null {
@@ -340,6 +501,7 @@ export default function GoalsPage() {
   // selectedGoalId = null (nothing), a real goalId, or STANDALONE_ID (-1)
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null); // "{hobbyId}_{planId}"
+  const [editingHobbyGoalId, setEditingHobbyGoalId] = useState<string | null>(null); // goalId within extraJson
   const [mobileTab, setMobileTab] = useState<"goals" | "projects" | "tasks">("goals");
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
@@ -404,6 +566,12 @@ export default function GoalsPage() {
     mutationFn: ({ id, ...data }: { id: number } & Partial<InsertGoal>) =>
       apiRequest("PATCH", `/api/goals/${id}`, data),
     onSuccess: () => { inv(); toast({ title: "Goal updated" }); },
+  });
+
+  const updateHobby = useMutation({
+    mutationFn: ({ id, extraJson }: { id: number; extraJson: string }) =>
+      apiRequest("PATCH", `/api/hobbies/${id}`, { extraJson }),
+    onSuccess: () => { inv(); toast({ title: "Updated" }); },
   });
 
   // ── Project mutations ────────────────────────────────────────────────────
@@ -1127,59 +1295,32 @@ export default function GoalsPage() {
                   );
                 })()}
               </div>
-            ) : /* Hobby Plan detail mode */
-            isHobbyGoalsSelected && selectedHobbyPlan ? (
-              <div className="space-y-4">
-                {/* Plan header */}
-                <div className="rounded-xl border p-3 space-y-2 bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold">{selectedHobbyPlan.title}</p>
-                      <p className="text-xs text-muted-foreground">{selectedHobbyPlan.hobby.name}{selectedHobbyPlan.durationWeeks ? ` · ${selectedHobbyPlan.durationWeeks}w plan` : ""}</p>
-                    </div>
-                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0">Active</span>
-                  </div>
-                  {selectedHobbyPlan.description && (
-                    <p className="text-xs text-muted-foreground">{selectedHobbyPlan.description}</p>
-                  )}
-                  {(() => {
-                    const steps: any[] = selectedHobbyPlan.steps ?? [];
-                    const done = steps.filter((s: any) => s.done).length;
-                    const total = steps.length;
-                    const pct = total ? Math.round((done / total) * 100) : 0;
-                    if (!total) return null;
-                    return (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{done} / {total} steps</span>
-                          <span className="font-semibold">{pct}%</span>
-                        </div>
-                        <Progress value={pct} className="h-2" />
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* All steps */}
-                {(selectedHobbyPlan.steps ?? []).length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Steps</p>
-                    {(selectedHobbyPlan.steps ?? []).map((s: any) => (
-                      <div key={s.id} className="flex items-start gap-2 px-2 py-2 rounded-lg bg-secondary/30">
-                        {s.done
-                          ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0 mt-0.5" />
-                          : <Circle size={13} className="text-muted-foreground/30 shrink-0 mt-0.5" />}
-                        <span className={`text-xs flex-1 ${s.done ? "line-through text-muted-foreground" : ""}`}>{s.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Link href="/hobbies">
-                  <a className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors px-1">
-                    <ClipboardList size={11} /> Manage steps in Hobbies →
-                  </a>
-                </Link>
-              </div>
-            ) : /* Hobby Goals overview mode */
+            ) : /* Hobby Plan detail mode — with inline buddy/title editing */
+            isHobbyGoalsSelected && selectedHobbyPlan ? (() => {
+              const plan = selectedHobbyPlan;
+              const hobby = plan.hobby;
+              const steps: any[] = plan.steps ?? [];
+              const done = steps.filter((s: any) => s.done).length;
+              const total = steps.length;
+              const pct = total ? Math.round((done / total) * 100) : 0;
+              const currentBuddy = friends.find(f => f.id === plan.buddyUserId) ?? null;
+              return (
+                <HobbyPlanEditor
+                  plan={plan}
+                  hobby={hobby}
+                  friends={friends}
+                  steps={steps}
+                  done={done}
+                  total={total}
+                  pct={pct}
+                  currentBuddy={currentBuddy}
+                  onSave={(buddyUserId) => {
+                    const newExtra = _setPlanInExtra(hobby.extraJson ?? "{}", plan.id, { buddyUserId });
+                    updateHobby.mutate({ id: hobby.id, extraJson: newExtra });
+                  }}
+                />
+              );
+            })() : /* Hobby Goals overview mode — with per-goal inline editing */
             isHobbyGoalsSelected && !selectedHobbyPlanKey ? (
               <div className="space-y-3">
                 {activeHobbyGoals.map((g: any) => {
@@ -1188,16 +1329,48 @@ export default function GoalsPage() {
                   if (g.goalType === "count") { const cur = g.currentValue ?? 0; const tgt = g.targetValue ?? 1; pct = Math.min(100, Math.round((cur / tgt) * 100)); sublabel = `${cur} / ${tgt} ${g.unit ?? ""}`; }
                   else if (g.goalType === "milestone") { pct = g.status === "completed" ? 100 : 0; sublabel = "Milestone"; }
                   else if (g.goalType === "frequency") { sublabel = `${g.freqTimes}× / ${g.freqPeriod}`; pct = 50; }
+                  const isEditing = editingHobbyGoalId === g.id;
+                  const currentBuddy = friends.find(f => f.id === g.buddyUserId) ?? null;
                   return (
-                    <div key={g.id} className="rounded-xl border p-3 space-y-1.5 bg-card">
+                    <div key={g.id} className="rounded-xl border p-3 space-y-2 bg-card">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold truncate">{g.title}</p>
                           <p className="text-xs text-muted-foreground">{g.hobby.name} · <span className="capitalize">{g.goalType}</span></p>
                         </div>
+                        <button
+                          onClick={() => setEditingHobbyGoalId(isEditing ? null : g.id)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border rounded-lg px-2 py-1 hover:bg-muted transition-all shrink-0"
+                        >
+                          {isEditing ? <X size={10} /> : <Pencil size={10} />}
+                          {isEditing ? "Cancel" : "Edit"}
+                        </button>
                       </div>
-                      {g.goalType === "count" && <Progress value={pct} className="h-1.5" />}
-                      <p className="text-xs text-muted-foreground">{sublabel}</p>
+                      {!isEditing && (
+                        <>
+                          {g.goalType === "count" && <Progress value={pct} className="h-1.5" />}
+                          <p className="text-xs text-muted-foreground">{sublabel}</p>
+                          {currentBuddy && (
+                            <div className="flex items-center gap-1.5">
+                              <BuddyAvatarSm user={currentBuddy} size={16} />
+                              <span className="text-xs text-muted-foreground">
+                                <span className="text-primary/80 font-medium">{currentBuddy.name.split(" ")[0]}</span> is your buddy
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {isEditing && (
+                        <HobbyGoalInlineEditor
+                          goal={g}
+                          friends={friends}
+                          onSave={(updates) => {
+                            const newExtra = _setGoalInExtra(g.hobby.extraJson ?? "{}", g.id, updates);
+                            updateHobby.mutate({ id: g.hobby.id, extraJson: newExtra });
+                            setEditingHobbyGoalId(null);
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 })}
