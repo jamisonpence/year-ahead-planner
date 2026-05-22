@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Baby, Quote, Palette,
+  ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette,
   Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
   Smartphone, Download,
 } from "lucide-react";
@@ -28,11 +28,9 @@ const PRIVACY_TABS = [
   { path: "/movies",        label: "Movies & Shows",     icon: Film            },
   { path: "/music",         label: "Music",              icon: Music2          },
   { path: "/budget",        label: "Budget",             icon: Wallet          },
-  { path: "/plants",        label: "Plants",             icon: Leaf            },
   { path: "/housekeeping",  label: "Housekeeping",       icon: Home            },
   { path: "/spots",         label: "Spots",              icon: MapPin          },
   { path: "/kids",          label: "Kids",               icon: Baby            },
-  { path: "/quotes",        label: "Quotes",             icon: Quote           },
   { path: "/art",           label: "Art",                icon: Palette         },
   { path: "/hobbies",       label: "Hobbies",            icon: Sparkles        },
   { path: "/faith",         label: "Faith & Spirituality", icon: Flame         },
