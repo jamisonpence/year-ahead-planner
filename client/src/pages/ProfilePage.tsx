@@ -668,7 +668,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="px-4 py-4 sm:p-6 max-w-5xl mx-auto overflow-x-hidden w-full">
       {/* Back */}
       <button
         onClick={() => navigate("/relationships")}
@@ -683,8 +683,8 @@ export default function ProfilePage() {
         <div className="flex items-start gap-4">
           <Avatar name={user.name} avatarUrl={user.avatarUrl} size={64} />
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold">{user.name}</h1>
-            <p className="text-sm text-muted-foreground">{user.email}</p>
+            <h1 className="text-xl font-bold truncate">{user.name}</h1>
+            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
           </div>
           <button
             onClick={() => setRecOpen(true)}
@@ -716,7 +716,7 @@ export default function ProfilePage() {
 
         {/* Taste breakdown */}
         {matchData && matchData.total > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 overflow-hidden">
             {[
               { key: "books",   label: "books",   emoji: "📚" },
               { key: "movies",  label: "movies",  emoji: "🎬" },
@@ -773,7 +773,7 @@ export default function ProfilePage() {
       ) : (
         <>
           {/* Tab bar */}
-          <div className="flex flex-wrap gap-2 mb-6">
+          <div className="flex flex-wrap gap-2 mb-6 overflow-x-auto pb-1 scrollbar-none">
             {displayTabs.map(tab => {
               const Icon = tab.icon;
               const isActive = currentTab === tab.path;
@@ -795,7 +795,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Content */}
-          <div>{renderContent()}</div>
+          <div className="overflow-x-hidden w-full">{renderContent()}</div>
         </>
       )}
     </div>
