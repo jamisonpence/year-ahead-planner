@@ -4,8 +4,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette, Quote,
-  Target, Dumbbell, Leaf, Star, Heart, Lock, Plus, Check, Sparkles, Flame, Send, X,
+  ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette,
+  Target, Dumbbell, Star, Heart, Lock, Plus, Check, Sparkles, Flame, Send, X,
   Loader2,
 } from "lucide-react";
 
@@ -39,10 +39,8 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType; key: st
   "/recipes":    { label: "Recipes",       icon: ChefHat,   key: "recipes"  },
   "/spots":      { label: "Spots",         icon: MapPin,    key: "spots"    },
   "/art":        { label: "Art",           icon: Palette,   key: "art"      },
-  "/quotes":     { label: "Quotes",        icon: Quote,     key: "quotes"   },
   "/goals":      { label: "Goals",         icon: Target,    key: "goals"    },
   "/workouts":   { label: "Workouts",      icon: Dumbbell,  key: "workouts" },
-  "/plants":     { label: "Plants",        icon: Leaf,      key: "plants"   },
   "/hobbies":    { label: "Hobbies",       icon: Sparkles,  key: "hobbies"  },
   "/faith":      { label: "Faith & Spirituality", icon: Flame, key: "faithTexts" },
 };
@@ -331,35 +329,6 @@ function ArtPanel({ pieces, onAdd, added }: {
   );
 }
 
-function QuotesPanel({ quotes, onAdd, added }: {
-  quotes: ProfileData["data"]["quotes"];
-  onAdd: (type: string, data: any, key: string) => void;
-  added: Set<string>;
-}) {
-  if (!quotes?.length) return <Empty label="No quotes yet" />;
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {quotes.map(q => {
-        const key = `quote-${q.id}`;
-        return (
-          <div key={q.id} className="p-4 rounded-xl border bg-card flex flex-col gap-2">
-            <p className="text-sm italic leading-relaxed text-foreground">"{q.text}"</p>
-            <div className="flex items-center justify-between mt-auto">
-              <div>
-                {q.author && <p className="text-xs font-medium text-muted-foreground">— {q.author}</p>}
-                {q.category && <p className="text-xs text-muted-foreground/60 capitalize">{q.category}</p>}
-              </div>
-              <div className="flex items-center gap-2">
-                {q.isFavorite && <Heart size={12} className="fill-red-400 text-red-400 shrink-0" />}
-                <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("quote", { text: q.text, author: q.author, category: q.category }, key)} />
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function GoalsPanel({ goals }: { goals: ProfileData["data"]["goals"] }) {
   if (!goals?.length) return <Empty label="No goals yet" />;
@@ -400,38 +369,6 @@ function WorkoutsPanel({ workouts }: { workouts: ProfileData["data"]["workouts"]
   );
 }
 
-function PlantsPanel({ plants, onAdd, added }: {
-  plants: ProfileData["data"]["plants"];
-  onAdd: (type: string, data: any, key: string) => void;
-  added: Set<string>;
-}) {
-  if (!plants?.length) return <Empty label="No plants yet" />;
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-      {plants.map(p => {
-        const key = `plant-${p.id}`;
-        return (
-          <div key={p.id} className="rounded-xl border bg-card overflow-hidden relative">
-            <div className="absolute top-1.5 right-1.5 z-10">
-              <AddButton itemKey={key} added={added.has(key)} onAdd={() => onAdd("plant", { name: p.name, species: p.species, imageUrl: p.imageUrl }, key)} />
-            </div>
-            {p.imageUrl ? (
-              <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover" />
-            ) : (
-              <div className="w-full aspect-square bg-green-50 dark:bg-green-950/20 flex items-center justify-center">
-                <Leaf size={28} className="text-green-400" />
-              </div>
-            )}
-            <div className="p-2">
-              <p className="text-xs font-semibold truncate">{p.name}</p>
-              {p.species && <p className="text-[10px] text-muted-foreground truncate italic">{p.species}</p>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function Empty({ label }: { label: string }) {
   return <p className="text-sm text-muted-foreground py-8 text-center">{label}</p>;
@@ -722,10 +659,8 @@ export default function ProfilePage() {
       case "/recipes":   return <RecipesPanel recipes={data.recipes} {...panelProps} />;
       case "/spots":     return <SpotsPanel spots={data.spots} {...panelProps} />;
       case "/art":       return <ArtPanel pieces={data.art} {...panelProps} />;
-      case "/quotes":    return <QuotesPanel quotes={data.quotes} {...panelProps} />;
       case "/goals":     return <GoalsPanel goals={data.goals} />;
       case "/workouts":  return <WorkoutsPanel workouts={data.workouts} />;
-      case "/plants":    return <PlantsPanel plants={data.plants} {...panelProps} />;
       case "/hobbies":   return <HobbiesPanel hobbies={data.hobbies} />;
       case "/faith":     return <FaithPanel texts={data.faithTexts} practices={data.faithPractices} sermons={data.faithSermons} />;
       default:           return <Empty label="Content coming soon" />;
