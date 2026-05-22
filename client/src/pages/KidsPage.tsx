@@ -1689,7 +1689,7 @@ export default function KidsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto overflow-x-hidden w-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>

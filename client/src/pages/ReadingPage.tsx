@@ -705,7 +705,7 @@ export default function ReadingPage() {
   const isRecsTab = tab === "recommendations";
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5 overflow-x-hidden w-full">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
