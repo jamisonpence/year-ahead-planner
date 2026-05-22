@@ -696,7 +696,7 @@ export default function ReadingPage() {
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5 overflow-x-hidden w-full">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-2xl font-bold">Reading</h1>
           {streak > 0 && (
@@ -705,7 +705,7 @@ export default function ReadingPage() {
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={openNewGoalModal} className="gap-1.5">
             <Target size={13} /> Add Goal
           </Button>
