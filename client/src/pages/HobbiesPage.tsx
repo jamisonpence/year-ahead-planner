@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Hobby, InsertHobby } from "@shared/schema";
+import type { Hobby, InsertHobby, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +144,8 @@ interface HobbyGoal {
   targetDate?: string;
   status: "active" | "completed" | "paused";
   createdAt: string;
+  // accountability
+  buddyUserId?: number;
 }
 
 interface GoalTemplate {
@@ -153,6 +155,69 @@ interface GoalTemplate {
   description: string;
   goalType: GoalType;
   defaults: Partial<HobbyGoal>;
+}
+
+// ── Shared buddy helpers ──────────────────────────────────────────────────────
+
+function useFriends() {
+  return useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: async () => (await apiRequest("GET", "/api/friends")).json(),
+    staleTime: 60_000,
+  });
+}
+
+function BuddyPickerInline({
+  value,
+  onChange,
+  friends,
+}: {
+  value: number | null | undefined;
+  onChange: (id: number | null) => void;
+  friends: PublicUser[];
+}) {
+  const selected = friends.find((f) => f.id === value) ?? null;
+
+  function avatar(f: PublicUser, size = 20) {
+    const initials = f.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+    if (f.avatarUrl)
+      return <img src={f.avatarUrl} alt={f.name} className="rounded-full object-cover border border-background shrink-0" style={{ width: size, height: size }} />;
+    return (
+      <div className="rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center border border-background shrink-0"
+        style={{ width: size, height: size, fontSize: size * 0.38 }}>
+        {initials}
+      </div>
+    );
+  }
+
+  if (friends.length === 0) {
+    return <p className="text-[11px] text-muted-foreground">Add friends to assign an Accountabilibuddy.</p>;
+  }
+  if (selected) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border bg-primary/5 border-primary/30 px-2.5 py-1.5">
+        {avatar(selected, 24)}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium leading-tight truncate">{selected.name}</p>
+          <p className="text-[10px] text-muted-foreground">Accountabilibuddy</p>
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="p-0.5 rounded hover:bg-muted transition-colors">
+          <X size={11} className="text-muted-foreground" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {friends.map((f) => (
+        <button type="button" key={f.id} onClick={() => onChange(f.id)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-card hover:bg-muted/50 hover:border-primary/40 transition-all text-xs">
+          {avatar(f, 18)}
+          <span className="font-medium">{f.name.split(" ")[0]}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ── Goal templates per hobby type ─────────────────────────────────────────────
@@ -1730,6 +1795,8 @@ function GoalCard({
 }) {
   const [editingCount, setEditingCount] = useState(false);
   const [countInput, setCountInput] = useState(String(goal.currentValue ?? 0));
+  const { data: friends = [] } = useFriends();
+  const buddy = goal.buddyUserId ? friends.find((f) => f.id === goal.buddyUserId) : null;
   const meta = GOAL_TYPE_META[goal.goalType];
   const GoalIcon = meta.icon;
   const { pct, label } = goalProgress(goal);
@@ -1850,6 +1917,23 @@ function GoalCard({
         <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
           <CheckCircle2 size={11} /> Completed
         </span>
+      )}
+
+      {/* Accountabilibuddy chip */}
+      {buddy && (
+        <div className="flex items-center gap-1.5 pt-0.5">
+          {buddy.avatarUrl ? (
+            <img src={buddy.avatarUrl} alt={buddy.name} className="w-4 h-4 rounded-full object-cover border border-background shrink-0" />
+          ) : (
+            <div className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[8px] font-bold flex items-center justify-center border border-background shrink-0">
+              {buddy.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <span className="text-xs text-muted-foreground">
+            <span className="font-medium" style={{ color: hobbyColor }}>{buddy.name.split(" ")[0]}</span>
+            {" "}is your buddy
+          </span>
+        </div>
       )}
     </div>
   );
@@ -4704,7 +4788,9 @@ function GoalWizard({
   const [steps, setSteps] = useState<GoalStep[]>([]);
   const [stepInput, setStepInput] = useState("");
   const [stepDate, setStepDate] = useState("");
+  const [buddyUserId, setBuddyUserId] = useState<number | null>(null);
 
+  const { data: friends = [] } = useFriends();
   const selectedHobby = hobbies.find(h => h.id === selectedHobbyId) ?? null;
   const hobbyType = (selectedHobby?.hobbyType as HobbyType) ?? "creative";
   const templates = [...(GOAL_TEMPLATES[hobbyType] ?? []), CUSTOM_TEMPLATE];
@@ -4717,6 +4803,7 @@ function GoalWizard({
     setTitle(""); setDescription(""); setTargetValue(""); setCurrentValue("0");
     setUnit(""); setTargetDate(""); setFreqTimes("3"); setFreqPeriod("week");
     setDurationWeeks("12"); setSteps([]); setStepInput(""); setStepDate("");
+    setBuddyUserId(null);
   }
 
   function handleClose() { reset(); onClose(); }
@@ -4753,6 +4840,7 @@ function GoalWizard({
         freqTimes: Number(freqTimes) || 3, freqPeriod, durationWeeks: Number(durationWeeks) || 12
       } : {}),
       ...(goalType === "plan" ? { steps } : {}),
+      ...(buddyUserId ? { buddyUserId } : {}),
     };
     onSave(selectedHobbyId, goal);
     handleClose();
@@ -4946,6 +5034,14 @@ function GoalWizard({
                   <Input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="text-sm" />
                 </div>
               )}
+
+              {/* Accountabilibuddy */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block flex items-center gap-1.5">
+                  👥 Accountabilibuddy <span className="normal-case font-normal">(optional)</span>
+                </label>
+                <BuddyPickerInline value={buddyUserId} onChange={setBuddyUserId} friends={friends} />
+              </div>
             </>
           )}
         </div>
@@ -8108,6 +8204,8 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const [goalFreqTimes, setGoalFreqTimes] = useState("3");
   const [goalFreqPeriod, setGoalFreqPeriod] = useState<"week" | "month">("week");
   const [goalTargetDate, setGoalTargetDate] = useState("");
+  const [goalBuddyUserId, setGoalBuddyUserId] = useState<number | null>(null);
+  const { data: friends = [] } = useFriends();
 
   function addGoal() {
     if (!goalTitle.trim()) return;
@@ -8120,10 +8218,12 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
       freqPeriod: goalType === "frequency" ? goalFreqPeriod : undefined,
       targetDate: goalTargetDate || undefined,
       status: "active", createdAt: new Date().toISOString(),
+      ...(goalBuddyUserId ? { buddyUserId: goalBuddyUserId } : {}),
     };
     setPendingGoals(g => [...g, goal]);
     setGoalTitle(""); setGoalFormType("milestone"); setGoalTarget(""); setGoalUnit("");
     setGoalFreqTimes("3"); setGoalFreqPeriod("week"); setGoalTargetDate("");
+    setGoalBuddyUserId(null);
     setShowGoalForm(false);
   }
 
@@ -8314,11 +8414,15 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
                   <label className="text-[10px] text-muted-foreground block mb-0.5">Target date (optional)</label>
                   <Input type="date" value={goalTargetDate} onChange={e => setGoalTargetDate(e.target.value)} className="text-sm" />
                 </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-1">👥 Accountabilibuddy (optional)</label>
+                  <BuddyPickerInline value={goalBuddyUserId} onChange={setGoalBuddyUserId} friends={friends} />
+                </div>
                 <div className="flex gap-2">
                   <Button type="button" size="sm" onClick={addGoal} disabled={!goalTitle.trim()} className="flex-1 gap-1 bg-amber-600 hover:bg-amber-700 text-white">
                     <Check size={12} /> Add Goal
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowGoalForm(false); setGoalTitle(""); setGoalFormType("milestone"); }}>Cancel</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowGoalForm(false); setGoalTitle(""); setGoalFormType("milestone"); setGoalBuddyUserId(null); }}>Cancel</Button>
                 </div>
               </div>
             )}
