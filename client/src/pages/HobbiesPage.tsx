@@ -8093,14 +8093,64 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const [showPresets, setShowPresets] = useState(false);
   const set = (key: keyof InsertHobby, val: any) => setForm(f => ({ ...f, [key]: val }));
   const setExtraKey = (key: string, val: any) => setExtra(e => ({ ...e, [key]: val }));
+
+  // Plans state
+  const [pendingPlans, setPendingPlans] = useState<HobbyPlan[]>(() => parsePlans(initial.extraJson ?? "{}"));
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planTitle, setPlanTitle] = useState("");
+  const [planDesc, setPlanDesc] = useState("");
+  const [planWeeks, setPlanWeeks] = useState("");
+  const [planActivate, setPlanActivate] = useState(true);
+
+  // Goals state
+  const [pendingGoals, setPendingGoals] = useState<HobbyGoal[]>(() => parseGoals(initial.extraJson ?? "{}"));
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [goalTitle, setGoalTitle] = useState("");
+  const [goalType, setGoalFormType] = useState<GoalType>("milestone");
+  const [goalTarget, setGoalTarget] = useState("");
+  const [goalUnit, setGoalUnit] = useState("");
+  const [goalFreqTimes, setGoalFreqTimes] = useState("3");
+  const [goalFreqPeriod, setGoalFreqPeriod] = useState<"week" | "month">("week");
+  const [goalTargetDate, setGoalTargetDate] = useState("");
+
+  function addPlan() {
+    if (!planTitle.trim()) return;
+    const plan: HobbyPlan = {
+      id: genId(), title: planTitle.trim(),
+      description: planDesc.trim() || undefined,
+      durationWeeks: planWeeks ? Number(planWeeks) : undefined,
+      isActive: planActivate,
+      startDate: planActivate ? new Date().toISOString().slice(0, 10) : undefined,
+      steps: [], createdAt: new Date().toISOString(),
+    };
+    setPendingPlans(p => [...p, plan]);
+    setPlanTitle(""); setPlanDesc(""); setPlanWeeks(""); setPlanActivate(true);
+    setShowPlanForm(false);
+  }
+
+  function addGoal() {
+    if (!goalTitle.trim()) return;
+    const goal: HobbyGoal = {
+      id: genId(), title: goalTitle.trim(), goalType,
+      targetValue: goalType === "count" && goalTarget ? Number(goalTarget) : undefined,
+      currentValue: goalType === "count" ? 0 : undefined,
+      unit: goalType === "count" ? goalUnit || undefined : undefined,
+      freqTimes: goalType === "frequency" ? Number(goalFreqTimes) : undefined,
+      freqPeriod: goalType === "frequency" ? goalFreqPeriod : undefined,
+      targetDate: goalTargetDate || undefined,
+      status: "active", createdAt: new Date().toISOString(),
+    };
+    setPendingGoals(g => [...g, goal]);
+    setGoalTitle(""); setGoalFormType("milestone"); setGoalTarget(""); setGoalUnit("");
+    setGoalFreqTimes("3"); setGoalFreqPeriod("week"); setGoalTargetDate("");
+    setShowGoalForm(false);
+  }
+
   const handleSave = () => {
     if (!form.name?.trim()) return;
-    // Preserve existing goals and plans when saving extra fields
-    const existingGoals = parseGoals(initial.extraJson ?? "{}");
-    const existingPlans = parsePlans(initial.extraJson ?? "{}");
     const newExtra = { ...extra };
-    if (existingGoals.length > 0) newExtra.goals = existingGoals;
-    if (existingPlans.length > 0) newExtra.plans = existingPlans;
+    newExtra.plans = pendingPlans;
+    newExtra.goals = pendingGoals;
     onSave({ ...form, extraJson: JSON.stringify(newExtra) });
   };
   const typeInfo = HOBBY_TYPE_MAP[(form.hobbyType as HobbyType) ?? "creative"];
@@ -8178,6 +8228,152 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Personal Notes</label>
             <Textarea className="text-sm min-h-[60px]" placeholder="Goals, reminders, anything else…" value={form.notes ?? ""} onChange={e => set("notes", e.target.value)} />
           </div>
+          {/* ── Plans ── */}
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                <ClipboardList size={13} /> Plans
+                {pendingPlans.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 font-bold">{pendingPlans.length}</span>}
+              </p>
+              {!showPlanForm && (
+                <button type="button" onClick={() => setShowPlanForm(true)} className="text-xs text-blue-600 dark:text-blue-400 hover:opacity-80 flex items-center gap-0.5">
+                  <Plus size={11} /> Add plan
+                </button>
+              )}
+            </div>
+
+            {/* Existing plans list */}
+            {pendingPlans.map(p => (
+              <div key={p.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-card text-xs">
+                <ClipboardList size={11} className="text-blue-500 shrink-0" />
+                <span className="flex-1 truncate font-medium">{p.title}</span>
+                {p.durationWeeks && <span className="text-muted-foreground shrink-0">{p.durationWeeks}w</span>}
+                {p.isActive && <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded-full shrink-0">Active</span>}
+                <button type="button" onClick={() => setPendingPlans(pl => pl.filter(x => x.id !== p.id))} className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1">
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+
+            {/* Inline plan form */}
+            {showPlanForm && (
+              <div className="space-y-2 pt-1">
+                <Input placeholder="Plan title *" value={planTitle} onChange={e => setPlanTitle(e.target.value)} className="text-sm" autoFocus />
+                <Input placeholder="Description (optional)" value={planDesc} onChange={e => setPlanDesc(e.target.value)} className="text-sm" />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Duration (weeks)</label>
+                    <Input type="number" min={1} placeholder="e.g. 12" value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} className="text-sm" />
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs cursor-pointer mt-4">
+                    <input type="checkbox" checked={planActivate} onChange={e => setPlanActivate(e.target.checked)} className="rounded" />
+                    Activate now
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={addPlan} disabled={!planTitle.trim()} className="flex-1 gap-1 bg-blue-600 hover:bg-blue-700 text-white">
+                    <Check size={12} /> Add Plan
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowPlanForm(false); setPlanTitle(""); setPlanDesc(""); setPlanWeeks(""); }}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
+            {pendingPlans.length === 0 && !showPlanForm && (
+              <p className="text-[11px] text-muted-foreground">Add step-by-step plans to work toward your hobby goals.</p>
+            )}
+          </div>
+
+          {/* ── Goals ── */}
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <Target size={13} /> Goals
+                {pendingGoals.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 font-bold">{pendingGoals.length}</span>}
+              </p>
+              {!showGoalForm && (
+                <button type="button" onClick={() => setShowGoalForm(true)} className="text-xs text-amber-600 dark:text-amber-400 hover:opacity-80 flex items-center gap-0.5">
+                  <Plus size={11} /> Add goal
+                </button>
+              )}
+            </div>
+
+            {/* Existing goals list */}
+            {pendingGoals.map(g => {
+              const meta = GOAL_TYPE_META[g.goalType];
+              const MetaIcon = meta.icon;
+              return (
+                <div key={g.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-card text-xs">
+                  <MetaIcon size={11} className={`${meta.color} shrink-0`} />
+                  <span className="flex-1 truncate font-medium">{g.title}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{meta.label}</span>
+                  <button type="button" onClick={() => setPendingGoals(gl => gl.filter(x => x.id !== g.id))} className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1">
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Inline goal form */}
+            {showGoalForm && (
+              <div className="space-y-2 pt-1">
+                <Input placeholder="Goal title *" value={goalTitle} onChange={e => setGoalTitle(e.target.value)} className="text-sm" autoFocus />
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-1">Goal type</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(["milestone", "count", "frequency"] as GoalType[]).map(t => {
+                      const m = GOAL_TYPE_META[t]; const GIcon = m.icon;
+                      return (
+                        <button key={t} type="button" onClick={() => setGoalFormType(t)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${goalType === t ? "bg-amber-600 text-white border-amber-600" : "bg-card hover:bg-secondary border-border"}`}>
+                          <GIcon size={11} /> {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {goalType === "count" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-0.5">Target number</label>
+                      <Input type="number" min={1} placeholder="e.g. 10" value={goalTarget} onChange={e => setGoalTarget(e.target.value)} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-0.5">Unit (optional)</label>
+                      <Input placeholder="e.g. sessions, books" value={goalUnit} onChange={e => setGoalUnit(e.target.value)} className="text-sm" />
+                    </div>
+                  </div>
+                )}
+                {goalType === "frequency" && (
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={1} max={30} value={goalFreqTimes} onChange={e => setGoalFreqTimes(e.target.value)} className="text-sm w-16" />
+                    <span className="text-xs text-muted-foreground">times per</span>
+                    {(["week", "month"] as const).map(p => (
+                      <button key={p} type="button" onClick={() => setGoalFreqPeriod(p)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${goalFreqPeriod === p ? "bg-amber-600 text-white border-amber-600" : "bg-card hover:bg-secondary border-border"}`}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5">Target date (optional)</label>
+                  <Input type="date" value={goalTargetDate} onChange={e => setGoalTargetDate(e.target.value)} className="text-sm" />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={addGoal} disabled={!goalTitle.trim()} className="flex-1 gap-1 bg-amber-600 hover:bg-amber-700 text-white">
+                    <Check size={12} /> Add Goal
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowGoalForm(false); setGoalTitle(""); setGoalFormType("milestone"); }}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
+            {pendingGoals.length === 0 && !showGoalForm && (
+              <p className="text-[11px] text-muted-foreground">Set targets to track your progress — milestones, counts, or habits.</p>
+            )}
+          </div>
+
           <button type="button" onClick={() => set("isFavorite", !form.isFavorite)} className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors w-full ${form.isFavorite ? "bg-pink-50 dark:bg-pink-950/20 border-pink-200 text-pink-600" : "hover:bg-muted"}`}>
             <Heart size={14} className={form.isFavorite ? "fill-pink-500 text-pink-500" : ""} />
             {form.isFavorite ? "Marked as favorite" : "Mark as favorite"}
