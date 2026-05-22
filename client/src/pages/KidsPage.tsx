@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Baby, Plus, Pencil, Trash2, Check, Users,
+  Baby, Plus, Pencil, Trash2, Check, Users, ChevronDown,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -312,6 +312,304 @@ function getDevStage(birthDate: string | null | undefined): DevStage | null {
   const totalMonths = calcTotalMonths(birthDate);
   if (totalMonths === null || totalMonths < 0) return null;
   return DEV_STAGES.find((s) => totalMonths >= s.minMonths && totalMonths < s.maxMonths) ?? null;
+}
+
+// ── Sleep Methods Data ────────────────────────────────────────────────────────
+
+interface SleepSubMethod {
+  id: string;
+  name: string;
+  steps: string;
+  note?: string;
+}
+
+interface SleepMethodFamily {
+  id: string;
+  emoji: string;
+  name: string;
+  tagline: string;
+  color: string;
+  subMethods: SleepSubMethod[];
+}
+
+const SLEEP_METHODS: SleepMethodFamily[] = [
+  {
+    id: "extinction",
+    emoji: "😤",
+    name: "Extinction / \"Cry-It-Out\" family",
+    tagline: "Baby learns to self-settle with minimal or no parental response to crying",
+    color: "#f87171",
+    subMethods: [
+      {
+        id: "classic-cio",
+        name: "Unmodified Extinction (\"Classic CIO\")",
+        steps: "Bedtime routine → baby goes down drowsy but awake → you do not respond to crying until a set time (often morning), aside from safety checks.",
+        note: "Fastest method but emotionally hardest for most parents.",
+      },
+      {
+        id: "ferber",
+        name: "Graduated Extinction – Ferber / Controlled Crying",
+        steps: "Bedtime routine → baby down awake → if crying, you check in on a schedule with increasing intervals (e.g., 3, 5, 10, 15 minutes) with brief, no-pickup verbal reassurance.",
+        note: "Same principle as CIO but with structured, timed check-ins.",
+      },
+      {
+        id: "check-console",
+        name: "Check-and-Console Variants",
+        steps: "Similar to Ferber, but intervals may be fixed (e.g., check every 10 minutes) or more parent-led — 'go in when crying escalates beyond a certain point'.",
+      },
+    ],
+  },
+  {
+    id: "stay-near",
+    emoji: "🪑",
+    name: "\"Stay-Near\" / Parental Presence",
+    tagline: "You remain physically close at bedtime, then slowly fade your presence over days or weeks",
+    color: "#fb923c",
+    subMethods: [
+      {
+        id: "chair-method",
+        name: "Chair Method / Camping-Out",
+        steps: "Sit in a chair next to the crib or bed, mostly quiet with optional gentle verbal reassurance. Each night, move the chair a bit farther away until you're out of the room entirely.",
+      },
+      {
+        id: "sleep-lady-shuffle",
+        name: "Sleep Lady Shuffle",
+        steps: "Start right next to the crib providing limited comfort, then progressively move further away night by night: side of crib → middle of room → doorway → hallway.",
+        note: "From Kim West's approach — a named chair-method variant.",
+      },
+      {
+        id: "in-room-fading",
+        name: "In-Room Fading",
+        steps: "Stay in the room but reduce what you do each night — less patting and rocking, more just being present — until your presence is minimal, then removed.",
+        note: "Often combined with time-based goals, e.g. 'by night 5 I don't touch, only talk softly'.",
+      },
+    ],
+  },
+  {
+    id: "fading",
+    emoji: "🌅",
+    name: "Fading / Gentle Extinction",
+    tagline: "Gradually shift sleep associations and bedtime timing rather than removing support all at once",
+    color: "#fbbf24",
+    subMethods: [
+      {
+        id: "bedtime-fading",
+        name: "Bedtime Fading",
+        steps: "Start bedtime later — closer to when your child naturally crashes — so they fall asleep quickly. Once that's working, move bedtime gradually earlier in small steps while preserving independent sleep.",
+      },
+      {
+        id: "response-fading",
+        name: "Response Fading",
+        steps: "Keep your usual soothing (rocking, feeding, patting) but do progressively less of it each night: shorter rocking, lighter patting, fewer interventions before leaving.",
+      },
+      {
+        id: "scheduled-awakenings",
+        name: "Scheduled Awakenings",
+        steps: "If your child wakes regularly at certain times, briefly wake and soothe them just before those wakings, then gradually reduce the help so their pattern naturally resets.",
+        note: "Most useful for children with predictable, frequent night wakings.",
+      },
+    ],
+  },
+  {
+    id: "no-cry",
+    emoji: "🤱",
+    name: "Pick-Up / Put-Down & No-Cry",
+    tagline: "Minimise crying by responding quickly and repeatedly — usually takes longer but involves less distress",
+    color: "#34d399",
+    subMethods: [
+      {
+        id: "pupd",
+        name: "Pick-Up / Put-Down (Baby Whisperer)",
+        steps: "Put baby down awake. If they cry, pick them up just until calm, then put them back down awake. Repeat as many times as needed throughout the night.",
+        note: "High-contact, high-effort, and usually lower-intensity crying spread over more nights.",
+      },
+      {
+        id: "no-cry-solution",
+        name: "No-Cry Sleep Solution (Elizabeth Pantley)",
+        steps: "A multi-step toolkit of gentle habit changes: consistent routines, adjusting feeding patterns, breaking nurse-to-sleep habits slowly, using Pantley's Pull-Off during feeds, and partial night co-sleeping where helpful.",
+        note: "Focus is on reducing crying by changing habits in small increments over weeks.",
+      },
+      {
+        id: "responsive-settling",
+        name: "Responsive Settling / Gentle Settling",
+        steps: "Go in quickly whenever baby cries; offer soothing (patting, shushing, feeding as your plan allows) and try to put baby back down drowsy-but-awake as often as possible.",
+        note: "Many attachment-friendly coaching approaches live in this category.",
+      },
+    ],
+  },
+  {
+    id: "schedule-based",
+    emoji: "📅",
+    name: "Routine- & Schedule-Based Systems",
+    tagline: "Focus on day structure and bedtime habits rather than what you do once crying starts",
+    color: "#60a5fa",
+    subMethods: [
+      {
+        id: "strict-schedule",
+        name: "Strict Schedule Methods (e.g., Babywise, Gina Ford)",
+        steps: "Emphasise clock-based eat–play–sleep cycles with fairly fixed nap and bedtimes. Goal is to prevent overtiredness so falling asleep becomes easier and more predictable.",
+      },
+      {
+        id: "flexible-routine",
+        name: "Flexible Routine Methods (e.g., Taking Cara Babies)",
+        steps: "Emphasise age-appropriate wake windows and sleepy cues rather than strict clock times. Strong sleep environment (dark room, white noise) plus consistent routine structure.",
+        note: "Often combined with one of the specific training methods above — check-ins, chair method, fading, etc.",
+      },
+      {
+        id: "environment-focused",
+        name: "Environment-Focused Approach",
+        steps: "Optimise room darkening, white noise, swaddling or sleep sacks, and temperature. Minimal formal training — instead relies on the right conditions making sleep easier.",
+        note: "Not a complete method on its own, but many families find it dramatically reduces wake-ups.",
+      },
+    ],
+  },
+  {
+    id: "cosleeping",
+    emoji: "🛏️",
+    name: "Co-sleeping / No-Training Philosophies",
+    tagline: "No active sleep training — focus on routine, safety, and responsiveness while trusting natural development",
+    color: "#a78bfa",
+    subMethods: [
+      {
+        id: "responsive-cosleeping",
+        name: "Responsive Co-sleeping / Bed-Sharing",
+        steps: "Caregiver shares a bed or very close sleep space and responds immediately — nursing, rocking, or patting — often with the expectation that independent sleep will emerge naturally later.",
+        note: "If bed-sharing, follow safe sleep guidelines to reduce risk.",
+      },
+      {
+        id: "room-sharing",
+        name: "Room-Sharing with On-Demand Soothing",
+        steps: "Baby sleeps in their own crib or bassinet in the parents' room; parents respond to fussing quickly, often with feeding or patting, and accept frequent wakings as developmentally normal.",
+      },
+      {
+        id: "wait-it-out",
+        name: "\"Wait It Out\" / Developmental Approach",
+        steps: "No formal training method. Focus on consistent bedtime routine, safe sleep, and emotional support — trusting that children will naturally consolidate sleep as they mature.",
+      },
+    ],
+  },
+  {
+    id: "named-blends",
+    emoji: "📚",
+    name: "Named Blends & Branded Systems",
+    tagline: "Popular books and courses that combine elements from multiple methods with their own structure",
+    color: "#e879f9",
+    subMethods: [
+      {
+        id: "ferber-method",
+        name: "Ferber Method",
+        steps: "Graduated extinction with increasing check-in intervals. Bedtime routine → down awake → timed check-ins with verbal reassurance only, no pick-up.",
+        note: "One of the most researched methods. See 'Graduated Extinction' above for full detail.",
+      },
+      {
+        id: "sleep-lady-blend",
+        name: "Sleep Lady Shuffle",
+        steps: "Structured parental-presence fading. You start next to the crib and move further away each night over roughly two weeks.",
+        note: "See 'Stay-Near' family above for full detail.",
+      },
+      {
+        id: "taking-cara-blend",
+        name: "Taking Cara Babies",
+        steps: "Age-based routine guidance combined with a mix of check-ins, response-fading, and wake-window scheduling. Available as newborn class and older-baby sleep training course.",
+      },
+      {
+        id: "baby-whisperer-blend",
+        name: "Baby Whisperer (Tracy Hogg)",
+        steps: "Pick-Up / Put-Down combined with EASY (Eat–Activity–Sleep–You) schedule guidance. Focuses on reading baby's cues and avoiding sleep associations.",
+      },
+      {
+        id: "no-cry-blend",
+        name: "No-Cry Sleep Solution (Pantley)",
+        steps: "A gentle, multi-step habit-change toolkit emphasising routine tweaks, feeding adjustments, and the 'Pantley Pull-Off' technique. Results build over several weeks.",
+      },
+    ],
+  },
+];
+
+// ── Sleep Tab ─────────────────────────────────────────────────────────────────
+
+function SleepTab() {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+
+  function toggle(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id));
+    setSelectedSubId(null);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground mb-4">
+        Select a sleep approach to learn how it works. Every family is different — these are reference descriptions, not prescriptions.
+      </p>
+      {SLEEP_METHODS.map((family) => {
+        const isOpen = expandedId === family.id;
+        return (
+          <div key={family.id} className="rounded-xl border bg-card overflow-hidden">
+            {/* Family header — clickable */}
+            <button
+              className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-muted/40 transition-colors"
+              onClick={() => toggle(family.id)}
+            >
+              <span className="text-xl shrink-0">{family.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold leading-snug">{family.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{family.tagline}</p>
+              </div>
+              <ChevronDown
+                size={16}
+                className={`text-muted-foreground shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {/* Sub-methods (expanded) */}
+            {isOpen && (
+              <div className="px-3.5 pb-3.5 space-y-2 border-t border-border/50 pt-3">
+                {family.subMethods.map((sub) => {
+                  const isSel = selectedSubId === sub.id;
+                  return (
+                    <div
+                      key={sub.id}
+                      className={`rounded-lg border p-3 cursor-pointer transition-all ${
+                        isSel
+                          ? "border-current bg-background"
+                          : "border-border/60 hover:border-border hover:bg-muted/30"
+                      }`}
+                      style={isSel ? { borderColor: family.color, background: family.color + "10" } : {}}
+                      onClick={() => setSelectedSubId(isSel ? null : sub.id)}
+                    >
+                      {/* Sub-method name row */}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium leading-snug">{sub.name}</p>
+                        <div
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: isSel ? family.color : "transparent", border: `1.5px solid ${family.color}80` }}
+                        />
+                      </div>
+                      {/* Expanded detail */}
+                      {isSel && (
+                        <div className="mt-2.5 space-y-2">
+                          <p className="text-sm leading-relaxed text-foreground/90">{sub.steps}</p>
+                          {sub.note && (
+                            <p className="text-xs text-muted-foreground italic border-l-2 pl-2" style={{ borderColor: family.color }}>
+                              {sub.note}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <p className="text-xs text-muted-foreground text-center pt-1 pb-2">
+        Always consult your pediatrician if you have concerns about your child's sleep.
+      </p>
+    </div>
+  );
 }
 
 // ── Development Tab ───────────────────────────────────────────────────────────
@@ -783,6 +1081,7 @@ function ChildDetail({ child }: { child: ChildWithDetails }) {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="development">Development</TabsTrigger>
+          <TabsTrigger value="sleep">Sleep</TabsTrigger>
           <TabsTrigger value="milestones">Milestones <span className="ml-1 text-xs opacity-60">{child.milestones.length}</span></TabsTrigger>
           <TabsTrigger value="memories">Memories <span className="ml-1 text-xs opacity-60">{child.memories.length}</span></TabsTrigger>
           <TabsTrigger value="prep">Prep <span className="ml-1 text-xs opacity-60">{child.prepItems.length}</span></TabsTrigger>
@@ -791,6 +1090,11 @@ function ChildDetail({ child }: { child: ChildWithDetails }) {
         {/* ── Development ── */}
         <TabsContent value="development">
           <DevelopmentTab child={child} />
+        </TabsContent>
+
+        {/* ── Sleep ── */}
+        <TabsContent value="sleep">
+          <SleepTab />
         </TabsContent>
 
         {/* ── Milestones ── */}
