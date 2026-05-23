@@ -1292,11 +1292,9 @@ export default function SpotsPage() {
           <div className="overflow-x-auto scrollbar-hide px-3 pb-2 shrink-0">
             <div className="flex gap-1 w-max">
               {[
-                { value: "all",           label: `All (${spots.length})` },
-                { value: "want_to_visit", label: `Want to Visit (${spots.filter(s => s.status === "want_to_visit").length})` },
-                { value: "visited",       label: `Visited (${spots.filter(s => s.status === "visited").length})` },
-                { value: "favorites",     label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
-                { value: "shared",        label: "Shared" },
+                { value: "all",       label: `All (${spots.length})` },
+                { value: "favorites", label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
+                { value: "shared",    label: "Shared" },
               ].map(tab => (
                 <button
                   key={tab.value}
