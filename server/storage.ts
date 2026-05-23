@@ -631,6 +631,31 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_avatar_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_birthday TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_last_sync TEXT`);
+
+  // Google Contacts columns
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_access_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_refresh_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_token_expiry TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
+
+  // Google Contacts table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS google_contacts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      resource_name TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      email TEXT,
+      phone TEXT,
+      birthday TEXT,
+      avatar_url TEXT,
+      company TEXT,
+      imported_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, resource_name)
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS facebook_friends (
       id SERIAL PRIMARY KEY,
@@ -1679,6 +1704,13 @@ export interface IStorage {
   clearLinkedinProfile(userId: number): Promise<void>;
   importLinkedinContacts(userId: number, contacts: Array<{ firstName: string; lastName?: string; email?: string; company?: string; position?: string; connectedOn?: string }>): Promise<number>;
   getLinkedinContacts(userId: number): Promise<Array<{ id: number; firstName: string; lastName: string | null; email: string | null; company: string | null; position: string | null; connectedOn: string | null; importedAt: string }>>;
+  // Google Contacts
+  saveGoogleContactsTokens(userId: number, data: { accessToken: string; refreshToken: string | null; expiry: string }): Promise<void>;
+  getGoogleContactsTokens(userId: number): Promise<{ accessToken: string; refreshToken: string | null; expiry: string } | null>;
+  clearGoogleContactsTokens(userId: number): Promise<void>;
+  upsertGoogleContacts(userId: number, contacts: Array<{ resourceName: string; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null; birthday?: string | null; avatarUrl?: string | null; company?: string | null }>): Promise<number>;
+  getGoogleContacts(userId: number): Promise<Array<{ id: number; resourceName: string; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; birthday: string | null; avatarUrl: string | null; company: string | null; importedAt: string }>>;
+  setGoogleContactsLastSync(userId: number, ts: string): Promise<void>;
   // Google Calendar tokens
   saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string): Promise<void>;
   getGcalTokens(userId: number): Promise<{ accessToken: string; refreshToken: string | null; expiry: string } | null>;
@@ -2881,6 +2913,66 @@ export const storage: IStorage = {
       position: row.position ?? null, connectedOn: row.connected_on ?? null,
       importedAt: row.imported_at,
     }));
+  },
+  async saveGoogleContactsTokens(userId: number, data: { accessToken: string; refreshToken: string | null; expiry: string }) {
+    await pool.query(
+      `UPDATE users SET google_contacts_access_token=$1, google_contacts_refresh_token=$2, google_contacts_token_expiry=$3 WHERE id=$4`,
+      [data.accessToken, data.refreshToken, data.expiry, userId]
+    );
+  },
+  async getGoogleContactsTokens(userId: number) {
+    const r = await pool.query(
+      `SELECT google_contacts_access_token, google_contacts_refresh_token, google_contacts_token_expiry FROM users WHERE id=$1`,
+      [userId]
+    );
+    const row = r.rows[0];
+    if (!row?.google_contacts_access_token) return null;
+    return { accessToken: row.google_contacts_access_token, refreshToken: row.google_contacts_refresh_token ?? null, expiry: row.google_contacts_token_expiry ?? new Date().toISOString() };
+  },
+  async clearGoogleContactsTokens(userId: number) {
+    await pool.query(
+      `UPDATE users SET google_contacts_access_token=NULL, google_contacts_refresh_token=NULL, google_contacts_token_expiry=NULL, google_contacts_last_sync=NULL WHERE id=$1`,
+      [userId]
+    );
+    await pool.query(`DELETE FROM google_contacts WHERE user_id=$1`, [userId]);
+  },
+  async upsertGoogleContacts(userId: number, contacts: Array<{ resourceName: string; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null; birthday?: string | null; avatarUrl?: string | null; company?: string | null }>) {
+    if (contacts.length === 0) return 0;
+    const now = new Date().toISOString();
+    let count = 0;
+    for (const c of contacts) {
+      await pool.query(
+        `INSERT INTO google_contacts (user_id, resource_name, first_name, last_name, email, phone, birthday, avatar_url, company, imported_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
+         ON CONFLICT (user_id, resource_name) DO UPDATE SET
+           first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name,
+           email=COALESCE(EXCLUDED.email, google_contacts.email),
+           phone=COALESCE(EXCLUDED.phone, google_contacts.phone),
+           birthday=COALESCE(EXCLUDED.birthday, google_contacts.birthday),
+           avatar_url=COALESCE(EXCLUDED.avatar_url, google_contacts.avatar_url),
+           company=COALESCE(EXCLUDED.company, google_contacts.company),
+           updated_at=$10`,
+        [userId, c.resourceName, c.firstName ?? null, c.lastName ?? null, c.email ?? null, c.phone ?? null, c.birthday ?? null, c.avatarUrl ?? null, c.company ?? null, now]
+      );
+      count++;
+    }
+    return count;
+  },
+  async getGoogleContacts(userId: number) {
+    const r = await pool.query(
+      `SELECT id, resource_name, first_name, last_name, email, phone, birthday, avatar_url, company, imported_at FROM google_contacts WHERE user_id=$1 ORDER BY first_name, last_name`,
+      [userId]
+    );
+    return r.rows.map((row: any) => ({
+      id: row.id, resourceName: row.resource_name,
+      firstName: row.first_name ?? null, lastName: row.last_name ?? null,
+      email: row.email ?? null, phone: row.phone ?? null,
+      birthday: row.birthday ?? null, avatarUrl: row.avatar_url ?? null,
+      company: row.company ?? null, importedAt: row.imported_at,
+    }));
+  },
+  async setGoogleContactsLastSync(userId: number, ts: string) {
+    await pool.query(`UPDATE users SET google_contacts_last_sync=$1 WHERE id=$2`, [ts, userId]);
   },
   async saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string) {
     await db.update(users).set({ gcalAccessToken: accessToken, gcalRefreshToken: refreshToken, gcalTokenExpiry: expiry }).where(eq(users.id, userId));

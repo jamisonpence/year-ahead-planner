@@ -38,7 +38,29 @@ export const users = pgTable("users", {
   facebookAvatarUrl: text("facebook_avatar_url"),
   facebookBirthday: text("facebook_birthday"),
   facebookLastSync: text("facebook_last_sync"),
+  // Google Contacts integration (separate from login/GCal OAuth)
+  googleContactsAccessToken: text("google_contacts_access_token"),
+  googleContactsRefreshToken: text("google_contacts_refresh_token"),
+  googleContactsTokenExpiry: text("google_contacts_token_expiry"),
+  googleContactsLastSync: text("google_contacts_last_sync"),
 });
+
+// ── GOOGLE CONTACTS ───────────────────────────────────────────────────────────
+export const googleContacts = pgTable("google_contacts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  resourceName: text("resource_name").notNull(), // e.g. "people/c1234"
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  birthday: text("birthday"),      // YYYY-MM-DD or MM-DD
+  avatarUrl: text("avatar_url"),
+  company: text("company"),
+  importedAt: text("imported_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+export type GoogleContact = typeof googleContacts.$inferSelect;
 
 // ── FACEBOOK FRIENDS ──────────────────────────────────────────────────────────
 export const facebookFriends = pgTable("facebook_friends", {

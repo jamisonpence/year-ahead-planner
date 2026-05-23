@@ -1333,6 +1333,172 @@ function FacebookPanel({ onDisconnect }: { onDisconnect: () => void }) {
   );
 }
 
+function GoogleContactsPanel({ onDisconnect }: { onDisconnect: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: status, isLoading } = useQuery<{
+    connected: boolean; configured: boolean;
+    contactCount: number; birthdayCount: number; lastSync: string | null;
+  }>({
+    queryKey: ["/api/gcontacts/status"],
+    queryFn: () => fetch("/api/gcontacts/status").then(r => r.json()),
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: contacts = [] } = useQuery<Array<{ id: number; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; birthday: string | null; avatarUrl: string | null; company: string | null }>>({
+    queryKey: ["/api/gcontacts/contacts"],
+    queryFn: () => fetch("/api/gcontacts/contacts").then(r => r.json()),
+    enabled: (status?.contactCount ?? 0) > 0,
+  });
+
+  const syncMut = useMutation({
+    mutationFn: () => fetch("/api/gcontacts/sync", { method: "POST" }).then(r => r.json()),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["/api/gcontacts/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/gcontacts/contacts"] });
+      toast({ title: `Synced — ${d.contactCount} contacts updated` });
+    },
+    onError: () => toast({ title: "Sync failed", variant: "destructive" }),
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: () => fetch("/api/gcontacts/disconnect", { method: "DELETE" }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/gcontacts/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/gcontacts/contacts"] });
+      onDisconnect();
+      toast({ title: "Google Contacts disconnected" });
+    },
+  });
+
+  const [filter, setFilter] = useState<"all" | "birthday">("all");
+
+  if (isLoading) return <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-[#4285f4] border-t-transparent rounded-full animate-spin" /></div>;
+
+  const today = new Date();
+  const upcomingBirthdays = contacts
+    .filter(c => c.birthday)
+    .map(c => {
+      const bday = c.birthday!;
+      // Handle YYYY-MM-DD or MM-DD
+      const parts = bday.split("-");
+      let mm: number, dd: number;
+      if (parts.length === 3) { mm = parseInt(parts[1]); dd = parseInt(parts[2]); }
+      else { mm = parseInt(parts[0]); dd = parseInt(parts[1]); }
+      const next = new Date(today.getFullYear(), mm - 1, dd);
+      if (next < today) next.setFullYear(today.getFullYear() + 1);
+      const daysAway = Math.round((next.getTime() - today.getTime()) / 86400000);
+      return { ...c, daysAway, displayBday: `${String(mm).padStart(2,"0")}/${String(dd).padStart(2,"0")}` };
+    })
+    .sort((a, b) => a.daysAway - b.daysAway)
+    .slice(0, 10);
+
+  const displayed = filter === "birthday" ? contacts.filter(c => c.birthday) : contacts;
+
+  return (
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border bg-card p-3 text-center">
+          <p className="text-2xl font-bold text-[#4285f4]">{status?.contactCount ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Contacts imported</p>
+        </div>
+        <div className="rounded-xl border bg-card p-3 text-center">
+          <p className="text-2xl font-bold text-amber-500">🎂 {status?.birthdayCount ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Birthdays found</p>
+        </div>
+      </div>
+
+      {/* Upcoming birthdays */}
+      {upcomingBirthdays.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">🎂 Upcoming Birthdays</p>
+          <div className="rounded-xl border overflow-hidden divide-y divide-border">
+            {upcomingBirthdays.map(c => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                {c.avatarUrl ? (
+                  <img src={c.avatarUrl} alt={`${c.firstName}`} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-[#4285f4]/15 flex items-center justify-center text-[#4285f4] font-semibold text-sm shrink-0">
+                    {c.firstName?.[0] ?? "?"}{c.lastName?.[0] ?? ""}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{[c.firstName, c.lastName].filter(Boolean).join(" ")}</p>
+                  <p className="text-xs text-muted-foreground">{c.displayBday}</p>
+                </div>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                  c.daysAway === 0 ? "bg-amber-100 text-amber-700" :
+                  c.daysAway <= 7 ? "bg-orange-100 text-orange-700" :
+                  "bg-muted text-muted-foreground"
+                }`}>
+                  {c.daysAway === 0 ? "Today! 🎉" : c.daysAway === 1 ? "Tomorrow" : `${c.daysAway}d`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Contacts list */}
+      {contacts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Contacts</p>
+            <div className="flex gap-1 p-0.5 bg-secondary rounded-lg">
+              {(["all", "birthday"] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === f ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
+                  {f === "all" ? `All (${contacts.length})` : `🎂 Birthdays (${contacts.filter(c => c.birthday).length})`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border overflow-hidden divide-y divide-border max-h-72 overflow-y-auto">
+            {displayed.slice(0, 50).map(c => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                {c.avatarUrl ? (
+                  <img src={c.avatarUrl} alt={`${c.firstName}`} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#4285f4]/10 flex items-center justify-center text-[#4285f4] text-xs font-bold shrink-0">
+                    {c.firstName?.[0] ?? "?"}{c.lastName?.[0] ?? ""}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{[c.firstName, c.lastName].filter(Boolean).join(" ") || "Unknown"}</p>
+                  {(c.email || c.company) && (
+                    <p className="text-xs text-muted-foreground truncate">{[c.email, c.company].filter(Boolean).join(" · ")}</p>
+                  )}
+                </div>
+                {c.birthday && <span className="text-xs text-amber-600 shrink-0">🎂</span>}
+              </div>
+            ))}
+            {displayed.length > 50 && (
+              <div className="px-4 py-2 text-xs text-muted-foreground text-center">+{displayed.length - 50} more</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-1">
+        <button onClick={() => syncMut.mutate()} disabled={syncMut.isPending}
+          className="text-xs text-primary font-medium hover:underline disabled:opacity-50">
+          {syncMut.isPending ? "Syncing…" : "↻ Sync now"}
+        </button>
+        {status?.lastSync && (
+          <span className="text-xs text-muted-foreground">Last sync: {new Date(status.lastSync).toLocaleDateString()}</span>
+        )}
+        <button onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}
+          className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+          Disconnect
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PersonalAssistantSection() {
   const [localConnected, setLocalConnected] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")); }
@@ -1341,8 +1507,9 @@ function PersonalAssistantSection() {
   const [screen, setScreen] = useState<"connect" | "assistant">("connect");
   const [linkedinExpanded, setLinkedinExpanded] = useState(false);
   const [facebookExpanded, setFacebookExpanded] = useState(false);
+  const [googleExpanded, setGoogleExpanded] = useState(false);
 
-  // Check real LinkedIn + Facebook status on mount
+  // Check real LinkedIn + Facebook + Google status on mount
   const { data: linkedinStatus } = useQuery<{ connected: boolean; contactCount: number }>({
     queryKey: ["/api/linkedin/status"],
     queryFn: () => fetch("/api/linkedin/status").then(r => r.json()),
@@ -1355,7 +1522,13 @@ function PersonalAssistantSection() {
     refetchOnWindowFocus: true,
   });
 
-  // Sync LinkedIn real status into localConnected + handle redirect params
+  const { data: googleStatus } = useQuery<{ connected: boolean; contactCount: number; birthdayCount: number; lastSync: string | null }>({
+    queryKey: ["/api/gcontacts/status"],
+    queryFn: () => fetch("/api/gcontacts/status").then(r => r.json()),
+    refetchOnWindowFocus: true,
+  });
+
+  // Sync real statuses into localConnected + handle redirect params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const liStatus = params.get("linkedin");
@@ -1369,7 +1542,12 @@ function PersonalAssistantSection() {
       setScreen("assistant");
       setFacebookExpanded(true);
       window.history.replaceState({}, "", window.location.pathname);
-    } else if (liStatus === "error" || params.get("facebook") === "error") {
+    } else if (params.get("google") === "connected") {
+      setLocalConnected(prev => { const n = new Set(prev); n.add("google"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+      setScreen("assistant");
+      setGoogleExpanded(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (liStatus === "error" || params.get("facebook") === "error" || params.get("google") === "error") {
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (linkedinStatus?.connected) {
@@ -1378,7 +1556,10 @@ function PersonalAssistantSection() {
     if (facebookStatus?.connected) {
       setLocalConnected(prev => { const n = new Set(prev); n.add("facebook"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
     }
-  }, [linkedinStatus, facebookStatus]);
+    if (googleStatus?.connected) {
+      setLocalConnected(prev => { const n = new Set(prev); n.add("google"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+    }
+  }, [linkedinStatus, facebookStatus, googleStatus]);
 
   // If any real account is connected, start on assistant screen
   useEffect(() => {
@@ -1388,6 +1569,7 @@ function PersonalAssistantSection() {
   function toggle(id: string) {
     if (id === "linkedin") { window.location.href = "/api/linkedin/connect"; return; }
     if (id === "facebook") { window.location.href = "/api/facebook/connect"; return; }
+    if (id === "google") { window.location.href = "/api/gcontacts/connect"; return; }
     // Others: local toggle (UI placeholder)
     setLocalConnected(prev => {
       const next = new Set(prev);
@@ -1398,9 +1580,18 @@ function PersonalAssistantSection() {
     });
   }
 
+  const isLinkedinConnected = linkedinStatus?.connected || localConnected.has("linkedin");
+  const isFacebookConnected = facebookStatus?.connected || localConnected.has("facebook");
+  const isGoogleConnected = googleStatus?.connected || localConnected.has("google");
+
   if (screen === "assistant") {
     const allItems = ACCOUNT_GROUPS.flatMap(g => g.items);
-    const connectedItems = allItems.filter(a => localConnected.has(a.id) || (a.id === "linkedin" && linkedinStatus?.connected));
+    const connectedItems = allItems.filter(a => {
+      if (a.id === "linkedin") return isLinkedinConnected;
+      if (a.id === "facebook") return isFacebookConnected;
+      if (a.id === "google") return isGoogleConnected;
+      return localConnected.has(a.id);
+    });
     return (
       <div className="space-y-5">
         {/* Header */}
@@ -1421,7 +1612,7 @@ function PersonalAssistantSection() {
         </div>
 
         {/* LinkedIn expanded panel */}
-        {(linkedinStatus?.connected || localConnected.has("linkedin")) && (
+        {isLinkedinConnected && (
           <div className="rounded-xl border overflow-hidden">
             <button
               onClick={() => setLinkedinExpanded(v => !v)}
@@ -1450,7 +1641,7 @@ function PersonalAssistantSection() {
         )}
 
         {/* Facebook expanded panel */}
-        {(facebookStatus?.connected || localConnected.has("facebook")) && (
+        {isFacebookConnected && (
           <div className="rounded-xl border overflow-hidden">
             <button onClick={() => setFacebookExpanded(v => !v)}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
@@ -1476,10 +1667,37 @@ function PersonalAssistantSection() {
           </div>
         )}
 
-        {/* Other connected accounts */}
-        {connectedItems.filter(a => a.id !== "linkedin" && a.id !== "facebook").length > 0 && (
+        {/* Google Contacts expanded panel */}
+        {isGoogleConnected && (
+          <div className="rounded-xl border overflow-hidden">
+            <button onClick={() => setGoogleExpanded(v => !v)}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-[#4285f4] flex items-center justify-center text-white font-bold text-sm shrink-0">G</div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-semibold">Google Contacts</p>
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle2 size={10} /> Connected
+                  {googleStatus?.contactCount ? ` · ${googleStatus.contactCount} contacts` : ""}
+                  {googleStatus?.birthdayCount ? ` · 🎂 ${googleStatus.birthdayCount} birthdays` : ""}
+                </p>
+              </div>
+              <ChevronDown size={14} className={`text-muted-foreground transition-transform ${googleExpanded ? "rotate-180" : ""}`} />
+            </button>
+            {googleExpanded && (
+              <div className="px-4 pb-4 border-t pt-4">
+                <GoogleContactsPanel onDisconnect={() => {
+                  setLocalConnected(prev => { const n = new Set(prev); n.delete("google"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+                  if (connectedItems.length <= 1) setScreen("connect");
+                }} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Other connected accounts (non-real-API ones) */}
+        {connectedItems.filter(a => !["linkedin", "facebook", "google"].includes(a.id)).length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {connectedItems.filter(a => a.id !== "linkedin" && a.id !== "facebook").map(a => (
+            {connectedItems.filter(a => !["linkedin", "facebook", "google"].includes(a.id)).map(a => (
               <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border bg-card text-xs font-medium">
                 <div className="w-4 h-4 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0" style={{ background: a.color }}>
                   {/\p{Emoji}/u.test(a.icon) ? a.icon : a.icon[0]}
@@ -1524,9 +1742,11 @@ function PersonalAssistantSection() {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{group.label}</p>
             <div className="rounded-xl border overflow-hidden divide-y divide-border">
               {group.items.map(account => {
-                const isLinkedin = account.id === "linkedin";
-                const isFacebook = account.id === "facebook";
-                const isConnected = isLinkedin ? !!linkedinStatus?.connected : isFacebook ? !!facebookStatus?.connected : localConnected.has(account.id);
+                const isConnected =
+                  account.id === "linkedin" ? isLinkedinConnected :
+                  account.id === "facebook" ? isFacebookConnected :
+                  account.id === "google" ? isGoogleConnected :
+                  localConnected.has(account.id);
                 return (
                   <button key={account.id} onClick={() => toggle(account.id)}
                     className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left">
@@ -1552,10 +1772,10 @@ function PersonalAssistantSection() {
 
       <button
         onClick={() => setScreen("assistant")}
-        disabled={localConnected.size === 0 && !linkedinStatus?.connected}
+        disabled={!isLinkedinConnected && !isFacebookConnected && !isGoogleConnected && localConnected.size === 0}
         className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white bg-violet-600 hover:bg-violet-700"
       >
-        Continue{(localConnected.size + (linkedinStatus?.connected ? 1 : 0)) > 0 ? ` (${localConnected.size + (linkedinStatus?.connected && !localConnected.has("linkedin") ? 1 : 0)} connected)` : ""}
+        Continue
       </button>
     </div>
   );

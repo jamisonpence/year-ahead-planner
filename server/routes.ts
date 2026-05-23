@@ -1,7 +1,7 @@
 import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
-import { storage } from "./storage";
+import { storage, pool } from "./storage";
 import { passport } from "./auth";
 import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
 import { fatSecretSearch, fatSecretGetFood, fatSecretConfigured } from "./fatsecret";
@@ -7367,6 +7367,191 @@ Rules:
     try {
       const contacts = await storage.getLinkedinContacts((req.user as User).id);
       res.json(contacts);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Google Contacts OAuth ─────────────────────────────────────────────────────
+
+  function gcontactsCallbackUrl(req: Request): string {
+    if (process.env.GOOGLE_CONTACTS_CALLBACK_URL) return process.env.GOOGLE_CONTACTS_CALLBACK_URL;
+    const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+    return `${proto}://${req.get("host")}/api/gcontacts/callback`;
+  }
+
+  // GET /api/gcontacts/status
+  app.get("/api/gcontacts/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const tokens = await storage.getGoogleContactsTokens(userId);
+      const contacts = tokens ? await storage.getGoogleContacts(userId) : [];
+      const r = await pool.query(`SELECT google_contacts_last_sync FROM users WHERE id=$1`, [userId]);
+      const lastSync = r.rows[0]?.google_contacts_last_sync ?? null;
+      const withBirthday = contacts.filter(c => c.birthday).length;
+      res.json({
+        connected: !!tokens,
+        configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+        contactCount: contacts.length,
+        birthdayCount: withBirthday,
+        lastSync,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/gcontacts/connect — redirect to Google OAuth for contacts
+  app.get("/api/gcontacts/connect", requireAuth, (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) return res.status(500).send(`
+      <html><body style="font-family:sans-serif;padding:40px;text-align:center;max-width:520px;margin:0 auto">
+        <h2>Google Contacts not configured</h2>
+        <p>Add <strong>GOOGLE_CLIENT_ID</strong> and <strong>GOOGLE_CLIENT_SECRET</strong> to your environment variables.</p>
+        <p>These are the same credentials used for Google login — just add this callback URL in the Google Cloud Console:</p>
+        <code style="display:block;padding:10px;background:#f0f0f0;border-radius:6px;margin:10px 0">${gcontactsCallbackUrl(req)}</code>
+        <a href="/">← Back to app</a>
+      </body></html>
+    `);
+    (req.session as any).gcontactsUserId = (req.user as User).id;
+    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", gcontactsCallbackUrl(req));
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "https://www.googleapis.com/auth/contacts.readonly");
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent"); // force refresh_token
+    url.searchParams.set("state", String((req.user as User).id));
+    res.redirect(url.toString());
+  });
+
+  // GET /api/gcontacts/callback — exchange code, fetch & store contacts
+  app.get("/api/gcontacts/callback", async (req, res) => {
+    try {
+      const { code, error, state } = req.query as Record<string, string>;
+      const userId = (req.session as any).gcontactsUserId ?? (state ? parseInt(state) : null);
+      if (error || !code || !userId) return res.redirect("/?tab=assistant&google=error");
+
+      // Exchange code for tokens
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          redirect_uri: gcontactsCallbackUrl(req),
+          grant_type: "authorization_code",
+        }).toString(),
+      });
+      if (!tokenRes.ok) return res.redirect("/?tab=assistant&google=error");
+      const tokenData = await tokenRes.json() as any;
+      const accessToken: string = tokenData.access_token;
+      const refreshToken: string | null = tokenData.refresh_token ?? null;
+      const expiry = new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString();
+
+      await storage.saveGoogleContactsTokens(userId, { accessToken, refreshToken, expiry });
+
+      // Fetch contacts from Google People API
+      await syncGoogleContactsForUser(userId, accessToken);
+
+      await storage.setGoogleContactsLastSync(userId, new Date().toISOString());
+      res.redirect("/?tab=assistant&google=connected");
+    } catch (e) {
+      console.error("Google Contacts callback error:", e);
+      res.redirect("/?tab=assistant&google=error");
+    }
+  });
+
+  /** Fetch all contacts from Google People API and upsert them */
+  async function syncGoogleContactsForUser(userId: number, accessToken: string): Promise<number> {
+    const fields = "names,emailAddresses,phoneNumbers,birthdays,photos,organizations";
+    let pageToken: string | undefined;
+    let total = 0;
+    do {
+      const url = new URL("https://people.googleapis.com/v1/people/me/connections");
+      url.searchParams.set("personFields", fields);
+      url.searchParams.set("pageSize", "1000");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!r.ok) break;
+      const data = await r.json() as any;
+      const connections: any[] = data.connections ?? [];
+      const contacts = connections.map((p: any) => {
+        const name = p.names?.[0];
+        const email = p.emailAddresses?.[0]?.value ?? null;
+        const phone = p.phoneNumbers?.[0]?.value ?? null;
+        const photo = p.photos?.[0]?.url ?? null;
+        const org = p.organizations?.[0];
+        const bdayObj = p.birthdays?.[0]?.date;
+        let birthday: string | null = null;
+        if (bdayObj) {
+          const { year, month, day } = bdayObj;
+          if (year && month && day) birthday = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+          else if (month && day) birthday = `${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+        }
+        return {
+          resourceName: p.resourceName,
+          firstName: name?.givenName ?? null,
+          lastName: name?.familyName ?? null,
+          email,
+          phone,
+          birthday,
+          avatarUrl: photo,
+          company: org?.name ?? null,
+        };
+      }).filter((c: any) => c.resourceName);
+      if (contacts.length > 0) {
+        total += await storage.upsertGoogleContacts(userId, contacts);
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    return total;
+  }
+
+  // POST /api/gcontacts/sync — re-sync with stored token
+  app.post("/api/gcontacts/sync", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const tokens = await storage.getGoogleContactsTokens(userId);
+      if (!tokens) return res.status(400).json({ error: "Not connected" });
+
+      // Refresh token if expired
+      let accessToken = tokens.accessToken;
+      if (tokens.refreshToken && new Date(tokens.expiry) <= new Date()) {
+        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            refresh_token: tokens.refreshToken,
+            client_id: process.env.GOOGLE_CLIENT_ID!,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+            grant_type: "refresh_token",
+          }).toString(),
+        });
+        if (tokenRes.ok) {
+          const d = await tokenRes.json() as any;
+          accessToken = d.access_token;
+          const newExpiry = new Date(Date.now() + (d.expires_in ?? 3600) * 1000).toISOString();
+          await storage.saveGoogleContactsTokens(userId, { accessToken, refreshToken: tokens.refreshToken, expiry: newExpiry });
+        }
+      }
+
+      const count = await syncGoogleContactsForUser(userId, accessToken);
+      await storage.setGoogleContactsLastSync(userId, new Date().toISOString());
+      res.json({ contactCount: count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/gcontacts/contacts
+  app.get("/api/gcontacts/contacts", requireAuth, async (req, res) => {
+    try {
+      const contacts = await storage.getGoogleContacts((req.user as User).id);
+      res.json(contacts);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/gcontacts/disconnect
+  app.delete("/api/gcontacts/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.clearGoogleContactsTokens((req.user as User).id);
+      res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
 
