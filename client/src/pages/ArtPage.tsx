@@ -52,6 +52,12 @@ const FILTER_TABS = [
   { value: "rated",      label: "Rated"      },
 ];
 
+const STATUS_FILTERS = [
+  { value: "seen",         label: "Seen"         },
+  { value: "want_to_see",  label: "Want to See"  },
+  { value: "own",          label: "Own"          },
+];
+
 const EMPTY_FORM = {
   title: "",
   artistName: "",
@@ -408,8 +414,10 @@ export default function ArtPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [filterTab, setFilterTab] = useState("all");
+  const [filterTab, setFilterTab] = useState("favourites");
   const [mediumFilter, setMediumFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [favOnly, setFavOnly] = useState(false);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") setFilterTab("shared");
   }, []);
@@ -594,7 +602,8 @@ export default function ArtPage() {
       );
     }
     if (filterTab === "favourites") {
-      result = result.filter((p) => p.isFavorite);
+      if (favOnly) result = result.filter((p) => p.isFavorite);
+      if (statusFilter) result = result.filter((p) => p.status === statusFilter);
     } else if (filterTab === "reviews") {
       result = result.filter((p) => p.notes && p.notes.trim().length > 0);
     } else if (filterTab === "rated") {
@@ -604,12 +613,15 @@ export default function ArtPage() {
       result = result.filter((p) => p.medium === mediumFilter);
     }
     return result;
-  }, [allPieces, search, filterTab, mediumFilter]);
+  }, [allPieces, search, filterTab, mediumFilter, statusFilter, favOnly]);
 
   const counts = useMemo(() => ({
-    favourites: allPieces.filter((p) => p.isFavorite).length,
+    favourites: allPieces.length,
     reviews:    allPieces.filter((p) => p.notes && p.notes.trim().length > 0).length,
     rated:      allPieces.filter((p) => (p as any).rating && (p as any).rating > 0).length,
+    seen:        allPieces.filter((p) => p.status === "seen").length,
+    want_to_see: allPieces.filter((p) => p.status === "want_to_see").length,
+    own:         allPieces.filter((p) => p.status === "own").length,
   }), [allPieces]);
 
   return (
@@ -645,11 +657,11 @@ export default function ArtPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-4">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-3">
         {FILTER_TABS.map((t) => (
           <button
             key={t.value}
-            onClick={() => setFilterTab(t.value)}
+            onClick={() => { setFilterTab(t.value); setStatusFilter(null); setFavOnly(false); }}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
               filterTab === t.value ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
@@ -659,6 +671,44 @@ export default function ArtPage() {
           </button>
         ))}
       </div>
+
+      {/* Status filter pills + fav toggle — shown on Favourites tab */}
+      {filterTab === "favourites" && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setStatusFilter(statusFilter === s.value ? null : s.value)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                statusFilter === s.value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              {s.label}
+              <span className="opacity-70">{counts[s.value as keyof typeof counts]}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => setFavOnly((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              favOnly
+                ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400"
+                : "border-border text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            ❤️ Favourites only
+          </button>
+          {(statusFilter || favOnly) && (
+            <button
+              onClick={() => { setStatusFilter(null); setFavOnly(false); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-muted-foreground hover:bg-secondary border border-border transition-colors"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Medium pills + search */}
       <div className="flex flex-wrap gap-2 mb-5">
