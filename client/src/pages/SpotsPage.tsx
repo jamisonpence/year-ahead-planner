@@ -3046,15 +3046,25 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
       }).addTo(map);
 
       mappable.forEach(city => {
-        const iconHtml = `<div style="
-          width:26px;height:26px;border-radius:50%;
-          background:#6366f1;border:2.5px solid white;
-          box-shadow:0 2px 6px rgba(0,0,0,0.35);
-          display:flex;align-items:center;justify-content:center;
-          font-size:13px;">
-          ✈️
-        </div>`;
-        const icon = L.divIcon({ html: iconHtml, className: "", iconSize: [26, 26], iconAnchor: [13, 13] });
+        const iconHtml = `
+          <div style="position:relative;width:32px;height:42px;">
+            <div style="
+              width:32px;height:32px;border-radius:50% 50% 50% 0;
+              background:#6366f1;border:3px solid white;
+              transform:rotate(-45deg);
+              box-shadow:0 3px 10px rgba(0,0,0,0.4);
+              position:absolute;top:0;left:0;">
+            </div>
+            <div style="
+              position:absolute;top:5px;left:5px;
+              width:22px;height:22px;border-radius:50%;
+              background:white;
+              display:flex;align-items:center;justify-content:center;
+              font-size:11px;transform:rotate(45deg);">
+              ✈️
+            </div>
+          </div>`;
+        const icon = L.divIcon({ html: iconHtml, className: "", iconSize: [32, 42], iconAnchor: [16, 42] });
         const marker = L.marker([city.lat!, city.lon!], { icon }).addTo(map);
         marker.bindPopup(`<b>${city.city}</b>${city.country ? `<br/>${city.country}` : ""}${city.visitedDate ? `<br/><small>${city.visitedDate}</small>` : ""}`);
       });
