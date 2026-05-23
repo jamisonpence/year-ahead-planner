@@ -568,15 +568,19 @@ Return exactly this structure:
     req.logout(() => { res.json({ ok: true }); });
   });
 
-  // Protect all remaining /api routes — except OAuth connect endpoints which
-  // handle auth themselves (redirect to Google login if session is missing)
+  // Protect all remaining /api routes — except OAuth connect/callback endpoints
+  // which handle auth themselves (the callback arrives from an external redirect
+  // and may not have a session cookie present)
   app.use("/api", (req, res, next) => {
-    const oauthConnectPaths = [
+    const oauthPaths = [
       "/api/linkedin/connect",
+      "/api/linkedin/callback",
       "/api/facebook/connect",
+      "/api/facebook/callback",
       "/api/gcontacts/connect",
+      "/api/gcontacts/callback",
     ];
-    if (oauthConnectPaths.includes(req.path) || oauthConnectPaths.some(p => req.originalUrl.startsWith(p))) {
+    if (oauthPaths.some(p => req.originalUrl.startsWith(p))) {
       return next();
     }
     return requireAuth(req, res, next);
