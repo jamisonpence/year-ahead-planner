@@ -7501,7 +7501,11 @@ Rules:
       url.searchParams.set("pageSize", "1000");
       if (pageToken) url.searchParams.set("pageToken", pageToken);
       const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!r.ok) break;
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({})) as any;
+        const msg = errBody?.error?.message ?? errBody?.error ?? `HTTP ${r.status}`;
+        throw new Error(`Google People API error: ${msg}`);
+      }
       const data = await r.json() as any;
       const connections: any[] = data.connections ?? [];
       const contacts = connections.map((p: any) => {
