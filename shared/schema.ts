@@ -315,6 +315,21 @@ export type CustomGroceryItem = typeof customGroceryItems.$inferSelect;
 export type RecipeIngredient = { name: string; qty: string };
 export type ComponentType = "main" | "vegetable" | "side" | "sauce" | "dessert" | "baking";
 
+// ── TIMELINE ENTRIES ─────────────────────────────────────────────────────────
+export const timelineEntries = pgTable("timeline_entries", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  personIdsJson: text("person_ids_json").notNull().default("[]"), // JSON array of person IDs
+  interactionType: text("interaction_type").notNull().default("note"), // call|coffee|email|meal|meeting|networking|note|other|party|text|custom
+  customType: text("custom_type"),       // label when interactionType === "custom"
+  note: text("note"),
+  date: text("date").notNull(),          // ISO date "YYYY-MM-DD"
+  createdAt: text("created_at").notNull(),
+});
+export type TimelineEntry = typeof timelineEntries.$inferSelect;
+export const insertTimelineEntrySchema = createInsertSchema(timelineEntries).omit({ id: true });
+export type InsertTimelineEntry = z.infer<typeof insertTimelineEntrySchema>;
+
 // ── RELATIONSHIP GROUPS ─────────────────────────────────────────────────────
 export const relationshipGroups = pgTable("relationship_groups", {
   id: serial("id").primaryKey(),

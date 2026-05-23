@@ -1084,6 +1084,47 @@ Return exactly this structure:
     (await storage.deletePerson(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
+  // ── Timeline Entries ─────────────────────────────────────────────────────────
+  app.get("/api/timeline", async (req, res) => {
+    try {
+      const entries = await storage.getTimelineEntries((req.user as User).id);
+      res.json(entries);
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/timeline", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { personIds, interactionType, customType, note, date } = req.body as {
+        personIds: number[]; interactionType: string; customType?: string; note?: string; date: string;
+      };
+      const id = await storage.createTimelineEntry(uid, {
+        personIdsJson: JSON.stringify(personIds ?? []),
+        interactionType: interactionType ?? "note",
+        customType: customType ?? null,
+        note: note ?? null,
+        date: date ?? new Date().toISOString().slice(0, 10),
+      });
+      res.json({ id });
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/timeline/:id", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { personIds, interactionType, customType, note, date } = req.body as any;
+      await storage.updateTimelineEntry(+req.params.id, uid, {
+        personIdsJson: personIds !== undefined ? JSON.stringify(personIds) : undefined,
+        interactionType, customType, note, date,
+      });
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/timeline/:id", async (req, res) => {
+    try {
+      const ok = await storage.deleteTimelineEntry(+req.params.id, (req.user as User).id);
+      ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.post("/api/people/:id/link-spouse", async (req, res) => {
     try {
       const uid = (req.user as User).id;

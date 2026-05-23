@@ -929,6 +929,356 @@ function UserSearchPanel({
   );
 }
 
+// ── Timeline Section ──────────────────────────────────────────────────────────
+
+const INTERACTION_TYPES = [
+  { key: "call",        label: "Call",           icon: "📞" },
+  { key: "coffee",      label: "Coffee",         icon: "☕" },
+  { key: "email",       label: "Email",          icon: "✉️" },
+  { key: "meal",        label: "Meal",           icon: "🍔" },
+  { key: "meeting",     label: "Meeting",        icon: "📅" },
+  { key: "networking",  label: "Networking",     icon: "💼" },
+  { key: "note",        label: "Note",           icon: "📝" },
+  { key: "other",       label: "Other",          icon: "⚽" },
+  { key: "party",       label: "Party/Social",   icon: "🙌" },
+  { key: "text",        label: "Text/Messaging", icon: "💬" },
+  { key: "custom",      label: "Custom",         icon: "+" },
+] as const;
+
+type InteractionType = typeof INTERACTION_TYPES[number]["key"];
+
+interface TimelineEntry {
+  id: number;
+  personIdsJson: string;
+  interactionType: string;
+  customType: string | null;
+  note: string | null;
+  date: string;
+  createdAt: string;
+}
+
+function groupEntriesByPeriod(entries: TimelineEntry[]): Array<{ label: string; entries: TimelineEntry[] }> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+  const thisMonth: TimelineEntry[] = [];
+  const lastMonth: TimelineEntry[] = [];
+  const thisYear: TimelineEntry[] = [];
+  const older: TimelineEntry[] = [];
+
+  for (const e of entries) {
+    const d = new Date(e.date);
+    if (d >= startOfMonth) thisMonth.push(e);
+    else if (d >= startOfLastMonth) lastMonth.push(e);
+    else if (d >= startOfYear) thisYear.push(e);
+    else older.push(e);
+  }
+
+  return [
+    { label: "This Month", entries: thisMonth },
+    { label: "Last Month", entries: lastMonth },
+    { label: "This Year", entries: thisYear },
+    { label: "Older", entries: older },
+  ].filter(g => g.entries.length > 0);
+}
+
+function AddNoteModal({ people, onClose, onSaved, editEntry }: {
+  people: PersonWithSpouse[];
+  onClose: () => void;
+  onSaved: () => void;
+  editEntry?: TimelineEntry | null;
+}) {
+  const { toast } = useToast();
+  const [selectedPeople, setSelectedPeople] = useState<PersonWithSpouse[]>(() => {
+    if (!editEntry) return [];
+    const ids: number[] = JSON.parse(editEntry.personIdsJson ?? "[]");
+    return people.filter(p => ids.includes(p.id));
+  });
+  const [note, setNote] = useState(editEntry?.note ?? "");
+  const [date, setDate] = useState(editEntry?.date ?? new Date().toISOString().slice(0, 10));
+  const [interactionType, setInteractionType] = useState<InteractionType>((editEntry?.interactionType as InteractionType) ?? "note");
+  const [customType, setCustomType] = useState(editEntry?.customType ?? "");
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [personSearch, setPersonSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const filteredPeople = personSearch
+    ? people.filter(p => fullName(p).toLowerCase().includes(personSearch.toLowerCase()))
+    : people;
+
+  async function save() {
+    setSaving(true);
+    try {
+      const body = {
+        personIds: selectedPeople.map(p => p.id),
+        interactionType,
+        customType: interactionType === "custom" ? customType : null,
+        note: note || null,
+        date,
+      };
+      if (editEntry) {
+        await fetch(`/api/timeline/${editEntry.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+      } else {
+        await fetch("/api/timeline", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+      }
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedType = INTERACTION_TYPES.find(t => t.key === interactionType);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-card w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b">
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Who did you meet?</p>
+            <div className="flex flex-wrap gap-1.5 items-center min-h-[28px]">
+              {selectedPeople.map(p => (
+                <span key={p.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-sm font-medium">
+                  <div className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">
+                    {p.firstName[0]}
+                  </div>
+                  {fullName(p)}
+                  <button onClick={() => setSelectedPeople(prev => prev.filter(x => x.id !== p.id))} className="text-muted-foreground hover:text-destructive ml-0.5">
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <input
+                value={personSearch}
+                onChange={e => setPersonSearch(e.target.value)}
+                placeholder={selectedPeople.length === 0 ? "Add contacts..." : ""}
+                className="flex-1 min-w-[100px] text-sm bg-transparent outline-none text-muted-foreground placeholder:text-muted-foreground/60"
+              />
+            </div>
+            {personSearch && (
+              <div className="absolute mt-1 z-10 bg-card border rounded-xl shadow-lg max-h-40 overflow-y-auto min-w-[200px]">
+                {filteredPeople.slice(0, 8).map(p => (
+                  <button key={p.id} onClick={() => { setSelectedPeople(prev => prev.find(x => x.id === p.id) ? prev : [...prev, p]); setPersonSearch(""); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 text-sm text-left">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{p.firstName[0]}</div>
+                    {fullName(p)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground ml-3 shrink-0"><X size={18} /></button>
+        </div>
+
+        {/* Note area */}
+        <div className="px-5 py-3 flex-1 overflow-y-auto">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">Note</p>
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="What would you like to add?"
+            rows={5}
+            className="w-full bg-transparent text-sm resize-none outline-none placeholder:text-muted-foreground/50"
+          />
+        </div>
+
+        {/* Footer toolbar */}
+        <div className="border-t px-4 py-3 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium">
+              <StickyNote size={12} className="text-muted-foreground" />
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="bg-transparent outline-none text-xs w-[100px]" />
+            </div>
+
+            {/* Interaction type */}
+            <div className="relative">
+              <button
+                onClick={() => setShowTypeDropdown(v => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted/40 transition-colors"
+              >
+                <span>{selectedType?.icon}</span>
+                <span>{selectedType?.label}</span>
+                <ChevronDown size={11} className="text-muted-foreground" />
+              </button>
+              {showTypeDropdown && (
+                <div className="absolute bottom-full mb-1 left-0 z-20 bg-card border rounded-xl shadow-xl min-w-[160px] py-1 max-h-64 overflow-y-auto">
+                  {INTERACTION_TYPES.map(t => (
+                    <button key={t.key} onClick={() => { setInteractionType(t.key); setShowTypeDropdown(false); }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50 text-left ${interactionType === t.key ? "bg-muted/40 font-medium" : ""}`}>
+                      <span className="text-base">{t.icon}</span> {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {interactionType === "custom" && (
+              <input value={customType} onChange={e => setCustomType(e.target.value)}
+                placeholder="Custom type..." className="px-2.5 py-1.5 rounded-lg border text-xs outline-none bg-transparent w-28" />
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+            <button onClick={save} disabled={saving}
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity">
+              {saving ? "Saving…" : editEntry ? "Save changes" : "Add note"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineSection({ people }: { people: PersonWithSpouse[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [showModal, setShowModal] = useState(false);
+  const [editEntry, setEditEntry] = useState<TimelineEntry | null>(null);
+  const [search, setSearch] = useState("");
+
+  const { data: entries = [] } = useQuery<TimelineEntry[]>({
+    queryKey: ["/api/timeline"],
+    queryFn: () => fetch("/api/timeline").then(r => r.json()),
+  });
+
+  async function deleteEntry(id: number) {
+    try {
+      await fetch(`/api/timeline/${id}`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["/api/timeline"] });
+      toast({ title: "Entry deleted" });
+    } catch {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    }
+  }
+
+  const peopleById = useMemo(() => {
+    const m = new Map<number, PersonWithSpouse>();
+    people.forEach(p => m.set(p.id, p));
+    return m;
+  }, [people]);
+
+  const filtered = useMemo(() => {
+    if (!search) return entries;
+    const q = search.toLowerCase();
+    return entries.filter(e => {
+      if (e.note?.toLowerCase().includes(q)) return true;
+      const ids: number[] = JSON.parse(e.personIdsJson ?? "[]");
+      return ids.some(id => fullName(peopleById.get(id) ?? { firstName: "", lastName: null } as any).toLowerCase().includes(q));
+    });
+  }, [entries, search, peopleById]);
+
+  const groups = groupEntriesByPeriod(filtered);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-bold">Timeline</h3>
+          <p className="text-xs text-muted-foreground">Meet someone recently? Add to your timeline to remember where you left off.</p>
+        </div>
+        <button
+          onClick={() => { setEditEntry(null); setShowModal(true); }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity shrink-0"
+        >
+          <Plus size={14} /> Add note
+        </button>
+      </div>
+
+      {/* Search */}
+      {entries.length > 0 && (
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search timeline…"
+            className="w-full pl-8 pr-3 py-2 rounded-xl border bg-card text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+      )}
+
+      {/* Entries */}
+      {groups.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground text-sm">
+          <p className="text-2xl mb-2">📝</p>
+          <p>No entries yet — log your first interaction above.</p>
+        </div>
+      ) : (
+        groups.map(group => (
+          <div key={group.label}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{group.label}</p>
+            <div className="space-y-2">
+              {group.entries.map(entry => {
+                const ids: number[] = JSON.parse(entry.personIdsJson ?? "[]");
+                const entryPeople = ids.map(id => peopleById.get(id)).filter(Boolean) as PersonWithSpouse[];
+                const type = INTERACTION_TYPES.find(t => t.key === entry.interactionType) ?? INTERACTION_TYPES.find(t => t.key === "note")!;
+                const typeLabel = entry.interactionType === "custom" && entry.customType ? entry.customType : type.label;
+                return (
+                  <div key={entry.id} className="rounded-xl border bg-card px-4 py-3 space-y-2 group">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{type.icon}</span>
+                        <div>
+                          <p className="text-sm font-semibold">{typeLabel}</p>
+                          {entry.note && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{entry.note}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-muted-foreground">{format(new Date(entry.date), "MMM d, yyyy")}</span>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                          <button onClick={() => { setEditEntry(entry); setShowModal(true); }}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => deleteEntry(entry.id)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {entryPeople.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {entryPeople.map(p => (
+                          <span key={p.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-xs font-medium">
+                            <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">
+                              {p.firstName[0]}
+                            </div>
+                            {fullName(p)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
+      )}
+
+      {(showModal || editEntry) && (
+        <AddNoteModal
+          people={people}
+          onClose={() => { setShowModal(false); setEditEntry(null); }}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["/api/timeline"] })}
+          editEntry={editEntry}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Keep in Touch Section ─────────────────────────────────────────────────────
 
 const KIT_FREQUENCIES = [
@@ -2270,8 +2620,9 @@ export default function RelationshipsPage() {
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
       {socialTab === "friends" && (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <FriendsSocialHub />
+          <TimelineSection people={allPeople} />
           <div>
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-base font-bold">Keep in Touch</h3>

@@ -299,6 +299,19 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS last_contacted_at TEXT`);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS timeline_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      person_ids_json TEXT NOT NULL DEFAULT '[]',
+      interaction_type TEXT NOT NULL DEFAULT 'note',
+      custom_type TEXT,
+      note TEXT,
+      date TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS general_tasks (
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
@@ -2344,6 +2357,51 @@ export const storage: IStorage = {
     return result.rowCount > 0;
   },
 
+  // ── Timeline Entries ─────────────────────────────────────────────────────────
+  async getTimelineEntries(userId: number) {
+    const r = await pool.query(
+      `SELECT id, user_id, person_ids_json, interaction_type, custom_type, note, date, created_at
+       FROM timeline_entries WHERE user_id=$1 ORDER BY date DESC, created_at DESC`,
+      [userId]
+    );
+    return r.rows.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      personIdsJson: row.person_ids_json,
+      interactionType: row.interaction_type,
+      customType: row.custom_type ?? null,
+      note: row.note ?? null,
+      date: row.date,
+      createdAt: row.created_at,
+    }));
+  },
+  async createTimelineEntry(userId: number, data: { personIdsJson: string; interactionType: string; customType?: string | null; note?: string | null; date: string }) {
+    const now = new Date().toISOString();
+    const r = await pool.query(
+      `INSERT INTO timeline_entries (user_id, person_ids_json, interaction_type, custom_type, note, date, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [userId, data.personIdsJson, data.interactionType, data.customType ?? null, data.note ?? null, data.date, now]
+    );
+    return r.rows[0].id as number;
+  },
+  async updateTimelineEntry(id: number, userId: number, data: { personIdsJson?: string; interactionType?: string; customType?: string | null; note?: string | null; date?: string }) {
+    const fields: string[] = [];
+    const vals: any[] = [];
+    let i = 1;
+    if (data.personIdsJson !== undefined) { fields.push(`person_ids_json=$${i++}`); vals.push(data.personIdsJson); }
+    if (data.interactionType !== undefined) { fields.push(`interaction_type=$${i++}`); vals.push(data.interactionType); }
+    if (data.customType !== undefined) { fields.push(`custom_type=$${i++}`); vals.push(data.customType); }
+    if (data.note !== undefined) { fields.push(`note=$${i++}`); vals.push(data.note); }
+    if (data.date !== undefined) { fields.push(`date=$${i++}`); vals.push(data.date); }
+    if (fields.length === 0) return;
+    vals.push(id, userId);
+    await pool.query(`UPDATE timeline_entries SET ${fields.join(",")} WHERE id=$${i++} AND user_id=$${i}`, vals);
+  },
+  async deleteTimelineEntry(id: number, userId: number) {
+    const r = await pool.query(`DELETE FROM timeline_entries WHERE id=$1 AND user_id=$2`, [id, userId]);
+    return (r.rowCount ?? 0) > 0;
+  },
+
   // ── Movies ────────────────────────────────────────────────────────────────────────
   async getAllMovies(userId: number) {
     return db.select().from(movies).where(eq(movies.userId, userId)).orderBy(asc(movies.title));
@@ -3079,6 +3137,7 @@ export const storage: IStorage = {
     await pool.query(`DELETE FROM projects WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM general_tasks WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM tasks WHERE user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM timeline_entries WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM people WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM relationship_groups WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM events WHERE user_id = $1`, [uid]);
