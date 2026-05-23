@@ -933,33 +933,10 @@ function UserSearchPanel({
 
 const ACCOUNT_GROUPS = [
   {
-    label: "Most Popular",
+    label: "Contact Import",
     items: [
-      { id: "linkedin",  name: "LinkedIn",  icon: "in",  color: "#0077b5", desc: "Import connections & work history" },
-      { id: "google",    name: "Google",    icon: "G",   color: "#4285f4", desc: "Contacts, Calendar & Gmail" },
-      { id: "outlook",   name: "Outlook",   icon: "O",   color: "#0078d4", desc: "Email, contacts & calendar" },
-    ],
-  },
-  {
-    label: "Messaging",
-    items: [
-      { id: "imessage",  name: "iMessage",  icon: "💬", color: "#34c759", desc: "Sync messages & contacts" },
-      { id: "whatsapp",  name: "WhatsApp",  icon: "W",   color: "#25d366", desc: "Chat history & contacts" },
-      { id: "instagram", name: "Instagram", icon: "IG",  color: "#e1306c", desc: "DMs & social connections" },
-      { id: "messenger", name: "Messenger", icon: "M",   color: "#0084ff", desc: "Facebook messages & friends" },
-    ],
-  },
-  {
-    label: "Birthdays & Social",
-    items: [
-      { id: "facebook",  name: "Facebook",  icon: "f",   color: "#1877f2", desc: "Friends list & birthdays — via Facebook Login" },
-      { id: "twitter",   name: "X / Twitter", icon: "X", color: "#14171a", desc: "Followers & connections" },
-    ],
-  },
-  {
-    label: "Contact Sync",
-    items: [
-      { id: "carddav",   name: "Two-way Contact Sync (CardDAV)", icon: "👤", color: "#6366f1", desc: "Sync your phone contacts" },
+      { id: "linkedin", name: "LinkedIn",        icon: "in", color: "#0077b5", desc: "Import connections & work history" },
+      { id: "google",   name: "Google Contacts", icon: "G",  color: "#4285f4", desc: "Sync your Google contacts & birthdays" },
     ],
   },
 ];
