@@ -5323,7 +5323,10 @@ export const storage: IStorage = {
     );
     const convId = conv.rows[0].id;
     const allIds = Array.from(new Set([createdBy, ...participantIds]));
-    const vals = allIds.map((uid, i) => `($1,$${i + 2},$3)`).join(",");
+    // params = [convId, ...allIds, now]
+    // $1 = convId, $2..$N+1 = user ids, $N+2 = now
+    const nowParam = allIds.length + 2;
+    const vals = allIds.map((_, i) => `($1,$${i + 2},$${nowParam})`).join(",");
     await pool.query(`INSERT INTO conversation_participants (conversation_id, user_id, joined_at) VALUES ${vals}`, [convId, ...allIds, now]);
     return { id: convId };
   },
