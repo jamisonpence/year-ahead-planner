@@ -9,7 +9,7 @@ import {
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
   UserX, Send, Loader2, Link, Bell,
-  Sparkles, LayoutGrid,
+  Sparkles, LayoutGrid, Bot, Plug, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -929,6 +929,201 @@ function UserSearchPanel({
   );
 }
 
+// ── Personal Assistant Section ────────────────────────────────────────────────
+
+const ACCOUNT_GROUPS = [
+  {
+    label: "Most Popular",
+    items: [
+      { id: "linkedin",  name: "LinkedIn",  icon: "in",  color: "#0077b5", desc: "Import connections & work history" },
+      { id: "google",    name: "Google",    icon: "G",   color: "#4285f4", desc: "Contacts, Calendar & Gmail" },
+      { id: "outlook",   name: "Outlook",   icon: "O",   color: "#0078d4", desc: "Email, contacts & calendar" },
+    ],
+  },
+  {
+    label: "Messaging",
+    items: [
+      { id: "imessage",  name: "iMessage",  icon: "💬", color: "#34c759", desc: "Sync messages & contacts" },
+      { id: "whatsapp",  name: "WhatsApp",  icon: "W",   color: "#25d366", desc: "Chat history & contacts" },
+      { id: "instagram", name: "Instagram", icon: "IG",  color: "#e1306c", desc: "DMs & social connections" },
+      { id: "messenger", name: "Messenger", icon: "M",   color: "#0084ff", desc: "Facebook messages & friends" },
+    ],
+  },
+  {
+    label: "Birthdays & Social",
+    items: [
+      { id: "facebook",  name: "Facebook",  icon: "f",   color: "#1877f2", desc: "Friends list & birthdays" },
+      { id: "twitter",   name: "X / Twitter", icon: "X", color: "#14171a", desc: "Followers & connections" },
+    ],
+  },
+  {
+    label: "Contact Sync",
+    items: [
+      { id: "carddav",   name: "Two-way Contact Sync (CardDAV)", icon: "👤", color: "#6366f1", desc: "Sync your phone contacts" },
+    ],
+  },
+];
+
+const STORAGE_KEY = "pa_connected_accounts";
+
+function AccountIcon({ icon, color }: { icon: string; color: string }) {
+  const isEmoji = /\p{Emoji}/u.test(icon) && icon.length <= 2;
+  return (
+    <div
+      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-white text-sm shadow-sm"
+      style={{ background: color }}
+    >
+      {isEmoji ? <span className="text-lg">{icon}</span> : icon}
+    </div>
+  );
+}
+
+function PersonalAssistantSection() {
+  const [connected, setConnected] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const [screen, setScreen] = useState<"connect" | "assistant">(
+    () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const arr = stored ? JSON.parse(stored) : [];
+        return arr.length > 0 ? "assistant" : "connect";
+      } catch { return "connect"; }
+    }
+  );
+
+  function toggle(id: string) {
+    setConnected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function handleContinue() {
+    if (connected.size === 0) return;
+    setScreen("assistant");
+  }
+
+  if (screen === "assistant") {
+    const connectedItems = ACCOUNT_GROUPS.flatMap(g => g.items).filter(a => connected.has(a.id));
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+              <Bot className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Personal Assistant</h2>
+              <p className="text-xs text-muted-foreground">{connected.size} account{connected.size !== 1 ? "s" : ""} connected</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setScreen("connect")}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-3 py-1.5 rounded-lg border hover:bg-secondary transition-colors"
+          >
+            <Plug size={12} /> Manage
+          </button>
+        </div>
+
+        {/* Connected accounts pills */}
+        <div className="flex flex-wrap gap-2">
+          {connectedItems.map(a => (
+            <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border bg-card text-xs font-medium">
+              <div className="w-4 h-4 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0"
+                style={{ background: a.color }}>
+                {/\p{Emoji}/u.test(a.icon) ? a.icon : a.icon[0]}
+              </div>
+              {a.name}
+              <CheckCircle2 size={11} className="text-green-500" />
+            </div>
+          ))}
+        </div>
+
+        {/* Coming soon placeholder */}
+        <div className="rounded-2xl border-2 border-dashed border-border bg-muted/20 p-10 flex flex-col items-center gap-3 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+            <Sparkles className="w-7 h-7 text-violet-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-base">Your assistant is getting ready</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+              Smart suggestions, birthday reminders, relationship insights, and more — coming soon.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Connect screen ──────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-6 max-w-lg mx-auto">
+      {/* Header */}
+      <div className="text-center pt-2">
+        <div className="w-14 h-14 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center mx-auto mb-3">
+          <Bot className="w-7 h-7 text-violet-600 dark:text-violet-400" />
+        </div>
+        <h2 className="text-xl font-bold">Connect your accounts</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Sync your interactions and add all your contacts in one place
+        </p>
+      </div>
+
+      {/* Account groups */}
+      <div className="space-y-5">
+        {ACCOUNT_GROUPS.map(group => (
+          <div key={group.label}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{group.label}</p>
+            <div className="rounded-xl border overflow-hidden divide-y divide-border">
+              {group.items.map(account => {
+                const isConnected = connected.has(account.id);
+                return (
+                  <button
+                    key={account.id}
+                    onClick={() => toggle(account.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left"
+                  >
+                    <AccountIcon icon={account.icon} color={account.color} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{account.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{account.desc}</p>
+                    </div>
+                    {isConnected ? (
+                      <span className="text-sm font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5 shrink-0">
+                        Connected <CheckCircle2 size={15} />
+                      </span>
+                    ) : (
+                      <span className="text-sm font-medium text-primary shrink-0">Connect</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Continue button */}
+      <button
+        onClick={handleContinue}
+        disabled={connected.size === 0}
+        className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
+        style={{ background: connected.size > 0 ? "#6366f1" : undefined, backgroundColor: connected.size === 0 ? "#a5b4fc" : undefined }}
+      >
+        Continue{connected.size > 0 ? ` (${connected.size} connected)` : ""}
+      </button>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RelationshipsPage() {
   const { toast } = useToast();
@@ -1098,7 +1293,7 @@ export default function RelationshipsPage() {
     }
   }
 
-  const [socialTab, setSocialTab] = useState<"friends" | "contacts">("friends");
+  const [socialTab, setSocialTab] = useState<"friends" | "contacts" | "assistant">("friends");
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
@@ -1117,10 +1312,19 @@ export default function RelationshipsPage() {
         >
           Contacts
         </button>
+        <button
+          onClick={() => setSocialTab("assistant")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "assistant" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Bot size={13} /> Assistant
+        </button>
       </div>
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
       {socialTab === "friends" && <FriendsSocialHub />}
+
+      {/* ── Personal Assistant ────────────────────────────────────────────────── */}
+      {socialTab === "assistant" && <PersonalAssistantSection />}
 
       {/* ── Contacts (existing CRM) ───────────────────────────────────────────── */}
       {socialTab === "contacts" && (
