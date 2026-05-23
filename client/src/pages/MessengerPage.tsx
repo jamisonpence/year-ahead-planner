@@ -447,7 +447,7 @@ export default function MessengerPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="flex h-[calc(100dvh-152px)] lg:h-screen">
 
       {/* ── Left: Conversation List ──────────────────────────────────────────── */}
       <div className={`flex flex-col border-r bg-card ${
