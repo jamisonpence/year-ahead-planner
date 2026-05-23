@@ -1093,7 +1093,7 @@ function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
           </div>
           <div className="flex gap-2">
             <a
-              href="https://www.linkedin.com/mypreferences/d/categories/dmp"
+              href="https://www.linkedin.com/mypreferences/d/download-my-data"
               target="_blank"
               rel="noreferrer"
               className="flex-1 py-2.5 rounded-lg bg-[#0077b5] text-white text-sm font-semibold hover:bg-[#006097] transition-colors text-center"
@@ -1122,7 +1122,7 @@ function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
           {!hasContacts && (
             <p className="text-xs text-muted-foreground">
               Upload the <strong>Connections.csv</strong> file from your LinkedIn data export.{" "}
-              <a href="https://www.linkedin.com/mypreferences/d/categories/dmp" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noreferrer" className="text-primary hover:underline">
                 Request export →
               </a>
             </p>
@@ -1583,6 +1583,8 @@ function PersonalAssistantSection() {
     }
     if (linkedinStatus?.connected) {
       setLocalConnected(prev => { const n = new Set(prev); n.add("linkedin"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+      // Auto-expand LinkedIn panel if connected but no contacts imported yet
+      if (linkedinStatus.contactCount === 0) setLinkedinExpanded(true);
     }
     if (facebookStatus?.connected) {
       setLocalConnected(prev => { const n = new Set(prev); n.add("facebook"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
