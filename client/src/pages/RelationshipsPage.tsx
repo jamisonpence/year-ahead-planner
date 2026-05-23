@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import FriendsSocialHub from "@/components/FriendsSocialHub";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -978,25 +978,229 @@ function AccountIcon({ icon, color }: { icon: string; color: string }) {
   );
 }
 
-function PersonalAssistantSection() {
-  const [connected, setConnected] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
+function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: status, isLoading } = useQuery<{
+    connected: boolean; configured: boolean;
+    profile: { name: string; headline: string | null; avatarUrl: string | null; email: string | null } | null;
+    contactCount: number;
+  }>({
+    queryKey: ["/api/linkedin/status"],
+    queryFn: () => fetch("/api/linkedin/status").then(r => r.json()),
+    refetchOnWindowFocus: true,
   });
-  const [screen, setScreen] = useState<"connect" | "assistant">(
-    () => {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        const arr = stored ? JSON.parse(stored) : [];
-        return arr.length > 0 ? "assistant" : "connect";
-      } catch { return "connect"; }
+
+  const { data: contacts = [] } = useQuery<Array<{ id: number; firstName: string; lastName: string | null; email: string | null; company: string | null; position: string | null }>>({
+    queryKey: ["/api/linkedin/contacts"],
+    queryFn: () => fetch("/api/linkedin/contacts").then(r => r.json()),
+    enabled: (status?.contactCount ?? 0) > 0,
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: () => fetch("/api/linkedin/disconnect", { method: "DELETE" }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/linkedin/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/linkedin/contacts"] });
+      onDisconnect();
+      toast({ title: "LinkedIn disconnected" });
+    },
+  });
+
+  const [csvText, setCsvText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleCsvFile(file: File) {
+    const text = await file.text();
+    setCsvText(text);
+    setShowCsvImport(true);
+  }
+
+  async function importCsv() {
+    if (!csvText) return;
+    setImporting(true);
+    try {
+      const r = await fetch("/api/linkedin/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Import failed");
+      toast({ title: `Imported ${d.imported} contacts` });
+      qc.invalidateQueries({ queryKey: ["/api/linkedin/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/linkedin/contacts"] });
+      setShowCsvImport(false);
+      setCsvText("");
+    } catch (e: any) {
+      toast({ title: e.message ?? "Import failed", variant: "destructive" });
+    } finally {
+      setImporting(false);
     }
+  }
+
+  if (isLoading) return <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  const profile = status?.profile;
+
+  return (
+    <div className="space-y-4">
+      {/* Profile card */}
+      {profile && (
+        <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-[#0077b5]/30 bg-[#0077b5]/5">
+          {profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt={profile.name} className="w-14 h-14 rounded-full object-cover border-2 border-[#0077b5]/40" />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-[#0077b5] flex items-center justify-center text-white font-bold text-xl">
+              {profile.name[0]}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-base">{profile.name}</p>
+            {profile.headline && <p className="text-sm text-muted-foreground">{profile.headline}</p>}
+            {profile.email && <p className="text-xs text-muted-foreground">{profile.email}</p>}
+          </div>
+          <CheckCircle2 className="text-green-500 shrink-0" size={20} />
+        </div>
+      )}
+
+      {/* Contact count */}
+      <div className="flex items-center justify-between px-4 py-3 rounded-xl border bg-card">
+        <div className="flex items-center gap-3">
+          <Users size={18} className="text-[#0077b5]" />
+          <div>
+            <p className="text-sm font-medium">Imported Contacts</p>
+            <p className="text-xs text-muted-foreground">{status?.contactCount ?? 0} LinkedIn connections</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowCsvImport(v => !v)}
+          className="text-xs text-primary font-medium hover:underline"
+        >
+          + Import more
+        </button>
+      </div>
+
+      {/* CSV Import section */}
+      {showCsvImport && (
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold mb-1">Import from LinkedIn CSV</p>
+            <p className="text-xs text-muted-foreground">
+              Export your connections from{" "}
+              <a href="https://www.linkedin.com/mynetwork/invite-connect/connections/" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                LinkedIn Settings
+              </a>{" "}
+              → My Network → Manage my network → Export contacts, then upload the CSV here.
+            </p>
+          </div>
+          <input ref={fileRef} type="file" accept=".csv" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); }} />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-full py-2.5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {csvText ? "✓ File loaded — click Import" : "Choose CSV file…"}
+          </button>
+          {csvText && (
+            <button
+              onClick={importCsv}
+              disabled={importing}
+              className="w-full py-2.5 rounded-lg bg-[#0077b5] text-white text-sm font-semibold hover:bg-[#006097] transition-colors disabled:opacity-50"
+            >
+              {importing ? "Importing…" : "Import Contacts"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Contact list preview */}
+      {contacts.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Recent Contacts</p>
+          <div className="rounded-xl border overflow-hidden divide-y divide-border">
+            {contacts.slice(0, 8).map(c => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#0077b5]/15 flex items-center justify-center text-[#0077b5] font-semibold text-xs shrink-0">
+                  {c.firstName[0]}{c.lastName?.[0] ?? ""}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{c.firstName} {c.lastName}</p>
+                  {(c.position || c.company) && (
+                    <p className="text-xs text-muted-foreground truncate">{[c.position, c.company].filter(Boolean).join(" · ")}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+            {contacts.length > 8 && (
+              <div className="px-4 py-2 text-xs text-muted-foreground text-center">
+                +{contacts.length - 8} more contacts
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Disconnect */}
+      <button
+        onClick={() => disconnectMut.mutate()}
+        disabled={disconnectMut.isPending}
+        className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+      >
+        Disconnect LinkedIn
+      </button>
+    </div>
   );
+}
+
+function PersonalAssistantSection() {
+  const [localConnected, setLocalConnected] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")); }
+    catch { return new Set(); }
+  });
+  const [screen, setScreen] = useState<"connect" | "assistant">("connect");
+  const [linkedinExpanded, setLinkedinExpanded] = useState(false);
+
+  // Check real LinkedIn status on mount
+  const { data: linkedinStatus } = useQuery<{ connected: boolean; contactCount: number }>({
+    queryKey: ["/api/linkedin/status"],
+    queryFn: () => fetch("/api/linkedin/status").then(r => r.json()),
+    refetchOnWindowFocus: true,
+  });
+
+  // Sync LinkedIn real status into localConnected + handle redirect params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const liStatus = params.get("linkedin");
+    if (liStatus === "connected") {
+      setLocalConnected(prev => { const n = new Set(prev); n.add("linkedin"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+      setScreen("assistant");
+      setLinkedinExpanded(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (liStatus === "error") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (linkedinStatus?.connected) {
+      setLocalConnected(prev => { const n = new Set(prev); n.add("linkedin"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+    }
+  }, [linkedinStatus]);
+
+  // If any real account is connected, start on assistant screen
+  useEffect(() => {
+    if (localConnected.size > 0) setScreen("assistant");
+  }, []);
 
   function toggle(id: string) {
-    setConnected(prev => {
+    if (id === "linkedin") {
+      // Real OAuth — redirect to backend
+      window.location.href = "/api/linkedin/connect";
+      return;
+    }
+    // Others: local toggle (UI placeholder)
+    setLocalConnected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -1005,13 +1209,9 @@ function PersonalAssistantSection() {
     });
   }
 
-  function handleContinue() {
-    if (connected.size === 0) return;
-    setScreen("assistant");
-  }
-
   if (screen === "assistant") {
-    const connectedItems = ACCOUNT_GROUPS.flatMap(g => g.items).filter(a => connected.has(a.id));
+    const allItems = ACCOUNT_GROUPS.flatMap(g => g.items);
+    const connectedItems = allItems.filter(a => localConnected.has(a.id) || (a.id === "linkedin" && linkedinStatus?.connected));
     return (
       <div className="space-y-5">
         {/* Header */}
@@ -1022,40 +1222,68 @@ function PersonalAssistantSection() {
             </div>
             <div>
               <h2 className="text-lg font-bold">Personal Assistant</h2>
-              <p className="text-xs text-muted-foreground">{connected.size} account{connected.size !== 1 ? "s" : ""} connected</p>
+              <p className="text-xs text-muted-foreground">{connectedItems.length} account{connectedItems.length !== 1 ? "s" : ""} connected</p>
             </div>
           </div>
-          <button
-            onClick={() => setScreen("connect")}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-3 py-1.5 rounded-lg border hover:bg-secondary transition-colors"
-          >
+          <button onClick={() => setScreen("connect")}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-3 py-1.5 rounded-lg border hover:bg-secondary transition-colors">
             <Plug size={12} /> Manage
           </button>
         </div>
 
-        {/* Connected accounts pills */}
-        <div className="flex flex-wrap gap-2">
-          {connectedItems.map(a => (
-            <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border bg-card text-xs font-medium">
-              <div className="w-4 h-4 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0"
-                style={{ background: a.color }}>
-                {/\p{Emoji}/u.test(a.icon) ? a.icon : a.icon[0]}
+        {/* LinkedIn expanded panel */}
+        {(linkedinStatus?.connected || localConnected.has("linkedin")) && (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => setLinkedinExpanded(v => !v)}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#0077b5] flex items-center justify-center text-white font-bold text-sm shrink-0">in</div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-semibold">LinkedIn</p>
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle2 size={10} /> Connected{linkedinStatus?.contactCount ? ` · ${linkedinStatus.contactCount} contacts` : ""}
+                </p>
               </div>
-              {a.name}
-              <CheckCircle2 size={11} className="text-green-500" />
-            </div>
-          ))}
-        </div>
+              <ChevronDown size={14} className={`text-muted-foreground transition-transform ${linkedinExpanded ? "rotate-180" : ""}`} />
+            </button>
+            {linkedinExpanded && (
+              <div className="px-4 pb-4 border-t">
+                <div className="pt-4">
+                  <LinkedInPanel onDisconnect={() => {
+                    setLocalConnected(prev => { const n = new Set(prev); n.delete("linkedin"); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+                    if (connectedItems.length <= 1) setScreen("connect");
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Other connected accounts */}
+        {connectedItems.filter(a => a.id !== "linkedin").length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {connectedItems.filter(a => a.id !== "linkedin").map(a => (
+              <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border bg-card text-xs font-medium">
+                <div className="w-4 h-4 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0" style={{ background: a.color }}>
+                  {/\p{Emoji}/u.test(a.icon) ? a.icon : a.icon[0]}
+                </div>
+                {a.name}
+                <CheckCircle2 size={11} className="text-green-500" />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Coming soon placeholder */}
-        <div className="rounded-2xl border-2 border-dashed border-border bg-muted/20 p-10 flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-            <Sparkles className="w-7 h-7 text-violet-500" />
+        <div className="rounded-2xl border-2 border-dashed border-border bg-muted/20 p-8 flex flex-col items-center gap-3 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+            <Sparkles className="w-6 h-6 text-violet-500" />
           </div>
           <div>
-            <p className="font-semibold text-base">Your assistant is getting ready</p>
+            <p className="font-semibold">Your assistant is getting ready</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-              Smart suggestions, birthday reminders, relationship insights, and more — coming soon.
+              Smart suggestions, relationship insights, birthday reminders — coming soon.
             </p>
           </div>
         </div>
@@ -1066,31 +1294,25 @@ function PersonalAssistantSection() {
   // ── Connect screen ──────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-lg mx-auto">
-      {/* Header */}
       <div className="text-center pt-2">
         <div className="w-14 h-14 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center mx-auto mb-3">
           <Bot className="w-7 h-7 text-violet-600 dark:text-violet-400" />
         </div>
         <h2 className="text-xl font-bold">Connect your accounts</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Sync your interactions and add all your contacts in one place
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Sync your interactions and add all your contacts in one place</p>
       </div>
 
-      {/* Account groups */}
       <div className="space-y-5">
         {ACCOUNT_GROUPS.map(group => (
           <div key={group.label}>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{group.label}</p>
             <div className="rounded-xl border overflow-hidden divide-y divide-border">
               {group.items.map(account => {
-                const isConnected = connected.has(account.id);
+                const isLinkedin = account.id === "linkedin";
+                const isConnected = isLinkedin ? !!linkedinStatus?.connected : localConnected.has(account.id);
                 return (
-                  <button
-                    key={account.id}
-                    onClick={() => toggle(account.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left"
-                  >
+                  <button key={account.id} onClick={() => toggle(account.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left">
                     <AccountIcon icon={account.icon} color={account.color} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">{account.name}</p>
@@ -1111,14 +1333,12 @@ function PersonalAssistantSection() {
         ))}
       </div>
 
-      {/* Continue button */}
       <button
-        onClick={handleContinue}
-        disabled={connected.size === 0}
-        className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
-        style={{ background: connected.size > 0 ? "#6366f1" : undefined, backgroundColor: connected.size === 0 ? "#a5b4fc" : undefined }}
+        onClick={() => setScreen("assistant")}
+        disabled={localConnected.size === 0 && !linkedinStatus?.connected}
+        className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white bg-violet-600 hover:bg-violet-700"
       >
-        Continue{connected.size > 0 ? ` (${connected.size} connected)` : ""}
+        Continue{(localConnected.size + (linkedinStatus?.connected ? 1 : 0)) > 0 ? ` (${localConnected.size + (linkedinStatus?.connected && !localConnected.has("linkedin") ? 1 : 0)} connected)` : ""}
       </button>
     </div>
   );

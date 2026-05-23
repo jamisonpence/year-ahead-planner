@@ -23,7 +23,28 @@ export const users = pgTable("users", {
   stravaRefreshToken: text("strava_refresh_token"),
   stravaTokenExpiry: text("strava_token_expiry"),
   stravaAthleteId: text("strava_athlete_id"),
+  // LinkedIn integration
+  linkedinAccessToken: text("linkedin_access_token"),
+  linkedinProfileId: text("linkedin_profile_id"),
+  linkedinName: text("linkedin_name"),
+  linkedinHeadline: text("linkedin_headline"),
+  linkedinAvatarUrl: text("linkedin_avatar_url"),
+  linkedinEmail: text("linkedin_email"),
 });
+
+// ── LINKEDIN CONTACTS ─────────────────────────────────────────────────────────
+export const linkedinContacts = pgTable("linkedin_contacts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  company: text("company"),
+  position: text("position"),
+  connectedOn: text("connected_on"),
+  importedAt: text("imported_at").notNull(),
+});
+export type LinkedinContact = typeof linkedinContacts.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 

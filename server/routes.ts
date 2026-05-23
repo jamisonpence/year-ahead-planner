@@ -7047,4 +7047,157 @@ Rules:
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found or not authorized" });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── LinkedIn OAuth ────────────────────────────────────────────────────────────
+
+  function linkedinCallbackUrl(req: Request): string {
+    if (process.env.LINKEDIN_CALLBACK_URL) return process.env.LINKEDIN_CALLBACK_URL;
+    const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+    return `${proto}://${req.get("host")}/api/linkedin/callback`;
+  }
+
+  // GET /api/linkedin/status
+  app.get("/api/linkedin/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const profile = await storage.getLinkedinProfile(userId);
+      const contacts = await storage.getLinkedinContacts(userId);
+      res.json({
+        connected: !!profile,
+        configured: !!(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET),
+        profile: profile ? { name: profile.name, headline: profile.headline, avatarUrl: profile.avatarUrl, email: profile.email } : null,
+        contactCount: contacts.length,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/linkedin/connect — redirect to LinkedIn OAuth
+  app.get("/api/linkedin/connect", requireAuth, (req, res) => {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    if (!clientId) return res.status(500).send(`
+      <html><body style="font-family:sans-serif;padding:40px;text-align:center">
+        <h2>LinkedIn not configured</h2>
+        <p>Add <strong>LINKEDIN_CLIENT_ID</strong> and <strong>LINKEDIN_CLIENT_SECRET</strong> to your Railway environment variables.</p>
+        <p><a href="https://www.linkedin.com/developers/apps/new" target="_blank">Create a LinkedIn app</a> to get credentials.</p>
+        <p><a href="/">← Back to app</a></p>
+      </body></html>
+    `);
+    (req.session as any).linkedinUserId = (req.user as User).id;
+    const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", linkedinCallbackUrl(req));
+    url.searchParams.set("scope", "openid profile email");
+    url.searchParams.set("state", String((req.user as User).id));
+    res.redirect(url.toString());
+  });
+
+  // GET /api/linkedin/callback — exchange code for token + fetch profile
+  app.get("/api/linkedin/callback", async (req, res) => {
+    try {
+      const { code, error, state } = req.query as Record<string, string>;
+      const userId = (req.session as any).linkedinUserId ?? (state ? parseInt(state) : null);
+      if (error || !code || !userId) return res.redirect("/?tab=assistant&linkedin=error");
+
+      // Exchange code for access token
+      const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: linkedinCallbackUrl(req),
+          client_id: process.env.LINKEDIN_CLIENT_ID!,
+          client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+        }).toString(),
+      });
+      if (!tokenRes.ok) return res.redirect("/?tab=assistant&linkedin=error");
+      const tokenData = await tokenRes.json() as any;
+      const accessToken: string = tokenData.access_token;
+
+      // Fetch profile via OpenID Connect userinfo
+      const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!profileRes.ok) return res.redirect("/?tab=assistant&linkedin=error");
+      const profile = await profileRes.json() as any;
+
+      const name = profile.name ?? [profile.given_name, profile.family_name].filter(Boolean).join(" ") ?? "LinkedIn User";
+      await storage.saveLinkedinProfile(userId, {
+        accessToken,
+        profileId: profile.sub ?? String(userId),
+        name,
+        headline: profile.locale?.language ? `LinkedIn member` : null,
+        avatarUrl: profile.picture ?? null,
+        email: profile.email ?? null,
+      });
+
+      res.redirect("/?tab=assistant&linkedin=connected");
+    } catch (e) {
+      console.error("LinkedIn callback error:", e);
+      res.redirect("/?tab=assistant&linkedin=error");
+    }
+  });
+
+  // DELETE /api/linkedin/disconnect
+  app.delete("/api/linkedin/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.clearLinkedinProfile((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/linkedin/contacts
+  app.get("/api/linkedin/contacts", requireAuth, async (req, res) => {
+    try {
+      const contacts = await storage.getLinkedinContacts((req.user as User).id);
+      res.json(contacts);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // POST /api/linkedin/import-csv — parse LinkedIn connections CSV export
+  app.post("/api/linkedin/import-csv", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { csvText } = req.body as { csvText: string };
+      if (!csvText) return res.status(400).json({ error: "csvText required" });
+
+      // LinkedIn CSV format: First Name,Last Name,Email Address,Company,Position,Connected On
+      const lines = csvText.split(/\r?\n/).filter(Boolean);
+      // Find header row (skip any preamble lines)
+      const headerIdx = lines.findIndex(l => l.toLowerCase().includes("first name") || l.toLowerCase().includes("firstname"));
+      if (headerIdx === -1) return res.status(400).json({ error: "Could not find CSV header row" });
+
+      const headers = lines[headerIdx].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+      const firstCol  = headers.indexOf("first name") !== -1 ? headers.indexOf("first name") : headers.indexOf("firstname");
+      const lastCol   = headers.indexOf("last name")  !== -1 ? headers.indexOf("last name")  : headers.indexOf("lastname");
+      const emailCol  = headers.findIndex(h => h.includes("email"));
+      const compCol   = headers.findIndex(h => h.includes("company"));
+      const posCol    = headers.findIndex(h => h.includes("position"));
+      const dateCol   = headers.findIndex(h => h.includes("connected"));
+
+      const contacts = lines.slice(headerIdx + 1).map(line => {
+        // Respect quoted CSV fields
+        const cols: string[] = [];
+        let cur = "", inQ = false;
+        for (const ch of line) {
+          if (ch === '"') { inQ = !inQ; continue; }
+          if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; continue; }
+          cur += ch;
+        }
+        cols.push(cur.trim());
+        return {
+          firstName: firstCol >= 0 ? (cols[firstCol] ?? "").replace(/^"|"$/g, "") : "",
+          lastName:  lastCol  >= 0 ? (cols[lastCol]  ?? "").replace(/^"|"$/g, "") : undefined,
+          email:     emailCol >= 0 ? (cols[emailCol] ?? "").replace(/^"|"$/g, "") || undefined : undefined,
+          company:   compCol  >= 0 ? (cols[compCol]  ?? "").replace(/^"|"$/g, "") || undefined : undefined,
+          position:  posCol   >= 0 ? (cols[posCol]   ?? "").replace(/^"|"$/g, "") || undefined : undefined,
+          connectedOn: dateCol >= 0 ? (cols[dateCol]  ?? "").replace(/^"|"$/g, "") || undefined : undefined,
+        };
+      }).filter(c => c.firstName);
+
+      const count = await storage.importLinkedinContacts(userId, contacts);
+      res.json({ imported: count });
+    } catch (e) { handleError(res, e); }
+  });
 }

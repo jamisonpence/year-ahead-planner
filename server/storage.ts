@@ -615,6 +615,27 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_token_expiry TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_athlete_id TEXT`);
 
+  // LinkedIn integration
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_access_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_profile_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_name TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_headline TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_avatar_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_email TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS linkedin_contacts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL,
+      last_name TEXT,
+      email TEXT,
+      company TEXT,
+      position TEXT,
+      connected_on TEXT,
+      imported_at TEXT NOT NULL
+    )
+  `);
+
   // Google Calendar event ID on events table
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS gcal_event_id TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS events_gcal_event_id_idx ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL`);
@@ -1621,6 +1642,12 @@ export interface IStorage {
   saveStravaTokens(userId: number, accessToken: string, refreshToken: string, expiry: string, athleteId: string): Promise<void>;
   getStravaTokens(userId: number): Promise<{ accessToken: string; refreshToken: string; expiry: string; athleteId: string } | null>;
   clearStravaTokens(userId: number): Promise<void>;
+  // LinkedIn
+  saveLinkedinProfile(userId: number, data: { accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null }): Promise<void>;
+  getLinkedinProfile(userId: number): Promise<{ accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null } | null>;
+  clearLinkedinProfile(userId: number): Promise<void>;
+  importLinkedinContacts(userId: number, contacts: Array<{ firstName: string; lastName?: string; email?: string; company?: string; position?: string; connectedOn?: string }>): Promise<number>;
+  getLinkedinContacts(userId: number): Promise<Array<{ id: number; firstName: string; lastName: string | null; email: string | null; company: string | null; position: string | null; connectedOn: string | null; importedAt: string }>>;
   // Google Calendar tokens
   saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string): Promise<void>;
   getGcalTokens(userId: number): Promise<{ accessToken: string; refreshToken: string | null; expiry: string } | null>;
@@ -2730,6 +2757,46 @@ export const storage: IStorage = {
   },
   async clearStravaTokens(userId: number) {
     await db.update(users).set({ stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null, stravaAthleteId: null }).where(eq(users.id, userId));
+  },
+  async saveLinkedinProfile(userId: number, data: { accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null }) {
+    await db.update(users).set({
+      linkedinAccessToken: data.accessToken,
+      linkedinProfileId: data.profileId,
+      linkedinName: data.name,
+      linkedinHeadline: data.headline,
+      linkedinAvatarUrl: data.avatarUrl,
+      linkedinEmail: data.email,
+    }).where(eq(users.id, userId));
+  },
+  async getLinkedinProfile(userId: number) {
+    const r = await db.select({
+      a: users.linkedinAccessToken, p: users.linkedinProfileId,
+      n: users.linkedinName, h: users.linkedinHeadline,
+      av: users.linkedinAvatarUrl, e: users.linkedinEmail,
+    }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!r[0]?.p) return null;
+    return { accessToken: r[0].a!, profileId: r[0].p, name: r[0].n ?? "", headline: r[0].h ?? null, avatarUrl: r[0].av ?? null, email: r[0].e ?? null };
+  },
+  async clearLinkedinProfile(userId: number) {
+    await db.update(users).set({ linkedinAccessToken: null, linkedinProfileId: null, linkedinName: null, linkedinHeadline: null, linkedinAvatarUrl: null, linkedinEmail: null }).where(eq(users.id, userId));
+  },
+  async importLinkedinContacts(userId: number, contacts: Array<{ firstName: string; lastName?: string; email?: string; company?: string; position?: string; connectedOn?: string }>) {
+    if (contacts.length === 0) return 0;
+    const now = new Date().toISOString();
+    const values = contacts.map(c =>
+      `(${userId}, ${pool.escapeLiteral(c.firstName)}, ${c.lastName ? pool.escapeLiteral(c.lastName) : 'NULL'}, ${c.email ? pool.escapeLiteral(c.email) : 'NULL'}, ${c.company ? pool.escapeLiteral(c.company) : 'NULL'}, ${c.position ? pool.escapeLiteral(c.position) : 'NULL'}, ${c.connectedOn ? pool.escapeLiteral(c.connectedOn) : 'NULL'}, ${pool.escapeLiteral(now)})`
+    ).join(",");
+    const result = await pool.query(`INSERT INTO linkedin_contacts (user_id,first_name,last_name,email,company,position,connected_on,imported_at) VALUES ${values}`);
+    return result.rowCount ?? 0;
+  },
+  async getLinkedinContacts(userId: number) {
+    const r = await pool.query(`SELECT id,first_name,last_name,email,company,position,connected_on,imported_at FROM linkedin_contacts WHERE user_id=$1 ORDER BY first_name`, [userId]);
+    return r.rows.map((row: any) => ({
+      id: row.id, firstName: row.first_name, lastName: row.last_name ?? null,
+      email: row.email ?? null, company: row.company ?? null,
+      position: row.position ?? null, connectedOn: row.connected_on ?? null,
+      importedAt: row.imported_at,
+    }));
   },
   async saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string) {
     await db.update(users).set({ gcalAccessToken: accessToken, gcalRefreshToken: refreshToken, gcalTokenExpiry: expiry }).where(eq(users.id, userId));
