@@ -1897,6 +1897,25 @@ const EMPTY_MEMBER_FORM = {
   birthYear: "", deathYear: "", birthPlace: "", notes: "", isDeceased: false,
 };
 
+function GenLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2 mt-1 text-center">
+      {children}
+    </p>
+  );
+}
+
+function CardRow({ members, cardProps }: {
+  members: FamilyMember[];
+  cardProps: (m: FamilyMember) => { member: FamilyMember; onEdit: () => void; onDelete: () => void };
+}) {
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      {members.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+    </div>
+  );
+}
+
 function FamilyMemberCard({ member, onEdit, onDelete }: {
   member: FamilyMember;
   onEdit: () => void;
@@ -1917,9 +1936,6 @@ function FamilyMemberCard({ member, onEdit, onDelete }: {
       ) : yearSpan ? (
         <span className="text-[9px] opacity-60">{yearSpan}</span>
       ) : null}
-      {member.side && member.side !== "none" && (
-        <span className="text-[9px] opacity-50 capitalize">{member.side}</span>
-      )}
       <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onClick={onEdit} className="p-0.5 rounded bg-white/60 hover:bg-white dark:bg-black/20 dark:hover:bg-black/40 transition-colors">
           <Pencil size={10} />
@@ -1987,24 +2003,30 @@ function FamilyTreeSection() {
     else addMut.mutate(payload);
   }
 
-  // Group members by generation for tree view
-  const generations = ROLES.reduce<{ gen: number; label: string; members: FamilyMember[] }[]>((acc, role) => {
-    const roleMembers = members.filter(m => m.role === role.value);
-    if (roleMembers.length === 0) return acc;
-    const group = acc.find(g => g.gen === role.generation);
-    if (group) { group.members.push(...roleMembers); }
-    else {
-      const genLabel =
-        role.generation === 0 ? "Great-Grandparents" :
-        role.generation === 1 ? "Grandparents" :
-        role.generation === 2 ? "Parents & Aunts/Uncles" :
-        role.generation === 3 ? "Your Generation" :
-        role.generation === 4 ? "Children" :
-        role.generation === 5 ? "Grandchildren" : "Other";
-      acc.push({ gen: role.generation, label: genLabel, members: [...roleMembers] });
-    }
-    return acc;
-  }, []).sort((a, b) => a.gen - b.gen);
+  // Segment members for the structured tree
+  const greatGrandparents = members.filter(m => m.role === "great_grandparent");
+  const grandparents      = members.filter(m => m.role === "grandparent");
+  const parents           = members.filter(m => m.role === "parent" || m.role === "aunt_uncle");
+  const yourGen           = members.filter(m => m.role === "self" || m.role === "sibling" || m.role === "spouse");
+  const children          = members.filter(m => m.role === "child");
+  const grandchildren     = members.filter(m => m.role === "grandchild");
+  const others            = members.filter(m => m.role === "other");
+
+  const patGrandparents   = grandparents.filter(m => m.side === "paternal");
+  const matGrandparents   = grandparents.filter(m => m.side === "maternal");
+  const noSideGrandparents = grandparents.filter(m => !m.side || m.side === "none");
+  const patParents        = parents.filter(m => m.side === "paternal");
+  const matParents        = parents.filter(m => m.side === "maternal");
+  const noSideParents     = parents.filter(m => !m.side || m.side === "none");
+
+  const hasTwoSides = (patGrandparents.length > 0 || patParents.length > 0) &&
+                      (matGrandparents.length > 0 || matParents.length > 0);
+
+  // For header stats
+  const generationCount = [
+    greatGrandparents.length, grandparents.length, parents.length,
+    yourGen.length, children.length, grandchildren.length, others.length,
+  ].filter(n => n > 0).length;
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-40">
@@ -2021,7 +2043,7 @@ function FamilyTreeSection() {
             <GitFork size={18} /> Family Tree
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {members.length} {members.length === 1 ? "person" : "people"} · {generations.length} {generations.length === 1 ? "generation" : "generations"}
+            {members.length} {members.length === 1 ? "person" : "people"} · {generationCount} {generationCount === 1 ? "generation" : "generations"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -2089,33 +2111,128 @@ function FamilyTreeSection() {
         </div>
       ) : (
         /* ── Tree view ── */
-        <div className="overflow-x-auto pb-4 -mx-3 px-3">
-          <div className="flex flex-col items-center gap-0 min-w-max mx-auto">
-            {generations.map((gen, gi) => (
-              <div key={gen.gen} className="flex flex-col items-center w-full">
-                <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2 mt-1">
-                  {gen.label}
-                </p>
-                <div className="flex items-start justify-center gap-3 flex-wrap">
-                  {gen.members.map(m => (
-                    <FamilyMemberCard
-                      key={m.id}
-                      member={m}
-                      onEdit={() => openEdit(m)}
-                      onDelete={() => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); }}
-                    />
-                  ))}
-                </div>
-                {gi < generations.length - 1 && (
-                  <div className="flex flex-col items-center mt-3">
-                    <div className="w-px h-6 bg-border" />
-                    <div className="w-2 h-2 rounded-full bg-border" />
-                  </div>
+        (() => {
+          const cardProps = (m: FamilyMember) => ({
+            member: m,
+            onEdit: () => openEdit(m),
+            onDelete: () => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); },
+          });
+          const Dot = () => <div className="w-2.5 h-2.5 rounded-full bg-border flex-shrink-0" />;
+          const VLine = ({ color = "bg-border", height = "h-6" }: { color?: string; height?: string }) => (
+            <div className={`w-px ${height} ${color} mx-auto`} />
+          );
+
+          return (
+            <div className="overflow-x-auto pb-6 -mx-3 px-3">
+              <div className="flex flex-col items-center min-w-[300px] mx-auto">
+
+                {/* ── Great-grandparents (centered) ─────────────────── */}
+                {greatGrandparents.length > 0 && (
+                  <>
+                    <GenLabel>Great-Grandparents</GenLabel>
+                    <CardRow members={greatGrandparents} cardProps={cardProps} />
+                    <VLine /><Dot />
+                  </>
+                )}
+
+                {/* ── Grandparents + Parents (two-column if sides exist) ── */}
+                {hasTwoSides ? (
+                  <>
+                    <div className="flex gap-3 w-full mt-1">
+                      {/* PATERNAL side */}
+                      <div className="flex-1 rounded-2xl border-2 border-blue-300/50 dark:border-blue-700/40 bg-blue-50/20 dark:bg-blue-950/10 p-3 flex flex-col items-center gap-2">
+                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">Paternal</span>
+                        {patGrandparents.length > 0 && <CardRow members={patGrandparents} cardProps={cardProps} />}
+                        {patGrandparents.length > 0 && patParents.length > 0 && <VLine color="bg-blue-300/60 dark:bg-blue-700/50" height="h-5" />}
+                        {patParents.length > 0 && <CardRow members={patParents} cardProps={cardProps} />}
+                      </div>
+                      {/* MATERNAL side */}
+                      <div className="flex-1 rounded-2xl border-2 border-pink-300/50 dark:border-pink-700/40 bg-pink-50/20 dark:bg-pink-950/10 p-3 flex flex-col items-center gap-2">
+                        <span className="text-[9px] font-bold text-pink-500 uppercase tracking-widest">Maternal</span>
+                        {matGrandparents.length > 0 && <CardRow members={matGrandparents} cardProps={cardProps} />}
+                        {matGrandparents.length > 0 && matParents.length > 0 && <VLine color="bg-pink-300/60 dark:bg-pink-700/50" height="h-5" />}
+                        {matParents.length > 0 && <CardRow members={matParents} cardProps={cardProps} />}
+                      </div>
+                    </div>
+                    {noSideParents.length > 0 && (
+                      <div className="mt-2"><CardRow members={noSideParents} cardProps={cardProps} /></div>
+                    )}
+                    {/* Merge connector → Your Generation */}
+                    {yourGen.length > 0 && (
+                      <div className="w-full flex flex-col items-center mt-2">
+                        <div className="flex w-full" style={{ height: 28 }}>
+                          <div className="flex-1 border-t-2 border-r-2 border-border rounded-tr-xl" />
+                          <div className="flex-1 border-t-2 border-l-2 border-border rounded-tl-xl" />
+                        </div>
+                        <VLine height="h-3" /><Dot />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Single-column fallback */
+                  <>
+                    {grandparents.length > 0 && (
+                      <>
+                        <GenLabel>Grandparents</GenLabel>
+                        <CardRow members={grandparents} cardProps={cardProps} />
+                        {parents.length > 0 && <><VLine /><Dot /></>}
+                      </>
+                    )}
+                    {noSideGrandparents.length > 0 && grandparents.length === 0 && (
+                      <>
+                        <GenLabel>Grandparents</GenLabel>
+                        <CardRow members={noSideGrandparents} cardProps={cardProps} />
+                        {parents.length > 0 && <><VLine /><Dot /></>}
+                      </>
+                    )}
+                    {parents.length > 0 && (
+                      <>
+                        <GenLabel>Parents & Aunts/Uncles</GenLabel>
+                        <CardRow members={parents} cardProps={cardProps} />
+                        {yourGen.length > 0 && <><VLine /><Dot /></>}
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* ── Your Generation ────────────────────────────────── */}
+                {yourGen.length > 0 && (
+                  <>
+                    <GenLabel>Your Generation</GenLabel>
+                    <CardRow members={yourGen} cardProps={cardProps} />
+                  </>
+                )}
+
+                {/* ── Children ───────────────────────────────────────── */}
+                {children.length > 0 && (
+                  <>
+                    <VLine /><Dot />
+                    <GenLabel>Children</GenLabel>
+                    <CardRow members={children} cardProps={cardProps} />
+                  </>
+                )}
+
+                {/* ── Grandchildren ──────────────────────────────────── */}
+                {grandchildren.length > 0 && (
+                  <>
+                    <VLine /><Dot />
+                    <GenLabel>Grandchildren</GenLabel>
+                    <CardRow members={grandchildren} cardProps={cardProps} />
+                  </>
+                )}
+
+                {/* ── Others ─────────────────────────────────────────── */}
+                {others.length > 0 && (
+                  <>
+                    <div className="mt-5" />
+                    <GenLabel>Other</GenLabel>
+                    <CardRow members={others} cardProps={cardProps} />
+                  </>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          );
+        })()
       )}
 
       {/* Add / Edit Modal */}
