@@ -572,7 +572,7 @@ export default function MessengerPage() {
                   value={draft}
                   onChange={e => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+                  placeholder="Type a message…"
                   className="flex-1 min-h-[40px] max-h-32 resize-none text-sm py-2 leading-snug"
                   rows={1}
                 />
