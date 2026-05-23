@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser, PetWithVisits, PetVetVisit, FamilyMember } from "@shared/schema";
@@ -1978,6 +1978,103 @@ function FamilyTreeSection() {
     onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
   });
 
+  // ── SVG connecting lines ──────────────────────────────────────────────────
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+  const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [svgPaths, setSvgPaths] = useState<Array<{ d: string; color: string }>>([]);
+
+  function setNodeRef(key: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) nodeRefs.current.set(key, el);
+      else nodeRefs.current.delete(key);
+    };
+  }
+
+  function computeSvgPaths() {
+    if (!treeContainerRef.current) return;
+    const containerRect = treeContainerRef.current.getBoundingClientRect();
+    const newPaths: Array<{ d: string; color: string }> = [];
+
+    function getBox(key: string) {
+      const el = nodeRefs.current.get(key);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return null;
+      return {
+        cx:     r.left + r.width  / 2 - containerRect.left,
+        top:    r.top              - containerRect.top,
+        bottom: r.bottom           - containerRect.top,
+      };
+    }
+
+    function bezierV(x1: number, y1: number, x2: number, y2: number) {
+      const mid = (y1 + y2) / 2;
+      return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${mid.toFixed(1)}, ${x2.toFixed(1)} ${mid.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    }
+
+    // great-grandparents → grandparents
+    const ggpBox   = getBox("ggp");
+    const gpAllBox = getBox("gpAll");
+    const gpPatBox = getBox("patGP");
+    const gpMatBox = getBox("matGP");
+    if (ggpBox) {
+      const target = gpAllBox ?? gpPatBox ?? gpMatBox;
+      if (target) newPaths.push({ d: bezierV(ggpBox.cx, ggpBox.bottom, target.cx, target.top), color: "#94a3b8" });
+    }
+
+    // within paternal column: grandparents → parents
+    const patGPBox = getBox("patGP");
+    const patPBox  = getBox("patP");
+    if (patGPBox && patPBox) newPaths.push({ d: bezierV(patGPBox.cx, patGPBox.bottom, patPBox.cx, patPBox.top), color: "#93c5fd" });
+
+    // within maternal column: grandparents → parents
+    const matGPBox = getBox("matGP");
+    const matPBox  = getBox("matP");
+    if (matGPBox && matPBox) newPaths.push({ d: bezierV(matGPBox.cx, matGPBox.bottom, matPBox.cx, matPBox.top), color: "#f9a8d4" });
+
+    // single-column: all grandparents → all parents
+    if (gpAllBox) {
+      const pAllBox = getBox("parentsAll");
+      if (pAllBox) newPaths.push({ d: bezierV(gpAllBox.cx, gpAllBox.bottom, pAllBox.cx, pAllBox.top), color: "#94a3b8" });
+    }
+
+    // merge two columns → yourGen  (bracket ⊓ shape)
+    const yourGenBox   = getBox("yourGen");
+    const patBottomBox = getBox("patP") ?? getBox("patGP");
+    const matBottomBox = getBox("matP") ?? getBox("matGP");
+    if (yourGenBox && patBottomBox && matBottomBox) {
+      const mergeY = Math.max(patBottomBox.bottom, matBottomBox.bottom) + 14;
+      const midX   = (patBottomBox.cx + matBottomBox.cx) / 2;
+      newPaths.push({ d: `M ${patBottomBox.cx.toFixed(1)} ${patBottomBox.bottom.toFixed(1)} V ${mergeY.toFixed(1)} H ${midX.toFixed(1)}`, color: "#94a3b8" });
+      newPaths.push({ d: `M ${matBottomBox.cx.toFixed(1)} ${matBottomBox.bottom.toFixed(1)} V ${mergeY.toFixed(1)} H ${midX.toFixed(1)}`, color: "#94a3b8" });
+      newPaths.push({ d: `M ${midX.toFixed(1)} ${mergeY.toFixed(1)} V ${yourGenBox.top.toFixed(1)}`, color: "#94a3b8" });
+    } else if (yourGenBox) {
+      // single-column parents/grandparents → yourGen
+      const aboveBox = getBox("parentsAll") ?? getBox("gpAll");
+      if (aboveBox) newPaths.push({ d: bezierV(aboveBox.cx, aboveBox.bottom, yourGenBox.cx, yourGenBox.top), color: "#94a3b8" });
+    }
+
+    // yourGen → children
+    const childrenBox = getBox("children");
+    if (yourGenBox && childrenBox) newPaths.push({ d: bezierV(yourGenBox.cx, yourGenBox.bottom, childrenBox.cx, childrenBox.top), color: "#94a3b8" });
+
+    // children → grandchildren
+    const grandchildrenBox = getBox("grandchildren");
+    if (childrenBox && grandchildrenBox) newPaths.push({ d: bezierV(childrenBox.cx, childrenBox.bottom, grandchildrenBox.cx, grandchildrenBox.top), color: "#94a3b8" });
+
+    setSvgPaths(newPaths);
+  }
+
+  useLayoutEffect(() => {
+    if (viewMode === "tree") computeSvgPaths();
+  });
+
+  useEffect(() => {
+    const handler = () => { if (viewMode === "tree") computeSvgPaths(); };
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [viewMode]);
+
   function openAdd() {
     setEditing(null); setForm({ ...EMPTY_MEMBER_FORM }); setShowModal(true);
   }
@@ -2117,56 +2214,72 @@ function FamilyTreeSection() {
             onEdit: () => openEdit(m),
             onDelete: () => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); },
           });
-          const Dot = () => <div className="w-2.5 h-2.5 rounded-full bg-border flex-shrink-0" />;
-          const VLine = ({ color = "bg-border", height = "h-6" }: { color?: string; height?: string }) => (
-            <div className={`w-px ${height} ${color} mx-auto`} />
-          );
 
           return (
             <div className="overflow-x-auto pb-6 -mx-3 px-3">
-              <div className="flex flex-col items-center min-w-[300px] mx-auto">
+              <div ref={treeContainerRef} className="relative flex flex-col items-center min-w-[300px] mx-auto">
 
-                {/* ── Great-grandparents (centered) ─────────────────── */}
+                {/* SVG overlay for connecting lines */}
+                <svg
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ width: "100%", height: "100%", overflow: "visible" }}
+                  aria-hidden="true"
+                >
+                  {svgPaths.map((p, i) => (
+                    <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth="1.5" strokeOpacity="0.7" />
+                  ))}
+                </svg>
+
+                {/* ── Great-grandparents ── */}
                 {greatGrandparents.length > 0 && (
                   <>
                     <GenLabel>Great-Grandparents</GenLabel>
-                    <CardRow members={greatGrandparents} cardProps={cardProps} />
-                    <VLine /><Dot />
+                    <div ref={setNodeRef("ggp")} className="flex flex-wrap justify-center gap-2">
+                      {greatGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    </div>
+                    <div className="h-10" />
                   </>
                 )}
 
-                {/* ── Grandparents + Parents (two-column if sides exist) ── */}
+                {/* ── Grandparents + Parents ── */}
                 {hasTwoSides ? (
                   <>
                     <div className="flex gap-3 w-full mt-1">
-                      {/* PATERNAL side */}
-                      <div className="flex-1 rounded-2xl border-2 border-blue-300/50 dark:border-blue-700/40 bg-blue-50/20 dark:bg-blue-950/10 p-3 flex flex-col items-center gap-2">
-                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">Paternal</span>
-                        {patGrandparents.length > 0 && <CardRow members={patGrandparents} cardProps={cardProps} />}
-                        {patGrandparents.length > 0 && patParents.length > 0 && <VLine color="bg-blue-300/60 dark:bg-blue-700/50" height="h-5" />}
-                        {patParents.length > 0 && <CardRow members={patParents} cardProps={cardProps} />}
+                      {/* PATERNAL column */}
+                      <div className="flex-1 rounded-2xl border-2 border-blue-300/50 dark:border-blue-700/40 bg-blue-50/20 dark:bg-blue-950/10 p-3 flex flex-col items-center">
+                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-2">Paternal</span>
+                        {patGrandparents.length > 0 && (
+                          <div ref={setNodeRef("patGP")} className="flex flex-wrap justify-center gap-2">
+                            {patGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
+                        {patGrandparents.length > 0 && patParents.length > 0 && <div className="h-10" />}
+                        {patParents.length > 0 && (
+                          <div ref={setNodeRef("patP")} className="flex flex-wrap justify-center gap-2">
+                            {patParents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
                       </div>
-                      {/* MATERNAL side */}
-                      <div className="flex-1 rounded-2xl border-2 border-pink-300/50 dark:border-pink-700/40 bg-pink-50/20 dark:bg-pink-950/10 p-3 flex flex-col items-center gap-2">
-                        <span className="text-[9px] font-bold text-pink-500 uppercase tracking-widest">Maternal</span>
-                        {matGrandparents.length > 0 && <CardRow members={matGrandparents} cardProps={cardProps} />}
-                        {matGrandparents.length > 0 && matParents.length > 0 && <VLine color="bg-pink-300/60 dark:bg-pink-700/50" height="h-5" />}
-                        {matParents.length > 0 && <CardRow members={matParents} cardProps={cardProps} />}
+                      {/* MATERNAL column */}
+                      <div className="flex-1 rounded-2xl border-2 border-pink-300/50 dark:border-pink-700/40 bg-pink-50/20 dark:bg-pink-950/10 p-3 flex flex-col items-center">
+                        <span className="text-[9px] font-bold text-pink-500 uppercase tracking-widest mb-2">Maternal</span>
+                        {matGrandparents.length > 0 && (
+                          <div ref={setNodeRef("matGP")} className="flex flex-wrap justify-center gap-2">
+                            {matGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
+                        {matGrandparents.length > 0 && matParents.length > 0 && <div className="h-10" />}
+                        {matParents.length > 0 && (
+                          <div ref={setNodeRef("matP")} className="flex flex-wrap justify-center gap-2">
+                            {matParents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
                       </div>
                     </div>
                     {noSideParents.length > 0 && (
                       <div className="mt-2"><CardRow members={noSideParents} cardProps={cardProps} /></div>
                     )}
-                    {/* Merge connector → Your Generation */}
-                    {yourGen.length > 0 && (
-                      <div className="w-full flex flex-col items-center mt-2">
-                        <div className="flex w-full" style={{ height: 28 }}>
-                          <div className="flex-1 border-t-2 border-r-2 border-border rounded-tr-xl" />
-                          <div className="flex-1 border-t-2 border-l-2 border-border rounded-tl-xl" />
-                        </div>
-                        <VLine height="h-3" /><Dot />
-                      </div>
-                    )}
+                    {yourGen.length > 0 && <div className="h-12" />}
                   </>
                 ) : (
                   /* Single-column fallback */
@@ -2174,54 +2287,57 @@ function FamilyTreeSection() {
                     {grandparents.length > 0 && (
                       <>
                         <GenLabel>Grandparents</GenLabel>
-                        <CardRow members={grandparents} cardProps={cardProps} />
-                        {parents.length > 0 && <><VLine /><Dot /></>}
-                      </>
-                    )}
-                    {noSideGrandparents.length > 0 && grandparents.length === 0 && (
-                      <>
-                        <GenLabel>Grandparents</GenLabel>
-                        <CardRow members={noSideGrandparents} cardProps={cardProps} />
-                        {parents.length > 0 && <><VLine /><Dot /></>}
+                        <div ref={setNodeRef("gpAll")} className="flex flex-wrap justify-center gap-2">
+                          {grandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                        </div>
+                        {parents.length > 0 && <div className="h-10" />}
                       </>
                     )}
                     {parents.length > 0 && (
                       <>
-                        <GenLabel>Parents & Aunts/Uncles</GenLabel>
-                        <CardRow members={parents} cardProps={cardProps} />
-                        {yourGen.length > 0 && <><VLine /><Dot /></>}
+                        <GenLabel>Parents &amp; Aunts/Uncles</GenLabel>
+                        <div ref={setNodeRef("parentsAll")} className="flex flex-wrap justify-center gap-2">
+                          {parents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                        </div>
+                        {yourGen.length > 0 && <div className="h-10" />}
                       </>
                     )}
                   </>
                 )}
 
-                {/* ── Your Generation ────────────────────────────────── */}
+                {/* ── Your Generation ── */}
                 {yourGen.length > 0 && (
                   <>
                     <GenLabel>Your Generation</GenLabel>
-                    <CardRow members={yourGen} cardProps={cardProps} />
+                    <div ref={setNodeRef("yourGen")} className="flex flex-wrap justify-center gap-2">
+                      {yourGen.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    </div>
                   </>
                 )}
 
-                {/* ── Children ───────────────────────────────────────── */}
+                {/* ── Children ── */}
                 {children.length > 0 && (
                   <>
-                    <VLine /><Dot />
+                    <div className="h-10" />
                     <GenLabel>Children</GenLabel>
-                    <CardRow members={children} cardProps={cardProps} />
+                    <div ref={setNodeRef("children")} className="flex flex-wrap justify-center gap-2">
+                      {children.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    </div>
                   </>
                 )}
 
-                {/* ── Grandchildren ──────────────────────────────────── */}
+                {/* ── Grandchildren ── */}
                 {grandchildren.length > 0 && (
                   <>
-                    <VLine /><Dot />
+                    <div className="h-10" />
                     <GenLabel>Grandchildren</GenLabel>
-                    <CardRow members={grandchildren} cardProps={cardProps} />
+                    <div ref={setNodeRef("grandchildren")} className="flex flex-wrap justify-center gap-2">
+                      {grandchildren.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    </div>
                   </>
                 )}
 
-                {/* ── Others ─────────────────────────────────────────── */}
+                {/* ── Others ── */}
                 {others.length > 0 && (
                   <>
                     <div className="mt-5" />
