@@ -7158,7 +7158,7 @@ Rules:
     try {
       const { code, error, state } = req.query as Record<string, string>;
       const userId = (req.session as any).facebookUserId ?? (state ? parseInt(state) : null);
-      if (error || !code || !userId) return res.redirect("/?tab=assistant&facebook=error");
+      if (error || !code || !userId) return res.redirect("/?facebook=error#/relationships");
 
       // Exchange code for access token
       const tokenUrl = new URL("https://graph.facebook.com/v19.0/oauth/access_token");
@@ -7167,7 +7167,7 @@ Rules:
       tokenUrl.searchParams.set("redirect_uri", fbCallbackUrl(req));
       tokenUrl.searchParams.set("code", code);
       const tokenRes = await fetch(tokenUrl.toString());
-      if (!tokenRes.ok) return res.redirect("/?tab=assistant&facebook=error");
+      if (!tokenRes.ok) return res.redirect("/?facebook=error#/relationships");
       const tokenData = await tokenRes.json() as any;
       const accessToken: string = tokenData.access_token;
 
@@ -7175,7 +7175,7 @@ Rules:
       const profileRes = await fetch(
         `https://graph.facebook.com/v19.0/me?fields=id,name,email,birthday,picture.type(large),location&access_token=${accessToken}`
       );
-      if (!profileRes.ok) return res.redirect("/?tab=assistant&facebook=error");
+      if (!profileRes.ok) return res.redirect("/?facebook=error#/relationships");
       const profile = await profileRes.json() as any;
 
       await storage.saveFacebookProfile(userId, {
@@ -7224,10 +7224,10 @@ Rules:
       } catch { /* birthday calendar optional */ }
 
       await storage.setFacebookLastSync(userId, new Date().toISOString());
-      res.redirect("/?tab=assistant&facebook=connected");
+      res.redirect("/?facebook=connected#/relationships");
     } catch (e) {
       console.error("Facebook callback error:", e);
-      res.redirect("/?tab=assistant&facebook=error");
+      res.redirect("/?facebook=error#/relationships");
     }
   });
 
@@ -7340,7 +7340,7 @@ Rules:
     try {
       const { code, error, state } = req.query as Record<string, string>;
       const userId = (req.session as any).linkedinUserId ?? (state ? parseInt(state) : null);
-      if (error || !code || !userId) return res.redirect("/?tab=assistant&linkedin=error");
+      if (error || !code || !userId) return res.redirect("/?linkedin=error#/relationships");
 
       // Exchange code for access token
       const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
@@ -7354,7 +7354,7 @@ Rules:
           client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
         }).toString(),
       });
-      if (!tokenRes.ok) return res.redirect("/?tab=assistant&linkedin=error");
+      if (!tokenRes.ok) return res.redirect("/?linkedin=error#/relationships");
       const tokenData = await tokenRes.json() as any;
       const accessToken: string = tokenData.access_token;
 
@@ -7362,7 +7362,7 @@ Rules:
       const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!profileRes.ok) return res.redirect("/?tab=assistant&linkedin=error");
+      if (!profileRes.ok) return res.redirect("/?linkedin=error#/relationships");
       const profile = await profileRes.json() as any;
 
       const name = profile.name ?? [profile.given_name, profile.family_name].filter(Boolean).join(" ") ?? "LinkedIn User";
@@ -7375,10 +7375,10 @@ Rules:
         email: profile.email ?? null,
       });
 
-      res.redirect("/?tab=assistant&linkedin=connected");
+      res.redirect("/?linkedin=connected#/relationships");
     } catch (e) {
       console.error("LinkedIn callback error:", e);
-      res.redirect("/?tab=assistant&linkedin=error");
+      res.redirect("/?linkedin=error#/relationships");
     }
   });
 
@@ -7458,7 +7458,7 @@ Rules:
     try {
       const { code, error, state } = req.query as Record<string, string>;
       const userId = (req.session as any).gcontactsUserId ?? (state ? parseInt(state) : null);
-      if (error || !code || !userId) return res.redirect("/?tab=assistant&google=error");
+      if (error || !code || !userId) return res.redirect("/?google=error#/relationships");
 
       // Exchange code for tokens
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -7472,7 +7472,7 @@ Rules:
           grant_type: "authorization_code",
         }).toString(),
       });
-      if (!tokenRes.ok) return res.redirect("/?tab=assistant&google=error");
+      if (!tokenRes.ok) return res.redirect("/?google=error#/relationships");
       const tokenData = await tokenRes.json() as any;
       const accessToken: string = tokenData.access_token;
       const refreshToken: string | null = tokenData.refresh_token ?? null;
@@ -7484,10 +7484,10 @@ Rules:
       await syncGoogleContactsForUser(userId, accessToken);
 
       await storage.setGoogleContactsLastSync(userId, new Date().toISOString());
-      res.redirect("/?tab=assistant&google=connected");
+      res.redirect("/?google=connected#/relationships");
     } catch (e) {
       console.error("Google Contacts callback error:", e);
-      res.redirect("/?tab=assistant&google=error");
+      res.redirect("/?google=error#/relationships");
     }
   });
 
