@@ -447,7 +447,7 @@ export default function MessengerPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-x-0 top-14 bottom-16 flex lg:static lg:inset-auto lg:h-screen">
+    <div className="fixed inset-x-0 top-14 bottom-24 flex lg:static lg:inset-auto lg:h-screen">
 
       {/* ── Left: Conversation List ──────────────────────────────────────────── */}
       <div className={`flex flex-col border-r bg-card ${
