@@ -130,9 +130,13 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       return res.redirect("/?gcal=error#/calendar");
     }
   }, passport.authenticate("google", { failureRedirect: "/" }),
-  (_req, res) => {
-    // Redirect to "/" not "/dashboard" — the SPA is served from root so
-    // Vite's base:"/" asset paths always resolve correctly.
+  (req, res) => {
+    // After login, honour any pending OAuth connect redirect (e.g. LinkedIn, Facebook)
+    const dest = (req.session as any).postLoginRedirect;
+    if (dest) {
+      delete (req.session as any).postLoginRedirect;
+      return res.redirect(dest);
+    }
     res.redirect("/");
   });
 
@@ -7101,7 +7105,11 @@ Rules:
   });
 
   // GET /api/facebook/connect — redirect to Facebook OAuth
-  app.get("/api/facebook/connect", requireAuth, (req, res) => {
+  app.get("/api/facebook/connect", (req, res) => {
+    if (!req.isAuthenticated()) {
+      (req.session as any).postLoginRedirect = "/api/facebook/connect";
+      return res.redirect("/auth/google");
+    }
     const appId = process.env.FACEBOOK_APP_ID;
     if (!appId) return res.status(500).send(`
       <html><body style="font-family:sans-serif;padding:40px;text-align:center;max-width:520px;margin:0 auto">
@@ -7287,7 +7295,11 @@ Rules:
   });
 
   // GET /api/linkedin/connect — redirect to LinkedIn OAuth
-  app.get("/api/linkedin/connect", requireAuth, (req, res) => {
+  app.get("/api/linkedin/connect", (req, res) => {
+    if (!req.isAuthenticated()) {
+      (req.session as any).postLoginRedirect = "/api/linkedin/connect";
+      return res.redirect("/auth/google");
+    }
     const clientId = process.env.LINKEDIN_CLIENT_ID;
     if (!clientId) return res.status(500).send(`
       <html><body style="font-family:sans-serif;padding:40px;text-align:center">
@@ -7398,7 +7410,11 @@ Rules:
   });
 
   // GET /api/gcontacts/connect — redirect to Google OAuth for contacts
-  app.get("/api/gcontacts/connect", requireAuth, (req, res) => {
+  app.get("/api/gcontacts/connect", (req, res) => {
+    if (!req.isAuthenticated()) {
+      (req.session as any).postLoginRedirect = "/api/gcontacts/connect";
+      return res.redirect("/auth/google");
+    }
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) return res.status(500).send(`
       <html><body style="font-family:sans-serif;padding:40px;text-align:center;max-width:520px;margin:0 auto">
