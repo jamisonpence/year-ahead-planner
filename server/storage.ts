@@ -295,6 +295,8 @@ export async function initializeStorage() {
     )
   `);
   await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS linked_user_id INTEGER`);
+  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS keep_in_touch_frequency TEXT`);
+  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS last_contacted_at TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS general_tasks (

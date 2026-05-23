@@ -341,6 +341,9 @@ export const people = pgTable("people", {
   sortOrder: integer("sort_order").notNull().default(0),
   // linked app user id — when set, this person is an app-connected friend
   linkedUserId: integer("linked_user_id"),
+  // Keep in touch
+  keepInTouchFrequency: text("keep_in_touch_frequency"), // "week"|"2weeks"|"month"|"6weeks"|"3months"|"6months"|"year"|"never"
+  lastContactedAt: text("last_contacted_at"),            // ISO date "YYYY-MM-DD"
 });
 
 // ── GENERAL TASKS (standalone — not linked to any project or goal) ────────────
