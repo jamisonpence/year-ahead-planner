@@ -20,6 +20,7 @@ import BudgetPage from "@/pages/BudgetPage";
 import PlantsPage from "@/pages/PlantsPage";
 import HousekeepingPage from "@/pages/HousekeepingPage";
 import SpotsPage from "@/pages/SpotsPage";
+import EventsPage from "@/pages/EventsPage";
 import KidsPage from "@/pages/KidsPage";
 import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
@@ -57,6 +58,7 @@ function AuthenticatedApp() {
         <Route path="/plants" component={PlantsPage} />
         <Route path="/housekeeping" component={HousekeepingPage} />
         <Route path="/spots" component={SpotsPage} />
+        <Route path="/events" component={EventsPage} />
         <Route path="/kids" component={KidsPage} />
         <Route path="/quotes" component={QuotesPage} />
         <Route path="/art" component={ArtPage} />

@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import EventsTab from "@/components/EventsTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity } from "@shared/schema";
@@ -1000,7 +999,7 @@ export default function SpotsPage() {
   const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [mainTab, setMainTab] = useState<"places" | "travel" | "events">("places");
+  const [mainTab, setMainTab] = useState<"places" | "travel">("places");
   const [travelSubTab, setTravelSubTab] = useState<"trips" | "cities">("trips");
   const [placesSubTab, setPlacesSubTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
@@ -1195,13 +1194,12 @@ export default function SpotsPage() {
   return (
     <div className="flex flex-col h-full">
 
-      {/* ── Top-level section nav: Places | Trips | Events ───────────────────── */}
+      {/* ── Top-level section nav: Places | Travel ───────────────────────────── */}
       <div className="px-3 pt-3 pb-0 shrink-0">
         <div className="flex gap-1 border-b">
           {[
             { value: "places" as const, label: "Places", icon: <MapPin size={14} /> },
             { value: "travel" as const, label: "Travel", icon: <Plane size={14} /> },
-            { value: "events" as const, label: "Events", icon: <Calendar size={14} /> },
           ].map(tab => (
             <button
               key={tab.value}
@@ -1444,13 +1442,6 @@ export default function SpotsPage() {
             {travelSubTab === "trips"  ? <TripsTab spots={spots} /> : <VisitedCitiesTab />}
           </div>
         </>
-      )}
-
-      {/* ══ EVENTS ═══════════════════════════════════════════════════════════ */}
-      {mainTab === "events" && (
-        <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
-          <EventsTab />
-        </div>
       )}
 
       {/* ── Hidden CSV input ──────────────────────────────────────────────────── */}

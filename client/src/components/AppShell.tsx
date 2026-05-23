@@ -99,6 +99,7 @@ const ALL_TABS = [
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places & Experiences ──
   { path: "/spots",         label: "Places",                  icon: MapPin          },
+  { path: "/events",        label: "Events",                  icon: Calendar        },
   // ── Home & Money ──
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
@@ -117,7 +118,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "people",    label: "People & Relationships", paths: ["/relationships", "/kids"] },
   { key: "health",    label: "Health & Wellness",    paths: ["/workouts", "/health"] },
   { key: "culture",   label: "Culture & Interests",  paths: ["/reading", "/movies", "/music", "/art", "/recipes", "/hobbies"] },
-  { key: "places",    label: "Places & Experiences", paths: ["/spots"] },
+  { key: "places",    label: "Places & Experiences", paths: ["/spots", "/events"] },
   { key: "home",      label: "Home & Money",         paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society",    paths: ["/faith", "/politics"] },
 ];
