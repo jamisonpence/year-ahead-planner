@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Movie, MovieShareWithUser, PublicUser } from "@shared/schema";
+import type { Movie, MovieShareWithUser, PublicUser, MovieList } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +14,7 @@ import { format, parseISO } from "date-fns";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
   Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle, Clapperboard,
-  Send, Inbox, CornerUpRight, Youtube,
+  Send, Inbox, CornerUpRight, Youtube, Users, UserPlus, Crown, Eye,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -88,6 +88,23 @@ export default function MoviesPage() {
 
   const { data: allItems = [] } = useQuery<Movie[]>({ queryKey: ["/api/movies"] });
   const { data: savedLists = [] } = useQuery<any[]>({ queryKey: ["/api/movie-lists"] });
+  const { data: sharedLists = [] } = useQuery<any[]>({ queryKey: ["/api/movie-lists/shared"] });
+  const { data: friends = [] } = useQuery<PublicUser[]>({ queryKey: ["/api/friends"] });
+
+  // List sharing state
+  const [sharingListId, setSharingListId] = useState<number | null>(null);
+  const { data: listMembers = [], refetch: refetchMembers } = useQuery<any[]>({
+    queryKey: ["/api/movie-lists", sharingListId, "members"],
+    queryFn: () => sharingListId ? apiRequest("GET", `/api/movie-lists/${sharingListId}/members`).then(r => r.json()) : Promise.resolve([]),
+    enabled: !!sharingListId,
+  });
+  const [memberAddUserId, setMemberAddUserId] = useState<string>("");
+  const [memberAddRole, setMemberAddRole] = useState<"viewer" | "collaborator">("viewer");
+  const [sharingModalOpen, setSharingModalOpen] = useState(false);
+  const [sharingList, setSharingList] = useState<any | null>(null);
+  // Collaborator add-movies modal
+  const [collabListOpen, setCollabListOpen] = useState(false);
+  const [collabList, setCollabList] = useState<any | null>(null);
 
   // Split by type
   const items = useMemo(
@@ -130,6 +147,31 @@ export default function MoviesPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/movie-lists/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/movie-lists"] }),
   });
+
+  const addMemberMut = useMutation({
+    mutationFn: ({ listId, userId, role }: { listId: number; userId: number; role: string }) =>
+      apiRequest("POST", `/api/movie-lists/${listId}/members`, { userId, role }),
+    onSuccess: () => { refetchMembers(); setMemberAddUserId(""); },
+    onError: () => toast({ title: "Error adding member", variant: "destructive" }),
+  });
+  const removeMemberMut = useMutation({
+    mutationFn: ({ listId, userId }: { listId: number; userId: number }) =>
+      apiRequest("DELETE", `/api/movie-lists/${listId}/members/${userId}`),
+    onSuccess: () => refetchMembers(),
+  });
+  const updateRoleMut = useMutation({
+    mutationFn: ({ listId, userId, role }: { listId: number; userId: number; role: string }) =>
+      apiRequest("PATCH", `/api/movie-lists/${listId}/members/${userId}`, { role }),
+    onSuccess: () => refetchMembers(),
+  });
+
+  function openSharingModal(lst: any) {
+    setSharingList(lst);
+    setSharingListId(lst.id);
+    setMemberAddUserId("");
+    setMemberAddRole("viewer");
+    setSharingModalOpen(true);
+  }
 
   function openListModal(lst?: any) {
     setEditingList(lst ?? null);
@@ -779,6 +821,9 @@ export default function MoviesPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => openSharingModal(lst)} className="p-1.5 rounded hover:bg-secondary transition-colors" title="Share & Collaborators">
+                            <Users size={13} className="text-muted-foreground" />
+                          </button>
                           <button onClick={() => openListModal(lst)} className="p-1.5 rounded hover:bg-secondary transition-colors">
                             <Pencil size={13} className="text-muted-foreground" />
                           </button>
@@ -810,6 +855,50 @@ export default function MoviesPage() {
             )}
           </div>
         )}
+
+        {/* Shared with me */}
+        {mainTab === "lists" && sharedLists.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Users size={13} /> Shared with Me
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {sharedLists.map((lst) => {
+                  const isCollaborator = lst.role === "collaborator";
+                  return (
+                    <div key={lst.id} className="rounded-xl border bg-card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm truncate">{lst.name}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <Crown size={10} /> {lst.ownerName}
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                              isCollaborator
+                                ? "bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800"
+                                : "bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800"
+                            }`}>
+                              {isCollaborator ? "✏️ Collaborator" : "👁 Viewer"}
+                            </span>
+                            {lst.isRanked && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">🏆 Ranked</span>
+                            )}
+                          </div>
+                        </div>
+                        {isCollaborator && (
+                          <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1"
+                            onClick={() => { setCollabList(lst); setCollabListOpen(true); }}>
+                            <Plus size={11} /> Add Movies
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
       </>)}
 
       {/* List Create/Edit Modal */}
@@ -1244,6 +1333,109 @@ export default function MoviesPage() {
       {shareMovie && (
         <MovieShareModal movie={shareMovie} onClose={() => setShareMovie(null)} />
       )}
+
+      {/* List Sharing & Collaborators Modal */}
+      <Dialog open={sharingModalOpen} onOpenChange={(o) => { if (!o) { setSharingModalOpen(false); setSharingList(null); setSharingListId(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users size={16} /> Share "{sharingList?.name}"
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            {/* Add a friend */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Invite a Friend</label>
+              {friends.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No friends yet. Add friends in the People section.</p>
+              ) : (
+                <div className="flex gap-2">
+                  <Select value={memberAddUserId} onValueChange={setMemberAddUserId}>
+                    <SelectTrigger className="flex-1 h-8 text-sm"><SelectValue placeholder="Select friend…" /></SelectTrigger>
+                    <SelectContent>
+                      {friends
+                        .filter((f) => !listMembers.some((m: any) => m.userId === f.id))
+                        .map((f) => (
+                          <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={memberAddRole} onValueChange={(v) => setMemberAddRole(v as any)}>
+                    <SelectTrigger className="w-32 h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="viewer">👁 Viewer</SelectItem>
+                      <SelectItem value="collaborator">✏️ Collaborator</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" className="h-8 gap-1 shrink-0"
+                    disabled={!memberAddUserId || addMemberMut.isPending}
+                    onClick={() => sharingList && addMemberMut.mutate({ listId: sharingList.id, userId: +memberAddUserId, role: memberAddRole })}>
+                    <UserPlus size={13} /> Add
+                  </Button>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-medium">Viewer</span> — can see the list. &nbsp;
+                <span className="font-medium">Collaborator</span> — can also add their own movies to the list.
+              </p>
+            </div>
+
+            {/* Current members */}
+            {listMembers.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Members ({listMembers.length})
+                </label>
+                <div className="border rounded-lg divide-y">
+                  {listMembers.map((m: any) => (
+                    <div key={m.userId} className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+                        {m.name?.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-sm font-medium truncate">{m.name}</span>
+                      <Select
+                        value={m.role}
+                        onValueChange={(v) => sharingList && updateRoleMut.mutate({ listId: sharingList.id, userId: m.userId, role: v })}
+                      >
+                        <SelectTrigger className="w-32 h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer">👁 Viewer</SelectItem>
+                          <SelectItem value="collaborator">✏️ Collaborator</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => sharingList && removeMemberMut.mutate({ listId: sharingList.id, userId: m.userId })}
+                        className="p-1 rounded hover:bg-secondary transition-colors shrink-0">
+                        <X size={13} className="text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {listMembers.length === 0 && friends.length > 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Users size={28} className="mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No one has been invited yet.</p>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" size="sm" onClick={() => setSharingModalOpen(false)}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Collaborator: add my movies to a shared list */}
+      {collabList && (
+        <CollabAddMoviesModal
+          list={collabList}
+          myMovies={allItems.filter((m) => (m.mediaType ?? "movie") !== "video")}
+          onClose={() => { setCollabListOpen(false); setCollabList(null); }}
+          open={collabListOpen}
+        />
+      )}
     </div>
   );
 }
@@ -1254,6 +1446,108 @@ interface YTResult {
   title: string;
   channel: string;
   thumbnail: string;
+}
+
+// ── CollabAddMoviesModal ───────────────────────────────────────────────────────
+function CollabAddMoviesModal({
+  list, myMovies, open, onClose,
+}: {
+  list: any; myMovies: Movie[]; open: boolean; onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Which of my movies are already tagged with this list
+  const [selected, setSelected] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    myMovies.forEach((m) => {
+      try { if ((JSON.parse(m.listsJson) as string[]).includes(list.name)) s.add(m.id); } catch {}
+    });
+    return s;
+  });
+
+  // Re-init when list changes
+  useEffect(() => {
+    const s = new Set<number>();
+    myMovies.forEach((m) => {
+      try { if ((JSON.parse(m.listsJson) as string[]).includes(list.name)) s.add(m.id); } catch {}
+    });
+    setSelected(s);
+  }, [list.id]);
+
+  const pool = myMovies.filter((m) => !search || m.title.toLowerCase().includes(search.toLowerCase()));
+
+  async function save() {
+    setSaving(true);
+    try {
+      const updates: Promise<any>[] = [];
+      for (const m of myMovies) {
+        let lists: string[] = [];
+        try { lists = JSON.parse(m.listsJson); } catch {}
+        const wasIn = lists.includes(list.name);
+        const isIn = selected.has(m.id);
+        if (wasIn && !isIn) {
+          updates.push(apiRequest("PATCH", `/api/movies/${m.id}`, { listsJson: JSON.stringify(lists.filter((l) => l !== list.name)) }));
+        } else if (!wasIn && isIn) {
+          updates.push(apiRequest("PATCH", `/api/movies/${m.id}`, { listsJson: JSON.stringify([...lists, list.name]) }));
+        }
+      }
+      await Promise.all(updates);
+      qc.invalidateQueries({ queryKey: ["/api/movies"] });
+      toast({ title: "Saved!" });
+      onClose();
+    } catch {
+      toast({ title: "Error saving", variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col gap-0 p-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Plus size={16} /> Add My Movies to "{list.name}"
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Select movies from your library to contribute to this shared list.</p>
+        </DialogHeader>
+        <div className="px-5 pb-3 shrink-0">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="pl-7 h-8 text-sm" />
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 border-t divide-y px-2">
+          {pool.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No titles found.</p>}
+          {pool.map((m) => {
+            const inList = selected.has(m.id);
+            return (
+              <button key={m.id} type="button"
+                onClick={() => setSelected((prev) => { const n = new Set(prev); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; })}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-secondary transition-colors ${inList ? "bg-primary/5" : ""}`}>
+                <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${inList ? "bg-primary border-primary" : "border-border"}`}>
+                  {inList && <Check size={10} className="text-primary-foreground" />}
+                </div>
+                <span className="flex-1 text-sm font-medium truncate">{m.title}</span>
+                {m.year && <span className="text-xs text-muted-foreground shrink-0">{m.year}</span>}
+                {m.mediaType === "show" && <Tv2 size={12} className="text-muted-foreground shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="px-5 py-3 border-t shrink-0 flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">{selected.size} selected</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" disabled={saving} onClick={save} className="gap-1.5">
+              <Check size={13} /> Save
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── ClipCard ──────────────────────────────────────────────────────────────────

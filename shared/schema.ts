@@ -343,6 +343,16 @@ export const movieLists = pgTable("movie_lists", {
 });
 export type MovieList = typeof movieLists.$inferSelect;
 
+export const movieListMembers = pgTable("movie_list_members", {
+  id:          serial("id").primaryKey(),
+  listId:      integer("list_id").notNull(),
+  userId:      integer("user_id").notNull(),   // the friend given access
+  invitedBy:   integer("invited_by").notNull(), // the list owner
+  role:        text("role").notNull().default("viewer"), // "viewer" | "collaborator"
+  createdAt:   text("created_at").notNull(),
+});
+export type MovieListMember = typeof movieListMembers.$inferSelect;
+
 // ── MUSIC ─────────────────────────────────────────────────────────────────────
 // Artists to explore or that you love
 export const musicArtists = pgTable("music_artists", {

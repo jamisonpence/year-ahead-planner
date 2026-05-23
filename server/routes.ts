@@ -1457,6 +1457,36 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Movie List Members ──────────────────────────────────────────────────────
+  app.get("/api/movie-lists/shared", requireAuth, async (req, res) => {
+    try { res.json(await storage.getSharedListsForUser((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.get("/api/movie-lists/:id/members", requireAuth, async (req, res) => {
+    try { res.json(await storage.getListMembers(+req.params.id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/movie-lists/:id/members", requireAuth, async (req, res) => {
+    try {
+      const { userId, role } = req.body;
+      await storage.addListMember(+req.params.id, +userId, (req.user as User).id, role ?? "viewer");
+      res.status(201).json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/movie-lists/:id/members/:userId", requireAuth, async (req, res) => {
+    try {
+      const { role } = req.body;
+      await storage.updateListMemberRole(+req.params.id, +req.params.userId, role);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/movie-lists/:id/members/:userId", requireAuth, async (req, res) => {
+    try {
+      await storage.removeListMember(+req.params.id, +req.params.userId, (req.user as User).id);
+      res.status(204).end();
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Budget Categories ───────────────────────────────────────────────────────
   app.get("/api/budget-categories", async (req, res) => {
     try {

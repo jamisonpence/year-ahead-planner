@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -61,7 +61,7 @@ import type {
   insertNutritionGoalSchema,
   InsertBodyCompPlan, BodyCompPlan, BodyCompCheckIn, InsertBodyCompCheckIn,
   InsertReadingGoal, ReadingGoal,
-  MovieList,
+  MovieList, MovieListMember,
 } from "@shared/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
@@ -371,6 +371,17 @@ export async function initializeStorage() {
     )
   `);
   await pool.query(`ALTER TABLE movie_lists ADD COLUMN IF NOT EXISTS movies_json TEXT DEFAULT '[]'`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS movie_list_members (
+      id SERIAL PRIMARY KEY,
+      list_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      invited_by INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      created_at TEXT NOT NULL
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS movie_list_members_unique ON movie_list_members(list_id, user_id)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS budget_categories (
@@ -2242,6 +2253,75 @@ export const storage: IStorage = {
   },
   async deleteMovieList(id: number, userId: number): Promise<void> {
     await db.delete(movieLists).where(and(eq(movieLists.id, id), eq(movieLists.userId, userId)));
+    // Clean up all members when list is deleted
+    await db.delete(movieListMembers).where(eq(movieListMembers.listId, id));
+  },
+
+  // ── Movie List Members ────────────────────────────────────────────────────────
+  async getListMembers(listId: number): Promise<Array<MovieListMember & { name: string; avatarUrl: string | null; email: string }>> {
+    const rows = await pool.query(`
+      SELECT mlm.*, u.name, u.email, u.avatar_url as "avatarUrl"
+      FROM movie_list_members mlm
+      JOIN users u ON u.id = mlm.user_id
+      WHERE mlm.list_id = $1
+      ORDER BY mlm.created_at ASC
+    `, [listId]);
+    return rows.rows;
+  },
+  async addListMember(listId: number, userId: number, invitedBy: number, role: string): Promise<void> {
+    await pool.query(`
+      INSERT INTO movie_list_members (list_id, user_id, invited_by, role, created_at)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (list_id, user_id) DO UPDATE SET role = EXCLUDED.role
+    `, [listId, userId, invitedBy, role, new Date().toISOString()]);
+  },
+  async removeListMember(listId: number, userId: number, ownerUserId: number): Promise<void> {
+    // Only list owner or the member themselves can remove
+    const list = await db.select().from(movieLists).where(eq(movieLists.id, listId)).limit(1);
+    if (list.length === 0 || (list[0].userId !== ownerUserId && userId !== ownerUserId)) return;
+    await db.delete(movieListMembers).where(and(eq(movieListMembers.listId, listId), eq(movieListMembers.userId, userId)));
+  },
+  async updateListMemberRole(listId: number, userId: number, role: string): Promise<void> {
+    await pool.query(`UPDATE movie_list_members SET role = $1 WHERE list_id = $2 AND user_id = $3`, [role, listId, userId]);
+  },
+  async getSharedListsForUser(userId: number): Promise<Array<MovieList & { role: string; ownerName: string; ownerAvatarUrl: string | null }>> {
+    const rows = await pool.query(`
+      SELECT ml.*, mlm.role, u.name as "ownerName", u.avatar_url as "ownerAvatarUrl"
+      FROM movie_list_members mlm
+      JOIN movie_lists ml ON ml.id = mlm.list_id
+      JOIN users u ON u.id = ml.user_id
+      WHERE mlm.user_id = $1
+      ORDER BY ml.name ASC
+    `, [userId]);
+    return rows.rows;
+  },
+  // Get movies for a list from all contributing users (owner + collaborators)
+  async getListMoviesAllUsers(listId: number, ownerUserId: number, listName: string): Promise<Array<{ id: number; title: string; year: number | null; mediaType: string | null; posterUrl: string | null; posterColor: string | null; isFavorite: boolean; rating: number | null; contributerName: string; contributerId: number }>> {
+    const members = await pool.query(`
+      SELECT mlm.user_id as "userId", u.name
+      FROM movie_list_members mlm
+      JOIN users u ON u.id = mlm.user_id
+      WHERE mlm.list_id = $1 AND mlm.role = 'collaborator'
+    `, [listId]);
+    const allUserIds = [ownerUserId, ...members.rows.map((r: any) => r.userId)];
+    const userNames: Record<number, string> = { [ownerUserId]: "You" };
+    members.rows.forEach((r: any) => { userNames[r.userId] = r.name; });
+
+    const rows = await pool.query(`
+      SELECT m.id, m.title, m.year, m.media_type as "mediaType", m.poster_url as "posterUrl",
+             m.poster_color as "posterColor", m.is_favorite as "isFavorite", m.rating,
+             m.user_id as "contributerId"
+      FROM movies m
+      WHERE m.user_id = ANY($1)
+        AND m.lists_json::text LIKE $2
+      ORDER BY m.title ASC
+    `, [allUserIds, `%${listName}%`]);
+
+    return rows.rows
+      .filter((r: any) => {
+        try { return (JSON.parse(r.listsJson ?? "[]") as string[]).includes(listName); } catch { return true; }
+      })
+      .map((r: any) => ({ ...r, contributerName: userNames[r.contributerId] ?? "Unknown" }));
   },
 
   // ── Budget Categories ──────────────────────────────────────────────────────────
