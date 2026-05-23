@@ -622,6 +622,30 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_headline TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_avatar_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_email TEXT`);
+
+  // Facebook integration
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_access_token TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_user_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_name TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_email TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_avatar_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_birthday TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_last_sync TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_friends (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      fb_friend_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      birthday TEXT,
+      birthday_raw TEXT,
+      avatar_url TEXT,
+      location TEXT,
+      imported_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, fb_friend_id)
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS linkedin_contacts (
       id SERIAL PRIMARY KEY,
@@ -1642,6 +1666,13 @@ export interface IStorage {
   saveStravaTokens(userId: number, accessToken: string, refreshToken: string, expiry: string, athleteId: string): Promise<void>;
   getStravaTokens(userId: number): Promise<{ accessToken: string; refreshToken: string; expiry: string; athleteId: string } | null>;
   clearStravaTokens(userId: number): Promise<void>;
+  // Facebook
+  saveFacebookProfile(userId: number, data: { accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null }): Promise<void>;
+  getFacebookProfile(userId: number): Promise<{ accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null; lastSync: string | null } | null>;
+  clearFacebookProfile(userId: number): Promise<void>;
+  upsertFacebookFriends(userId: number, friends: Array<{ fbFriendId: string; name: string; birthday?: string | null; birthdayRaw?: string | null; avatarUrl?: string | null; location?: string | null }>): Promise<number>;
+  getFacebookFriends(userId: number): Promise<Array<{ id: number; fbFriendId: string; name: string; birthday: string | null; avatarUrl: string | null; location: string | null; importedAt: string }>>;
+  setFacebookLastSync(userId: number, ts: string): Promise<void>;
   // LinkedIn
   saveLinkedinProfile(userId: number, data: { accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null }): Promise<void>;
   getLinkedinProfile(userId: number): Promise<{ accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null } | null>;
@@ -2757,6 +2788,59 @@ export const storage: IStorage = {
   },
   async clearStravaTokens(userId: number) {
     await db.update(users).set({ stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null, stravaAthleteId: null }).where(eq(users.id, userId));
+  },
+  async saveFacebookProfile(userId: number, data: { accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null }) {
+    await db.update(users).set({
+      facebookAccessToken: data.accessToken, facebookUserId: data.fbUserId,
+      facebookName: data.name, facebookEmail: data.email,
+      facebookAvatarUrl: data.avatarUrl, facebookBirthday: data.birthday,
+    }).where(eq(users.id, userId));
+  },
+  async getFacebookProfile(userId: number) {
+    const r = await db.select({
+      a: users.facebookAccessToken, u: users.facebookUserId, n: users.facebookName,
+      e: users.facebookEmail, av: users.facebookAvatarUrl, b: users.facebookBirthday, ls: users.facebookLastSync,
+    }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!r[0]?.u) return null;
+    return { accessToken: r[0].a!, fbUserId: r[0].u, name: r[0].n ?? "", email: r[0].e ?? null, avatarUrl: r[0].av ?? null, birthday: r[0].b ?? null, lastSync: r[0].ls ?? null };
+  },
+  async clearFacebookProfile(userId: number) {
+    await db.update(users).set({ facebookAccessToken: null, facebookUserId: null, facebookName: null, facebookEmail: null, facebookAvatarUrl: null, facebookBirthday: null, facebookLastSync: null }).where(eq(users.id, userId));
+    await pool.query(`DELETE FROM facebook_friends WHERE user_id=$1`, [userId]);
+  },
+  async upsertFacebookFriends(userId: number, friends: Array<{ fbFriendId: string; name: string; birthday?: string | null; birthdayRaw?: string | null; avatarUrl?: string | null; location?: string | null }>) {
+    if (friends.length === 0) return 0;
+    const now = new Date().toISOString();
+    let count = 0;
+    for (const f of friends) {
+      await pool.query(
+        `INSERT INTO facebook_friends (user_id, fb_friend_id, name, birthday, birthday_raw, avatar_url, location, imported_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+         ON CONFLICT (user_id, fb_friend_id) DO UPDATE SET
+           name=EXCLUDED.name, birthday=COALESCE(EXCLUDED.birthday, facebook_friends.birthday),
+           birthday_raw=COALESCE(EXCLUDED.birthday_raw, facebook_friends.birthday_raw),
+           avatar_url=COALESCE(EXCLUDED.avatar_url, facebook_friends.avatar_url),
+           location=COALESCE(EXCLUDED.location, facebook_friends.location),
+           updated_at=$8`,
+        [userId, f.fbFriendId, f.name, f.birthday ?? null, f.birthdayRaw ?? null, f.avatarUrl ?? null, f.location ?? null, now]
+      );
+      count++;
+    }
+    return count;
+  },
+  async getFacebookFriends(userId: number) {
+    const r = await pool.query(
+      `SELECT id, fb_friend_id, name, birthday, avatar_url, location, imported_at FROM facebook_friends WHERE user_id=$1 ORDER BY name`,
+      [userId]
+    );
+    return r.rows.map((row: any) => ({
+      id: row.id, fbFriendId: row.fb_friend_id, name: row.name,
+      birthday: row.birthday ?? null, avatarUrl: row.avatar_url ?? null,
+      location: row.location ?? null, importedAt: row.imported_at,
+    }));
+  },
+  async setFacebookLastSync(userId: number, ts: string) {
+    await db.update(users).set({ facebookLastSync: ts }).where(eq(users.id, userId));
   },
   async saveLinkedinProfile(userId: number, data: { accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null }) {
     await db.update(users).set({

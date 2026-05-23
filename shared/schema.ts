@@ -30,7 +30,30 @@ export const users = pgTable("users", {
   linkedinHeadline: text("linkedin_headline"),
   linkedinAvatarUrl: text("linkedin_avatar_url"),
   linkedinEmail: text("linkedin_email"),
+  // Facebook integration
+  facebookAccessToken: text("facebook_access_token"),
+  facebookUserId: text("facebook_user_id"),
+  facebookName: text("facebook_name"),
+  facebookEmail: text("facebook_email"),
+  facebookAvatarUrl: text("facebook_avatar_url"),
+  facebookBirthday: text("facebook_birthday"),
+  facebookLastSync: text("facebook_last_sync"),
 });
+
+// ── FACEBOOK FRIENDS ──────────────────────────────────────────────────────────
+export const facebookFriends = pgTable("facebook_friends", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  fbFriendId: text("fb_friend_id").notNull(),
+  name: text("name").notNull(),
+  birthday: text("birthday"),          // MM/DD/YYYY or MM/DD from birthday calendar
+  birthdayRaw: text("birthday_raw"),   // raw ICS string
+  avatarUrl: text("avatar_url"),
+  location: text("location"),
+  importedAt: text("imported_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+export type FacebookFriend = typeof facebookFriends.$inferSelect;
 
 // ── LINKEDIN CONTACTS ─────────────────────────────────────────────────────────
 export const linkedinContacts = pgTable("linkedin_contacts", {

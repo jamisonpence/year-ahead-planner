@@ -7048,6 +7048,221 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Facebook OAuth ────────────────────────────────────────────────────────────
+
+  function fbCallbackUrl(req: Request): string {
+    if (process.env.FACEBOOK_CALLBACK_URL) return process.env.FACEBOOK_CALLBACK_URL;
+    const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+    return `${proto}://${req.get("host")}/api/facebook/callback`;
+  }
+
+  /** Parse Facebook birthday ICS calendar feed to extract {name, birthday} pairs */
+  function parseFacebookBirthdayIcs(icsText: string): Array<{ fbFriendId: string; name: string; birthday: string; birthdayRaw: string }> {
+    const events: Array<{ fbFriendId: string; name: string; birthday: string; birthdayRaw: string }> = [];
+    const blocks = icsText.split("BEGIN:VEVENT");
+    for (const block of blocks.slice(1)) {
+      const get = (key: string) => {
+        const m = block.match(new RegExp(`^${key}[^:]*:(.+)$`, "m"));
+        return m ? m[1].trim() : null;
+      };
+      const summary = get("SUMMARY");
+      const dtstart = get("DTSTART");
+      const uid = get("UID");
+      if (!summary || !dtstart) continue;
+      // Summary is typically "Name's Birthday" — strip the "'s Birthday" suffix
+      const name = summary.replace(/'s Birthday$/i, "").replace(/'\s*Birthday$/i, "").trim();
+      // DTSTART;VALUE=DATE:19700101 for recurring — get month/day
+      const dateMatch = dtstart.match(/(\d{4})(\d{2})(\d{2})/);
+      if (!dateMatch) continue;
+      const [, _y, mm, dd] = dateMatch;
+      const birthday = `${mm}/${dd}`; // MM/DD (year is usually placeholder)
+      // Use UID to extract FB friend ID if present
+      const fbFriendId = uid?.match(/fb\/(\d+)/)?.[1] ?? uid ?? `${name}-${birthday}`;
+      events.push({ fbFriendId, name, birthday, birthdayRaw: dtstart });
+    }
+    return events;
+  }
+
+  // GET /api/facebook/status
+  app.get("/api/facebook/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const profile = await storage.getFacebookProfile(userId);
+      const friends = await storage.getFacebookFriends(userId);
+      const withBirthday = friends.filter(f => f.birthday).length;
+      res.json({
+        connected: !!profile,
+        configured: !!(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET),
+        profile: profile ? { name: profile.name, email: profile.email, avatarUrl: profile.avatarUrl, birthday: profile.birthday, lastSync: profile.lastSync } : null,
+        friendCount: friends.length,
+        birthdayCount: withBirthday,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/facebook/connect — redirect to Facebook OAuth
+  app.get("/api/facebook/connect", requireAuth, (req, res) => {
+    const appId = process.env.FACEBOOK_APP_ID;
+    if (!appId) return res.status(500).send(`
+      <html><body style="font-family:sans-serif;padding:40px;text-align:center;max-width:520px;margin:0 auto">
+        <h2>Facebook not configured</h2>
+        <p>Add <strong>FACEBOOK_APP_ID</strong> and <strong>FACEBOOK_APP_SECRET</strong> to your Railway environment variables.</p>
+        <ol style="text-align:left;line-height:2">
+          <li>Go to <a href="https://developers.facebook.com/apps" target="_blank">developers.facebook.com/apps</a></li>
+          <li>Create a new app → Choose "Consumer" type</li>
+          <li>Add "Facebook Login" product</li>
+          <li>Under Facebook Login → Settings, add <code>${fbCallbackUrl(req)}</code> as a valid OAuth redirect URI</li>
+          <li>Copy App ID and App Secret to Railway env vars</li>
+        </ol>
+        <a href="/">← Back to app</a>
+      </body></html>
+    `);
+    (req.session as any).facebookUserId = (req.user as User).id;
+    const url = new URL("https://www.facebook.com/v19.0/dialog/oauth");
+    url.searchParams.set("client_id", appId);
+    url.searchParams.set("redirect_uri", fbCallbackUrl(req));
+    url.searchParams.set("response_type", "code");
+    // user_birthday: logged-in user's birthday
+    // user_friends: friends who also use this app
+    // email: email address
+    url.searchParams.set("scope", "email,user_birthday,user_friends,public_profile");
+    url.searchParams.set("state", String((req.user as User).id));
+    res.redirect(url.toString());
+  });
+
+  // GET /api/facebook/callback — exchange code, fetch profile + friends + birthday calendar
+  app.get("/api/facebook/callback", async (req, res) => {
+    try {
+      const { code, error, state } = req.query as Record<string, string>;
+      const userId = (req.session as any).facebookUserId ?? (state ? parseInt(state) : null);
+      if (error || !code || !userId) return res.redirect("/?tab=assistant&facebook=error");
+
+      // Exchange code for access token
+      const tokenUrl = new URL("https://graph.facebook.com/v19.0/oauth/access_token");
+      tokenUrl.searchParams.set("client_id", process.env.FACEBOOK_APP_ID!);
+      tokenUrl.searchParams.set("client_secret", process.env.FACEBOOK_APP_SECRET!);
+      tokenUrl.searchParams.set("redirect_uri", fbCallbackUrl(req));
+      tokenUrl.searchParams.set("code", code);
+      const tokenRes = await fetch(tokenUrl.toString());
+      if (!tokenRes.ok) return res.redirect("/?tab=assistant&facebook=error");
+      const tokenData = await tokenRes.json() as any;
+      const accessToken: string = tokenData.access_token;
+
+      // Fetch user profile (id, name, email, birthday, picture)
+      const profileRes = await fetch(
+        `https://graph.facebook.com/v19.0/me?fields=id,name,email,birthday,picture.type(large),location&access_token=${accessToken}`
+      );
+      if (!profileRes.ok) return res.redirect("/?tab=assistant&facebook=error");
+      const profile = await profileRes.json() as any;
+
+      await storage.saveFacebookProfile(userId, {
+        accessToken,
+        fbUserId: profile.id,
+        name: profile.name ?? "",
+        email: profile.email ?? null,
+        avatarUrl: profile.picture?.data?.url ?? null,
+        birthday: profile.birthday ?? null,
+      });
+
+      // Fetch friends who have also authorized this app (user_friends scope)
+      const friendsRes = await fetch(
+        `https://graph.facebook.com/v19.0/me/friends?fields=id,name,picture.type(normal)&limit=200&access_token=${accessToken}`
+      );
+      const friendsData = friendsRes.ok ? await friendsRes.json() as any : { data: [] };
+      const apiFriends = (friendsData.data ?? []).map((f: any) => ({
+        fbFriendId: f.id,
+        name: f.name,
+        avatarUrl: f.picture?.data?.url ?? null,
+      }));
+      if (apiFriends.length > 0) {
+        await storage.upsertFacebookFriends(userId, apiFriends);
+      }
+
+      // Fetch birthday ICS calendar feed — this contains ALL friends' birthdays
+      // Facebook provides this at /me/events/birthday as an ICS-like feed
+      // We use the graph events endpoint and also the ical birthday export
+      try {
+        const bdayRes = await fetch(
+          `https://graph.facebook.com/v19.0/me/events/birthday?fields=name,start_time,cover&limit=500&access_token=${accessToken}`
+        );
+        if (bdayRes.ok) {
+          const bdayData = await bdayRes.json() as any;
+          const bdayFriends = (bdayData.data ?? []).map((ev: any) => {
+            const name = (ev.name ?? "").replace(/'s Birthday$/i, "").replace(/'\s*Birthday$/i, "").trim();
+            const dateStr = ev.start_time ? ev.start_time.slice(5, 10) : null; // MM-DD
+            const birthday = dateStr ? dateStr.replace("-", "/") : null;
+            return { fbFriendId: `bday-${name}`, name, birthday, avatarUrl: ev.cover?.source ?? null };
+          }).filter((f: any) => f.name && f.birthday);
+          if (bdayFriends.length > 0) {
+            await storage.upsertFacebookFriends(userId, bdayFriends);
+          }
+        }
+      } catch { /* birthday calendar optional */ }
+
+      await storage.setFacebookLastSync(userId, new Date().toISOString());
+      res.redirect("/?tab=assistant&facebook=connected");
+    } catch (e) {
+      console.error("Facebook callback error:", e);
+      res.redirect("/?tab=assistant&facebook=error");
+    }
+  });
+
+  // POST /api/facebook/sync — re-fetch friends + birthdays with stored token
+  app.post("/api/facebook/sync", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const profile = await storage.getFacebookProfile(userId);
+      if (!profile) return res.status(400).json({ error: "Not connected" });
+      const accessToken = profile.accessToken;
+
+      // Refresh friends
+      const friendsRes = await fetch(
+        `https://graph.facebook.com/v19.0/me/friends?fields=id,name,picture.type(normal)&limit=500&access_token=${accessToken}`
+      );
+      let friendCount = 0;
+      if (friendsRes.ok) {
+        const d = await friendsRes.json() as any;
+        const friends = (d.data ?? []).map((f: any) => ({ fbFriendId: f.id, name: f.name, avatarUrl: f.picture?.data?.url ?? null }));
+        friendCount = await storage.upsertFacebookFriends(userId, friends);
+      }
+
+      // Refresh birthday events
+      let bdayCount = 0;
+      const bdayRes = await fetch(
+        `https://graph.facebook.com/v19.0/me/events/birthday?fields=name,start_time&limit=500&access_token=${accessToken}`
+      );
+      if (bdayRes.ok) {
+        const d = await bdayRes.json() as any;
+        const bdayFriends = (d.data ?? []).map((ev: any) => {
+          const name = (ev.name ?? "").replace(/'s Birthday$/i, "").replace(/'\s*Birthday$/i, "").trim();
+          const dateStr = ev.start_time ? ev.start_time.slice(5, 10) : null;
+          const birthday = dateStr ? dateStr.replace("-", "/") : null;
+          return { fbFriendId: `bday-${name}`, name, birthday };
+        }).filter((f: any) => f.name && f.birthday);
+        bdayCount = await storage.upsertFacebookFriends(userId, bdayFriends);
+      }
+
+      await storage.setFacebookLastSync(userId, new Date().toISOString());
+      res.json({ friendCount, bdayCount });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // GET /api/facebook/friends
+  app.get("/api/facebook/friends", requireAuth, async (req, res) => {
+    try {
+      const friends = await storage.getFacebookFriends((req.user as User).id);
+      res.json(friends);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // DELETE /api/facebook/disconnect
+  app.delete("/api/facebook/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.clearFacebookProfile((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── LinkedIn OAuth ────────────────────────────────────────────────────────────
 
   function linkedinCallbackUrl(req: Request): string {
