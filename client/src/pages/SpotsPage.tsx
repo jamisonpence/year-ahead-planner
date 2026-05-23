@@ -1007,7 +1007,9 @@ export default function SpotsPage() {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [addToTripSpot, setAddToTripSpot] = useState<Spot | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const [collapsedCities, setCollapsedCities] = useState<Set<string>>(new Set());
+  const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(
+    new Set(SPOT_TYPES.map(t => t.value))   // all collapsed by default
+  );
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") {
       setMainTab("places");
@@ -1345,51 +1347,46 @@ export default function SpotsPage() {
               </div>
             ) : viewMode === "map" ? (
               <MapView spots={displaySpots} />
-            ) : placesSubTab === "all" && filterCity === "all" && !search ? (
+            ) : !search && filterType === "all" ? (
+              // ── Grouped by type, all collapsed by default ──────────────────
               (() => {
-                const cityMap = new Map<string, Spot[]>();
-                displaySpots.forEach(s => {
-                  const key = s.city ?? "Other";
-                  if (!cityMap.has(key)) cityMap.set(key, []);
-                  cityMap.get(key)!.push(s);
-                });
-                const cityGroups = Array.from(cityMap.entries())
-                  .map(([city, citySpots]) => ({ city, spots: citySpots }))
-                  .sort((a, b) => b.spots.length - a.spots.length);
+                // Build groups in SPOT_TYPES order, only include types that have spots
+                const typeGroups = SPOT_TYPES
+                  .map(t => ({ type: t, spots: displaySpots.filter(s => s.type === t.value) }))
+                  .filter(g => g.spots.length > 0);
                 return (
-                  <div className="space-y-4">
-                    {cityGroups.map(({ city, spots: citySpots }) => {
-                      const collapsed = collapsedCities.has(city);
+                  <div className="space-y-1 pt-1">
+                    {typeGroups.map(({ type, spots: typeSpots }) => {
+                      const collapsed = collapsedTypes.has(type.value);
                       return (
-                        <div key={city}>
+                        <div key={type.value} className="rounded-xl border overflow-hidden">
                           <button
-                            onClick={() => setCollapsedCities(prev => {
+                            onClick={() => setCollapsedTypes(prev => {
                               const next = new Set(prev);
-                              if (collapsed) next.delete(city); else next.add(city);
+                              if (collapsed) next.delete(type.value); else next.add(type.value);
                               return next;
                             })}
-                            className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-2 border-b"
+                            className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/50 transition-colors"
                           >
-                            <MapPin size={13} className="text-primary shrink-0" />
-                            <span className="font-semibold text-sm">{city}</span>
-                            <span className="text-xs text-muted-foreground">({citySpots.length})</span>
-                            <span className="ml-auto text-muted-foreground">
-                              {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-                            </span>
+                            <span className="text-lg shrink-0">{type.emoji}</span>
+                            <span className="font-semibold text-sm flex-1 text-left">{type.label}</span>
+                            <span className="text-xs text-muted-foreground mr-1">{typeSpots.length}</span>
+                            {collapsed ? <ChevronDown size={15} className="text-muted-foreground shrink-0" /> : <ChevronUp size={15} className="text-muted-foreground shrink-0" />}
                           </button>
                           {!collapsed && (
-                            <div className="space-y-2">
-                              {citySpots.map(spot => (
-                                <SpotCard
-                                  key={spot.id}
-                                  spot={spot}
-                                  onEdit={() => openEdit(spot)}
-                                  onDelete={() => deleteMut.mutate(spot.id)}
-                                  onShare={() => setShareSpot(spot)}
-                                  onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                                  onAddToTrip={() => setAddToTripSpot(spot)}
-                                  onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                                />
+                            <div className="divide-y border-t">
+                              {typeSpots.map(spot => (
+                                <div key={spot.id} className="px-3 py-2">
+                                  <SpotCard
+                                    spot={spot}
+                                    onEdit={() => openEdit(spot)}
+                                    onDelete={() => deleteMut.mutate(spot.id)}
+                                    onShare={() => setShareSpot(spot)}
+                                    onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                                    onAddToTrip={() => setAddToTripSpot(spot)}
+                                    onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                                  />
+                                </div>
                               ))}
                             </div>
                           )}
@@ -1400,7 +1397,8 @@ export default function SpotsPage() {
                 );
               })()
             ) : (
-              <div className="space-y-2">
+              // ── Flat list (when searching or type-filtered) ────────────────
+              <div className="space-y-2 pt-1">
                 {displaySpots.map(spot => (
                   <SpotCard
                     key={spot.id}
