@@ -1726,6 +1726,37 @@ function PersonalAssistantSection() {
   }
 
   // ── Connect screen ──────────────────────────────────────────────────────────
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  async function handleDisconnect(id: string) {
+    setDisconnecting(id);
+    try {
+      if (id === "linkedin") {
+        await fetch("/api/linkedin/disconnect", { method: "DELETE" });
+        qc.invalidateQueries({ queryKey: ["/api/linkedin/status"] });
+        qc.invalidateQueries({ queryKey: ["/api/linkedin/contacts"] });
+        toast({ title: "LinkedIn disconnected" });
+      } else if (id === "facebook") {
+        await fetch("/api/facebook/disconnect", { method: "DELETE" });
+        qc.invalidateQueries({ queryKey: ["/api/facebook/status"] });
+        qc.invalidateQueries({ queryKey: ["/api/facebook/friends"] });
+        toast({ title: "Facebook disconnected" });
+      } else if (id === "google") {
+        await fetch("/api/gcontacts/disconnect", { method: "DELETE" });
+        qc.invalidateQueries({ queryKey: ["/api/gcontacts/status"] });
+        qc.invalidateQueries({ queryKey: ["/api/gcontacts/contacts"] });
+        toast({ title: "Google Contacts disconnected" });
+      }
+      setLocalConnected(prev => { const n = new Set(prev); n.delete(id); localStorage.setItem(STORAGE_KEY, JSON.stringify([...n])); return n; });
+    } catch {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    } finally {
+      setDisconnecting(null);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-lg mx-auto">
       <div className="text-center pt-2">
@@ -1748,21 +1779,40 @@ function PersonalAssistantSection() {
                   account.id === "google" ? isGoogleConnected :
                   localConnected.has(account.id);
                 return (
-                  <button key={account.id} onClick={() => toggle(account.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left">
+                  <div key={account.id} className="flex items-center gap-3 px-4 py-3.5">
                     <AccountIcon icon={account.icon} color={account.color} />
-                    <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => !isConnected && toggle(account.id)}
+                      className="flex-1 min-w-0 text-left"
+                    >
                       <p className="text-sm font-medium">{account.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{account.desc}</p>
-                    </div>
+                    </button>
                     {isConnected ? (
-                      <span className="text-sm font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5 shrink-0">
-                        Connected <CheckCircle2 size={15} />
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                          Connected <CheckCircle2 size={14} />
+                        </span>
+                        <button
+                          onClick={() => handleDisconnect(account.id)}
+                          disabled={disconnecting === account.id}
+                          title="Disconnect account"
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
+                        >
+                          {disconnecting === account.id
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <X size={13} />}
+                        </button>
+                      </div>
                     ) : (
-                      <span className="text-sm font-medium text-primary shrink-0">Connect</span>
+                      <button
+                        onClick={() => toggle(account.id)}
+                        className="text-sm font-medium text-primary hover:underline shrink-0"
+                      >
+                        Connect
+                      </button>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
