@@ -2067,13 +2067,13 @@ function FamilyTreeSection() {
 
   useLayoutEffect(() => {
     if (viewMode === "tree") computeSvgPaths();
-  });
+  }, [members, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = () => { if (viewMode === "tree") computeSvgPaths(); };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
-  }, [viewMode]);
+  }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openAdd() {
     setEditing(null); setForm({ ...EMPTY_MEMBER_FORM }); setShowModal(true);
