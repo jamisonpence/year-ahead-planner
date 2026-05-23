@@ -6798,6 +6798,28 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Visited Cities ────────────────────────────────────────────────────────────
+  app.get("/api/visited-cities", requireAuth, async (req, res) => {
+    try { res.json(await storage.getVisitedCities((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/visited-cities", requireAuth, async (req, res) => {
+    try { res.json(await storage.addVisitedCity((req.user as User).id, req.body)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/visited-cities/:id", requireAuth, async (req, res) => {
+    try {
+      const r = await storage.updateVisitedCity(+req.params.id, (req.user as User).id, req.body);
+      r ? res.json(r) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/visited-cities/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteVisitedCity(+req.params.id, (req.user as User).id))
+        ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Activity Feed ─────────────────────────────────────────────────────────────
   // GET /api/feed/stories — friends with recent-activity rings + current user
   app.get("/api/feed/stories", requireAuth, async (req, res) => {

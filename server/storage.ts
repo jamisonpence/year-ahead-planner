@@ -913,6 +913,20 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS visited_cities (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      city TEXT NOT NULL,
+      country TEXT,
+      lat REAL,
+      lon REAL,
+      visited_date TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_shares (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -4634,6 +4648,58 @@ export const storage: IStorage = {
   },
   async deleteTripItem(id: number) {
     const result = await db.delete(tripItems).where(eq(tripItems.id, id));
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Visited Cities ────────────────────────────────────────────────────────────
+  async getVisitedCities(userId: number) {
+    const result = await pool.query(
+      `SELECT * FROM visited_cities WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId]
+    );
+    return result.rows.map((r: any) => ({
+      id: r.id, userId: r.user_id, city: r.city, country: r.country,
+      lat: r.lat, lon: r.lon, visitedDate: r.visited_date,
+      notes: r.notes, createdAt: r.created_at,
+    }));
+  },
+  async addVisitedCity(userId: number, data: { city: string; country?: string; lat?: number; lon?: number; visitedDate?: string; notes?: string }) {
+    const now = new Date().toISOString();
+    const result = await pool.query(
+      `INSERT INTO visited_cities (user_id, city, country, lat, lon, visited_date, notes, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [userId, data.city, data.country ?? null, data.lat ?? null, data.lon ?? null,
+       data.visitedDate ?? null, data.notes ?? null, now]
+    );
+    const r = result.rows[0];
+    return { id: r.id, userId: r.user_id, city: r.city, country: r.country,
+             lat: r.lat, lon: r.lon, visitedDate: r.visited_date, notes: r.notes, createdAt: r.created_at };
+  },
+  async updateVisitedCity(id: number, userId: number, data: Partial<{ city: string; country: string; lat: number; lon: number; visitedDate: string; notes: string }>) {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    if (data.city        !== undefined) { fields.push(`city=$${idx++}`);         values.push(data.city); }
+    if (data.country     !== undefined) { fields.push(`country=$${idx++}`);      values.push(data.country); }
+    if (data.lat         !== undefined) { fields.push(`lat=$${idx++}`);          values.push(data.lat); }
+    if (data.lon         !== undefined) { fields.push(`lon=$${idx++}`);          values.push(data.lon); }
+    if (data.visitedDate !== undefined) { fields.push(`visited_date=$${idx++}`); values.push(data.visitedDate); }
+    if (data.notes       !== undefined) { fields.push(`notes=$${idx++}`);        values.push(data.notes); }
+    if (fields.length === 0) return null;
+    values.push(id, userId);
+    const result = await pool.query(
+      `UPDATE visited_cities SET ${fields.join(",")} WHERE id=$${idx++} AND user_id=$${idx} RETURNING *`,
+      values
+    );
+    const r = result.rows[0];
+    if (!r) return null;
+    return { id: r.id, userId: r.user_id, city: r.city, country: r.country,
+             lat: r.lat, lon: r.lon, visitedDate: r.visited_date, notes: r.notes, createdAt: r.created_at };
+  },
+  async deleteVisitedCity(id: number, userId: number) {
+    const result = await pool.query(
+      `DELETE FROM visited_cities WHERE id=$1 AND user_id=$2`, [id, userId]
+    );
     return (result.rowCount ?? 0) > 0;
   },
 

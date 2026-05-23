@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import EventsTab from "@/components/EventsTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem } from "@shared/schema";
+import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1000,7 +1000,8 @@ export default function SpotsPage() {
   const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [mainTab, setMainTab] = useState<"places" | "trips" | "events">("places");
+  const [mainTab, setMainTab] = useState<"places" | "travel" | "events">("places");
+  const [travelSubTab, setTravelSubTab] = useState<"trips" | "cities">("trips");
   const [placesSubTab, setPlacesSubTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
@@ -1199,7 +1200,7 @@ export default function SpotsPage() {
         <div className="flex gap-1 border-b">
           {[
             { value: "places" as const, label: "Places", icon: <MapPin size={14} /> },
-            { value: "trips"  as const, label: "Trips",  icon: <Plane size={14} /> },
+            { value: "travel" as const, label: "Travel", icon: <Plane size={14} /> },
             { value: "events" as const, label: "Events", icon: <Calendar size={14} /> },
           ].map(tab => (
             <button
@@ -1415,11 +1416,34 @@ export default function SpotsPage() {
         </>
       )}
 
-      {/* ══ TRIPS ════════════════════════════════════════════════════════════ */}
-      {mainTab === "trips" && (
-        <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
-          <TripsTab spots={spots} />
-        </div>
+      {/* ══ TRAVEL ═══════════════════════════════════════════════════════════ */}
+      {mainTab === "travel" && (
+        <>
+          {/* Travel sub-tabs */}
+          <div className="px-3 pt-2 pb-0 shrink-0">
+            <div className="flex gap-1">
+              {([
+                { value: "trips"  as const, label: "Trips",               icon: <Plane size={13} /> },
+                { value: "cities" as const, label: "Cities & Countries",  icon: <Globe size={13} /> },
+              ]).map(tab => (
+                <button
+                  key={tab.value}
+                  onClick={() => setTravelSubTab(tab.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    travelSubTab === tab.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
+            {travelSubTab === "trips"  ? <TripsTab spots={spots} /> : <VisitedCitiesTab />}
+          </div>
+        </>
       )}
 
       {/* ══ EVENTS ═══════════════════════════════════════════════════════════ */}
@@ -2938,6 +2962,397 @@ function TripsTab({ spots }: { spots: Spot[] }) {
               <Button variant="outline" className="flex-1" onClick={() => setTripModal(false)}>Cancel</Button>
               <Button className="flex-1" onClick={saveTripForm} disabled={!tripForm.name.trim() || createTrip.isPending || updateTrip.isPending}>
                 {editingTrip ? "Save Changes" : "Create Trip"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── VisitedCitiesTab ──────────────────────────────────────────────────────────
+
+type NominatimCity = {
+  place_id: number;
+  display_name: string;
+  name?: string;
+  lat: string;
+  lon: string;
+  address?: {
+    city?: string; town?: string; village?: string; municipality?: string;
+    country?: string; country_code?: string;
+  };
+};
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  us: "🇺🇸", gb: "🇬🇧", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", es: "🇪🇸",
+  jp: "🇯🇵", cn: "🇨🇳", au: "🇦🇺", ca: "🇨🇦", mx: "🇲🇽", br: "🇧🇷",
+  in: "🇮🇳", pt: "🇵🇹", nl: "🇳🇱", be: "🇧🇪", ch: "🇨🇭", at: "🇦🇹",
+  se: "🇸🇪", no: "🇳🇴", dk: "🇩🇰", fi: "🇫🇮", pl: "🇵🇱", cz: "🇨🇿",
+  gr: "🇬🇷", tr: "🇹🇷", th: "🇹🇭", vn: "🇻🇳", id: "🇮🇩", sg: "🇸🇬",
+  nz: "🇳🇿", za: "🇿🇦", eg: "🇪🇬", ma: "🇲🇦", ar: "🇦🇷", co: "🇨🇴",
+  pe: "🇵🇪", cl: "🇨🇱", kr: "🇰🇷", hk: "🇭🇰", tw: "🇹🇼", ae: "🇦🇪",
+  il: "🇮🇱", hu: "🇭🇺", ro: "🇷🇴", hr: "🇭🇷", sk: "🇸🇰", rs: "🇷🇸",
+  ie: "🇮🇪", is: "🇮🇸", ru: "🇷🇺", ua: "🇺🇦",
+};
+
+function countryFlag(country: string): string {
+  const lower = country.toLowerCase().replace(/\s+/g, "");
+  // Try direct lookup by country code (if passed a code)
+  if (COUNTRY_FLAGS[lower]) return COUNTRY_FLAGS[lower];
+  // Try finding by matching known country names
+  const NAME_TO_CODE: Record<string, string> = {
+    "unitedstates": "us", "usa": "us", "unitedkingdom": "gb", "uk": "gb",
+    "france": "fr", "germany": "de", "italy": "it", "spain": "es",
+    "japan": "jp", "china": "cn", "australia": "au", "canada": "ca",
+    "mexico": "mx", "brazil": "br", "india": "in", "portugal": "pt",
+    "netherlands": "nl", "belgium": "be", "switzerland": "ch", "austria": "at",
+    "sweden": "se", "norway": "no", "denmark": "dk", "finland": "fi",
+    "poland": "pl", "czechrepublic": "cz", "czechia": "cz", "greece": "gr",
+    "turkey": "tr", "thailand": "th", "vietnam": "vn", "indonesia": "id",
+    "singapore": "sg", "newzealand": "nz", "southafrica": "za", "egypt": "eg",
+    "morocco": "ma", "argentina": "ar", "colombia": "co", "peru": "pe",
+    "chile": "cl", "southkorea": "kr", "hongkong": "hk", "taiwan": "tw",
+    "unitedarabemirates": "ae", "uae": "ae", "israel": "il", "hungary": "hu",
+    "romania": "ro", "croatia": "hr", "slovakia": "sk", "serbia": "rs",
+    "ireland": "ie", "iceland": "is", "russia": "ru", "ukraine": "ua",
+  };
+  const code = NAME_TO_CODE[lower];
+  return code ? (COUNTRY_FLAGS[code] ?? "🌍") : "🌍";
+}
+
+function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+
+  const mappable = cities.filter(c => c.lat != null && c.lon != null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    function initMap() {
+      const L = (window as any).L;
+      if (!L || !mapContainerRef.current) return;
+      if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+
+      const map = L.map(mapContainerRef.current, { zoomControl: true, scrollWheelZoom: false })
+        .setView([20, 10], 2);
+      mapInstanceRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map);
+
+      mappable.forEach(city => {
+        const iconHtml = `<div style="
+          width:26px;height:26px;border-radius:50%;
+          background:#6366f1;border:2.5px solid white;
+          box-shadow:0 2px 6px rgba(0,0,0,0.35);
+          display:flex;align-items:center;justify-content:center;
+          font-size:13px;">
+          ✈️
+        </div>`;
+        const icon = L.divIcon({ html: iconHtml, className: "", iconSize: [26, 26], iconAnchor: [13, 13] });
+        const marker = L.marker([city.lat!, city.lon!], { icon }).addTo(map);
+        marker.bindPopup(`<b>${city.city}</b>${city.country ? `<br/>${city.country}` : ""}${city.visitedDate ? `<br/><small>${city.visitedDate}</small>` : ""}`);
+      });
+
+      if (mappable.length > 1) {
+        const bounds = L.latLngBounds(mappable.map(c => [c.lat!, c.lon!]));
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+      } else if (mappable.length === 1) {
+        map.setView([mappable[0].lat!, mappable[0].lon!], 5);
+      }
+    }
+
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    if ((window as any).L) {
+      initMap();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = initMap;
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+    };
+  }, [JSON.stringify(mappable.map(c => c.id))]);
+
+  return (
+    <div className="rounded-xl overflow-hidden border" style={{ height: 220 }}>
+      <div ref={mapContainerRef} style={{ height: "100%", width: "100%" }} />
+    </div>
+  );
+}
+
+const EMPTY_CITY_FORM = { city: "", country: "", visitedDate: "", notes: "", lat: null as number | null, lon: null as number | null };
+
+function VisitedCitiesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCity, setEditingCity] = useState<VisitedCity | null>(null);
+  const [cityForm, setCityForm] = useState({ ...EMPTY_CITY_FORM });
+  const [citySearch, setCitySearch] = useState("");
+  const [cityResults, setCityResults] = useState<NominatimCity[]>([]);
+  const [citySearchLoading, setCitySearchLoading] = useState(false);
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: cities = [], isLoading } = useQuery<VisitedCity[]>({
+    queryKey: ["/api/visited-cities"],
+    queryFn: () => apiRequest("GET", "/api/visited-cities").then(r => r.json()),
+  });
+
+  const addCity = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/visited-cities", data).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/visited-cities"] }); setShowAddModal(false); toast({ title: "City logged!" }); },
+    onError: () => toast({ title: "Failed to log city", variant: "destructive" }),
+  });
+  const updateCity = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/visited-cities/${id}`, data).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/visited-cities"] }); setShowAddModal(false); toast({ title: "City updated!" }); },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+  const deleteCity = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/visited-cities/${id}`).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/visited-cities"] }); toast({ title: "Removed" }); },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  async function searchCities(q: string) {
+    if (!q.trim()) { setCityResults([]); return; }
+    setCitySearchLoading(true);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=6&featuretype=city`;
+      const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+      const data: NominatimCity[] = await res.json();
+      // Filter to city-like results
+      setCityResults(data.filter(r => ["city","town","village","municipality","administrative"].includes((r as any).type ?? "")));
+    } catch {
+      setCityResults([]);
+    } finally { setCitySearchLoading(false); }
+  }
+
+  function handleCitySearchChange(val: string) {
+    setCitySearch(val);
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+    cityDebounceRef.current = setTimeout(() => searchCities(val), 450);
+  }
+
+  function selectNominatimCity(r: NominatimCity) {
+    const addr = r.address ?? {};
+    const cityName = r.name ?? addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? r.display_name.split(",")[0];
+    const country = addr.country ?? "";
+    setCityForm(f => ({ ...f, city: cityName, country, lat: parseFloat(r.lat), lon: parseFloat(r.lon) }));
+    setCitySearch(cityName);
+    setCityResults([]);
+  }
+
+  function openAdd() {
+    setEditingCity(null);
+    setCityForm({ ...EMPTY_CITY_FORM });
+    setCitySearch("");
+    setCityResults([]);
+    setShowAddModal(true);
+  }
+
+  function openEdit(c: VisitedCity) {
+    setEditingCity(c);
+    setCityForm({ city: c.city, country: c.country ?? "", visitedDate: c.visitedDate ?? "", notes: c.notes ?? "", lat: c.lat ?? null, lon: c.lon ?? null });
+    setCitySearch(c.city);
+    setCityResults([]);
+    setShowAddModal(true);
+  }
+
+  function saveForm() {
+    const payload = { ...cityForm, country: cityForm.country || null, visitedDate: cityForm.visitedDate || null, notes: cityForm.notes || null };
+    if (editingCity) updateCity.mutate({ id: editingCity.id, data: payload });
+    else addCity.mutate(payload);
+  }
+
+  // Stats
+  const countryCount = new Set(cities.map(c => c.country).filter(Boolean)).size;
+  const cityCount = cities.length;
+
+  // Group by country
+  const grouped = useMemo(() => {
+    const map = new Map<string, VisitedCity[]>();
+    cities.forEach(c => {
+      const key = c.country ?? "Unknown";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    });
+    // Sort countries alphabetically
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [cities]);
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 size={20} className="animate-spin" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold leading-none">{countryCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">countries</p>
+          </div>
+          <div className="w-px bg-border" />
+          <div className="text-center">
+            <p className="text-2xl font-bold leading-none">{cityCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">cities</p>
+          </div>
+        </div>
+        <Button size="sm" onClick={openAdd} className="gap-1.5">
+          <Plus size={14} /> Log a City
+        </Button>
+      </div>
+
+      {/* Map */}
+      {cities.length > 0 && <VisitedCitiesWorldMap cities={cities} />}
+
+      {/* City list grouped by country */}
+      {cities.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-36 text-muted-foreground gap-2">
+          <Globe size={32} className="opacity-20" />
+          <p className="text-sm text-center">No cities logged yet.<br/>Tap "Log a City" to get started!</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map(([country, citiesInCountry]) => (
+            <div key={country}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-base">{countryFlag(country)}</span>
+                <span className="text-sm font-semibold">{country}</span>
+                <span className="text-xs text-muted-foreground">({citiesInCountry.length})</span>
+              </div>
+              <div className="space-y-1.5 pl-1">
+                {citiesInCountry
+                  .sort((a, b) => (b.visitedDate ?? "").localeCompare(a.visitedDate ?? ""))
+                  .map(city => (
+                  <div key={city.id} className="flex items-start gap-2.5 p-2.5 rounded-xl border bg-card group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{city.city}</p>
+                      {city.visitedDate && (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Calendar size={10} />
+                          {city.visitedDate}
+                        </p>
+                      )}
+                      {city.notes && (
+                        <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-1">{city.notes}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(city)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => deleteCity.mutate(city.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{editingCity ? "Edit City" : "Log a City"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            {/* City search */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">City *</label>
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                {citySearchLoading && <Loader2 size={12} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                <Input
+                  placeholder="Search for a city…"
+                  value={citySearch}
+                  onChange={e => { handleCitySearchChange(e.target.value); setCityForm(f => ({ ...f, city: e.target.value })); }}
+                  className="pl-9 text-sm"
+                />
+              </div>
+              {cityResults.length > 0 && (
+                <div className="border rounded-lg mt-1 overflow-hidden shadow-md bg-card">
+                  {cityResults.map(r => {
+                    const name = r.name ?? r.display_name.split(",")[0];
+                    const country = r.address?.country ?? "";
+                    return (
+                      <button
+                        key={r.place_id}
+                        onClick={() => selectNominatimCity(r)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors flex items-center gap-2 border-b last:border-b-0"
+                      >
+                        <MapPin size={12} className="text-muted-foreground shrink-0" />
+                        <span className="font-medium">{name}</span>
+                        {country && <span className="text-xs text-muted-foreground ml-1">{country}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Country */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Country</label>
+              <Input
+                placeholder="e.g. France"
+                value={cityForm.country}
+                onChange={e => setCityForm(f => ({ ...f, country: e.target.value }))}
+                className="text-sm"
+              />
+            </div>
+
+            {/* Visit date */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Visit Date</label>
+              <Input
+                type="date"
+                value={cityForm.visitedDate}
+                onChange={e => setCityForm(f => ({ ...f, visitedDate: e.target.value }))}
+                className="text-sm"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+              <Textarea
+                placeholder="Highlights, memories…"
+                rows={2}
+                value={cityForm.notes}
+                onChange={e => setCityForm(f => ({ ...f, notes: e.target.value }))}
+                className="text-sm resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                onClick={saveForm}
+                disabled={!cityForm.city.trim() || addCity.isPending || updateCity.isPending}
+              >
+                {editingCity ? "Save Changes" : "Log City"}
               </Button>
             </div>
           </div>

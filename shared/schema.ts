@@ -777,6 +777,20 @@ export const insertTripItemSchema = createInsertSchema(tripItems).omit({ id: tru
 export type InsertTripItem = z.infer<typeof insertTripItemSchema>;
 export type TripItem = typeof tripItems.$inferSelect;
 
+// ── VISITED CITIES ────────────────────────────────────────────────────────────
+export const visitedCities = pgTable("visited_cities", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").notNull(),
+  city:        text("city").notNull(),
+  country:     text("country"),
+  lat:         real("lat"),
+  lon:         real("lon"),
+  visitedDate: text("visited_date"),
+  notes:       text("notes"),
+  createdAt:   text("created_at").notNull(),
+});
+export type VisitedCity = typeof visitedCities.$inferSelect;
+
 // ── SPOT SHARES ────────────────────────────────────────────────────────────────
 export const spotShares = pgTable("spot_shares", {
   id: serial("id").primaryKey(),
