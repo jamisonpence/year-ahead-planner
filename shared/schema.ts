@@ -791,6 +791,23 @@ export const visitedCities = pgTable("visited_cities", {
 });
 export type VisitedCity = typeof visitedCities.$inferSelect;
 
+// ── FAMILY TREE ───────────────────────────────────────────────────────────────
+export const familyMembers = pgTable("family_members", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").notNull(),
+  name:       text("name").notNull(),
+  gender:     text("gender").default("unknown"),          // male | female | other | unknown
+  role:       text("role").notNull().default("other"),    // great_grandparent | grandparent | parent | aunt_uncle | self | spouse | sibling | child | grandchild | other
+  side:       text("side").default("none"),               // paternal | maternal | none
+  birthYear:  integer("birth_year"),
+  deathYear:  integer("death_year"),
+  birthPlace: text("birth_place"),
+  notes:      text("notes"),
+  isDeceased: integer("is_deceased").default(0),         // 0 | 1
+  createdAt:  text("created_at").notNull(),
+});
+export type FamilyMember = typeof familyMembers.$inferSelect;
+
 // ── SPOT SHARES ────────────────────────────────────────────────────────────────
 export const spotShares = pgTable("spot_shares", {
   id: serial("id").primaryKey(),

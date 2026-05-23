@@ -6820,6 +6820,28 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Family Tree ───────────────────────────────────────────────────────────────
+  app.get("/api/family-members", requireAuth, async (req, res) => {
+    try { res.json(await storage.getFamilyMembers((req.user as User).id)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.post("/api/family-members", requireAuth, async (req, res) => {
+    try { res.json(await storage.addFamilyMember((req.user as User).id, req.body)); }
+    catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/family-members/:id", requireAuth, async (req, res) => {
+    try {
+      const m = await storage.updateFamilyMember(+req.params.id, (req.user as User).id, req.body);
+      m ? res.json(m) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/family-members/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteFamilyMember(+req.params.id, (req.user as User).id))
+        ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Activity Feed ─────────────────────────────────────────────────────────────
   // GET /api/feed/stories — friends with recent-activity rings + current user
   app.get("/api/feed/stories", requireAuth, async (req, res) => {

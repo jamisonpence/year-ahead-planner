@@ -927,6 +927,23 @@ export async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS family_members (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      gender TEXT DEFAULT 'unknown',
+      role TEXT NOT NULL DEFAULT 'other',
+      side TEXT DEFAULT 'none',
+      birth_year INTEGER,
+      death_year INTEGER,
+      birth_place TEXT,
+      notes TEXT,
+      is_deceased INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_shares (
       id SERIAL PRIMARY KEY,
       from_user_id INTEGER NOT NULL,
@@ -4699,6 +4716,73 @@ export const storage: IStorage = {
   async deleteVisitedCity(id: number, userId: number) {
     const result = await pool.query(
       `DELETE FROM visited_cities WHERE id=$1 AND user_id=$2`, [id, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  // ── Family Tree ───────────────────────────────────────────────────────────────
+  async getFamilyMembers(userId: number) {
+    const { rows } = await pool.query(
+      `SELECT * FROM family_members WHERE user_id = $1 ORDER BY
+        CASE role
+          WHEN 'great_grandparent' THEN 1
+          WHEN 'grandparent' THEN 2
+          WHEN 'parent' THEN 3
+          WHEN 'aunt_uncle' THEN 3
+          WHEN 'self' THEN 4
+          WHEN 'spouse' THEN 4
+          WHEN 'sibling' THEN 4
+          WHEN 'child' THEN 5
+          WHEN 'grandchild' THEN 6
+          ELSE 7
+        END, side, name`,
+      [userId]
+    );
+    return rows.map((r: any) => ({
+      id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
+      role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
+      birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at,
+    }));
+  },
+  async addFamilyMember(userId: number, data: { name: string; gender?: string; role?: string; side?: string; birthYear?: number; deathYear?: number; birthPlace?: string; notes?: string; isDeceased?: number }) {
+    const { rows } = await pool.query(
+      `INSERT INTO family_members (user_id, name, gender, role, side, birth_year, death_year, birth_place, notes, is_deceased, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [userId, data.name, data.gender ?? "unknown", data.role ?? "other", data.side ?? "none",
+       data.birthYear ?? null, data.deathYear ?? null, data.birthPlace ?? null,
+       data.notes ?? null, data.isDeceased ?? 0, new Date().toISOString()]
+    );
+    const r = rows[0];
+    return { id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
+             role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
+             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at };
+  },
+  async updateFamilyMember(id: number, userId: number, data: Partial<{ name: string; gender: string; role: string; side: string; birthYear: number | null; deathYear: number | null; birthPlace: string; notes: string; isDeceased: number }>) {
+    const fieldMap: Record<string, string> = {
+      name: "name", gender: "gender", role: "role", side: "side",
+      birthYear: "birth_year", deathYear: "death_year", birthPlace: "birth_place",
+      notes: "notes", isDeceased: "is_deceased",
+    };
+    const fields: string[] = []; const values: any[] = [];
+    let idx = 1;
+    for (const [k, v] of Object.entries(data)) {
+      if (fieldMap[k]) { fields.push(`${fieldMap[k]}=$${idx++}`); values.push(v); }
+    }
+    if (!fields.length) return null;
+    values.push(id); values.push(userId);
+    const { rows } = await pool.query(
+      `UPDATE family_members SET ${fields.join(",")} WHERE id=$${idx++} AND user_id=$${idx} RETURNING *`,
+      values
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return { id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
+             role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
+             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at };
+  },
+  async deleteFamilyMember(id: number, userId: number) {
+    const result = await pool.query(
+      `DELETE FROM family_members WHERE id=$1 AND user_id=$2`, [id, userId]
     );
     return (result.rowCount ?? 0) > 0;
   },

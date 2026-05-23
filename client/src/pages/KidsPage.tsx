@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser, PetWithVisits, PetVetVisit } from "@shared/schema";
+import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser, PetWithVisits, PetVetVisit, FamilyMember } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Baby, Plus, Pencil, Trash2, Check, Users, ChevronDown,
-  PawPrint, Stethoscope, Calendar, Heart,
+  PawPrint, Stethoscope, Calendar, Heart, GitFork, ChevronUp,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1624,7 +1624,7 @@ function PetFormDialog({ open, onClose, form, setForm, onSave, editing }: {
 export default function KidsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [section, setSection] = useState<"children" | "pets">("children");
+  const [section, setSection] = useState<"children" | "pets" | "family-tree">("children");
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [childDialog, setChildDialog] = useState(false);
   const [editingChild, setEditingChild] = useState<ChildWithDetails | null>(null);
@@ -1721,9 +1721,17 @@ export default function KidsPage() {
         >
           <PawPrint size={14} /> Pets
         </button>
+        <button
+          onClick={() => setSection("family-tree")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${section === "family-tree" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <GitFork size={14} /> Family Tree
+        </button>
       </div>
 
-      {section === "pets" ? (
+      {section === "family-tree" ? (
+        <FamilyTreeSection />
+      ) : section === "pets" ? (
         <PetsSection />
       ) : (
         <>
@@ -1841,6 +1849,359 @@ export default function KidsPage() {
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={closeChildDialog}>Cancel</Button>
               <Button size="sm" onClick={saveChild}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Family Tree ───────────────────────────────────────────────────────────────
+
+const ROLES = [
+  { value: "great_grandparent", label: "Great-Grandparent", emoji: "👴", generation: 0 },
+  { value: "grandparent",       label: "Grandparent",       emoji: "🧓", generation: 1 },
+  { value: "parent",            label: "Parent",            emoji: "👨‍👧", generation: 2 },
+  { value: "aunt_uncle",        label: "Aunt / Uncle",      emoji: "🧑", generation: 2 },
+  { value: "sibling",           label: "Sibling",           emoji: "🧑‍🤝‍🧑", generation: 3 },
+  { value: "self",              label: "Me",                emoji: "⭐", generation: 3 },
+  { value: "spouse",            label: "Spouse / Partner",  emoji: "💑", generation: 3 },
+  { value: "child",             label: "Child",             emoji: "👶", generation: 4 },
+  { value: "grandchild",        label: "Grandchild",        emoji: "🍼", generation: 5 },
+  { value: "other",             label: "Other",             emoji: "👤", generation: 6 },
+];
+
+const SIDES = [
+  { value: "none",     label: "—"           },
+  { value: "paternal", label: "Paternal 👨" },
+  { value: "maternal", label: "Maternal 👩" },
+];
+
+const GENDERS = [
+  { value: "male",    label: "Male",   symbol: "♂" },
+  { value: "female",  label: "Female", symbol: "♀" },
+  { value: "other",   label: "Other",  symbol: "⚧" },
+  { value: "unknown", label: "?",      symbol: "?" },
+];
+
+const GENDER_COLORS: Record<string, string> = {
+  male:    "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300",
+  female:  "bg-pink-100 border-pink-300 text-pink-800 dark:bg-pink-950/30 dark:border-pink-700 dark:text-pink-300",
+  other:   "bg-purple-100 border-purple-300 text-purple-800 dark:bg-purple-950/30 dark:border-purple-700 dark:text-purple-300",
+  unknown: "bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-800/40 dark:border-gray-600 dark:text-gray-400",
+};
+
+const EMPTY_MEMBER_FORM = {
+  name: "", gender: "unknown", role: "other", side: "none",
+  birthYear: "", deathYear: "", birthPlace: "", notes: "", isDeceased: false,
+};
+
+function FamilyMemberCard({ member, onEdit, onDelete }: {
+  member: FamilyMember;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const role = ROLES.find(r => r.value === member.role);
+  const colorClass = GENDER_COLORS[member.gender ?? "unknown"] ?? GENDER_COLORS.unknown;
+  const yearSpan = member.birthYear
+    ? member.deathYear ? `${member.birthYear}–${member.deathYear}` : `b. ${member.birthYear}`
+    : "";
+
+  return (
+    <div className={`relative rounded-xl border-2 px-3 py-2.5 min-w-[110px] max-w-[140px] flex flex-col items-center gap-1 text-center shadow-sm group transition-shadow hover:shadow-md ${colorClass} ${member.isDeceased ? "opacity-60" : ""}`}>
+      <div className="text-xl leading-none">{role?.emoji ?? "👤"}</div>
+      <p className="text-xs font-semibold leading-tight line-clamp-2">{member.name}</p>
+      {member.isDeceased ? (
+        <span className="text-[9px] font-medium opacity-60">† {yearSpan || "deceased"}</span>
+      ) : yearSpan ? (
+        <span className="text-[9px] opacity-60">{yearSpan}</span>
+      ) : null}
+      {member.side && member.side !== "none" && (
+        <span className="text-[9px] opacity-50 capitalize">{member.side}</span>
+      )}
+      <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={onEdit} className="p-0.5 rounded bg-white/60 hover:bg-white dark:bg-black/20 dark:hover:bg-black/40 transition-colors">
+          <Pencil size={10} />
+        </button>
+        <button onClick={onDelete} className="p-0.5 rounded bg-white/60 hover:bg-red-100 hover:text-red-600 dark:bg-black/20 transition-colors">
+          <Trash2 size={10} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FamilyTreeSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<FamilyMember | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_MEMBER_FORM });
+  const [viewMode, setViewMode] = useState<"tree" | "list">("tree");
+
+  const { data: members = [], isLoading } = useQuery<FamilyMember[]>({
+    queryKey: ["/api/family-members"],
+    queryFn: () => apiRequest("GET", "/api/family-members").then(r => r.json()),
+  });
+
+  const addMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/family-members", data).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/family-members"] }); setShowModal(false); toast({ title: "Person added!" }); },
+    onError: () => toast({ title: "Failed to add", variant: "destructive" }),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/family-members/${id}`, data).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/family-members"] }); setShowModal(false); toast({ title: "Updated!" }); },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/family-members/${id}`).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/family-members"] }); toast({ title: "Removed" }); },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  function openAdd() {
+    setEditing(null); setForm({ ...EMPTY_MEMBER_FORM }); setShowModal(true);
+  }
+  function openEdit(m: FamilyMember) {
+    setEditing(m);
+    setForm({
+      name: m.name, gender: m.gender ?? "unknown", role: m.role, side: m.side ?? "none",
+      birthYear: m.birthYear?.toString() ?? "", deathYear: m.deathYear?.toString() ?? "",
+      birthPlace: m.birthPlace ?? "", notes: m.notes ?? "", isDeceased: !!m.isDeceased,
+    });
+    setShowModal(true);
+  }
+  function saveForm() {
+    if (!form.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+    const payload = {
+      name: form.name.trim(), gender: form.gender, role: form.role, side: form.side,
+      birthYear: form.birthYear ? parseInt(form.birthYear) : null,
+      deathYear: form.deathYear ? parseInt(form.deathYear) : null,
+      birthPlace: form.birthPlace || null, notes: form.notes || null,
+      isDeceased: form.isDeceased ? 1 : 0,
+    };
+    if (editing) updateMut.mutate({ id: editing.id, data: payload });
+    else addMut.mutate(payload);
+  }
+
+  // Group members by generation for tree view
+  const generations = ROLES.reduce<{ gen: number; label: string; members: FamilyMember[] }[]>((acc, role) => {
+    const roleMembers = members.filter(m => m.role === role.value);
+    if (roleMembers.length === 0) return acc;
+    const group = acc.find(g => g.gen === role.generation);
+    if (group) { group.members.push(...roleMembers); }
+    else {
+      const genLabel =
+        role.generation === 0 ? "Great-Grandparents" :
+        role.generation === 1 ? "Grandparents" :
+        role.generation === 2 ? "Parents & Aunts/Uncles" :
+        role.generation === 3 ? "Your Generation" :
+        role.generation === 4 ? "Children" :
+        role.generation === 5 ? "Grandchildren" : "Other";
+      acc.push({ gen: role.generation, label: genLabel, members: [...roleMembers] });
+    }
+    return acc;
+  }, []).sort((a, b) => a.gen - b.gen);
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-40">
+      <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <GitFork size={18} /> Family Tree
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {members.length} {members.length === 1 ? "person" : "people"} · {generations.length} {generations.length === 1 ? "generation" : "generations"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border overflow-hidden">
+            <button onClick={() => setViewMode("tree")} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "tree" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>Tree</button>
+            <button onClick={() => setViewMode("list")} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>List</button>
+          </div>
+          <Button size="sm" onClick={openAdd} className="gap-1.5">
+            <Plus size={14} /> Add Person
+          </Button>
+        </div>
+      </div>
+
+      {members.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+          <GitFork size={48} className="opacity-20" />
+          <p className="text-sm text-center max-w-xs">
+            Start building your family tree by adding yourself, then parents, grandparents, siblings, and children.
+          </p>
+          <Button variant="outline" onClick={openAdd} className="gap-1.5">
+            <Plus size={14} /> Add First Person
+          </Button>
+        </div>
+      ) : viewMode === "list" ? (
+        /* ── List view ── */
+        <div className="space-y-1">
+          {ROLES.filter(r => members.some(m => m.role === r.value)).map(role => (
+            <div key={role.value}>
+              <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-1 mt-4 mb-1.5">
+                {role.emoji} {role.label}
+              </p>
+              <div className="space-y-1.5">
+                {members.filter(m => m.role === role.value).map(m => {
+                  const colorClass = GENDER_COLORS[m.gender ?? "unknown"] ?? GENDER_COLORS.unknown;
+                  const yearSpan = m.birthYear
+                    ? (m.deathYear ? `${m.birthYear}–${m.deathYear}` : `b. ${m.birthYear}`)
+                    : "";
+                  return (
+                    <div key={m.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 group ${colorClass} ${m.isDeceased ? "opacity-60" : ""}`}>
+                      <span className="text-lg shrink-0">{role.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{m.name}{m.isDeceased ? " †" : ""}</p>
+                        <p className="text-xs opacity-60">
+                          {[yearSpan, m.birthPlace, m.side && m.side !== "none" ? m.side : ""].filter(Boolean).join(" · ")}
+                        </p>
+                        {m.notes && <p className="text-xs opacity-50 italic line-clamp-1 mt-0.5">{m.notes}</p>}
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); }}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* ── Tree view ── */
+        <div className="overflow-x-auto pb-4 -mx-3 px-3">
+          <div className="flex flex-col items-center gap-0 min-w-max mx-auto">
+            {generations.map((gen, gi) => (
+              <div key={gen.gen} className="flex flex-col items-center w-full">
+                <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2 mt-1">
+                  {gen.label}
+                </p>
+                <div className="flex items-start justify-center gap-3 flex-wrap">
+                  {gen.members.map(m => (
+                    <FamilyMemberCard
+                      key={m.id}
+                      member={m}
+                      onEdit={() => openEdit(m)}
+                      onDelete={() => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); }}
+                    />
+                  ))}
+                </div>
+                {gi < generations.length - 1 && (
+                  <div className="flex flex-col items-center mt-3">
+                    <div className="w-px h-6 bg-border" />
+                    <div className="w-2 h-2 rounded-full bg-border" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Person" : "Add to Family Tree"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
+              <Input placeholder="Full name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Relationship</label>
+              <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.emoji} {r.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Side</label>
+              <Select value={form.side} onValueChange={v => setForm(f => ({ ...f, side: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SIDES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Gender</label>
+              <div className="flex gap-1.5">
+                {GENDERS.map(g => (
+                  <button key={g.value} type="button"
+                    onClick={() => setForm(f => ({ ...f, gender: g.value }))}
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${form.gender === g.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+                    {g.symbol} {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Birth Year</label>
+                <Input type="number" placeholder="e.g. 1945" value={form.birthYear}
+                  onChange={e => setForm(f => ({ ...f, birthYear: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Death Year</label>
+                <Input type="number" placeholder="if deceased" value={form.deathYear}
+                  onChange={e => setForm(f => ({ ...f, deathYear: e.target.value }))} />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Birthplace</label>
+              <Input placeholder="City, Country" value={form.birthPlace}
+                onChange={e => setForm(f => ({ ...f, birthPlace: e.target.value }))} />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+              <Textarea placeholder="Stories, memories, or anything notable…" rows={2}
+                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                className="resize-none text-sm" />
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.isDeceased}
+                onChange={e => setForm(f => ({ ...f, isDeceased: e.target.checked }))}
+                className="w-4 h-4 rounded" />
+              <span className="text-sm text-muted-foreground">Mark as deceased</span>
+            </label>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button className="flex-1" onClick={saveForm}
+                disabled={!form.name.trim() || addMut.isPending || updateMut.isPending}>
+                {editing ? "Save Changes" : "Add Person"}
+              </Button>
             </div>
           </div>
         </DialogContent>
