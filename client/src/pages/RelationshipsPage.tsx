@@ -1500,6 +1500,8 @@ function GoogleContactsPanel({ onDisconnect }: { onDisconnect: () => void }) {
 }
 
 function PersonalAssistantSection() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [localConnected, setLocalConnected] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")); }
     catch { return new Set(); }
@@ -1508,6 +1510,7 @@ function PersonalAssistantSection() {
   const [linkedinExpanded, setLinkedinExpanded] = useState(false);
   const [facebookExpanded, setFacebookExpanded] = useState(false);
   const [googleExpanded, setGoogleExpanded] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   // Check real LinkedIn + Facebook + Google status on mount
   const { data: linkedinStatus } = useQuery<{ connected: boolean; contactCount: number }>({
@@ -1726,9 +1729,6 @@ function PersonalAssistantSection() {
   }
 
   // ── Connect screen ──────────────────────────────────────────────────────────
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   async function handleDisconnect(id: string) {
     setDisconnecting(id);
