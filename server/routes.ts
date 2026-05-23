@@ -7445,7 +7445,7 @@ Rules:
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", gcontactsCallbackUrl(req));
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "https://www.googleapis.com/auth/contacts.readonly");
+    url.searchParams.set("scope", "https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly");
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent"); // force refresh_token
     url.searchParams.set("state", String((req.user as User).id));
@@ -7490,53 +7490,81 @@ Rules:
     }
   });
 
+  /** Parse a raw People API person object into a storable contact */
+  function parsePerson(p: any) {
+    const name = p.names?.[0];
+    const email = p.emailAddresses?.[0]?.value ?? null;
+    const phone = p.phoneNumbers?.[0]?.value ?? null;
+    const photo = p.photos?.find((ph: any) => !ph.default)?.url ?? p.photos?.[0]?.url ?? null;
+    const org = p.organizations?.[0];
+    const bdayObj = p.birthdays?.[0]?.date;
+    let birthday: string | null = null;
+    if (bdayObj) {
+      const { year, month, day } = bdayObj;
+      if (year && month && day) birthday = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      else if (month && day) birthday = `${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    }
+    return {
+      resourceName: p.resourceName as string,
+      firstName: name?.givenName ?? null,
+      lastName: name?.familyName ?? null,
+      email,
+      phone,
+      birthday,
+      avatarUrl: photo,
+      company: org?.name ?? null,
+    };
+  }
+
   /** Fetch all contacts from Google People API and upsert them */
   async function syncGoogleContactsForUser(userId: number, accessToken: string): Promise<number> {
     const fields = "names,emailAddresses,phoneNumbers,birthdays,photos,organizations";
-    let pageToken: string | undefined;
+    const headers = { Authorization: `Bearer ${accessToken}` };
     let total = 0;
+
+    // 1. "My Contacts" — people/me/connections
+    let pageToken: string | undefined;
     do {
       const url = new URL("https://people.googleapis.com/v1/people/me/connections");
       url.searchParams.set("personFields", fields);
       url.searchParams.set("pageSize", "1000");
       if (pageToken) url.searchParams.set("pageToken", pageToken);
-      const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      const r = await fetch(url.toString(), { headers });
+      const rawText = await r.text();
+      console.log(`[gcontacts] connections status=${r.status} body=${rawText.slice(0, 500)}`);
       if (!r.ok) {
-        const errBody = await r.json().catch(() => ({})) as any;
-        const msg = errBody?.error?.message ?? errBody?.error ?? `HTTP ${r.status}`;
-        throw new Error(`Google People API error: ${msg}`);
+        const errBody = JSON.parse(rawText).catch?.(() => ({})) ?? {};
+        const msg = (errBody as any)?.error?.message ?? `HTTP ${r.status}`;
+        throw new Error(`Google People API (connections) error: ${msg} — ${rawText.slice(0, 200)}`);
       }
-      const data = await r.json() as any;
-      const connections: any[] = data.connections ?? [];
-      const contacts = connections.map((p: any) => {
-        const name = p.names?.[0];
-        const email = p.emailAddresses?.[0]?.value ?? null;
-        const phone = p.phoneNumbers?.[0]?.value ?? null;
-        const photo = p.photos?.[0]?.url ?? null;
-        const org = p.organizations?.[0];
-        const bdayObj = p.birthdays?.[0]?.date;
-        let birthday: string | null = null;
-        if (bdayObj) {
-          const { year, month, day } = bdayObj;
-          if (year && month && day) birthday = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-          else if (month && day) birthday = `${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-        }
-        return {
-          resourceName: p.resourceName,
-          firstName: name?.givenName ?? null,
-          lastName: name?.familyName ?? null,
-          email,
-          phone,
-          birthday,
-          avatarUrl: photo,
-          company: org?.name ?? null,
-        };
-      }).filter((c: any) => c.resourceName);
-      if (contacts.length > 0) {
-        total += await storage.upsertGoogleContacts(userId, contacts);
-      }
+      const data = JSON.parse(rawText) as any;
+      console.log(`[gcontacts] connections count=${(data.connections ?? []).length} nextPageToken=${data.nextPageToken ?? "none"}`);
+      const contacts = (data.connections ?? []).map(parsePerson).filter((c: any) => c.resourceName);
+      if (contacts.length > 0) total += await storage.upsertGoogleContacts(userId, contacts);
       pageToken = data.nextPageToken;
     } while (pageToken);
+
+    // 2. "Other contacts" — people auto-saved from Gmail/interactions
+    let otherPageToken: string | undefined;
+    do {
+      const url = new URL("https://people.googleapis.com/v1/otherContacts");
+      url.searchParams.set("readMask", fields);
+      url.searchParams.set("pageSize", "1000");
+      if (otherPageToken) url.searchParams.set("pageToken", otherPageToken);
+      const r = await fetch(url.toString(), { headers });
+      const rawText = await r.text();
+      console.log(`[gcontacts] otherContacts status=${r.status} body=${rawText.slice(0, 500)}`);
+      if (!r.ok) {
+        // otherContacts scope is optional — skip silently if not granted
+        break;
+      }
+      const data = JSON.parse(rawText) as any;
+      console.log(`[gcontacts] otherContacts count=${(data.otherContacts ?? []).length}`);
+      const contacts = (data.otherContacts ?? []).map(parsePerson).filter((c: any) => c.resourceName);
+      if (contacts.length > 0) total += await storage.upsertGoogleContacts(userId, contacts);
+      otherPageToken = data.nextPageToken;
+    } while (otherPageToken);
+
     return total;
   }
 
