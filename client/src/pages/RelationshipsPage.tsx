@@ -1045,65 +1045,95 @@ function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
   if (isLoading) return <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   const profile = status?.profile;
+  const hasContacts = (status?.contactCount ?? 0) > 0;
 
   return (
     <div className="space-y-4">
       {/* Profile card */}
       {profile && (
-        <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-[#0077b5]/30 bg-[#0077b5]/5">
+        <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-[#0077b5]/30 bg-[#0077b5]/5">
           {profile.avatarUrl ? (
-            <img src={profile.avatarUrl} alt={profile.name} className="w-14 h-14 rounded-full object-cover border-2 border-[#0077b5]/40" />
+            <img src={profile.avatarUrl} alt={profile.name} className="w-10 h-10 rounded-full object-cover border-2 border-[#0077b5]/40 shrink-0" />
           ) : (
-            <div className="w-14 h-14 rounded-full bg-[#0077b5] flex items-center justify-center text-white font-bold text-xl">
+            <div className="w-10 h-10 rounded-full bg-[#0077b5] flex items-center justify-center text-white font-bold shrink-0">
               {profile.name[0]}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-base">{profile.name}</p>
-            {profile.headline && <p className="text-sm text-muted-foreground">{profile.headline}</p>}
+            <p className="font-semibold text-sm">{profile.name}</p>
             {profile.email && <p className="text-xs text-muted-foreground">{profile.email}</p>}
           </div>
-          <CheckCircle2 className="text-green-500 shrink-0" size={20} />
+          <CheckCircle2 className="text-green-500 shrink-0" size={16} />
         </div>
       )}
 
-      {/* Contact count */}
-      <div className="flex items-center justify-between px-4 py-3 rounded-xl border bg-card">
-        <div className="flex items-center gap-3">
-          <Users size={18} className="text-[#0077b5]" />
-          <div>
-            <p className="text-sm font-medium">Imported Contacts</p>
-            <p className="text-xs text-muted-foreground">{status?.contactCount ?? 0} LinkedIn connections</p>
+      {/* Import CTA — prominent when no contacts yet */}
+      {!hasContacts && !showCsvImport && (
+        <div className="rounded-xl border-2 border-[#0077b5]/30 bg-[#0077b5]/5 p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#0077b5] flex items-center justify-center text-white font-bold text-sm shrink-0">in</div>
+            <div>
+              <p className="font-semibold text-sm">Import your LinkedIn network</p>
+              <p className="text-xs text-muted-foreground mt-0.5">LinkedIn restricts direct API access to connections, but you can export them as a CSV in seconds.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {[
+              { n: 1, text: "Go to LinkedIn → Me → Settings & Privacy" },
+              { n: 2, text: 'Click "Data privacy" → "Get a copy of your data"' },
+              { n: 3, text: 'Select "Connections" only and request the export' },
+              { n: 4, text: "LinkedIn emails you a link — download Connections.csv" },
+              { n: 5, text: "Upload it below" },
+            ].map(s => (
+              <div key={s.n} className="flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-[#0077b5] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</div>
+                <p className="text-xs text-foreground/80">{s.text}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <a
+              href="https://www.linkedin.com/mypreferences/d/categories/dmp"
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 py-2.5 rounded-lg bg-[#0077b5] text-white text-sm font-semibold hover:bg-[#006097] transition-colors text-center"
+            >
+              Open LinkedIn Export →
+            </a>
+            <button
+              onClick={() => setShowCsvImport(true)}
+              className="flex-1 py-2.5 rounded-lg border text-sm font-medium hover:bg-muted/40 transition-colors"
+            >
+              I have the CSV
+            </button>
           </div>
         </div>
-        <button
-          onClick={() => setShowCsvImport(v => !v)}
-          className="text-xs text-primary font-medium hover:underline"
-        >
-          + Import more
-        </button>
-      </div>
+      )}
 
-      {/* CSV Import section */}
-      {showCsvImport && (
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <div>
-            <p className="text-sm font-semibold mb-1">Import from LinkedIn CSV</p>
-            <p className="text-xs text-muted-foreground">
-              Export your connections from{" "}
-              <a href="https://www.linkedin.com/mynetwork/invite-connect/connections/" target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                LinkedIn Settings
-              </a>{" "}
-              → My Network → Manage my network → Export contacts, then upload the CSV here.
-            </p>
+      {/* CSV upload area */}
+      {(showCsvImport || hasContacts) && (
+        <div className={`rounded-xl border bg-card p-4 space-y-3 ${!hasContacts ? "border-[#0077b5]/40" : ""}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">{hasContacts ? "Import more contacts" : "Upload your Connections.csv"}</p>
+            {hasContacts && (
+              <span className="text-xs text-[#0077b5] font-medium">{status?.contactCount} imported</span>
+            )}
           </div>
+          {!hasContacts && (
+            <p className="text-xs text-muted-foreground">
+              Upload the <strong>Connections.csv</strong> file from your LinkedIn data export.{" "}
+              <a href="https://www.linkedin.com/mypreferences/d/categories/dmp" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                Request export →
+              </a>
+            </p>
+          )}
           <input ref={fileRef} type="file" accept=".csv" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); }} />
           <button
             onClick={() => fileRef.current?.click()}
-            className="w-full py-2.5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full py-2.5 rounded-lg border-2 border-dashed border-border hover:border-[#0077b5] hover:bg-[#0077b5]/5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            {csvText ? "✓ File loaded — click Import" : "Choose CSV file…"}
+            {csvText ? "✓ File loaded — ready to import" : "Choose Connections.csv…"}
           </button>
           {csvText && (
             <button
@@ -1117,12 +1147,12 @@ function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
         </div>
       )}
 
-      {/* Contact list preview */}
+      {/* Contact list */}
       {contacts.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Recent Contacts</p>
-          <div className="rounded-xl border overflow-hidden divide-y divide-border">
-            {contacts.slice(0, 8).map(c => (
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Connections</p>
+          <div className="rounded-xl border overflow-hidden divide-y divide-border max-h-64 overflow-y-auto">
+            {contacts.slice(0, 50).map(c => (
               <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="w-8 h-8 rounded-full bg-[#0077b5]/15 flex items-center justify-center text-[#0077b5] font-semibold text-xs shrink-0">
                   {c.firstName[0]}{c.lastName?.[0] ?? ""}
@@ -1135,10 +1165,8 @@ function LinkedInPanel({ onDisconnect }: { onDisconnect: () => void }) {
                 </div>
               </div>
             ))}
-            {contacts.length > 8 && (
-              <div className="px-4 py-2 text-xs text-muted-foreground text-center">
-                +{contacts.length - 8} more contacts
-              </div>
+            {contacts.length > 50 && (
+              <div className="px-4 py-2 text-xs text-muted-foreground text-center">+{contacts.length - 50} more</div>
             )}
           </div>
         </div>
