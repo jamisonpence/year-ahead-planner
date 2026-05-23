@@ -259,6 +259,7 @@ const SECTION_KEY: Record<string, string> = {
   "/music":         "music",
   "/recipes":       "recipes",
   "/spots":         "spots",
+  "/events":        "events",
   "/quotes":        "quotes",
   "/art":           "art",
   "/hobbies":       "hobbies",
@@ -278,44 +279,71 @@ const SECTION_KEY: Record<string, string> = {
 
 const COLLECTION_GROUPS = [
   {
-    key: "culture",
-    label: "Culture & Taste",
-    subtitle: "Visible to friends by default",
+    key: "growth",
+    label: "Growth & Planning",
+    subtitle: "Goals, schedule, and reflection",
     tiles: [
-      { path: "/reading",  emoji: "📚", label: "Reading"       },
-      { path: "/movies",   emoji: "🎬", label: "Movies & Shows"},
-      { path: "/music",    emoji: "🎵", label: "Music"         },
-      { path: "/recipes",  emoji: "🍽️", label: "Recipes"      },
-      { path: "/spots",    emoji: "📍", label: "Places"         },
-      { path: "/art",      emoji: "🎨", label: "Art"           },
-      { path: "/hobbies",  emoji: "✨", label: "Hobbies"       },
+      { path: "/goals",     emoji: "🎯", label: "Goals"    },
+      { path: "/calendar",  emoji: "📅", label: "Calendar" },
+      { path: "/journal",   emoji: "📓", label: "Journal"  },
     ],
   },
   {
-    key: "wellness",
-    label: "Wellness",
-    subtitle: "You control visibility",
+    key: "people",
+    label: "People & Relationships",
+    subtitle: "Friends and family",
+    tiles: [
+      { path: "/relationships", emoji: "👥", label: "Friends" },
+      { path: "/kids",          emoji: "👨‍👩‍👧", label: "Family" },
+    ],
+  },
+  {
+    key: "health",
+    label: "Health & Wellness",
+    subtitle: "Fitness and wellbeing",
     tiles: [
       { path: "/workouts", emoji: "💪", label: "Workouts" },
       { path: "/health",   emoji: "❤️", label: "Health"   },
     ],
   },
   {
-    key: "life",
-    label: "Life & Planning",
-    subtitle: "Private by default",
+    key: "culture",
+    label: "Culture & Interests",
+    subtitle: "Entertainment and creative pursuits",
     tiles: [
-      { path: "/dashboard",     emoji: "📊", label: "Dashboard"    },
-      { path: "/messenger",     emoji: "💬", label: "Messenger"    },
-      { path: "/goals",         emoji: "🎯", label: "Goals"        },
-      { path: "/calendar",      emoji: "📅", label: "Calendar"     },
-      { path: "/budget",        emoji: "💰", label: "Budget"       },
-      { path: "/relationships", emoji: "👥", label: "Relationships"},
-      { path: "/housekeeping",  emoji: "🏠", label: "Housekeeping" },
-      { path: "/kids",          emoji: "👨‍👩‍👧", label: "Family"      },
-      { path: "/journal",       emoji: "📓", label: "Journal"      },
-      { path: "/faith",         emoji: "🕊️", label: "Faith"       },
-      { path: "/politics",      emoji: "🏛️", label: "Politics"    },
+      { path: "/reading",  emoji: "📚", label: "Reading"        },
+      { path: "/movies",   emoji: "🎬", label: "Movies & Shows" },
+      { path: "/music",    emoji: "🎵", label: "Music"          },
+      { path: "/art",      emoji: "🎨", label: "Art"            },
+      { path: "/recipes",  emoji: "🍽️", label: "Recipes"       },
+      { path: "/hobbies",  emoji: "✨", label: "Hobbies"        },
+    ],
+  },
+  {
+    key: "places",
+    label: "Places & Experiences",
+    subtitle: "Spots, travel, and events",
+    tiles: [
+      { path: "/spots",   emoji: "📍", label: "Places" },
+      { path: "/events",  emoji: "🎟️", label: "Events" },
+    ],
+  },
+  {
+    key: "home",
+    label: "Home & Money",
+    subtitle: "Budget and household",
+    tiles: [
+      { path: "/budget",       emoji: "💰", label: "Budget"       },
+      { path: "/housekeeping", emoji: "🏠", label: "Housekeeping" },
+    ],
+  },
+  {
+    key: "beliefs",
+    label: "Beliefs & Society",
+    subtitle: "Faith, values, and civic life",
+    tiles: [
+      { path: "/faith",    emoji: "🕊️", label: "Faith"    },
+      { path: "/politics", emoji: "🏛️", label: "Politics" },
     ],
   },
 ];
@@ -848,19 +876,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t">
         <div className="flex items-end justify-around px-1 pt-2 pb-3">
 
-          {/* Dashboard */}
-          <Link href="/dashboard">
-            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <LayoutDashboard size={22} className={location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Dashboard</span>
-            </button>
-          </Link>
-
           {/* Discover */}
           <Link href="/discover">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
               <Search size={22} className={location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
               <span className={`text-[10px] font-medium ${location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
+            </button>
+          </Link>
+
+          {/* Dashboard */}
+          <Link href="/dashboard">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <LayoutDashboard size={22} className={location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Dashboard</span>
             </button>
           </Link>
 
@@ -875,27 +903,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-[10px] font-medium text-muted-foreground">Add</span>
           </button>
 
-          {/* Profile */}
+          {/* Messenger — with unread badge */}
+          <Link href="/messenger">
+            <button className="relative flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <div className="relative">
+                <MessageSquare size={22} className={location === "/messenger" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+                {unreadMessengerCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-card" />
+                )}
+              </div>
+              <span className={`text-[10px] font-medium ${location === "/messenger" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Messenger</span>
+            </button>
+          </Link>
+
+          {/* All tabs (profile sheet) */}
           <button
             onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
             className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
           >
             <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Profile</span>
+            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>More</span>
           </button>
-
-          {/* Friends — with badge dot */}
-          <Link href="/relationships">
-            <button className="relative flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <div className="relative">
-                <Users size={22} className={location === "/relationships" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-                {totalNotifCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-card" />
-                )}
-              </div>
-              <span className={`text-[10px] font-medium ${location === "/relationships" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Friends</span>
-            </button>
-          </Link>
         </div>
       </div>
 
