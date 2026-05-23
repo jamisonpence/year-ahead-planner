@@ -630,6 +630,7 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_email TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_avatar_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_birthday TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_location TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_last_sync TEXT`);
 
   // Google Contacts columns
@@ -2821,11 +2822,12 @@ export const storage: IStorage = {
   async clearStravaTokens(userId: number) {
     await db.update(users).set({ stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null, stravaAthleteId: null }).where(eq(users.id, userId));
   },
-  async saveFacebookProfile(userId: number, data: { accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null }) {
+  async saveFacebookProfile(userId: number, data: { accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null; location?: string | null }) {
     await db.update(users).set({
       facebookAccessToken: data.accessToken, facebookUserId: data.fbUserId,
       facebookName: data.name, facebookEmail: data.email,
       facebookAvatarUrl: data.avatarUrl, facebookBirthday: data.birthday,
+      facebookLocation: data.location ?? null,
     }).where(eq(users.id, userId));
   },
   async getFacebookProfile(userId: number) {

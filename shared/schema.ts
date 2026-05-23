@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   facebookEmail: text("facebook_email"),
   facebookAvatarUrl: text("facebook_avatar_url"),
   facebookBirthday: text("facebook_birthday"),
+  facebookLocation: text("facebook_location"),
   facebookLastSync: text("facebook_last_sync"),
   // Google Contacts integration (separate from login/GCal OAuth)
   googleContactsAccessToken: text("google_contacts_access_token"),

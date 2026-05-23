@@ -7148,7 +7148,7 @@ Rules:
     // user_birthday: logged-in user's birthday
     // user_friends: friends who also use this app
     // email: email address
-    url.searchParams.set("scope", "email,user_birthday,user_friends,public_profile");
+    url.searchParams.set("scope", "email,user_birthday,user_friends,user_location,public_profile");
     url.searchParams.set("state", String((req.user as User).id));
     res.redirect(url.toString());
   });
@@ -7185,6 +7185,7 @@ Rules:
         email: profile.email ?? null,
         avatarUrl: profile.picture?.data?.url ?? null,
         birthday: profile.birthday ?? null,
+        location: profile.location?.name ?? null,
       });
 
       // Fetch friends who have also authorized this app (user_friends scope)
