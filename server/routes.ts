@@ -568,8 +568,19 @@ Return exactly this structure:
     req.logout(() => { res.json({ ok: true }); });
   });
 
-  // Protect all remaining /api routes
-  app.use("/api", requireAuth);
+  // Protect all remaining /api routes — except OAuth connect endpoints which
+  // handle auth themselves (redirect to Google login if session is missing)
+  app.use("/api", (req, res, next) => {
+    const oauthConnectPaths = [
+      "/api/linkedin/connect",
+      "/api/facebook/connect",
+      "/api/gcontacts/connect",
+    ];
+    if (oauthConnectPaths.includes(req.path) || oauthConnectPaths.some(p => req.originalUrl.startsWith(p))) {
+      return next();
+    }
+    return requireAuth(req, res, next);
+  });
 
   // ── Events ──────────────────────────────────────────────────────────────────
   app.get("/api/events", async (req, res) => {
