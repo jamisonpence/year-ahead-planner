@@ -11,7 +11,7 @@ import {
   Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, User, Plus, MessageSquare,
+  Search, User, Plus, MessageSquare, PenLine,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -76,37 +76,50 @@ function PrivacyBanner({ path }: { path: string }) {
 }
 
 const ALL_TABS = [
+  // ── Top-level ──
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
   { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
-  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  // ── Growth & Planning ──
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
-  { path: "/reading",       label: "Reading",                 icon: BookOpen        },
-  { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
+  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  // ── People & Relationships ──
   { path: "/relationships", label: "Friends",                 icon: Users           },
-  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
-  { path: "/movies",        label: "Movies & Shows",           icon: Film            },
-  { path: "/music",         label: "Music",                   icon: Music2          },
-  { path: "/budget",        label: "Budget",                  icon: Wallet          },
-  { path: "/plants",        label: "Plants",                  icon: Leaf            },
-  { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
-  { path: "/spots",         label: "Places",                   icon: MapPin          },
   { path: "/kids",          label: "Family",                  icon: Baby            },
-  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
-  { path: "/art",           label: "Art",                     icon: Palette         },
-  { path: "/journal",       label: "Journal",                 icon: BookOpen        },
-  { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
-  { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
+  // ── Health & Wellness ──
+  { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/health",        label: "Health",                  icon: Activity        },
+  // ── Culture & Interests ──
+  { path: "/reading",       label: "Reading",                 icon: BookOpen        },
+  { path: "/movies",        label: "Movies & Shows",          icon: Film            },
+  { path: "/music",         label: "Music",                   icon: Music2          },
+  { path: "/art",           label: "Art",                     icon: Palette         },
+  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
+  { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
+  // ── Places & Experiences ──
+  { path: "/spots",         label: "Places",                  icon: MapPin          },
+  // ── Home & Money ──
+  { path: "/budget",        label: "Budget",                  icon: Wallet          },
+  { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
+  // ── Beliefs & Society ──
+  { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
   { path: "/politics",      label: "Politics",                icon: Landmark        },
+  // ── Hidden / legacy ──
+  { path: "/plants",        label: "Plants",                  icon: Leaf            },
+  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
 ];
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",     label: null,        paths: ["/discover", "/dashboard", "/messenger"] },
-  { key: "culture",  label: "Culture",   paths: ["/reading", "/movies", "/music", "/recipes", "/spots", "/art", "/hobbies", "/journal"] },
-  { key: "wellness", label: "Wellness",  paths: ["/workouts", "/health"] },
-  { key: "life",     label: "Life",      paths: ["/goals", "/calendar", "/budget", "/relationships", "/housekeeping", "/kids", "/faith", "/politics"] },
+  { key: "core",      label: null,                   paths: ["/discover", "/dashboard", "/messenger"] },
+  { key: "growth",    label: "Growth & Planning",    paths: ["/goals", "/calendar", "/journal"] },
+  { key: "people",    label: "People & Relationships", paths: ["/relationships", "/kids"] },
+  { key: "health",    label: "Health & Wellness",    paths: ["/workouts", "/health"] },
+  { key: "culture",   label: "Culture & Interests",  paths: ["/reading", "/movies", "/music", "/art", "/recipes", "/hobbies"] },
+  { key: "places",    label: "Places & Experiences", paths: ["/spots"] },
+  { key: "home",      label: "Home & Money",         paths: ["/budget", "/housekeeping"] },
+  { key: "beliefs",   label: "Beliefs & Society",    paths: ["/faith", "/politics"] },
 ];
 
 function useNavPrefs() {
