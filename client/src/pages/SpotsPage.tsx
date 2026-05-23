@@ -1000,7 +1000,8 @@ export default function SpotsPage() {
   const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [activeTab, setActiveTab] = useState("all");
+  const [mainTab, setMainTab] = useState<"places" | "trips" | "events">("places");
+  const [placesSubTab, setPlacesSubTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -1008,13 +1009,16 @@ export default function SpotsPage() {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [collapsedCities, setCollapsedCities] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("shared") === "1") setActiveTab("shared");
+    if (new URLSearchParams(window.location.search).get("shared") === "1") {
+      setMainTab("places");
+      setPlacesSubTab("shared");
+    }
   }, []);
   useEffect(() => {
-    if (activeTab !== "shared") return;
+    if (mainTab !== "places" || placesSubTab !== "shared") return;
     apiRequest("POST", "/api/shares/mark-read", { type: "spots" })
       .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
-  }, [activeTab]);
+  }, [mainTab, placesSubTab]);
 
   const { data: spots = [] } = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
 
@@ -1183,237 +1187,251 @@ export default function SpotsPage() {
     favorites:     applyFilters(spots.filter((s) => s.isFavorite)),
   };
 
-  const displaySpots = tabSpots[activeTab] ?? [];
+  const displaySpots = tabSpots[placesSubTab] ?? tabSpots.all;
 
   return (
     <div className="flex flex-col h-full">
-      {/* ── Top bar: Search + Filters + Map toggle ─────────────────────────── */}
-      {activeTab !== "trips" && activeTab !== "events" && activeTab !== "shared" ? (
-        <div className="px-3 pt-3 pb-2 space-y-2">
-          {/* Search row */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <Input
-                className="pl-9 h-10 rounded-xl bg-secondary border-transparent focus:border-border text-sm"
-                placeholder="Search places…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
 
-            {/* Filters button */}
-            <button
-              onClick={() => setFilterSheetOpen(true)}
-              className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border text-sm font-medium shrink-0 transition-colors relative ${
-                (filterType !== "all" || filterStatus !== "all" || filterCity !== "all")
-                  ? "border-primary text-primary bg-primary/5"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <SlidersHorizontal size={14} />
-              Filters
-              {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
-              )}
-            </button>
-
-            {/* Map/List toggle */}
-            <div className="flex items-center rounded-xl border overflow-hidden h-10 shrink-0">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                title="List view"
-              ><List size={14} /> List</button>
-              <button
-                onClick={() => setViewMode("map")}
-                className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                title="Map view"
-              ><MapIcon size={14} /> Map</button>
-            </div>
-          </div>
-
-          {/* Action row: Plan My Day + Add Place */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPlannerOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full text-white
-                bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
-                shadow-sm transition-all"
-            >
-              <Sparkles size={13} /> Plan My Day
-            </button>
-            <div className="flex items-center gap-1.5 ml-auto">
-              <button
-                onClick={() => setNominatimOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
-              >
-                <Search size={13} /> Find &amp; Add
-              </button>
-              <button
-                onClick={openNew}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
-                title="Add a place manually"
-              >
-                <Plus size={13} /> Manual
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="px-3 pt-3 pb-1">
-          <div className="flex items-center gap-2">
-            <MapPin size={18} className="text-primary" />
-            <h1 className="text-lg font-bold">Places</h1>
-          </div>
-        </div>
-      )}
-
-      {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto scrollbar-hide px-3 pb-2 shrink-0">
-        <div className="flex gap-1 w-max">
+      {/* ── Top-level section nav: Places | Trips | Events ───────────────────── */}
+      <div className="px-3 pt-3 pb-0 shrink-0">
+        <div className="flex gap-1 border-b">
           {[
-            { value: "all",           label: `All (${spots.length})` },
-            { value: "want_to_visit", label: `Want to Visit (${spots.filter(s => s.status === "want_to_visit").length})` },
-            { value: "visited",       label: `Visited (${spots.filter(s => s.status === "visited").length})` },
-            { value: "favorites",     label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
-            { value: "shared",        label: "Shared" },
-            { value: "trips",         label: "Trips" },
-            { value: "events",        label: "Events 🎟️" },
+            { value: "places" as const, label: "Places", icon: <MapPin size={14} /> },
+            { value: "trips"  as const, label: "Trips",  icon: <Plane size={14} /> },
+            { value: "events" as const, label: "Events", icon: <Calendar size={14} /> },
           ].map(tab => (
             <button
               key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                activeTab === tab.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              onClick={() => setMainTab(tab.value)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors -mb-px ${
+                mainTab === tab.value
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              {tab.label}
+              {tab.icon} {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Content ──────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-3 pb-6">
-        {activeTab === "shared" ? (
-          <SharedSpotsTab />
-        ) : activeTab === "trips" ? (
-          <TripsTab spots={spots} />
-        ) : activeTab === "events" ? (
-          <EventsTab />
-        ) : spots.length === 0 ? (
-          /* Empty state: no spots at all */
-          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>
-            <div className="text-center">
-              <p className="font-semibold text-foreground mb-1">Start building your places list</p>
-              <p className="text-sm">Add spots you love, want to visit, or come back to.</p>
-            </div>
-            <button
-              onClick={() => setNominatimOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
-            >
-              <Search size={15} /> Find Places
-            </button>
-          </div>
-        ) : displaySpots.length === 0 ? (
-          /* Empty state: filters active */
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-            <Search size={36} className="opacity-20" />
-            <div className="text-center">
-              <p className="font-semibold text-foreground mb-1">No spots match your filters</p>
-              <p className="text-sm">Try adjusting or clearing your filters.</p>
-            </div>
-            <button
-              onClick={() => { setSearch(""); setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); }}
-              className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
-            >
-              Clear filters
-            </button>
-          </div>
-        ) : viewMode === "map" ? (
-          <MapView spots={displaySpots} />
-        ) : activeTab === "all" && filterCity === "all" && !search ? (
-          /* Grouped by city */
-          (() => {
-            const cityMap = new Map<string, Spot[]>();
-            displaySpots.forEach(s => {
-              const key = s.city ?? "Other";
-              if (!cityMap.has(key)) cityMap.set(key, []);
-              cityMap.get(key)!.push(s);
-            });
-            const cityGroups = Array.from(cityMap.entries())
-              .map(([city, citySpots]) => ({ city, spots: citySpots }))
-              .sort((a, b) => b.spots.length - a.spots.length);
-            return (
-              <div className="space-y-4">
-                {cityGroups.map(({ city, spots: citySpots }) => {
-                  const collapsed = collapsedCities.has(city);
-                  return (
-                    <div key={city}>
-                      <button
-                        onClick={() => setCollapsedCities(prev => {
-                          const next = new Set(prev);
-                          if (collapsed) next.delete(city); else next.add(city);
-                          return next;
-                        })}
-                        className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-2 border-b"
-                      >
-                        <MapPin size={13} className="text-primary shrink-0" />
-                        <span className="font-semibold text-sm">{city}</span>
-                        <span className="text-xs text-muted-foreground">({citySpots.length})</span>
-                        <span className="ml-auto text-muted-foreground">
-                          {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-                        </span>
-                      </button>
-                      {!collapsed && (
-                        <div className="space-y-2">
-                          {citySpots.map(spot => (
-                            <SpotCard
-                              key={spot.id}
-                              spot={spot}
-                              onEdit={() => openEdit(spot)}
-                              onDelete={() => deleteMut.mutate(spot.id)}
-                              onShare={() => setShareSpot(spot)}
-                              onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                              onAddToTrip={() => setAddToTripSpot(spot)}
-                              onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+      {/* ══ PLACES ═══════════════════════════════════════════════════════════ */}
+      {mainTab === "places" && (
+        <>
+          {/* Search + Filters + Map toggle */}
+          {placesSubTab !== "shared" && (
+            <div className="px-3 pt-3 pb-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="pl-9 h-10 rounded-xl bg-secondary border-transparent focus:border-border text-sm"
+                    placeholder="Search places…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setFilterSheetOpen(true)}
+                  className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border text-sm font-medium shrink-0 transition-colors relative ${
+                    (filterType !== "all" || filterStatus !== "all" || filterCity !== "all")
+                      ? "border-primary text-primary bg-primary/5"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <SlidersHorizontal size={14} />
+                  Filters
+                  {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                  )}
+                </button>
+                <div className="flex items-center rounded-xl border overflow-hidden h-10 shrink-0">
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  ><List size={14} /> List</button>
+                  <button
+                    onClick={() => setViewMode("map")}
+                    className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  ><MapIcon size={14} /> Map</button>
+                </div>
               </div>
-            );
-          })()
-        ) : (
-          /* Flat list */
-          <div className="space-y-2">
-            {displaySpots.map(spot => (
-              <SpotCard
-                key={spot.id}
-                spot={spot}
-                onEdit={() => openEdit(spot)}
-                onDelete={() => deleteMut.mutate(spot.id)}
-                onShare={() => setShareSpot(spot)}
-                onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                onAddToTrip={() => setAddToTripSpot(spot)}
-                onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-              />
-            ))}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPlannerOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full text-white bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-sm transition-all"
+                >
+                  <Sparkles size={13} /> Plan My Day
+                </button>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    onClick={() => setNominatimOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+                  >
+                    <Search size={13} /> Find &amp; Add
+                  </button>
+                  <button
+                    onClick={openNew}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+                  >
+                    <Plus size={13} /> Manual
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Places sub-tabs: All | Want to Visit | Visited | Favorites | Shared */}
+          <div className="overflow-x-auto scrollbar-hide px-3 pb-2 shrink-0">
+            <div className="flex gap-1 w-max">
+              {[
+                { value: "all",           label: `All (${spots.length})` },
+                { value: "want_to_visit", label: `Want to Visit (${spots.filter(s => s.status === "want_to_visit").length})` },
+                { value: "visited",       label: `Visited (${spots.filter(s => s.status === "visited").length})` },
+                { value: "favorites",     label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
+                { value: "shared",        label: "Shared" },
+              ].map(tab => (
+                <button
+                  key={tab.value}
+                  onClick={() => setPlacesSubTab(tab.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                    placesSubTab === tab.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Places content */}
+          <div className="flex-1 overflow-y-auto px-3 pb-6">
+            {placesSubTab === "shared" ? (
+              <SharedSpotsTab />
+                ) : spots.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>
+                <div className="text-center">
+                  <p className="font-semibold text-foreground mb-1">Start building your places list</p>
+                  <p className="text-sm">Add spots you love, want to visit, or come back to.</p>
+                </div>
+                <button
+                  onClick={() => setNominatimOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+                >
+                  <Search size={15} /> Find Places
+                </button>
+              </div>
+            ) : displaySpots.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+                <Search size={36} className="opacity-20" />
+                <div className="text-center">
+                  <p className="font-semibold text-foreground mb-1">No spots match your filters</p>
+                  <p className="text-sm">Try adjusting or clearing your filters.</p>
+                </div>
+                <button
+                  onClick={() => { setSearch(""); setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); }}
+                  className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : viewMode === "map" ? (
+              <MapView spots={displaySpots} />
+            ) : placesSubTab === "all" && filterCity === "all" && !search ? (
+              (() => {
+                const cityMap = new Map<string, Spot[]>();
+                displaySpots.forEach(s => {
+                  const key = s.city ?? "Other";
+                  if (!cityMap.has(key)) cityMap.set(key, []);
+                  cityMap.get(key)!.push(s);
+                });
+                const cityGroups = Array.from(cityMap.entries())
+                  .map(([city, citySpots]) => ({ city, spots: citySpots }))
+                  .sort((a, b) => b.spots.length - a.spots.length);
+                return (
+                  <div className="space-y-4">
+                    {cityGroups.map(({ city, spots: citySpots }) => {
+                      const collapsed = collapsedCities.has(city);
+                      return (
+                        <div key={city}>
+                          <button
+                            onClick={() => setCollapsedCities(prev => {
+                              const next = new Set(prev);
+                              if (collapsed) next.delete(city); else next.add(city);
+                              return next;
+                            })}
+                            className="sticky top-0 z-10 flex items-center gap-2 w-full bg-background/95 backdrop-blur-sm py-2 mb-2 border-b"
+                          >
+                            <MapPin size={13} className="text-primary shrink-0" />
+                            <span className="font-semibold text-sm">{city}</span>
+                            <span className="text-xs text-muted-foreground">({citySpots.length})</span>
+                            <span className="ml-auto text-muted-foreground">
+                              {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                            </span>
+                          </button>
+                          {!collapsed && (
+                            <div className="space-y-2">
+                              {citySpots.map(spot => (
+                                <SpotCard
+                                  key={spot.id}
+                                  spot={spot}
+                                  onEdit={() => openEdit(spot)}
+                                  onDelete={() => deleteMut.mutate(spot.id)}
+                                  onShare={() => setShareSpot(spot)}
+                                  onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                                  onAddToTrip={() => setAddToTripSpot(spot)}
+                                  onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="space-y-2">
+                {displaySpots.map(spot => (
+                  <SpotCard
+                    key={spot.id}
+                    spot={spot}
+                    onEdit={() => openEdit(spot)}
+                    onDelete={() => deleteMut.mutate(spot.id)}
+                    onShare={() => setShareSpot(spot)}
+                    onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                    onAddToTrip={() => setAddToTripSpot(spot)}
+                    onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ══ TRIPS ════════════════════════════════════════════════════════════ */}
+      {mainTab === "trips" && (
+        <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
+          <TripsTab spots={spots} />
+        </div>
+      )}
+
+      {/* ══ EVENTS ═══════════════════════════════════════════════════════════ */}
+      {mainTab === "events" && (
+        <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
+          <EventsTab />
+        </div>
+      )}
 
       {/* ── Hidden CSV input ──────────────────────────────────────────────────── */}
       <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
@@ -2417,6 +2435,7 @@ function TripsTab({ spots }: { spots: Spot[] }) {
   const { toast } = useToast();
 
   // Trips state
+  const [tripsSubTab, setTripsSubTab] = useState<"upcoming" | "past">("upcoming");
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripModal, setTripModal] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
@@ -2805,28 +2824,47 @@ function TripsTab({ spots }: { spots: Spot[] }) {
   }
 
   // ─── Trips List View ───────────────────────────────────────────────────────
+  const today = new Date().toISOString().split("T")[0];
+  const upcomingTrips = trips.filter(t => !t.endDate || t.endDate >= today);
+  const pastTrips     = trips.filter(t => t.endDate && t.endDate < today);
+  const displayedTrips = tripsSubTab === "upcoming" ? upcomingTrips : pastTrips;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-base font-semibold flex items-center gap-2"><Plane size={16} className="text-primary" /> Trip Planning</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Plan itineraries with day-by-day stops</p>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex gap-1 border-b flex-1 mr-3">
+          {([
+            { value: "upcoming" as const, label: `Upcoming (${upcomingTrips.length})` },
+            { value: "past"     as const, label: `Past (${pastTrips.length})` },
+          ] as const).map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setTripsSubTab(tab.value)}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px ${
+                tripsSubTab === tab.value
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-        <Button size="sm" onClick={openNewTrip} className="gap-1.5">
+        <Button size="sm" onClick={openNewTrip} className="gap-1.5 shrink-0">
           <Plus size={13} /> New Trip
         </Button>
       </div>
 
-      {trips.length === 0 ? (
+      {displayedTrips.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <Plane size={40} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-medium">No trips yet</p>
-          <p className="text-xs mt-1">Create your first trip to start planning your itinerary.</p>
-          <Button size="sm" className="mt-4 gap-1.5" onClick={openNewTrip}><Plus size={13} /> Create Trip</Button>
+          <p className="text-sm font-medium">{tripsSubTab === "upcoming" ? "No upcoming trips" : "No past trips"}</p>
+          {tripsSubTab === "upcoming" && <p className="text-xs mt-1">Create a trip to start planning your itinerary.</p>}
+          {tripsSubTab === "upcoming" && <Button size="sm" className="mt-4 gap-1.5" onClick={openNewTrip}><Plus size={13} /> Create Trip</Button>}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {trips.map((trip) => (
+          {displayedTrips.map((trip) => (
             <button
               key={trip.id}
               onClick={() => setSelectedTrip(trip)}
