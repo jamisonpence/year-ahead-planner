@@ -2089,7 +2089,7 @@ function FamilyTreeSection() {
     }
 
     function elbowPath(x1: number, y1: number, x2: number, y2: number) {
-      const midY = y1 + (y2 - y1) * 0.5;
+      const midY = y1 + (y2 - y1) * 0.35;
       return `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x1.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
     }
     function vertPath(x: number, y1: number, y2: number) {
@@ -2097,7 +2097,7 @@ function FamilyTreeSection() {
     }
     function railPath(parentCx: number, parentBottom: number, childCenters: number[], childTop: number) {
       if (childCenters.length === 0) return [];
-      const railY = parentBottom + (childTop - parentBottom) * 0.45;
+      const railY = parentBottom + (childTop - parentBottom) * 0.35;
       const left  = Math.min(...childCenters, parentCx);
       const right = Math.max(...childCenters, parentCx);
       const paths: string[] = [];
@@ -2528,7 +2528,7 @@ function FamilyTreeSection() {
                 ) : null}
 
                 {/* spacer between grandparents and parents */}
-                {(grandparents.length > 0 || greatGrandparents.length > 0) && parents.length > 0 && <div className="h-14" />}
+                {(grandparents.length > 0 || greatGrandparents.length > 0) && parents.length > 0 && <div className="h-10" />}
 
                 {/* ── Parents + Aunts/Uncles ── */}
                 {parents.length > 0 && (
@@ -2583,12 +2583,12 @@ function FamilyTreeSection() {
                 )}
 
                 {/* spacer */}
-                {(parents.length > 0 || grandparents.length > 0) && yourGen.length > 0 && <div className="h-14" />}
+                {(parents.length > 0 || grandparents.length > 0) && yourGen.length > 0 && <div className="h-10" />}
 
                 {/* ── Your Generation: siblings | you ═══ spouse ── */}
                 {yourGen.length > 0 && (
                   <>
-                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Your Generation</p>
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-2">Your Generation</p>
                     <div className="flex items-start justify-center gap-6 flex-wrap">
                       {/* Siblings to the left */}
                       {siblings.map(m => (
@@ -2613,12 +2613,12 @@ function FamilyTreeSection() {
                 )}
 
                 {/* spacer */}
-                {yourGen.length > 0 && children.length > 0 && <div className="h-14" />}
+                {yourGen.length > 0 && children.length > 0 && <div className="h-8" />}
 
                 {/* ── Children ── */}
                 {children.length > 0 && (
                   <>
-                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Children</p>
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-2">Children</p>
                     <div className="flex flex-wrap justify-center gap-8">
                       {children.map(m => (
                         <div key={m.id} ref={setNodeRef2(`ch-${m.id}`, `node-${m.id}`)}>
@@ -2630,12 +2630,12 @@ function FamilyTreeSection() {
                 )}
 
                 {/* spacer */}
-                {children.length > 0 && grandchildren.length > 0 && <div className="h-14" />}
+                {children.length > 0 && grandchildren.length > 0 && <div className="h-8" />}
 
                 {/* ── Grandchildren ── */}
                 {grandchildren.length > 0 && (
                   <>
-                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandchildren</p>
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-2">Grandchildren</p>
                     <div className="flex flex-wrap justify-center gap-8">
                       {grandchildren.map(m => (
                         <div key={m.id} ref={setNodeRef2(`gc-${m.id}`, `node-${m.id}`)}>
