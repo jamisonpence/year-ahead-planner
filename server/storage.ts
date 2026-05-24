@@ -1025,6 +1025,8 @@ export async function initializeStorage() {
       birth_place TEXT,
       notes TEXT,
       is_deceased INTEGER DEFAULT 0,
+      parent1_id INTEGER,
+      parent2_id INTEGER,
       created_at TEXT NOT NULL
     )
   `);
@@ -1582,6 +1584,10 @@ export async function initializeStorage() {
       UNIQUE (message_id, user_id, emoji)
     )
   `);
+
+  // Parent-child links on family_members
+  await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent1_id INTEGER`);
+  await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent2_id INTEGER`);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -5057,27 +5063,34 @@ export const storage: IStorage = {
     return rows.map((r: any) => ({
       id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
       role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
-      birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at,
+      birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased,
+      parent1Id: r.parent1_id ?? null, parent2Id: r.parent2_id ?? null,
+      createdAt: r.created_at,
     }));
   },
-  async addFamilyMember(userId: number, data: { name: string; gender?: string; role?: string; side?: string; birthYear?: number; deathYear?: number; birthPlace?: string; notes?: string; isDeceased?: number }) {
+  async addFamilyMember(userId: number, data: { name: string; gender?: string; role?: string; side?: string; birthYear?: number; deathYear?: number; birthPlace?: string; notes?: string; isDeceased?: number; parent1Id?: number | null; parent2Id?: number | null }) {
     const { rows } = await pool.query(
-      `INSERT INTO family_members (user_id, name, gender, role, side, birth_year, death_year, birth_place, notes, is_deceased, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO family_members (user_id, name, gender, role, side, birth_year, death_year, birth_place, notes, is_deceased, parent1_id, parent2_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [userId, data.name, data.gender ?? "unknown", data.role ?? "other", data.side ?? "none",
        data.birthYear ?? null, data.deathYear ?? null, data.birthPlace ?? null,
-       data.notes ?? null, data.isDeceased ?? 0, new Date().toISOString()]
+       data.notes ?? null, data.isDeceased ?? 0,
+       data.parent1Id ?? null, data.parent2Id ?? null,
+       new Date().toISOString()]
     );
     const r = rows[0];
     return { id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
              role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
-             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at };
+             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased,
+             parent1Id: r.parent1_id ?? null, parent2Id: r.parent2_id ?? null,
+             createdAt: r.created_at };
   },
-  async updateFamilyMember(id: number, userId: number, data: Partial<{ name: string; gender: string; role: string; side: string; birthYear: number | null; deathYear: number | null; birthPlace: string; notes: string; isDeceased: number }>) {
+  async updateFamilyMember(id: number, userId: number, data: Partial<{ name: string; gender: string; role: string; side: string; birthYear: number | null; deathYear: number | null; birthPlace: string; notes: string; isDeceased: number; parent1Id: number | null; parent2Id: number | null }>) {
     const fieldMap: Record<string, string> = {
       name: "name", gender: "gender", role: "role", side: "side",
       birthYear: "birth_year", deathYear: "death_year", birthPlace: "birth_place",
       notes: "notes", isDeceased: "is_deceased",
+      parent1Id: "parent1_id", parent2Id: "parent2_id",
     };
     const fields: string[] = []; const values: any[] = [];
     let idx = 1;
@@ -5094,7 +5107,9 @@ export const storage: IStorage = {
     if (!r) return null;
     return { id: r.id, userId: r.user_id, name: r.name, gender: r.gender,
              role: r.role, side: r.side, birthYear: r.birth_year, deathYear: r.death_year,
-             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased, createdAt: r.created_at };
+             birthPlace: r.birth_place, notes: r.notes, isDeceased: r.is_deceased,
+             parent1Id: r.parent1_id ?? null, parent2Id: r.parent2_id ?? null,
+             createdAt: r.created_at };
   },
   async deleteFamilyMember(id: number, userId: number) {
     const result = await pool.query(

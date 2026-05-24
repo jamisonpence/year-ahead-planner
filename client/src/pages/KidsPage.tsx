@@ -1903,6 +1903,8 @@ const GENDER_COLORS: Record<string, string> = {
 const EMPTY_MEMBER_FORM = {
   name: "", gender: "unknown", role: "other", side: "none",
   birthYear: "", deathYear: "", birthPlace: "", notes: "", isDeceased: false,
+  parent1Id: null as number | null,
+  parent2Id: null as number | null,
 };
 
 // ── Tree node helpers ─────────────────────────────────────────────────────────
@@ -2057,6 +2059,13 @@ function FamilyTreeSection() {
     return (el: HTMLDivElement | null) => {
       if (el) nodeRefs.current.set(key, el);
       else nodeRefs.current.delete(key);
+    };
+  }
+  // Register element under two keys at once (specific key + universal `node-{id}`)
+  function setNodeRef2(key1: string, key2: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) { nodeRefs.current.set(key1, el); nodeRefs.current.set(key2, el); }
+      else { nodeRefs.current.delete(key1); nodeRefs.current.delete(key2); }
     };
   }
 
@@ -2242,6 +2251,20 @@ function FamilyTreeSection() {
       }
     }
 
+    // ── Explicit parent-child links ─────────────────────────────────────────────
+    const COL_LINK = "#10b981";
+    members.forEach((m: any) => {
+      if (!m.parent1Id && !m.parent2Id) return;
+      const childBox = getBox(`node-${m.id}`);
+      if (!childBox) return;
+      [m.parent1Id, m.parent2Id].filter(Boolean).forEach((pid: number) => {
+        const parentBox = getBox(`node-${pid}`);
+        if (parentBox) {
+          newPaths.push({ d: elbowPath(parentBox.cx, parentBox.bottom, childBox.cx, childBox.top), color: COL_LINK, dashed: true });
+        }
+      });
+    });
+
     setSvgPaths(newPaths);
   }
 
@@ -2264,6 +2287,8 @@ function FamilyTreeSection() {
       name: m.name, gender: m.gender ?? "unknown", role: m.role, side: m.side ?? "none",
       birthYear: m.birthYear?.toString() ?? "", deathYear: m.deathYear?.toString() ?? "",
       birthPlace: m.birthPlace ?? "", notes: m.notes ?? "", isDeceased: !!m.isDeceased,
+      parent1Id: (m as any).parent1Id ?? null,
+      parent2Id: (m as any).parent2Id ?? null,
     });
     setShowModal(true);
   }
@@ -2275,6 +2300,8 @@ function FamilyTreeSection() {
       deathYear: form.deathYear ? parseInt(form.deathYear) : null,
       birthPlace: form.birthPlace || null, notes: form.notes || null,
       isDeceased: form.isDeceased ? 1 : 0,
+      parent1Id: form.parent1Id,
+      parent2Id: form.parent2Id,
     };
     if (editing) updateMut.mutate({ id: editing.id, data: payload });
     else addMut.mutate(payload);
@@ -2453,7 +2480,11 @@ function FamilyTreeSection() {
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Great-Grandparents</p>
                     <div ref={setNodeRef("ggp")} className="flex flex-wrap justify-center gap-8">
-                      {greatGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      {greatGrandparents.map(m => (
+                        <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                     <div className="h-14" />
                   </>
@@ -2465,13 +2496,21 @@ function FamilyTreeSection() {
                     {/* Paternal grandparents */}
                     {patGrandparents.length > 0 && (
                       <div ref={setNodeRef("patGP")} className="flex gap-8">
-                        {patGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                        {patGrandparents.map(m => (
+                          <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                            <FamilyTreeNode {...cardProps(m)} />
+                          </div>
+                        ))}
                       </div>
                     )}
                     {/* Maternal grandparents */}
                     {matGrandparents.length > 0 && (
                       <div ref={setNodeRef("matGP")} className="flex gap-8">
-                        {matGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                        {matGrandparents.map(m => (
+                          <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                            <FamilyTreeNode {...cardProps(m)} />
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -2479,7 +2518,11 @@ function FamilyTreeSection() {
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandparents</p>
                     <div ref={setNodeRef("gpAll")} className="flex flex-wrap justify-center gap-8">
-                      {grandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      {grandparents.map(m => (
+                        <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                   </>
                 ) : null}
@@ -2497,12 +2540,12 @@ function FamilyTreeSection() {
                       {(patAUs.length > 0 || patFathers.length > 0) && (
                         <div className="flex items-start gap-6">
                           {patAUs.map(m => (
-                            <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`au-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
                           {patFathers.map(m => (
-                            <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`p-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
@@ -2512,12 +2555,12 @@ function FamilyTreeSection() {
                       {(matMothers.length > 0 || matAUs.length > 0) && (
                         <div className="flex items-start gap-6">
                           {matMothers.map(m => (
-                            <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`p-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
                           {matAUs.map(m => (
-                            <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`au-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
@@ -2525,13 +2568,13 @@ function FamilyTreeSection() {
                       )}
                       {/* No-side core parents */}
                       {noSideCoreParents.map(m => (
-                        <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`p-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
                       {/* No-side AUs */}
                       {noSideAUs.map(m => (
-                        <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`au-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
@@ -2549,19 +2592,19 @@ function FamilyTreeSection() {
                     <div className="flex items-start justify-center gap-6 flex-wrap">
                       {/* Siblings to the left */}
                       {siblings.map(m => (
-                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`yg-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
                       {/* You */}
                       {selfNodes.map(m => (
-                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`yg-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
                       {/* Spouse(s) directly adjacent to you */}
                       {spouseNodes.map(m => (
-                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`yg-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
@@ -2578,7 +2621,7 @@ function FamilyTreeSection() {
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Children</p>
                     <div className="flex flex-wrap justify-center gap-8">
                       {children.map(m => (
-                        <div key={m.id} ref={setNodeRef(`ch-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`ch-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
@@ -2595,7 +2638,7 @@ function FamilyTreeSection() {
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandchildren</p>
                     <div className="flex flex-wrap justify-center gap-8">
                       {grandchildren.map(m => (
-                        <div key={m.id} ref={setNodeRef(`gc-${m.id}`)}>
+                        <div key={m.id} ref={setNodeRef2(`gc-${m.id}`, `node-${m.id}`)}>
                           <FamilyTreeNode {...cardProps(m)} />
                         </div>
                       ))}
@@ -2627,7 +2670,7 @@ function FamilyTreeSection() {
                         <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Cousins</p>
                         <div className="flex flex-wrap justify-center gap-6">
                           {cousins.map(m => (
-                            <div key={m.id} ref={setNodeRef(`ext-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`ext-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
@@ -2641,7 +2684,7 @@ function FamilyTreeSection() {
                         <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Nieces &amp; Nephews</p>
                         <div className="flex flex-wrap justify-center gap-6">
                           {niecesNephews.map(m => (
-                            <div key={m.id} ref={setNodeRef(`ext-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`ext-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
@@ -2669,18 +2712,30 @@ function FamilyTreeSection() {
                           <div className="flex justify-center gap-16 w-full">
                             {patInLawGPs.length > 0 && (
                               <div ref={setNodeRef("ilGP-pat")} className="flex gap-6">
-                                {patInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                                {patInLawGPs.map(m => (
+                                  <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                    <FamilyTreeNode {...cardProps(m)} />
+                                  </div>
+                                ))}
                               </div>
                             )}
                             {matInLawGPs.length > 0 && (
                               <div ref={setNodeRef("ilGP-mat")} className="flex gap-6">
-                                {matInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                                {matInLawGPs.map(m => (
+                                  <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                    <FamilyTreeNode {...cardProps(m)} />
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
                         ) : (
                           <div ref={setNodeRef("ilGP-all")} className="flex flex-wrap justify-center gap-6">
-                            {noSideInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                            {noSideInLawGPs.map(m => (
+                              <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                <FamilyTreeNode {...cardProps(m)} />
+                              </div>
+                            ))}
                           </div>
                         )}
                       </>
@@ -2698,18 +2753,30 @@ function FamilyTreeSection() {
                           <div className="flex justify-center gap-16 w-full">
                             {patInLawParents.length > 0 && (
                               <div ref={setNodeRef("ilP-pat")} className="flex gap-6">
-                                {patInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                                {patInLawParents.map(m => (
+                                  <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                    <FamilyTreeNode {...cardProps(m)} />
+                                  </div>
+                                ))}
                               </div>
                             )}
                             {matInLawParents.length > 0 && (
                               <div ref={setNodeRef("ilP-mat")} className="flex gap-6">
-                                {matInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                                {matInLawParents.map(m => (
+                                  <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                    <FamilyTreeNode {...cardProps(m)} />
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
                         ) : (
                           <div ref={setNodeRef("ilP-all")} className="flex flex-wrap justify-center gap-6">
-                            {noSideInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                            {noSideInLawParents.map(m => (
+                              <div key={m.id} ref={setNodeRef(`node-${m.id}`)}>
+                                <FamilyTreeNode {...cardProps(m)} />
+                              </div>
+                            ))}
                           </div>
                         )}
                       </>
@@ -2722,7 +2789,7 @@ function FamilyTreeSection() {
                         <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Siblings-in-Law</p>
                         <div className="flex flex-wrap justify-center gap-6">
                           {inLawSiblings.map(m => (
-                            <div key={m.id} ref={setNodeRef(`ilSib-${m.id}`)}>
+                            <div key={m.id} ref={setNodeRef2(`ilSib-${m.id}`, `node-${m.id}`)}>
                               <FamilyTreeNode {...cardProps(m)} />
                             </div>
                           ))}
@@ -2818,6 +2885,69 @@ function FamilyTreeSection() {
               <Textarea placeholder="Stories, memories, or anything notable…" rows={2}
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 className="resize-none text-sm" />
+            </div>
+
+            {/* Parent links */}
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Parent Links</p>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Parent 1 (Father / Parent A)</label>
+                <Select
+                  value={form.parent1Id?.toString() ?? "none"}
+                  onValueChange={v => setForm(f => ({ ...f, parent1Id: v === "none" ? null : parseInt(v) }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {members
+                      .filter(m => !editing || m.id !== editing.id)
+                      .map(m => (
+                        <SelectItem key={m.id} value={m.id.toString()}>
+                          {m.name} ({getNodeLabel(m)})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Parent 2 (Mother / Parent B)</label>
+                <Select
+                  value={form.parent2Id?.toString() ?? "none"}
+                  onValueChange={v => setForm(f => ({ ...f, parent2Id: v === "none" ? null : parseInt(v) }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {members
+                      .filter(m => !editing || m.id !== editing.id)
+                      .map(m => (
+                        <SelectItem key={m.id} value={m.id.toString()}>
+                          {m.name} ({getNodeLabel(m)})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Children section — read-only, show who lists this person as parent */}
+              {editing && (() => {
+                const myChildren = members.filter(m =>
+                  (m as any).parent1Id === editing.id || (m as any).parent2Id === editing.id
+                );
+                if (myChildren.length === 0) return null;
+                return (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Children</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {myChildren.map(c => (
+                        <span key={c.id} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium border">
+                          {c.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer select-none">

@@ -882,13 +882,15 @@ export const familyMembers = pgTable("family_members", {
   userId:     integer("user_id").notNull(),
   name:       text("name").notNull(),
   gender:     text("gender").default("unknown"),          // male | female | other | unknown
-  role:       text("role").notNull().default("other"),    // great_grandparent | grandparent | parent | aunt_uncle | self | spouse | sibling | child | grandchild | other
+  role:       text("role").notNull().default("other"),
   side:       text("side").default("none"),               // paternal | maternal | none
   birthYear:  integer("birth_year"),
   deathYear:  integer("death_year"),
   birthPlace: text("birth_place"),
   notes:      text("notes"),
-  isDeceased: integer("is_deceased").default(0),         // 0 | 1
+  isDeceased: integer("is_deceased").default(0),
+  parent1Id:  integer("parent1_id"),                     // explicit parent link (mother/parent A)
+  parent2Id:  integer("parent2_id"),                     // explicit parent link (father/parent B)
   createdAt:  text("created_at").notNull(),
 });
 export type FamilyMember = typeof familyMembers.$inferSelect;
