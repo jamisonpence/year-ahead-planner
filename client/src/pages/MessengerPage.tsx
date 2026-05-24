@@ -231,8 +231,18 @@ function ShareDetailModal({ payload, onClose }: { payload: SharePayload; onClose
   const renderDetails = () => {
     if (payload.shareType === 'recipe') {
       const totalMins = (d.prepTime ?? 0) + (d.cookTime ?? 0);
-      let ingredients: string[] = [];
-      try { ingredients = JSON.parse(d.ingredientsJson ?? '[]'); } catch {}
+      // ingredientsJson stores { name: string; qty: string }[] objects
+      let ingredients: { name: string; qty: string }[] = [];
+      try {
+        const parsed = JSON.parse(d.ingredientsJson ?? '[]');
+        if (Array.isArray(parsed)) {
+          ingredients = parsed.map((ing: any) =>
+            typeof ing === 'string'
+              ? { name: ing, qty: '' }
+              : { name: String(ing.name ?? ''), qty: String(ing.qty ?? '') }
+          );
+        }
+      } catch {}
 
       return (
         <div className="space-y-4">
@@ -261,10 +271,10 @@ function ShareDetailModal({ payload, onClose }: { payload: SharePayload; onClose
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Ingredients</p>
               <ul className="space-y-1">
-                {ingredients.map((ing: string, i: number) => (
+                {ingredients.map((ing, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: meta.color }} />
-                    {ing}
+                    <span>{[ing.qty, ing.name].filter(Boolean).join(' ')}</span>
                   </li>
                 ))}
               </ul>
@@ -463,7 +473,10 @@ function ShareCard({ shareType, shareData, isOwn }: {
   catch { return <span className="text-xs text-muted-foreground italic">Shared item</span>; }
 
   const meta = SHARE_TYPE_META[shareType] ?? { icon: <Gift size={14} />, color: "#6b7280", label: "Share" };
-  const hasDetails = !!(payload.details || payload.imageUrl);
+  const hasDetails = !!(
+    payload.details &&
+    Object.values(payload.details).some(v => v != null && v !== '' && v !== '[]' && v !== '{}')
+  );
 
   return (
     <>
