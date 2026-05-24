@@ -1520,6 +1520,151 @@ function AddNoteModal({ people, onClose, onSaved, editEntry }: {
   );
 }
 
+// ── Friends Highlights ────────────────────────────────────────────────────────
+// Surfaces birthdays today, upcoming birthdays, and overdue Keep-in-Touch nudges
+function FriendsHighlights({ people }: { people: PersonWithSpouse[] }) {
+  const today = new Date();
+
+  // ── Birthdays today ───────────────────────────────────────────────────────
+  const birthdaysToday = people.filter((p) => {
+    if (!p.birthday) return false;
+    const bd = parseISO(p.birthday);
+    return bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+  });
+
+  // ── Upcoming birthdays (next 14 days, not today) ──────────────────────────
+  const upcomingBirthdays = people
+    .filter((p) => {
+      if (!p.birthday) return false;
+      const { daysAway } = nextBirthday(p.birthday);
+      return daysAway > 0 && daysAway <= 14;
+    })
+    .sort((a, b) => nextBirthday(a.birthday!).daysAway - nextBirthday(b.birthday!).daysAway);
+
+  // ── Overdue Keep-in-Touch contacts ────────────────────────────────────────
+  const overdueReach = people
+    .filter((p) => {
+      const freq = (p as any).keepInTouchFrequency as string | null;
+      if (!freq || freq === "never") return false;
+      const freqData = KIT_FREQUENCIES.find((f) => f.key === freq);
+      if (!freqData?.days) return false;
+      const nextDate = nextContactDate((p as any).lastContactedAt, freqData.days);
+      return nextDate <= today;
+    })
+    .sort((a, b) => {
+      const aFreq = KIT_FREQUENCIES.find((f) => f.key === (a as any).keepInTouchFrequency);
+      const bFreq = KIT_FREQUENCIES.find((f) => f.key === (b as any).keepInTouchFrequency);
+      const aNext = aFreq?.days ? nextContactDate((a as any).lastContactedAt, aFreq.days) : today;
+      const bNext = bFreq?.days ? nextContactDate((b as any).lastContactedAt, bFreq.days) : today;
+      return aNext.getTime() - bNext.getTime(); // oldest overdue first
+    });
+
+  if (birthdaysToday.length === 0 && upcomingBirthdays.length === 0 && overdueReach.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Birthdays today */}
+      {birthdaysToday.map((p) => (
+        <div
+          key={p.id}
+          className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40"
+        >
+          <span className="text-2xl shrink-0">🎂</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold leading-tight">
+              {fullName(p)}'s birthday is{" "}
+              <span className="text-amber-600 dark:text-amber-400">today!</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Don't forget to wish them a happy birthday 🎉</p>
+          </div>
+        </div>
+      ))}
+
+      {/* Upcoming birthdays */}
+      {upcomingBirthdays.length > 0 && (
+        <div className="rounded-2xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/30">
+            <Cake size={12} className="text-muted-foreground" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Upcoming Birthdays</p>
+          </div>
+          <div className="divide-y divide-border">
+            {upcomingBirthdays.map((p) => {
+              const { daysAway, label } = nextBirthday(p.birthday!);
+              return (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                    {initials(p.firstName, p.lastName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{fullName(p)}</p>
+                    <p className="text-xs text-muted-foreground">{formatBirthday(p.birthday!)}</p>
+                  </div>
+                  <span
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                      daysAway <= 3
+                        ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Overdue reach-outs */}
+      {overdueReach.length > 0 && (
+        <div className="rounded-2xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/30">
+            <Bell size={12} className="text-muted-foreground" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Time to Reach Out</p>
+          </div>
+          <div className="divide-y divide-border">
+            {overdueReach.slice(0, 6).map((p) => {
+              const freq = (p as any).keepInTouchFrequency as string;
+              const freqData = KIT_FREQUENCIES.find((f) => f.key === freq);
+              const freqDays = freqData?.days ?? 0;
+              const nextDate = nextContactDate((p as any).lastContactedAt, freqDays);
+              const daysOverdue = Math.round((today.getTime() - nextDate.getTime()) / 86400000);
+              const isUrgent = daysOverdue > 30;
+              return (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                    {initials(p.firstName, p.lastName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{fullName(p)}</p>
+                    <p className="text-xs text-muted-foreground">{freqData?.label}</p>
+                  </div>
+                  <span
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                      isUrgent
+                        ? "bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400"
+                        : "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {daysOverdue === 0 ? "Due today" : `${daysOverdue}d overdue`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {overdueReach.length > 6 && (
+            <div className="px-4 py-2 border-t bg-muted/20">
+              <p className="text-xs text-muted-foreground">+{overdueReach.length - 6} more in Keep in Touch</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TimelineSection({ people }: { people: PersonWithSpouse[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -3009,7 +3154,12 @@ export default function RelationshipsPage() {
       </div>
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
-      {socialTab === "friends" && <FriendsSocialHub />}
+      {socialTab === "friends" && (
+        <div className="space-y-4">
+          <FriendsHighlights people={allPeople} />
+          <FriendsSocialHub />
+        </div>
+      )}
 
       {/* ── Keep in Touch ─────────────────────────────────────────────────────── */}
       {socialTab === "keepintouch" && (
