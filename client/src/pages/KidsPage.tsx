@@ -1860,16 +1860,24 @@ export default function KidsPage() {
 // ── Family Tree ───────────────────────────────────────────────────────────────
 
 const ROLES = [
-  { value: "great_grandparent", label: "Great-Grandparent", emoji: "👴", generation: 0 },
-  { value: "grandparent",       label: "Grandparent",       emoji: "🧓", generation: 1 },
-  { value: "parent",            label: "Parent",            emoji: "👨‍👧", generation: 2 },
-  { value: "aunt_uncle",        label: "Aunt / Uncle",      emoji: "🧑", generation: 2 },
-  { value: "sibling",           label: "Sibling",           emoji: "🧑‍🤝‍🧑", generation: 3 },
-  { value: "self",              label: "Me",                emoji: "⭐", generation: 3 },
-  { value: "spouse",            label: "Spouse / Partner",  emoji: "💑", generation: 3 },
-  { value: "child",             label: "Child",             emoji: "👶", generation: 4 },
-  { value: "grandchild",        label: "Grandchild",        emoji: "🍼", generation: 5 },
-  { value: "other",             label: "Other",             emoji: "👤", generation: 6 },
+  // ── Your direct line ──────────────────────────────────────────────────────
+  { value: "great_grandparent",   label: "Great-Grandparent",     emoji: "👴", generation: 0 },
+  { value: "grandparent",         label: "Grandparent",           emoji: "🧓", generation: 1 },
+  { value: "parent",              label: "Parent",                emoji: "👨‍👧", generation: 2 },
+  { value: "aunt_uncle",          label: "Aunt / Uncle",          emoji: "🧑", generation: 2 },
+  { value: "cousin",              label: "Cousin",                emoji: "🧑‍🤝‍🧑", generation: 3 },
+  { value: "sibling",             label: "Sibling",               emoji: "🧑‍🤝‍🧑", generation: 3 },
+  { value: "self",                label: "Me",                    emoji: "⭐", generation: 3 },
+  { value: "spouse",              label: "Spouse / Partner",      emoji: "💑", generation: 3 },
+  { value: "niece_nephew",        label: "Niece / Nephew",        emoji: "🧒", generation: 4 },
+  { value: "child",               label: "Child",                 emoji: "👶", generation: 4 },
+  { value: "grandchild",          label: "Grandchild",            emoji: "🍼", generation: 5 },
+  // ── Spouse's family ───────────────────────────────────────────────────────
+  { value: "in_law_grandparent",  label: "Grandparent-in-Law",    emoji: "👴", generation: 1 },
+  { value: "in_law_parent",       label: "Parent-in-Law",         emoji: "👨‍👧", generation: 2 },
+  { value: "in_law_sibling",      label: "Sibling-in-Law",        emoji: "🧑‍🤝‍🧑", generation: 3 },
+  // ── Other ─────────────────────────────────────────────────────────────────
+  { value: "other",               label: "Other",                 emoji: "👤", generation: 6 },
 ];
 
 const SIDES = [
@@ -1900,31 +1908,41 @@ const EMPTY_MEMBER_FORM = {
 // ── Tree node helpers ─────────────────────────────────────────────────────────
 
 function getNodeColor(m: FamilyMember): string {
-  if (m.role === "self")             return "#0f766e";
-  if (m.role === "sibling")          return "#0d9488";
-  if (m.role === "spouse")           return "#7c3aed";
-  if (m.role === "child")            return "#0e7490";
-  if (m.role === "grandchild")       return "#155e75";
-  if (m.role === "great_grandparent") return "#475569";
-  if (m.role === "aunt_uncle")       return "#6d28d9";
-  if (m.role === "other")            return "#475569";
+  if (m.role === "self")               return "#0f766e";
+  if (m.role === "sibling")            return "#0d9488";
+  if (m.role === "spouse")             return "#7c3aed";
+  if (m.role === "child")              return "#0e7490";
+  if (m.role === "grandchild")         return "#155e75";
+  if (m.role === "great_grandparent")  return "#475569";
+  if (m.role === "aunt_uncle")         return "#6d28d9";
+  if (m.role === "cousin")             return "#8b5cf6";
+  if (m.role === "niece_nephew")       return "#0891b2";
+  if (m.role === "in_law_grandparent") return "#92400e";
+  if (m.role === "in_law_parent")      return "#b45309";
+  if (m.role === "in_law_sibling")     return "#d97706";
+  if (m.role === "other")              return "#475569";
   // grandparent / parent → use side for color
-  if (m.side === "paternal")         return "#1d4ed8";
-  if (m.side === "maternal")         return "#c2410c";
+  if (m.side === "paternal")           return "#1d4ed8";
+  if (m.side === "maternal")           return "#c2410c";
   // fallback by role
-  if (m.role === "grandparent")      return "#1e40af";
-  if (m.role === "parent")           return "#1d4ed8";
+  if (m.role === "grandparent")        return "#1e40af";
+  if (m.role === "parent")             return "#1d4ed8";
   return "#475569";
 }
 
 function getNodeLabel(m: FamilyMember): string {
-  if (m.role === "self")    return "YOU";
-  if (m.role === "sibling") return "SIBLING";
-  if (m.role === "spouse")  return "SPOUSE";
-  if (m.role === "child")   return m.gender === "female" ? "DAUGHTER" : m.gender === "male" ? "SON" : "CHILD";
-  if (m.role === "grandchild") return "GRANDCHILD";
-  if (m.role === "great_grandparent") return "GREAT-GRANDPARENT";
-  if (m.role === "aunt_uncle") return "AUNT / UNCLE";
+  if (m.role === "self")               return "YOU";
+  if (m.role === "sibling")            return m.gender === "female" ? "SISTER" : m.gender === "male" ? "BROTHER" : "SIBLING";
+  if (m.role === "spouse")             return "SPOUSE";
+  if (m.role === "child")              return m.gender === "female" ? "DAUGHTER" : m.gender === "male" ? "SON" : "CHILD";
+  if (m.role === "grandchild")         return "GRANDCHILD";
+  if (m.role === "great_grandparent")  return "GREAT-GRANDPARENT";
+  if (m.role === "aunt_uncle")         return m.gender === "female" ? "AUNT" : m.gender === "male" ? "UNCLE" : "AUNT / UNCLE";
+  if (m.role === "cousin")             return "COUSIN";
+  if (m.role === "niece_nephew")       return m.gender === "female" ? "NIECE" : m.gender === "male" ? "NEPHEW" : "NIECE / NEPHEW";
+  if (m.role === "in_law_grandparent") return m.gender === "female" ? "GRANDMOTHER-IN-LAW" : "GRANDFATHER-IN-LAW";
+  if (m.role === "in_law_parent")      return m.gender === "female" ? "MOTHER-IN-LAW" : "FATHER-IN-LAW";
+  if (m.role === "in_law_sibling")     return m.gender === "female" ? "SISTER-IN-LAW" : m.gender === "male" ? "BROTHER-IN-LAW" : "SIBLING-IN-LAW";
   if (m.role === "grandparent") {
     const side = m.side && m.side !== "none" ? m.side.toUpperCase() + " " : "";
     return side + (m.gender === "female" ? "GRANDMOTHER" : "GRANDFATHER");
@@ -2185,6 +2203,45 @@ function FamilyTreeSection() {
         .forEach(d => newPaths.push({ d, color: COL_TEAL }));
     }
 
+    // ── Spouse's family mini-tree (in-law grandparents → parents → siblings) ──
+    const COL_AMBER = "#d97706";
+
+    // In-law grandparents → in-law parents
+    const ilGPPatBox = getBox("ilGP-pat");
+    const ilGPMatBox = getBox("ilGP-mat");
+    const ilGPAllBox = getBox("ilGP-all");
+    const ilPPatBox  = getBox("ilP-pat");
+    const ilPMatBox  = getBox("ilP-mat");
+    const ilPAllBox  = getBox("ilP-all");
+
+    if (ilGPPatBox && ilPPatBox) newPaths.push({ d: elbowPath(ilGPPatBox.cx, ilGPPatBox.bottom, ilPPatBox.cx, ilPPatBox.top), color: COL_AMBER });
+    if (ilGPMatBox && ilPMatBox) newPaths.push({ d: elbowPath(ilGPMatBox.cx, ilGPMatBox.bottom, ilPMatBox.cx, ilPMatBox.top), color: COL_AMBER });
+    if (ilGPAllBox && ilPAllBox) newPaths.push({ d: elbowPath(ilGPAllBox.cx, ilGPAllBox.bottom, ilPAllBox.cx, ilPAllBox.top), color: COL_AMBER });
+
+    // Marriage line between paternal and maternal in-law parents
+    if (ilPPatBox && ilPMatBox) {
+      const lineY = (Math.max(ilPPatBox.top, ilPMatBox.top) + Math.min(ilPPatBox.bottom, ilPMatBox.bottom)) / 2;
+      newPaths.push({ d: `M ${ilPPatBox.cx.toFixed(1)} ${lineY.toFixed(1)} H ${ilPMatBox.cx.toFixed(1)}`, color: COL_SLATE });
+    }
+
+    // In-law parents → in-law siblings
+    const ilSibBoxes = inLawSiblings.map(m => getBox(`ilSib-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    if (ilSibBoxes.length > 0) {
+      let ilParentMidX: number | null = null;
+      let ilParentBottom: number | null = null;
+      if (ilPPatBox && ilPMatBox) {
+        ilParentMidX   = (ilPPatBox.cx + ilPMatBox.cx) / 2;
+        ilParentBottom = Math.max(ilPPatBox.bottom, ilPMatBox.bottom);
+      } else {
+        const fb = ilPPatBox ?? ilPMatBox ?? ilPAllBox;
+        if (fb) { ilParentMidX = fb.cx; ilParentBottom = fb.bottom; }
+      }
+      if (ilParentMidX !== null && ilParentBottom !== null) {
+        railPath(ilParentMidX, ilParentBottom, ilSibBoxes.map(b => b.cx), ilSibBoxes[0].top)
+          .forEach(d => newPaths.push({ d, color: COL_AMBER }));
+      }
+    }
+
     setSvgPaths(newPaths);
   }
 
@@ -2231,6 +2288,21 @@ function FamilyTreeSection() {
   const children          = members.filter(m => m.role === "child");
   const grandchildren     = members.filter(m => m.role === "grandchild");
   const others            = members.filter(m => m.role === "other");
+
+  // Extended family
+  const cousins           = members.filter(m => m.role === "cousin");
+  const niecesNephews     = members.filter(m => m.role === "niece_nephew");
+  const inLawGrandparents = members.filter(m => m.role === "in_law_grandparent");
+  const inLawParents      = members.filter(m => m.role === "in_law_parent");
+  const inLawSiblings     = members.filter(m => m.role === "in_law_sibling");
+  const patInLawGPs       = inLawGrandparents.filter(m => m.side === "paternal");
+  const matInLawGPs       = inLawGrandparents.filter(m => m.side === "maternal");
+  const noSideInLawGPs    = inLawGrandparents.filter(m => !m.side || m.side === "none");
+  const patInLawParents   = inLawParents.filter(m => m.side === "paternal");
+  const matInLawParents   = inLawParents.filter(m => m.side === "maternal");
+  const noSideInLawParents = inLawParents.filter(m => !m.side || m.side === "none");
+  const hasExtendedFamily = cousins.length > 0 || niecesNephews.length > 0;
+  const hasSpouseFamily   = inLawGrandparents.length > 0 || inLawParents.length > 0 || inLawSiblings.length > 0;
 
   const patGrandparents    = grandparents.filter(m => m.side === "paternal");
   const matGrandparents    = grandparents.filter(m => m.side === "maternal");
@@ -2537,6 +2609,126 @@ function FamilyTreeSection() {
                     <div className="mt-8" />
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Other</p>
                     <NodeRow members={others} cardProps={cardProps} />
+                  </>
+                )}
+
+                {/* ── Extended Family (cousins + nieces/nephews) ── */}
+                {hasExtendedFamily && (
+                  <>
+                    <div className="mt-10 w-full flex items-center gap-3">
+                      <div className="flex-1 h-px bg-border/60" />
+                      <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest shrink-0">Extended Family</p>
+                      <div className="flex-1 h-px bg-border/60" />
+                    </div>
+
+                    {cousins.length > 0 && (
+                      <>
+                        <div className="h-6" />
+                        <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Cousins</p>
+                        <div className="flex flex-wrap justify-center gap-6">
+                          {cousins.map(m => (
+                            <div key={m.id} ref={setNodeRef(`ext-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {niecesNephews.length > 0 && (
+                      <>
+                        <div className="h-6" />
+                        <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Nieces &amp; Nephews</p>
+                        <div className="flex flex-wrap justify-center gap-6">
+                          {niecesNephews.map(m => (
+                            <div key={m.id} ref={setNodeRef(`ext-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* ── Spouse's Family ── */}
+                {hasSpouseFamily && (
+                  <>
+                    <div className="mt-10 w-full flex items-center gap-3">
+                      <div className="flex-1 h-px bg-border/60" />
+                      <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest shrink-0">Spouse's Family</p>
+                      <div className="flex-1 h-px bg-border/60" />
+                    </div>
+
+                    {/* In-law grandparents */}
+                    {inLawGrandparents.length > 0 && (
+                      <>
+                        <div className="h-6" />
+                        <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandparents-in-Law</p>
+                        {(patInLawGPs.length > 0 || matInLawGPs.length > 0) ? (
+                          <div className="flex justify-center gap-16 w-full">
+                            {patInLawGPs.length > 0 && (
+                              <div ref={setNodeRef("ilGP-pat")} className="flex gap-6">
+                                {patInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                              </div>
+                            )}
+                            {matInLawGPs.length > 0 && (
+                              <div ref={setNodeRef("ilGP-mat")} className="flex gap-6">
+                                {matInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div ref={setNodeRef("ilGP-all")} className="flex flex-wrap justify-center gap-6">
+                            {noSideInLawGPs.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Spacer if grandparents and parents both present */}
+                    {inLawGrandparents.length > 0 && inLawParents.length > 0 && <div className="h-14" />}
+
+                    {/* In-law parents */}
+                    {inLawParents.length > 0 && (
+                      <>
+                        {inLawGrandparents.length === 0 && <div className="h-6" />}
+                        <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Parents-in-Law</p>
+                        {(patInLawParents.length > 0 || matInLawParents.length > 0) ? (
+                          <div className="flex justify-center gap-16 w-full">
+                            {patInLawParents.length > 0 && (
+                              <div ref={setNodeRef("ilP-pat")} className="flex gap-6">
+                                {patInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                              </div>
+                            )}
+                            {matInLawParents.length > 0 && (
+                              <div ref={setNodeRef("ilP-mat")} className="flex gap-6">
+                                {matInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div ref={setNodeRef("ilP-all")} className="flex flex-wrap justify-center gap-6">
+                            {noSideInLawParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* In-law siblings */}
+                    {inLawSiblings.length > 0 && (
+                      <>
+                        <div className="h-14" />
+                        <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Siblings-in-Law</p>
+                        <div className="flex flex-wrap justify-center gap-6">
+                          {inLawSiblings.map(m => (
+                            <div key={m.id} ref={setNodeRef(`ilSib-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
 
