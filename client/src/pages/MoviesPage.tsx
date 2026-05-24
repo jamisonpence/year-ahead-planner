@@ -14,7 +14,7 @@ import { format, parseISO } from "date-fns";
 import {
   Film, Plus, Star, Heart, Trash2, Pencil, Search, X, Check,
   Tv2, Clock, ChevronDown, ChevronUp, PlayCircle, Upload, Download, Video, ExternalLink, HelpCircle, Clapperboard,
-  Send, Inbox, CornerUpRight, Youtube, Users, UserPlus, Crown, Eye,
+  Send, Inbox, CornerUpRight, Youtube, Users, UserPlus, Crown, Eye, Loader2,
 } from "lucide-react";
 
 const GENRES = ["Action", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Horror", "Musical", "Romance", "Sci-Fi", "Thriller", "Western"];
@@ -75,6 +75,10 @@ export default function MoviesPage() {
   const [listSelectedMovieIds, setListSelectedMovieIds] = useState<Set<number>>(new Set());
   const [listMovieOrder, setListMovieOrder] = useState<number[]>([]); // ranked order of selected movie IDs
   const [listMovieSearch, setListMovieSearch] = useState("");
+  const [listTmdbResults, setListTmdbResults] = useState<TMDBResult[]>([]);
+  const [listTmdbLoading, setListTmdbLoading] = useState(false);
+  const [listTmdbAddingId, setListTmdbAddingId] = useState<number | null>(null);
+  const listSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listSaving, setListSaving] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -197,7 +201,62 @@ export default function MoviesPage() {
       setListMovieOrder([]);
     }
     setListMovieSearch("");
+    setListTmdbResults([]);
     setListModalOpen(true);
+  }
+
+  // TMDB search for the list modal — fires on each keystroke (debounced)
+  function handleListMovieSearch(val: string) {
+    setListMovieSearch(val);
+    setListTmdbResults([]);
+    if (listSearchDebounceRef.current) clearTimeout(listSearchDebounceRef.current);
+    if (!val.trim()) return;
+    listSearchDebounceRef.current = setTimeout(async () => {
+      setListTmdbLoading(true);
+      try {
+        const r = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(val.trim())}&type=multi`);
+        const data = await r.json();
+        setListTmdbResults(Array.isArray(data) ? data.slice(0, 12) : []);
+      } catch { /* silently fail */ }
+      finally { setListTmdbLoading(false); }
+    }, 350);
+  }
+
+  // Add a TMDB result to the user's collection and then to the list
+  async function addTmdbToList(item: TMDBResult) {
+    setListTmdbAddingId(item.id);
+    try {
+      const isTV = (item as any).media_type === "tv";
+      // Fetch full details for director/genres/poster
+      const detailRes = await apiRequest("GET", `/api/tmdb/${isTV ? "tv" : "movie"}/${item.id}`);
+      const detail: TMDBDetail = await detailRes.json();
+      const title = detail.title || detail.name || "";
+      const year = parseInt((detail.release_date || detail.first_air_date || "").slice(0, 4)) || null;
+      const genres = (detail.genres ?? []).map((g: any) => g.name).join(",") || null;
+      const director = isTV
+        ? (detail.credits?.created_by?.[0]?.name ?? null)
+        : (detail.credits?.crew?.find((c: any) => c.job === "Director")?.name ?? null);
+      const posterUrl = detail.poster_path ? `${TMDB_IMG_BASE}${detail.poster_path}` : null;
+      const payload = {
+        mediaType: isTV ? "show" : "movie",
+        title, year, director, genres,
+        status: "backlog", rating: null, notes: null,
+        listsJson: "[]", isFavorite: false,
+        posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+        streamingOn: null,
+        totalSeasons: isTV ? (detail.number_of_seasons ?? null) : null,
+        currentSeason: null, videoUrl: null, posterUrl,
+      };
+      const created: any = await apiRequest("POST", "/api/movies", payload).then(r => r.json ? r.json() : r);
+      qc.invalidateQueries({ queryKey: ["/api/movies"] });
+      setListSelectedMovieIds(prev => new Set([...prev, created.id]));
+      setListMovieOrder(prev => [...prev, created.id]);
+      toast({ title: `✓ "${title}" added to list` });
+    } catch {
+      toast({ title: "Failed to add title", variant: "destructive" });
+    } finally {
+      setListTmdbAddingId(null);
+    }
   }
 
   async function saveListWithMovies() {
@@ -993,31 +1052,38 @@ export default function MoviesPage() {
               </div>
             )}
 
-            {/* Movie / Show picker */}
-            {allItems.filter((m) => (m.mediaType ?? "movie") !== "video").length > 0 && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {listForm.isRanked ? "Add Titles" : "Add to List"} {listSelectedMovieIds.size > 0 && <span className="normal-case font-normal text-foreground ml-1">({listSelectedMovieIds.size} selected)</span>}
-                </label>
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={listMovieSearch}
-                    onChange={(e) => setListMovieSearch(e.target.value)}
-                    placeholder="Search titles…"
-                    className="pl-7 h-8 text-xs"
-                  />
-                </div>
-                <div className="border rounded-lg max-h-44 overflow-y-auto divide-y">
-                  {(() => {
-                    const pool = allItems
-                      .filter((m) => (m.mediaType ?? "movie") !== "video")
-                      .filter((m) => !listMovieSearch || m.title.toLowerCase().includes(listMovieSearch.toLowerCase()))
-                      .slice(0, 100);
-                    if (pool.length === 0) return (
-                      <p className="text-xs text-muted-foreground p-3 text-center">No titles found.</p>
-                    );
-                    return pool.map((m) => {
+            {/* Movie / Show picker with TMDB search */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {listForm.isRanked ? "Add Titles" : "Add to List"}{listSelectedMovieIds.size > 0 && <span className="normal-case font-normal text-foreground ml-1">({listSelectedMovieIds.size} selected)</span>}
+              </label>
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                {listTmdbLoading && <Loader2 size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                <Input
+                  value={listMovieSearch}
+                  onChange={(e) => handleListMovieSearch(e.target.value)}
+                  placeholder="Search any movie or show…"
+                  className="pl-7 pr-7 h-8 text-xs"
+                />
+              </div>
+
+              {/* Saved collection matches */}
+              {(() => {
+                const pool = allItems
+                  .filter((m) => (m.mediaType ?? "movie") !== "video")
+                  .filter((m) => !listMovieSearch || m.title.toLowerCase().includes(listMovieSearch.toLowerCase()))
+                  .slice(0, 50);
+                if (pool.length === 0 && !listMovieSearch) return null;
+                if (pool.length === 0) return null;
+                return (
+                  <div className="border rounded-lg overflow-hidden divide-y">
+                    {listMovieSearch && (
+                      <div className="px-3 py-1.5 bg-muted/40">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Your Collection</p>
+                      </div>
+                    )}
+                    {pool.map((m) => {
                       const inList = listSelectedMovieIds.has(m.id);
                       const rank = listForm.isRanked ? listMovieOrder.indexOf(m.id) : -1;
                       return (
@@ -1027,15 +1093,8 @@ export default function MoviesPage() {
                           onClick={() => {
                             setListSelectedMovieIds((prev) => {
                               const next = new Set(prev);
-                              if (next.has(m.id)) {
-                                next.delete(m.id);
-                                // Also remove from order
-                                setListMovieOrder((o) => o.filter((id) => id !== m.id));
-                              } else {
-                                next.add(m.id);
-                                // Append to end of order
-                                setListMovieOrder((o) => [...o, m.id]);
-                              }
+                              if (next.has(m.id)) { next.delete(m.id); setListMovieOrder((o) => o.filter((id) => id !== m.id)); }
+                              else { next.add(m.id); setListMovieOrder((o) => [...o, m.id]); }
                               return next;
                             });
                           }}
@@ -1044,6 +1103,7 @@ export default function MoviesPage() {
                           <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${inList ? "bg-primary border-primary" : "border-border"}`}>
                             {inList && <Check size={10} className="text-primary-foreground" />}
                           </div>
+                          {m.posterUrl && <img src={m.posterUrl} alt="" className="w-6 h-9 object-cover rounded shrink-0" />}
                           <span className="flex-1 truncate font-medium">{m.title}</span>
                           {m.year && <span className="text-muted-foreground shrink-0">{m.year}</span>}
                           {listForm.isRanked && inList && rank >= 0 && (
@@ -1052,11 +1112,58 @@ export default function MoviesPage() {
                           {m.mediaType === "show" && <Tv2 size={11} className="text-muted-foreground shrink-0" />}
                         </button>
                       );
-                    });
-                  })()}
-                </div>
-              </div>
-            )}
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* TMDB external results */}
+              {listMovieSearch && listTmdbResults.length > 0 && (() => {
+                const savedTitles = new Set(allItems.map((m) => m.title.toLowerCase()));
+                const external = listTmdbResults.filter((r) => {
+                  const t = (r.title || r.name || "").toLowerCase();
+                  return !savedTitles.has(t);
+                });
+                if (external.length === 0) return null;
+                return (
+                  <div className="border rounded-lg overflow-hidden divide-y">
+                    <div className="px-3 py-1.5 bg-muted/40">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Add from TMDB</p>
+                    </div>
+                    {external.map((r) => {
+                      const isTV = (r as any).media_type === "tv";
+                      const title = r.title || r.name || "";
+                      const year = parseInt((r.release_date || r.first_air_date || "").slice(0, 4)) || null;
+                      const isAdding = listTmdbAddingId === r.id;
+                      return (
+                        <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-secondary/50 transition-colors">
+                          {r.poster_path
+                            ? <img src={`https://image.tmdb.org/t/p/w92${r.poster_path}`} alt="" className="w-6 h-9 object-cover rounded shrink-0" />
+                            : <div className="w-6 h-9 rounded bg-muted shrink-0 flex items-center justify-center"><Film size={10} className="text-muted-foreground" /></div>
+                          }
+                          <span className="flex-1 truncate font-medium">{title}</span>
+                          {year && <span className="text-muted-foreground shrink-0">{year}</span>}
+                          {isTV && <Tv2 size={11} className="text-muted-foreground shrink-0" />}
+                          <button
+                            type="button"
+                            disabled={isAdding}
+                            onClick={() => addTmdbToList(r)}
+                            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[10px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                          >
+                            {isAdding ? <Loader2 size={9} className="animate-spin" /> : <Plus size={9} />}
+                            Add
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {listMovieSearch && !listTmdbLoading && listTmdbResults.length === 0 && allItems.filter((m) => m.title.toLowerCase().includes(listMovieSearch.toLowerCase())).length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-3">No results found for "{listMovieSearch}"</p>
+              )}
+            </div>
           </div>
           <div className="flex justify-between items-center pt-2">
             <div>

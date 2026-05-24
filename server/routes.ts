@@ -4069,7 +4069,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   app.get("/api/tmdb/search", requireAuth, async (req, res) => {
     try {
       const query = String(req.query.q || "").trim();
-      const type = String(req.query.type || "movie"); // "movie" | "tv"
+      const type = String(req.query.type || "movie"); // "movie" | "tv" | "multi"
       if (!query) return res.status(400).json({ error: "q is required" });
       const apiKey = process.env.TMDB_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "TMDB_API_KEY not configured" });
@@ -4077,7 +4077,9 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const tmdbRes = await fetch(url);
       if (!tmdbRes.ok) return res.status(tmdbRes.status).json({ error: "TMDB error" });
       const data = await tmdbRes.json() as any;
-      res.json(data.results ?? []);
+      // For multi-search, filter out persons and normalize fields
+      const results = (data.results ?? []).filter((r: any) => r.media_type !== "person");
+      res.json(results);
     } catch (e) { handleError(res, e); }
   });
 
