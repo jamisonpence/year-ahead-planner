@@ -169,7 +169,7 @@ function MergeContactModal({ open, onClose, person, allPeople, friends }: {
   );
 
   const otherPeople = allPeople.filter(
-    (p) => p.id !== person.id && !(p as any).linkedUserId
+    (p) => p.id !== person.id
   );
 
   const filteredFriends = search
@@ -279,26 +279,36 @@ function MergeContactModal({ open, onClose, person, allPeople, friends }: {
                 {search ? "No contacts match your search" : "No other contacts to merge with"}
               </p>
             ) : (
-              filteredPeople.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card/50 hover:bg-card transition-colors">
-                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0">
-                    {initials(p.firstName, p.lastName)}
+              filteredPeople.map((p) => {
+                const isLinked = !!(p as any).linkedUserId;
+                return (
+                  <div key={p.id} className={`flex items-center gap-3 p-3 rounded-xl border hover:bg-card transition-colors ${isLinked ? "bg-violet-50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800/40" : "bg-card/50"}`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${isLinked ? "bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400" : "bg-muted text-muted-foreground"}`}>
+                      {initials(p.firstName, p.lastName)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-semibold truncate">{fullName(p)}</p>
+                        {isLinked && (
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-700 flex items-center gap-0.5">
+                            <UserCheck size={8} /> MyLifos
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[p.birthday ? formatBirthday(p.birthday) : null].filter(Boolean).join(" · ") || (isLinked ? "Connected on MyLifos" : "No extra info")}
+                      </p>
+                    </div>
+                    <button
+                      disabled={loading}
+                      onClick={() => doMerge({ mergePersonId: p.id })}
+                      className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      Merge
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{fullName(p)}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {[p.company, p.birthday ? formatBirthday(p.birthday) : null].filter(Boolean).join(" · ") || "No extra info"}
-                    </p>
-                  </div>
-                  <button
-                    disabled={loading}
-                    onClick={() => doMerge({ mergePersonId: p.id })}
-                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-                  >
-                    Merge
-                  </button>
-                </div>
-              ))
+                );
+              })
             )
           )}
         </div>
