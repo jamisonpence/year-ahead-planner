@@ -157,6 +157,17 @@ interface GoalTemplate {
   defaults: Partial<HobbyGoal>;
 }
 
+// ── Language-learning hobby detector (used across components) ─────────────────
+
+function isLanguageLearningHobby(hobby: Hobby | null | undefined): boolean {
+  if (!hobby) return false;
+  const n = hobby.name.toLowerCase();
+  return n.includes("language") || n.includes("spanish") || n.includes("french") ||
+    n.includes("german") || n.includes("japanese") || n.includes("mandarin") ||
+    n.includes("italian") || n.includes("portuguese") || n.includes("korean") ||
+    n.includes("arabic") || n.includes("russian") || n.includes("chinese");
+}
+
 // ── Shared buddy helpers ──────────────────────────────────────────────────────
 
 function useFriends() {
@@ -2301,7 +2312,7 @@ function PlanWizard({
   const isClimbingHobby  = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("climb") || n.includes("climbing") || n.includes("bouldering") || n.includes("crag") || n.includes("sport climbing") || n.includes("trad climbing"); })();
   const isRunningHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n === "running" || n.includes("running") || n.includes("marathon") || n.includes("5k") || n.includes("10k") || n.includes("trail run"); })();
   const isSurfingHobby   = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n === "surfing" || n.includes("surfing") || n.includes("surf") || n.includes("longboard") || n.includes("shortboard"); })();
-  const isLangHobby    = (() => { const n = selectedHobby?.name?.toLowerCase() ?? ""; return n.includes("language") || n.includes("spanish") || n.includes("french") || n.includes("german") || n.includes("japanese") || n.includes("mandarin") || n.includes("italian") || n.includes("portuguese") || n.includes("korean") || n.includes("arabic") || n.includes("russian") || n.includes("chinese"); })();
+  const isLangHobby    = isLanguageLearningHobby(selectedHobby);
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
   const templates = isHikingHobby    ? HIKING_PLAN_TEMPLATES
@@ -7610,12 +7621,13 @@ function RunningSection({ hobby, onUpdateExtra }: {
 }
 
 function HobbyDetailDialog({
-  hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra,
+  hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra, onCreateSystemGoal,
 }: {
   hobby: Hobby | null; open: boolean; onClose: () => void; onEdit: () => void;
   onUpdateGoals: (goals: HobbyGoal[]) => void;
   onUpdatePlans: (plans: HobbyPlan[]) => void;
   onUpdateExtra: (newExtraJson: string) => void;
+  onCreateSystemGoal?: (hobby: Hobby, plan: HobbyPlan) => void;
 }) {
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingPlan, setAddingPlan] = useState(false);
@@ -7816,6 +7828,7 @@ function HobbyDetailDialog({
                 createdAt: plan.createdAt,
               };
               onUpdateExtra(setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", [...plans, plan], [...goals, autoGoal]));
+              if (isLanguageLearningHobby(hobby)) onCreateSystemGoal?.(hobby, plan);
               setAddingPlan(false);
             }}
           />
@@ -7899,9 +7912,11 @@ function HobbyDetailDialog({
 function PlansGoalsTab({
   hobbies,
   onUpdateHobby,
+  onCreateSystemGoal,
 }: {
   hobbies: Hobby[];
   onUpdateHobby: (id: number, extraJson: string) => void;
+  onCreateSystemGoal?: (hobby: Hobby, plan: HobbyPlan) => void;
 }) {
   const [planWizardOpen, setPlanWizardOpen] = useState(false);
   const [goalWizardOpen, setGoalWizardOpen] = useState(false);
@@ -8201,6 +8216,7 @@ function PlansGoalsTab({
             [...existingGoals, autoGoal],
           );
           onUpdateHobby(hobbyId, newExtra);
+          if (isLanguageLearningHobby(hobby)) onCreateSystemGoal?.(hobby, plan);
         }}
       />
       <GoalWizard
@@ -8585,6 +8601,37 @@ export default function HobbiesPage() {
 
   const handleToggleFavorite = async (h: Hobby) => { await updateMut.mutateAsync({ id: h.id, data: { isFavorite: !h.isFavorite } }); };
 
+  // ── Create a real Goal in the Goals section when a Language Learning plan is saved ──
+  const createSystemGoalFromPlan = async (hobby: Hobby, plan: HobbyPlan) => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const startDate = plan.startDate || today;
+      let targetDate: string | undefined;
+      if (plan.durationWeeks) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + plan.durationWeeks * 7);
+        targetDate = d.toISOString().slice(0, 10);
+      }
+      await apiRequest("POST", "/api/goals", {
+        title: plan.title,
+        description: plan.description || `Language learning plan for ${hobby.name}`,
+        category: "learning",
+        progressType: "percent",
+        progressCurrent: 0,
+        progressTarget: 100,
+        priority: "medium",
+        startDate,
+        targetDate,
+        recurring: "none",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/goals"] });
+      toast({ title: "🗺️ Goal created!", description: `"${plan.title}" added to your Goals` });
+    } catch {
+      // non-fatal — don't block the plan save
+      console.warn("[createSystemGoalFromPlan] goal creation failed");
+    }
+  };
+
   const handleUpdateGoals = async (hobby: Hobby, goals: HobbyGoal[]) => {
     const newExtraJson = setGoalsInExtra(hobby.extraJson ?? "{}", goals);
     await updateMut.mutateAsync({ id: hobby.id, data: { extraJson: newExtraJson } });
@@ -8644,7 +8691,7 @@ export default function HobbiesPage() {
 
       {/* ── Plans & Goals tab ── */}
       {activeTab === "plans" && (
-        <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} />
+        <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onCreateSystemGoal={createSystemGoalFromPlan} />
       )}
 
       {/* ── Hobbies tab ── */}
@@ -8761,6 +8808,7 @@ export default function HobbiesPage() {
         onUpdateGoals={(goals) => { if (detailHobby) handleUpdateGoals(detailHobby, goals); }}
         onUpdatePlans={(plans) => { if (detailHobby) handleUpdatePlans(detailHobby, plans); }}
         onUpdateExtra={(newJson) => { if (detailHobby) handleUpdateHobbyExtra(detailHobby.id, newJson); }}
+        onCreateSystemGoal={createSystemGoalFromPlan}
       />
     </div>
   );
