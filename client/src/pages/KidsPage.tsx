@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
+import FamilyTreeCanvas from "@/components/FamilyTreeCanvas";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { ChildWithDetails, ChildMilestone, ChildMemory, ChildPrepItem, TabCollaborationWithUser, PetWithVisits, PetVetVisit, FamilyMember } from "@shared/schema";
@@ -2443,8 +2444,12 @@ function FamilyTreeSection() {
           ))}
         </div>
       ) : (
-        /* ── Tree view ── */
-        (() => {
+        /* ── Tree view (interactive canvas) ── */
+        <div className="rounded-xl border overflow-hidden" style={{ height: "68vh", minHeight: 480 }}>
+          <FamilyTreeCanvas />
+        </div>
+      )}
+      {false && (() => {
           const cardProps = (m: FamilyMember) => ({
             member: m,
             onEdit: () => openEdit(m),
@@ -2814,7 +2819,7 @@ function FamilyTreeSection() {
             </div>
           );
         })()
-      )}
+      }
 
       {/* Add / Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
