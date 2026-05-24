@@ -3535,9 +3535,7 @@ function PlanWizard({
                           <p className="text-[10px] text-muted-foreground">Powered by Perenual — results are for inspiration</p>
                           {gardenWizardSearch.results.map((p: any) => (
                             <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card">
-                              {p.default_image?.small_url
-                                ? <img src={p.default_image.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover shrink-0" />
-                                : <div className="w-8 h-8 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-sm">🌿</div>}
+                              <PlantImg src={p.default_image?.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover" />
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium truncate">{p.common_name}</p>
                                 <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
@@ -6730,6 +6728,25 @@ function ClimbingSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── PlantImg — handles Perenual CDN images that 403 on free tier ─────────────
+
+function PlantImg({ src, alt, className, fallbackSize = "text-sm" }: {
+  src: string | undefined | null;
+  alt: string;
+  className: string;
+  fallbackSize?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed || !src) {
+    return (
+      <div className={`${className} bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 ${fallbackSize}`}>
+        🌿
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} className={`${className} shrink-0`} onError={() => setFailed(true)} />;
+}
+
 // ── usePerenualSearch hook ─────────────────────────────────────────────────────
 
 function usePerenualSearch() {
@@ -6868,7 +6885,7 @@ function GardeningSection({ hobby, onUpdateExtra }: {
                   <label className="text-[10px] text-muted-foreground font-medium block mb-0.5">Plant *</label>
                   {logCommonName ? (
                     <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50/60 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                      {logPhotoUrl && <img src={logPhotoUrl} alt={logCommonName} className="w-8 h-8 rounded object-cover shrink-0" />}
+                      <PlantImg src={logPhotoUrl} alt={logCommonName} className="w-8 h-8 rounded object-cover" />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold truncate">{logCommonName}</p>
                         {logSciName && <p className="text-[10px] text-muted-foreground italic truncate">{logSciName}</p>}
@@ -6893,9 +6910,7 @@ function GardeningSection({ hobby, onUpdateExtra }: {
                           {plantSearch.results.map((p: any) => (
                             <button key={p.id} onClick={() => selectPlant(p)}
                               className="w-full text-left flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors">
-                              {p.default_image?.small_url
-                                ? <img src={p.default_image.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover shrink-0" />
-                                : <div className="w-8 h-8 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-sm">🌿</div>}
+                              <PlantImg src={p.default_image?.small_url} alt={p.common_name} className="w-8 h-8 rounded object-cover" />
                               <div className="min-w-0">
                                 <p className="text-xs font-medium truncate">{p.common_name}</p>
                                 <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
@@ -6939,9 +6954,7 @@ function GardeningSection({ hobby, onUpdateExtra }: {
                 {[...plants].sort((a, b) => b.plantedDate.localeCompare(a.plantedDate)).map(entry => (
                   <div key={entry.id} className={`p-3 rounded-xl border bg-card space-y-1.5 ${entry.isHarvested ? "opacity-60" : ""}`}>
                     <div className="flex items-start gap-2.5">
-                      {entry.photoUrl && (
-                        <img src={entry.photoUrl} alt={entry.commonName} className="w-12 h-12 rounded-lg object-cover shrink-0 border" />
-                      )}
+                      <PlantImg src={entry.photoUrl} alt={entry.commonName} className="w-12 h-12 rounded-lg object-cover border" fallbackSize="text-xl" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className={`text-sm font-semibold truncate ${entry.isHarvested ? "line-through text-muted-foreground" : ""}`}>{entry.commonName}</p>
@@ -6992,9 +7005,7 @@ function GardeningSection({ hobby, onUpdateExtra }: {
                     const alreadyPlanted = plants.some(pl => pl.perenualId === p.id);
                     return (
                       <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
-                        {p.default_image?.small_url
-                          ? <img src={p.default_image.small_url} alt={p.common_name} className="w-9 h-9 rounded object-cover shrink-0" />
-                          : <div className="w-9 h-9 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-base">🌿</div>}
+                        <PlantImg src={p.default_image?.small_url} alt={p.common_name} className="w-9 h-9 rounded object-cover" fallbackSize="text-base" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold truncate">{p.common_name}</p>
                           <p className="text-[10px] text-muted-foreground italic truncate">{Array.isArray(p.scientific_name) ? p.scientific_name[0] : p.scientific_name}</p>
@@ -7020,9 +7031,7 @@ function GardeningSection({ hobby, onUpdateExtra }: {
                   const planted = plants.some(p => p.perenualId === w.perenualId || p.commonName.toLowerCase() === w.commonName.toLowerCase());
                   return (
                     <div key={w.id} className={`flex items-center gap-2.5 p-2.5 rounded-lg border bg-card ${planted ? "opacity-60" : ""}`}>
-                      {w.photoUrl
-                        ? <img src={w.photoUrl} alt={w.commonName} className="w-9 h-9 rounded object-cover shrink-0" />
-                        : <div className="w-9 h-9 rounded bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0 text-base">🌿</div>}
+                      <PlantImg src={w.photoUrl} alt={w.commonName} className="w-9 h-9 rounded object-cover" fallbackSize="text-base" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className={`text-xs font-semibold truncate ${planted ? "line-through text-muted-foreground" : ""}`}>{w.commonName}</p>
