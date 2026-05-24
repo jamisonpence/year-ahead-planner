@@ -2771,26 +2771,6 @@ export default function RelationshipsPage() {
               onUnfriend={(id) => unfriendMut.mutate(id)}
               sendPending={sendMut.isPending}
             />
-            {requests.outgoing.length > 0 && (
-              <div className="pt-3 border-t mt-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Sent Requests</p>
-                <div className="space-y-1.5">
-                  {requests.outgoing.map((req) => (
-                    <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
-                      <Avatar user={req.otherUser} size={32} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{req.otherUser.name}</p>
-                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Clock size={10} /> Pending</p>
-                      </div>
-                      <button onClick={() => cancelMut.mutate(req.id)}
-                        className="text-xs text-muted-foreground hover:text-destructive border px-2 py-1 rounded-lg hover:border-destructive/30 transition-colors">
-                        Cancel
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
