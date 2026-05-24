@@ -2770,6 +2770,80 @@ export default function RelationshipsPage() {
         );
       })()}
 
+      {/* Custom Groups ─────────────────────────────────────────────────────── */}
+      {groups.map((g) => {
+        const members = allPeople.filter((p) => p.groupId === g.id);
+        const key = `group-${g.id}`;
+        const open = !!contactSections[key];
+        return (
+          <div key={g.id} className="rounded-xl border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 hover:bg-secondary/50 transition-colors">
+              <button
+                onClick={() => toggleContactSection(key)}
+                className="flex items-center gap-2 flex-1 text-left"
+              >
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color || "#888" }} />
+                <span className="text-sm font-semibold">{g.name}</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{members.length}</span>
+              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { setEditGroup(g); setGroupModal(true); }}
+                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                  title="Edit group"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  onClick={() => toggleContactSection(key)}
+                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
+                >
+                  {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              </div>
+            </div>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {members.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <p className="text-sm">No people in this group</p>
+                    <button
+                      onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                      className="mt-2 text-xs text-primary hover:underline"
+                    >
+                      + Add Person
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {members.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+                          style={{ backgroundColor: `${g.color}22`, color: g.color || "#888" }}>
+                          {(p.firstName?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
+                          {(p.company || p.email) && (
+                            <p className="text-xs text-muted-foreground truncate">{p.company || p.email}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
       {/* Pending ───────────────────────────────────────────────────────────── */}
       {(() => {
         const pendingCount = requests.incoming.length + requests.outgoing.length;
