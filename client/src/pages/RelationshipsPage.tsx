@@ -405,22 +405,37 @@ function FamilyClusterCard({
   children,
   color,
   onEdit,
+  friendPersonIds,
 }: {
   adults: PersonWithSpouse[];
   children: PersonWithSpouse[];
   color?: string;
   onEdit: (p: PersonWithSpouse) => void;
+  friendPersonIds: Set<number>;
 }) {
   const accentBg = color ? `${color}18` : "rgba(99,102,241,0.07)";
   const accentBorder = color ? `${color}40` : "rgba(99,102,241,0.2)";
   const dot = color || "#6366f1";
 
+  const isFriend = (p: PersonWithSpouse) => friendPersonIds.has(p.id);
+
   const Avatar = ({ p, size = 36 }: { p: PersonWithSpouse; size?: number }) => (
-    <div
-      className="rounded-full flex items-center justify-center font-bold text-white shrink-0 select-none"
-      style={{ width: size, height: size, backgroundColor: dot, fontSize: size * 0.38 }}
-    >
-      {initials(p.firstName, p.lastName)}
+    <div className="relative shrink-0">
+      <div
+        className="rounded-full flex items-center justify-center font-bold text-white select-none"
+        style={{ width: size, height: size, backgroundColor: dot, fontSize: size * 0.38 }}
+      >
+        {initials(p.firstName, p.lastName)}
+      </div>
+      {isFriend(p) && (
+        <div
+          className="absolute -bottom-0.5 -right-0.5 rounded-full flex items-center justify-center"
+          style={{ width: size * 0.42, height: size * 0.42, backgroundColor: "#8b5cf6", border: "1.5px solid white" }}
+          title="MyLifos friend"
+        >
+          <UserCheck size={size * 0.22} className="text-white" strokeWidth={2.5} />
+        </div>
+      )}
     </div>
   );
 
@@ -440,7 +455,14 @@ function FamilyClusterCard({
             )}
             <Avatar p={adult} size={38} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate leading-tight">{fullName(adult)}</p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm font-semibold truncate leading-tight">{fullName(adult)}</p>
+                {isFriend(adult) && (
+                  <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-700">
+                    MyLifos
+                  </span>
+                )}
+              </div>
               {adult.birthday && (
                 <p className="text-[10px] text-muted-foreground flex items-center gap-0.5 mt-0.5">
                   <Cake size={9} /> {formatBirthday(adult.birthday)}
@@ -2984,15 +3006,24 @@ export default function RelationshipsPage() {
                   </div>
                 ) : (
                   <div className="pt-3 space-y-3">
-                    {clusterFamilies(members, allPeople).map((cluster, ci) => (
-                      <FamilyClusterCard
-                        key={ci}
-                        adults={cluster.adults}
-                        children={cluster.children}
-                        color={g.color ?? undefined}
-                        onEdit={(p) => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                      />
-                    ))}
+                    {(() => {
+                      // Build a set of person IDs that are linked to MyLifos friends
+                      const friendPersonIds = new Set(
+                        members
+                          .filter((p) => (p as any).linkedUserId && friendMap.has((p as any).linkedUserId))
+                          .map((p) => p.id)
+                      );
+                      return clusterFamilies(members, allPeople).map((cluster, ci) => (
+                        <FamilyClusterCard
+                          key={ci}
+                          adults={cluster.adults}
+                          children={cluster.children}
+                          color={g.color ?? undefined}
+                          onEdit={(p) => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          friendPersonIds={friendPersonIds}
+                        />
+                      ));
+                    })()}
                   </div>
                 )}
               </div>
