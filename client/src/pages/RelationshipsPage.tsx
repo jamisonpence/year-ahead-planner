@@ -2795,6 +2795,13 @@ export default function RelationshipsPage() {
                   <Pencil size={12} />
                 </button>
                 <button
+                  onClick={() => deleteGroupMut.mutate(g.id)}
+                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  title="Delete group"
+                >
+                  <Trash2 size={12} />
+                </button>
+                <button
                   onClick={() => toggleContactSection(key)}
                   className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
                 >
