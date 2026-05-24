@@ -1892,7 +1892,24 @@ export type Message = typeof messages.$inferSelect;
 export type MessageReaction = typeof messageReactions.$inferSelect;
 
 export type ReactionSummary = { emoji: string; count: number; userIds: number[] };
-export type MessageWithSender = Message & { sender: PublicUser; reactions: ReactionSummary[] };
+
+/** Structured payload stored in message.share_data (JSON string) */
+export type SharePayload = {
+  shareType: string;        // 'spot' | 'movie' | 'recipe' | 'book' | 'workout'
+  name: string;             // primary title
+  subtitle?: string;        // e.g. "Restaurant · NYC" or "Drama · 2023"
+  emoji?: string;           // type emoji
+  imageUrl?: string;
+  note?: string;            // optional personal note
+};
+
+export type MessageWithSender = Message & {
+  sender: PublicUser;
+  reactions: ReactionSummary[];
+  messageType?: string;     // 'text' | 'share'
+  shareType?: string;
+  shareData?: string;       // JSON SharePayload
+};
 export type ConversationWithDetails = Conversation & {
   participants: (PublicUser & { lastReadAt: string | null })[];
   lastMessage: MessageWithSender | null;

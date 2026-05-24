@@ -1588,6 +1588,11 @@ export async function initializeStorage() {
   // Parent-child links on family_members
   await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent1_id INTEGER`);
   await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent2_id INTEGER`);
+
+  // Share messages in the messenger
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_type TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_data TEXT`);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -5832,6 +5837,8 @@ export const storage: IStorage = {
     const rows = await pool.query(`
       SELECT m.id, m.conversation_id AS "conversationId", m.sender_id AS "senderId",
              m.content, m.created_at AS "createdAt", m.is_deleted AS "isDeleted",
+             COALESCE(m.message_type, 'text') AS "messageType",
+             m.share_type AS "shareType", m.share_data AS "shareData",
              u.id AS "sUid", u.name AS "sName", u.email AS "sEmail", u.avatar_url AS "sAvatarUrl"
       FROM messages m
       JOIN users u ON u.id = m.sender_id
@@ -5843,6 +5850,7 @@ export const storage: IStorage = {
     const msgList = rows.rows.reverse().map((m: any) => ({
       id: m.id, conversationId: m.conversationId, senderId: m.senderId,
       content: m.content, createdAt: m.createdAt, isDeleted: m.isDeleted,
+      messageType: m.messageType, shareType: m.shareType, shareData: m.shareData,
       sender: { id: m.sUid, name: m.sName, email: m.sEmail, avatarUrl: m.sAvatarUrl },
       reactions: [] as any[],
     }));
@@ -5868,7 +5876,10 @@ export const storage: IStorage = {
     return msgList;
   },
 
-  async createMessage(conversationId: number, senderId: number, content: string): Promise<any> {
+  async createMessage(
+    conversationId: number, senderId: number, content: string,
+    opts?: { messageType?: string; shareType?: string; shareData?: string }
+  ): Promise<any> {
     // Verify sender is a participant
     const check = await pool.query(
       `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
@@ -5877,9 +5888,13 @@ export const storage: IStorage = {
     if (!check.rows[0]) throw new Error("Not a participant");
 
     const now = new Date().toISOString();
+    const mt = opts?.messageType ?? 'text';
+    const st = opts?.shareType ?? null;
+    const sd = opts?.shareData ?? null;
     const msg = await pool.query(
-      `INSERT INTO messages (conversation_id, sender_id, content, created_at) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [conversationId, senderId, content, now]
+      `INSERT INTO messages (conversation_id, sender_id, content, created_at, message_type, share_type, share_data)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [conversationId, senderId, content, now, mt, st, sd]
     );
     await pool.query(
       `UPDATE conversations SET last_message_at = $1 WHERE id = $2`,
@@ -5890,8 +5905,42 @@ export const storage: IStorage = {
     );
     return {
       id: msg.rows[0].id, conversationId, senderId, content, createdAt: now, isDeleted: false,
-      sender: senderRow.rows[0],
+      messageType: mt, shareType: st, shareData: sd,
+      sender: senderRow.rows[0], reactions: [],
     };
+  },
+
+  /**
+   * Get or create the DM conversation between two users, then insert a share message.
+   * Called automatically when a share (spot, movie, etc.) is created.
+   */
+  async createDMShareMessage(
+    fromUserId: number, toUserId: number,
+    shareType: string, shareData: string, displayText: string
+  ): Promise<void> {
+    try {
+      const conv = await this.getOrCreateDM(fromUserId, toUserId);
+      // Ensure both users are participants
+      for (const uid of [fromUserId, toUserId]) {
+        const p = await pool.query(
+          `SELECT 1 FROM conversation_participants WHERE conversation_id=$1 AND user_id=$2`,
+          [conv.id, uid]
+        );
+        if (!p.rows[0]) {
+          await pool.query(
+            `INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
+             VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+            [conv.id, uid, new Date().toISOString()]
+          );
+        }
+      }
+      await this.createMessage(conv.id, fromUserId, displayText, {
+        messageType: 'share', shareType, shareData,
+      });
+    } catch (e) {
+      // Non-fatal: share itself already created, messenger message is a bonus
+      console.error('[createDMShareMessage] error:', e);
+    }
   },
 
   async markConversationRead(conversationId: number, userId: number): Promise<void> {

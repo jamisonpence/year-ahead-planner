@@ -10,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
-  Pencil, Trash2, Check, CheckCheck, MoreHorizontal,
+  Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell,
 } from "lucide-react";
-import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary } from "@shared/schema";
+import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,210 @@ function NewGroupDialog({ friends, onCreate, onClose }: {
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢", "🎉", "👏"];
 
+// ── Share Card ────────────────────────────────────────────────────────────────
+
+const SHARE_TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  spot:    { icon: <MapPin size={14} />,    color: "#f97316", label: "Place"   },
+  movie:   { icon: <Film size={14} />,      color: "#8b5cf6", label: "Movie"   },
+  recipe:  { icon: <ChefHat size={14} />,   color: "#10b981", label: "Recipe"  },
+  book:    { icon: <BookOpen size={14} />,  color: "#3b82f6", label: "Book"    },
+  workout: { icon: <Dumbbell size={14} />,  color: "#ef4444", label: "Workout" },
+};
+
+function ShareCard({ shareType, shareData, isOwn }: {
+  shareType: string;
+  shareData: string;
+  isOwn: boolean;
+}) {
+  let payload: SharePayload;
+  try { payload = JSON.parse(shareData); }
+  catch { return <span className="text-xs text-muted-foreground italic">Shared item</span>; }
+
+  const meta = SHARE_TYPE_META[shareType] ?? { icon: <Gift size={14} />, color: "#6b7280", label: "Share" };
+
+  return (
+    <div
+      className={`rounded-2xl overflow-hidden border text-sm max-w-[260px] ${
+        isOwn ? "rounded-br-sm" : "rounded-bl-sm"
+      }`}
+      style={{ borderColor: `${meta.color}40`, background: `${meta.color}12` }}
+    >
+      {/* Header badge */}
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest"
+        style={{ background: `${meta.color}25`, color: meta.color }}
+      >
+        {meta.icon}
+        {payload.emoji && <span>{payload.emoji}</span>}
+        {meta.label} Recommendation
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-2.5">
+        <p className="font-semibold leading-tight">{payload.name}</p>
+        {payload.subtitle && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">{payload.subtitle}</p>
+        )}
+        {payload.note && (
+          <p className="mt-1.5 text-xs italic text-foreground/70 border-t pt-1.5" style={{ borderColor: `${meta.color}30` }}>
+            "{payload.note}"
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Share Picker ──────────────────────────────────────────────────────────────
+
+type SharePickerTab = 'spots' | 'movies' | 'recipes';
+
+function SharePicker({ onShare, onClose }: {
+  onShare: (shareType: string, shareData: SharePayload, note: string) => void;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<SharePickerTab>('spots');
+  const [search, setSearch] = useState('');
+  const [note, setNote] = useState('');
+  const [selected, setSelected] = useState<{ type: string; payload: SharePayload } | null>(null);
+
+  const { data: spots = [] }   = useQuery<any[]>({ queryKey: ['/api/spots'],   queryFn: () => apiRequest('GET', '/api/spots').then(r => r.json())   });
+  const { data: movies = [] }  = useQuery<any[]>({ queryKey: ['/api/movies'],  queryFn: () => apiRequest('GET', '/api/movies').then(r => r.json())  });
+  const { data: recipes = [] } = useQuery<any[]>({ queryKey: ['/api/recipes'], queryFn: () => apiRequest('GET', '/api/recipes').then(r => r.json()) });
+
+  const items: { type: string; payload: SharePayload }[] = (() => {
+    const q = search.toLowerCase();
+    if (tab === 'spots') {
+      return spots
+        .filter((s: any) => !q || s.name?.toLowerCase().includes(q))
+        .map((s: any) => {
+          const spotTypeEmoji: Record<string, string> = { restaurant: '🍽️', bar: '🍸', cafe: '☕', hotel: '🏨', attraction: '🎯', shop: '🛍️', park: '🌳', other: '📍' };
+          return {
+            type: 'spot',
+            payload: {
+              shareType: 'spot', name: s.name,
+              subtitle: [s.type, s.neighborhood || s.city].filter(Boolean).join(' · '),
+              emoji: spotTypeEmoji[s.type] ?? '📍',
+            } as SharePayload,
+          };
+        });
+    }
+    if (tab === 'movies') {
+      return movies
+        .filter((m: any) => !q || m.title?.toLowerCase().includes(q))
+        .map((m: any) => ({
+          type: 'movie',
+          payload: {
+            shareType: 'movie', name: m.title,
+            subtitle: [m.mediaType === 'tv' ? 'TV Show' : 'Movie', m.releaseYear ? String(m.releaseYear) : null].filter(Boolean).join(' · '),
+            emoji: m.mediaType === 'tv' ? '📺' : '🎬',
+            imageUrl: m.posterUrl ?? undefined,
+          } as SharePayload,
+        }));
+    }
+    if (tab === 'recipes') {
+      return recipes
+        .filter((r: any) => !q || r.title?.toLowerCase().includes(q))
+        .map((r: any) => ({
+          type: 'recipe',
+          payload: {
+            shareType: 'recipe', name: r.title,
+            subtitle: [r.cuisine, r.totalTime ? `${r.totalTime} min` : null].filter(Boolean).join(' · '),
+            emoji: r.emoji ?? '🍽️',
+            imageUrl: r.imageUrl ?? undefined,
+          } as SharePayload,
+        }));
+    }
+    return [];
+  })();
+
+  const tabs: { key: SharePickerTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'spots',   label: 'Places',  icon: <MapPin size={13} /> },
+    { key: 'movies',  label: 'Movies',  icon: <Film size={13} /> },
+    { key: 'recipes', label: 'Recipes', icon: <ChefHat size={13} /> },
+  ];
+
+  return (
+    <div className="absolute bottom-full mb-2 left-0 w-80 bg-card border rounded-2xl shadow-xl overflow-hidden z-50">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5 border-b">
+        <span className="text-sm font-semibold">Share a Recommendation</span>
+        <button onClick={onClose} className="p-1 rounded-full hover:bg-secondary transition-colors"><X size={13} /></button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => { setTab(t.key); setSearch(''); setSelected(null); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+              tab === t.key ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.icon}{t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="px-3 pt-2">
+        <Input
+          placeholder={`Search ${tab}…`}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-8 text-xs"
+        />
+      </div>
+
+      {/* Items list */}
+      <div className="max-h-44 overflow-y-auto px-2 py-2 space-y-0.5">
+        {items.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">No {tab} found</p>
+        ) : items.map((item, i) => (
+          <button
+            key={i}
+            onClick={() => setSelected(selected?.payload.name === item.payload.name ? null : item)}
+            className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
+              selected?.payload.name === item.payload.name
+                ? 'bg-primary/10 border border-primary/30'
+                : 'hover:bg-secondary'
+            }`}
+          >
+            <span className="text-base leading-none">{item.payload.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{item.payload.name}</p>
+              {item.payload.subtitle && <p className="text-muted-foreground truncate">{item.payload.subtitle}</p>}
+            </div>
+            {selected?.payload.name === item.payload.name && (
+              <Check size={13} className="text-primary shrink-0" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Note + send */}
+      {selected && (
+        <div className="border-t px-3 py-2.5 space-y-2">
+          <Input
+            placeholder="Add a note… (optional)"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            className="h-8 text-xs"
+          />
+          <Button
+            size="sm"
+            className="w-full gap-1.5"
+            onClick={() => { onShare(selected.type, selected.payload, note); onClose(); }}
+          >
+            <Send size={13} /> Send Recommendation
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
   return (
     <div
@@ -275,15 +480,19 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
         )}
 
         <div className={`relative flex items-end gap-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
-          <div
-            className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-              isOwn
-                ? "bg-primary text-primary-foreground rounded-br-sm"
-                : "bg-secondary text-foreground rounded-bl-sm"
-            }`}
-          >
-            {msg.content}
-          </div>
+          {msg.messageType === 'share' && msg.shareType && msg.shareData ? (
+            <ShareCard shareType={msg.shareType} shareData={msg.shareData} isOwn={isOwn} />
+          ) : (
+            <div
+              className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
+                isOwn
+                  ? "bg-primary text-primary-foreground rounded-br-sm"
+                  : "bg-secondary text-foreground rounded-bl-sm"
+              }`}
+            >
+              {msg.content}
+            </div>
+          )}
 
           {/* Action buttons: react + delete — visible on hover */}
           <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
@@ -459,6 +668,8 @@ export default function MessengerPage() {
     onError: () => toast({ title: "Could not create group", variant: "destructive" }),
   });
 
+  const [showSharePicker, setShowSharePicker] = useState(false);
+
   const sendMessage = useMutation({
     mutationFn: (content: string) =>
       apiRequest("POST", `/api/messenger/conversations/${activeConvId}/messages`, { content }).then(r => r.json()),
@@ -468,6 +679,19 @@ export default function MessengerPage() {
       setDraft("");
     },
     onError: () => toast({ title: "Failed to send message", variant: "destructive" }),
+  });
+
+  const sendShare = useMutation({
+    mutationFn: ({ shareType, shareData, note }: { shareType: string; shareData: SharePayload; note: string }) =>
+      apiRequest("POST", `/api/messenger/conversations/${activeConvId}/share`, {
+        shareType, shareData, note,
+      }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/messenger/conversations", activeConvId, "messages"] });
+      qc.invalidateQueries({ queryKey: ["/api/messenger/conversations"] });
+      toast({ title: "Recommendation sent!" });
+    },
+    onError: () => toast({ title: "Failed to send", variant: "destructive" }),
   });
 
   const deleteMessage = useMutation({
@@ -660,6 +884,27 @@ export default function MessengerPage() {
             {/* Compose */}
             <div className="px-4 py-3 border-t bg-card">
               <div className="flex items-end gap-2">
+                {/* Share picker trigger */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSharePicker(p => !p)}
+                    className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors shrink-0 ${
+                      showSharePicker ? "bg-primary text-primary-foreground border-primary" : "hover:bg-secondary text-muted-foreground"
+                    }`}
+                    title="Share a recommendation"
+                  >
+                    <Gift size={16} />
+                  </button>
+                  {showSharePicker && (
+                    <SharePicker
+                      onShare={(shareType, shareData, note) =>
+                        sendShare.mutate({ shareType, shareData, note })
+                      }
+                      onClose={() => setShowSharePicker(false)}
+                    />
+                  )}
+                </div>
+
                 <Textarea
                   ref={textareaRef}
                   value={draft}

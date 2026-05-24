@@ -3168,6 +3168,12 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         createdAt: new Date().toISOString(),
         isDismissed: false,
       });
+      const timeParts = [recipePrepTime, recipeCookTime].filter(Boolean);
+      await storage.createDMShareMessage(userId, toUserId, 'recipe', JSON.stringify({
+        shareType: 'recipe', name: recipeName,
+        subtitle: [recipeCategory, timeParts.length ? timeParts.join(" + ") : null].filter(Boolean).join(" · "),
+        emoji: recipeEmoji || "🍽️", imageUrl: recipeImageUrl ?? undefined, note: notes ?? undefined,
+      }), `Shared a recipe: ${recipeName}`);
       res.status(201).json(share);
     } catch (e) { handleError(res, e); }
   });
@@ -3337,7 +3343,16 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         notes: req.body.notes ?? null,
         createdAt: new Date().toISOString(),
       };
-      res.status(201).json(await storage.sendSpotShare(data));
+      const share = await storage.sendSpotShare(data);
+      // Mirror to Messenger DM
+      const spotTypeEmoji: Record<string, string> = { restaurant: "🍽️", bar: "🍸", cafe: "☕", hotel: "🏨", attraction: "🎯", shop: "🛍️", park: "🌳", other: "📍" };
+      const emoji = spotTypeEmoji[data.type] ?? "📍";
+      const subtitle = [data.type, data.neighborhood || data.city].filter(Boolean).join(" · ");
+      await storage.createDMShareMessage(userId, data.toUserId, 'spot', JSON.stringify({
+        shareType: 'spot', name: data.name, subtitle, emoji,
+        note: data.notes ?? undefined,
+      }), `Shared a spot: ${data.name}`);
+      res.status(201).json(share);
     } catch (e) { handleError(res, e); }
   });
 
@@ -3379,7 +3394,14 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         notes: req.body.notes ?? null,
         createdAt: new Date().toISOString(),
       };
-      res.status(201).json(await storage.sendMovieShare(data));
+      const share = await storage.sendMovieShare(data);
+      const emoji = data.mediaType === "tv" ? "📺" : "🎬";
+      const subtitle = [data.mediaType === "tv" ? "TV Show" : "Movie", data.year ? String(data.year) : null].filter(Boolean).join(" · ");
+      await storage.createDMShareMessage(userId, data.toUserId, 'movie', JSON.stringify({
+        shareType: 'movie', name: data.title, subtitle, emoji,
+        imageUrl: data.posterUrl ?? undefined, note: data.notes ?? undefined,
+      }), `Shared a ${data.mediaType === "tv" ? "show" : "movie"}: ${data.title}`);
+      res.status(201).json(share);
     } catch (e) { handleError(res, e); }
   });
 
@@ -7143,6 +7165,24 @@ Rules:
       const { content } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "content required" });
       const msg = await storage.createMessage(convId, userId, content.trim());
+      res.status(201).json(msg);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Send a share card directly from Messenger
+  app.post("/api/messenger/conversations/:id/share", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const convId = +req.params.id;
+      const { shareType, shareData, note } = req.body;
+      if (!shareType || !shareData) return res.status(400).json({ error: "shareType and shareData required" });
+      const payload = typeof shareData === 'string' ? shareData : JSON.stringify(shareData);
+      const parsed = JSON.parse(payload);
+      const displayText = note?.trim() || `Shared a ${shareType}: ${parsed.name ?? ''}`;
+      const finalPayload = JSON.stringify({ ...parsed, note: note?.trim() || undefined });
+      const msg = await storage.createMessage(convId, userId, displayText, {
+        messageType: 'share', shareType, shareData: finalPayload,
+      });
       res.status(201).json(msg);
     } catch (e) { handleError(res, e); }
   });
