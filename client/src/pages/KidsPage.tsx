@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Baby, Plus, Pencil, Trash2, Check, Users, ChevronDown,
-  PawPrint, Stethoscope, Calendar, Heart, GitFork, ChevronUp,
+  PawPrint, Stethoscope, Calendar, Heart, GitFork, ChevronUp, User,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1897,53 +1897,105 @@ const EMPTY_MEMBER_FORM = {
   birthYear: "", deathYear: "", birthPlace: "", notes: "", isDeceased: false,
 };
 
-function GenLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2 mt-1 text-center">
-      {children}
-    </p>
-  );
+// ── Tree node helpers ─────────────────────────────────────────────────────────
+
+function getNodeColor(m: FamilyMember): string {
+  if (m.role === "self")             return "#0f766e";
+  if (m.role === "sibling")          return "#0d9488";
+  if (m.role === "spouse")           return "#7c3aed";
+  if (m.role === "child")            return "#0e7490";
+  if (m.role === "grandchild")       return "#155e75";
+  if (m.role === "great_grandparent") return "#475569";
+  if (m.role === "aunt_uncle")       return "#6d28d9";
+  if (m.role === "other")            return "#475569";
+  // grandparent / parent → use side for color
+  if (m.side === "paternal")         return "#1d4ed8";
+  if (m.side === "maternal")         return "#c2410c";
+  // fallback by role
+  if (m.role === "grandparent")      return "#1e40af";
+  if (m.role === "parent")           return "#1d4ed8";
+  return "#475569";
 }
 
-function CardRow({ members, cardProps }: {
-  members: FamilyMember[];
-  cardProps: (m: FamilyMember) => { member: FamilyMember; onEdit: () => void; onDelete: () => void };
-}) {
-  return (
-    <div className="flex flex-wrap justify-center gap-2">
-      {members.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-    </div>
-  );
+function getNodeLabel(m: FamilyMember): string {
+  if (m.role === "self")    return "YOU";
+  if (m.role === "sibling") return "SIBLING";
+  if (m.role === "spouse")  return "SPOUSE";
+  if (m.role === "child")   return m.gender === "female" ? "DAUGHTER" : m.gender === "male" ? "SON" : "CHILD";
+  if (m.role === "grandchild") return "GRANDCHILD";
+  if (m.role === "great_grandparent") return "GREAT-GRANDPARENT";
+  if (m.role === "aunt_uncle") return "AUNT / UNCLE";
+  if (m.role === "grandparent") {
+    const side = m.side && m.side !== "none" ? m.side.toUpperCase() + " " : "";
+    return side + (m.gender === "female" ? "GRANDMOTHER" : "GRANDFATHER");
+  }
+  if (m.role === "parent") return m.gender === "female" ? "MOTHER" : "FATHER";
+  return m.role.replace(/_/g, " ").toUpperCase();
 }
 
-function FamilyMemberCard({ member, onEdit, onDelete }: {
+function FamilyTreeNode({ member, onEdit, onDelete }: {
   member: FamilyMember;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const role = ROLES.find(r => r.value === member.role);
-  const colorClass = GENDER_COLORS[member.gender ?? "unknown"] ?? GENDER_COLORS.unknown;
-  const yearSpan = member.birthYear
-    ? member.deathYear ? `${member.birthYear}–${member.deathYear}` : `b. ${member.birthYear}`
-    : "";
+  const color  = getNodeColor(member);
+  const label  = getNodeLabel(member);
+  const gSym   = member.gender === "male" ? "♂" : member.gender === "female" ? "♀" : null;
 
   return (
-    <div className={`relative rounded-xl border-2 px-3 py-2.5 min-w-[110px] max-w-[140px] flex flex-col items-center gap-1 text-center shadow-sm group transition-shadow hover:shadow-md ${colorClass} ${member.isDeceased ? "opacity-60" : ""}`}>
-      <div className="text-xl leading-none">{role?.emoji ?? "👤"}</div>
-      <p className="text-xs font-semibold leading-tight line-clamp-2">{member.name}</p>
-      {member.isDeceased ? (
-        <span className="text-[9px] font-medium opacity-60">† {yearSpan || "deceased"}</span>
-      ) : yearSpan ? (
-        <span className="text-[9px] opacity-60">{yearSpan}</span>
-      ) : null}
-      <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="p-0.5 rounded bg-white/60 hover:bg-white dark:bg-black/20 dark:hover:bg-black/40 transition-colors">
-          <Pencil size={10} />
-        </button>
-        <button onClick={onDelete} className="p-0.5 rounded bg-white/60 hover:bg-red-100 hover:text-red-600 dark:bg-black/20 transition-colors">
-          <Trash2 size={10} />
-        </button>
+    <div className="flex flex-col items-center gap-0.5 group select-none" style={{ width: 96 }}>
+      {/* Circle */}
+      <div className="relative cursor-pointer" onClick={onEdit}>
+        <div
+          className="w-[68px] h-[68px] rounded-full flex items-center justify-center shadow-md transition-transform duration-150 group-hover:scale-105"
+          style={{ backgroundColor: color, border: "3px solid white" }}
+        >
+          <User size={30} className="text-white/80" />
+          {member.isDeceased && (
+            <div className="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center">
+              <span className="text-white text-base font-bold">†</span>
+            </div>
+          )}
+        </div>
+        {/* Gender badge */}
+        {gSym && (
+          <div
+            className="absolute top-0 right-0 w-[18px] h-[18px] rounded-full bg-white flex items-center justify-center text-[10px] font-bold shadow-sm"
+            style={{ color }}
+          >
+            {gSym}
+          </div>
+        )}
+        {/* Hover actions */}
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5 z-10">
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(); }}
+            className="w-6 h-6 rounded-full bg-card border shadow-sm flex items-center justify-center hover:bg-secondary transition-colors"
+          ><Pencil size={9} /></button>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(); }}
+            className="w-6 h-6 rounded-full bg-card border shadow-sm flex items-center justify-center hover:text-destructive transition-colors"
+          ><Trash2 size={9} /></button>
+        </div>
       </div>
+      {/* Name */}
+      <p className="text-[11px] font-semibold text-center leading-tight mt-2.5 line-clamp-2 px-0.5">{member.name}</p>
+      {/* Role label */}
+      <p className="text-[9px] font-bold uppercase tracking-widest text-center leading-tight" style={{ color }}>{label}</p>
+      {member.birthYear && (
+        <p className="text-[9px] text-muted-foreground">{member.isDeceased && member.deathYear ? `${member.birthYear}–${member.deathYear}` : `b. ${member.birthYear}`}</p>
+      )}
+    </div>
+  );
+}
+
+function NodeRow({ members, cardProps }: {
+  members: FamilyMember[];
+  cardProps: (m: FamilyMember) => { member: FamilyMember; onEdit: () => void; onDelete: () => void };
+}) {
+  return (
+    <div className="flex flex-wrap justify-center gap-6">
+      {members.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
     </div>
   );
 }
@@ -1981,7 +2033,7 @@ function FamilyTreeSection() {
   // ── SVG connecting lines ──────────────────────────────────────────────────
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [svgPaths, setSvgPaths] = useState<Array<{ d: string; color: string }>>([]);
+  const [svgPaths, setSvgPaths] = useState<Array<{ d: string; color: string; dashed?: boolean }>>([]);
 
   function setNodeRef(key: string) {
     return (el: HTMLDivElement | null) => {
@@ -1993,7 +2045,7 @@ function FamilyTreeSection() {
   function computeSvgPaths() {
     if (!treeContainerRef.current) return;
     const containerRect = treeContainerRef.current.getBoundingClientRect();
-    const newPaths: Array<{ d: string; color: string }> = [];
+    const newPaths: Array<{ d: string; color: string; dashed?: boolean }> = [];
 
     function getBox(key: string) {
       const el = nodeRefs.current.get(key);
@@ -2004,63 +2056,99 @@ function FamilyTreeSection() {
         cx:     r.left + r.width  / 2 - containerRect.left,
         top:    r.top              - containerRect.top,
         bottom: r.bottom           - containerRect.top,
+        left:   r.left             - containerRect.left,
+        right:  r.right            - containerRect.left,
       };
     }
 
-    function bezierV(x1: number, y1: number, x2: number, y2: number) {
-      const mid = (y1 + y2) / 2;
-      return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${mid.toFixed(1)}, ${x2.toFixed(1)} ${mid.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    // Orthogonal elbow: down → across → down
+    function elbowPath(x1: number, y1: number, x2: number, y2: number) {
+      const midY = y1 + (y2 - y1) * 0.5;
+      return `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x1.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    }
+    // Straight vertical
+    function vertPath(x: number, y1: number, y2: number) {
+      return `M ${x.toFixed(1)} ${y1.toFixed(1)} V ${y2.toFixed(1)}`;
+    }
+    // Horizontal rail then drop to each child center
+    function railPath(parentCx: number, parentBottom: number, childCenters: number[], childTop: number) {
+      if (childCenters.length === 0) return [];
+      const railY = parentBottom + (childTop - parentBottom) * 0.45;
+      const left  = Math.min(...childCenters, parentCx);
+      const right = Math.max(...childCenters, parentCx);
+      const paths: string[] = [];
+      // Down from parent to rail
+      paths.push(vertPath(parentCx, parentBottom, railY));
+      // Horizontal rail
+      if (childCenters.length > 1 || Math.abs(parentCx - childCenters[0]) > 4)
+        paths.push(`M ${left.toFixed(1)} ${railY.toFixed(1)} H ${right.toFixed(1)}`);
+      // Drop from rail to each child
+      childCenters.forEach(cx => paths.push(vertPath(cx, railY, childTop)));
+      return paths;
     }
 
+    const COL_PAT   = "#3b82f6";  // blue
+    const COL_MAT   = "#f97316";  // orange
+    const COL_TEAL  = "#0d9488";  // teal
+    const COL_SLATE = "#94a3b8";  // neutral
+
     // great-grandparents → grandparents
-    const ggpBox   = getBox("ggp");
-    const gpAllBox = getBox("gpAll");
-    const gpPatBox = getBox("patGP");
-    const gpMatBox = getBox("matGP");
+    const ggpBox = getBox("ggp");
     if (ggpBox) {
-      const target = gpAllBox ?? gpPatBox ?? gpMatBox;
-      if (target) newPaths.push({ d: bezierV(ggpBox.cx, ggpBox.bottom, target.cx, target.top), color: "#94a3b8" });
+      const targets = [getBox("gpAll"), getBox("patGP"), getBox("matGP")].filter(Boolean) as ReturnType<typeof getBox>[];
+      targets.forEach(t => { if (t) newPaths.push({ d: elbowPath(ggpBox.cx, ggpBox.bottom, t!.cx, t!.top), color: COL_SLATE }); });
     }
 
     // within paternal column: grandparents → parents
     const patGPBox = getBox("patGP");
     const patPBox  = getBox("patP");
-    if (patGPBox && patPBox) newPaths.push({ d: bezierV(patGPBox.cx, patGPBox.bottom, patPBox.cx, patPBox.top), color: "#93c5fd" });
+    if (patGPBox && patPBox) newPaths.push({ d: elbowPath(patGPBox.cx, patGPBox.bottom, patPBox.cx, patPBox.top), color: COL_PAT });
 
     // within maternal column: grandparents → parents
     const matGPBox = getBox("matGP");
     const matPBox  = getBox("matP");
-    if (matGPBox && matPBox) newPaths.push({ d: bezierV(matGPBox.cx, matGPBox.bottom, matPBox.cx, matPBox.top), color: "#f9a8d4" });
+    if (matGPBox && matPBox) newPaths.push({ d: elbowPath(matGPBox.cx, matGPBox.bottom, matPBox.cx, matPBox.top), color: COL_MAT });
 
-    // single-column: all grandparents → all parents
-    if (gpAllBox) {
-      const pAllBox = getBox("parentsAll");
-      if (pAllBox) newPaths.push({ d: bezierV(gpAllBox.cx, gpAllBox.bottom, pAllBox.cx, pAllBox.top), color: "#94a3b8" });
+    // single-column: grandparents → parents
+    const gpAllBox  = getBox("gpAll");
+    const pAllBox   = getBox("parentsAll");
+    if (gpAllBox && pAllBox) newPaths.push({ d: elbowPath(gpAllBox.cx, gpAllBox.bottom, pAllBox.cx, pAllBox.top), color: COL_SLATE });
+
+    // Horizontal line between paternal parent and maternal parent (spouse connection)
+    if (patPBox && matPBox) {
+      const lineY = (patPBox.top + patPBox.bottom) / 2;
+      newPaths.push({ d: `M ${patPBox.cx.toFixed(1)} ${lineY.toFixed(1)} H ${matPBox.cx.toFixed(1)}`, color: COL_SLATE });
     }
 
-    // merge two columns → yourGen  (bracket ⊓ shape)
-    const yourGenBox   = getBox("yourGen");
-    const patBottomBox = getBox("patP") ?? getBox("patGP");
-    const matBottomBox = getBox("matP") ?? getBox("matGP");
-    if (yourGenBox && patBottomBox && matBottomBox) {
-      const mergeY = Math.max(patBottomBox.bottom, matBottomBox.bottom) + 14;
-      const midX   = (patBottomBox.cx + matBottomBox.cx) / 2;
-      newPaths.push({ d: `M ${patBottomBox.cx.toFixed(1)} ${patBottomBox.bottom.toFixed(1)} V ${mergeY.toFixed(1)} H ${midX.toFixed(1)}`, color: "#94a3b8" });
-      newPaths.push({ d: `M ${matBottomBox.cx.toFixed(1)} ${matBottomBox.bottom.toFixed(1)} V ${mergeY.toFixed(1)} H ${midX.toFixed(1)}`, color: "#94a3b8" });
-      newPaths.push({ d: `M ${midX.toFixed(1)} ${mergeY.toFixed(1)} V ${yourGenBox.top.toFixed(1)}`, color: "#94a3b8" });
-    } else if (yourGenBox) {
-      // single-column parents/grandparents → yourGen
-      const aboveBox = getBox("parentsAll") ?? getBox("gpAll");
-      if (aboveBox) newPaths.push({ d: bezierV(aboveBox.cx, aboveBox.bottom, yourGenBox.cx, yourGenBox.top), color: "#94a3b8" });
+    // Parents → yourGen (bracket from midpoint of parent pair or single parent)
+    const yourGenBox    = getBox("yourGen");
+    const patBottomBox  = patPBox ?? patGPBox;
+    const matBottomBox  = matPBox ?? matGPBox;
+    if (yourGenBox) {
+      if (patBottomBox && matBottomBox) {
+        const midX  = (patBottomBox.cx + matBottomBox.cx) / 2;
+        const railY = Math.max(patBottomBox.bottom, matBottomBox.bottom) + 18;
+        newPaths.push({ d: vertPath(midX, railY, yourGenBox.top), color: COL_TEAL });
+      } else {
+        const aboveBox = pAllBox ?? gpAllBox;
+        if (aboveBox) newPaths.push({ d: elbowPath(aboveBox.cx, aboveBox.bottom, yourGenBox.cx, yourGenBox.top), color: COL_TEAL });
+      }
     }
 
-    // yourGen → children
+    // yourGen → children (fan out with rail)
     const childrenBox = getBox("children");
-    if (yourGenBox && childrenBox) newPaths.push({ d: bezierV(yourGenBox.cx, yourGenBox.bottom, childrenBox.cx, childrenBox.top), color: "#94a3b8" });
+    if (yourGenBox && childrenBox) {
+      const childCxs = [childrenBox.cx];
+      railPath(yourGenBox.cx, yourGenBox.bottom, childCxs, childrenBox.top)
+        .forEach(d => newPaths.push({ d, color: COL_TEAL }));
+    }
 
     // children → grandchildren
     const grandchildrenBox = getBox("grandchildren");
-    if (childrenBox && grandchildrenBox) newPaths.push({ d: bezierV(childrenBox.cx, childrenBox.bottom, grandchildrenBox.cx, grandchildrenBox.top), color: "#94a3b8" });
+    if (childrenBox && grandchildrenBox) {
+      railPath(childrenBox.cx, childrenBox.bottom, [grandchildrenBox.cx], grandchildrenBox.top)
+        .forEach(d => newPaths.push({ d, color: COL_TEAL }));
+    }
 
     setSvgPaths(newPaths);
   }
@@ -2216,9 +2304,12 @@ function FamilyTreeSection() {
           });
 
           return (
-            <div className="overflow-x-auto pb-6 -mx-3 px-3">
-              <div ref={treeContainerRef} className="relative flex flex-col items-center min-w-[300px] mx-auto">
-
+            <div className="overflow-x-auto pb-8 -mx-4 px-4">
+              <div
+                ref={treeContainerRef}
+                className="relative flex flex-col items-center gap-0 mx-auto"
+                style={{ minWidth: 340, background: "transparent" }}
+              >
                 {/* SVG overlay for connecting lines */}
                 <svg
                   className="absolute inset-0 pointer-events-none"
@@ -2226,113 +2317,113 @@ function FamilyTreeSection() {
                   aria-hidden="true"
                 >
                   {svgPaths.map((p, i) => (
-                    <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth="1.5" strokeOpacity="0.7" />
+                    <path
+                      key={i} d={p.d} fill="none"
+                      stroke={p.color} strokeWidth="2"
+                      strokeOpacity="0.6"
+                      strokeDasharray={p.dashed ? "5,4" : undefined}
+                      strokeLinecap="round"
+                    />
                   ))}
                 </svg>
 
                 {/* ── Great-grandparents ── */}
                 {greatGrandparents.length > 0 && (
                   <>
-                    <GenLabel>Great-Grandparents</GenLabel>
-                    <div ref={setNodeRef("ggp")} className="flex flex-wrap justify-center gap-2">
-                      {greatGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Great-Grandparents</p>
+                    <div ref={setNodeRef("ggp")} className="flex flex-wrap justify-center gap-8">
+                      {greatGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
                     </div>
-                    <div className="h-10" />
+                    <div className="h-14" />
                   </>
                 )}
 
-                {/* ── Grandparents + Parents ── */}
+                {/* ── Grandparents ── */}
                 {hasTwoSides ? (
+                  <div className="flex justify-center gap-20 w-full">
+                    {/* Paternal grandparents */}
+                    {patGrandparents.length > 0 && (
+                      <div ref={setNodeRef("patGP")} className="flex gap-8">
+                        {patGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      </div>
+                    )}
+                    {/* Maternal grandparents */}
+                    {matGrandparents.length > 0 && (
+                      <div ref={setNodeRef("matGP")} className="flex gap-8">
+                        {matGrandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      </div>
+                    )}
+                  </div>
+                ) : grandparents.length > 0 ? (
                   <>
-                    <div className="flex gap-3 w-full mt-1">
-                      {/* PATERNAL column */}
-                      <div className="flex-1 rounded-2xl border-2 border-blue-300/50 dark:border-blue-700/40 bg-blue-50/20 dark:bg-blue-950/10 p-3 flex flex-col items-center">
-                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-2">Paternal</span>
-                        {patGrandparents.length > 0 && (
-                          <div ref={setNodeRef("patGP")} className="flex flex-wrap justify-center gap-2">
-                            {patGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                          </div>
-                        )}
-                        {patGrandparents.length > 0 && patParents.length > 0 && <div className="h-10" />}
-                        {patParents.length > 0 && (
-                          <div ref={setNodeRef("patP")} className="flex flex-wrap justify-center gap-2">
-                            {patParents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                          </div>
-                        )}
-                      </div>
-                      {/* MATERNAL column */}
-                      <div className="flex-1 rounded-2xl border-2 border-pink-300/50 dark:border-pink-700/40 bg-pink-50/20 dark:bg-pink-950/10 p-3 flex flex-col items-center">
-                        <span className="text-[9px] font-bold text-pink-500 uppercase tracking-widest mb-2">Maternal</span>
-                        {matGrandparents.length > 0 && (
-                          <div ref={setNodeRef("matGP")} className="flex flex-wrap justify-center gap-2">
-                            {matGrandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                          </div>
-                        )}
-                        {matGrandparents.length > 0 && matParents.length > 0 && <div className="h-10" />}
-                        {matParents.length > 0 && (
-                          <div ref={setNodeRef("matP")} className="flex flex-wrap justify-center gap-2">
-                            {matParents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                          </div>
-                        )}
-                      </div>
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandparents</p>
+                    <div ref={setNodeRef("gpAll")} className="flex flex-wrap justify-center gap-8">
+                      {grandparents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
                     </div>
-                    {noSideParents.length > 0 && (
-                      <div className="mt-2"><CardRow members={noSideParents} cardProps={cardProps} /></div>
-                    )}
-                    {yourGen.length > 0 && <div className="h-12" />}
                   </>
-                ) : (
-                  /* Single-column fallback */
+                ) : null}
+
+                {/* spacer between grandparents and parents */}
+                {(grandparents.length > 0 || greatGrandparents.length > 0) && parents.length > 0 && <div className="h-14" />}
+
+                {/* ── Parents ── */}
+                {hasTwoSides ? (
+                  <div className="flex justify-center gap-20 w-full">
+                    {patParents.length > 0 && (
+                      <div ref={setNodeRef("patP")} className="flex gap-8">
+                        {patParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      </div>
+                    )}
+                    {matParents.length > 0 && (
+                      <div ref={setNodeRef("matP")} className="flex gap-8">
+                        {matParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                      </div>
+                    )}
+                  </div>
+                ) : parents.length > 0 ? (
                   <>
-                    {grandparents.length > 0 && (
-                      <>
-                        <GenLabel>Grandparents</GenLabel>
-                        <div ref={setNodeRef("gpAll")} className="flex flex-wrap justify-center gap-2">
-                          {grandparents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                        </div>
-                        {parents.length > 0 && <div className="h-10" />}
-                      </>
-                    )}
-                    {parents.length > 0 && (
-                      <>
-                        <GenLabel>Parents &amp; Aunts/Uncles</GenLabel>
-                        <div ref={setNodeRef("parentsAll")} className="flex flex-wrap justify-center gap-2">
-                          {parents.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
-                        </div>
-                        {yourGen.length > 0 && <div className="h-10" />}
-                      </>
-                    )}
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Parents</p>
+                    <div ref={setNodeRef("parentsAll")} className="flex flex-wrap justify-center gap-8">
+                      {parents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                    </div>
                   </>
-                )}
+                ) : null}
+
+                {/* spacer */}
+                {(parents.length > 0 || grandparents.length > 0) && yourGen.length > 0 && <div className="h-14" />}
 
                 {/* ── Your Generation ── */}
                 {yourGen.length > 0 && (
                   <>
-                    <GenLabel>Your Generation</GenLabel>
-                    <div ref={setNodeRef("yourGen")} className="flex flex-wrap justify-center gap-2">
-                      {yourGen.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Your Generation</p>
+                    <div ref={setNodeRef("yourGen")} className="flex flex-wrap justify-center gap-8">
+                      {yourGen.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
                     </div>
                   </>
                 )}
+
+                {/* spacer */}
+                {yourGen.length > 0 && children.length > 0 && <div className="h-14" />}
 
                 {/* ── Children ── */}
                 {children.length > 0 && (
                   <>
-                    <div className="h-10" />
-                    <GenLabel>Children</GenLabel>
-                    <div ref={setNodeRef("children")} className="flex flex-wrap justify-center gap-2">
-                      {children.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Children</p>
+                    <div ref={setNodeRef("children")} className="flex flex-wrap justify-center gap-8">
+                      {children.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
                     </div>
                   </>
                 )}
 
+                {/* spacer */}
+                {children.length > 0 && grandchildren.length > 0 && <div className="h-14" />}
+
                 {/* ── Grandchildren ── */}
                 {grandchildren.length > 0 && (
                   <>
-                    <div className="h-10" />
-                    <GenLabel>Grandchildren</GenLabel>
-                    <div ref={setNodeRef("grandchildren")} className="flex flex-wrap justify-center gap-2">
-                      {grandchildren.map(m => <FamilyMemberCard key={m.id} {...cardProps(m)} />)}
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandchildren</p>
+                    <div ref={setNodeRef("grandchildren")} className="flex flex-wrap justify-center gap-8">
+                      {grandchildren.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
                     </div>
                   </>
                 )}
@@ -2340,11 +2431,23 @@ function FamilyTreeSection() {
                 {/* ── Others ── */}
                 {others.length > 0 && (
                   <>
-                    <div className="mt-5" />
-                    <GenLabel>Other</GenLabel>
-                    <CardRow members={others} cardProps={cardProps} />
+                    <div className="mt-8" />
+                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Other</p>
+                    <NodeRow members={others} cardProps={cardProps} />
                   </>
                 )}
+
+                {/* ── Floating Add button ── */}
+                <div className="mt-10 flex justify-center">
+                  <button
+                    onClick={openAdd}
+                    className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg text-white transition-transform hover:scale-110 active:scale-95"
+                    style={{ backgroundColor: "#2563eb" }}
+                    title="Add person"
+                  >
+                    <Plus size={22} />
+                  </button>
+                </div>
               </div>
             </div>
           );
