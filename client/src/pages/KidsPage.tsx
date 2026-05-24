@@ -2061,92 +2061,127 @@ function FamilyTreeSection() {
       };
     }
 
-    // Orthogonal elbow: down → across → down
     function elbowPath(x1: number, y1: number, x2: number, y2: number) {
       const midY = y1 + (y2 - y1) * 0.5;
       return `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x1.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${midY.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
     }
-    // Straight vertical
     function vertPath(x: number, y1: number, y2: number) {
       return `M ${x.toFixed(1)} ${y1.toFixed(1)} V ${y2.toFixed(1)}`;
     }
-    // Horizontal rail then drop to each child center
     function railPath(parentCx: number, parentBottom: number, childCenters: number[], childTop: number) {
       if (childCenters.length === 0) return [];
       const railY = parentBottom + (childTop - parentBottom) * 0.45;
       const left  = Math.min(...childCenters, parentCx);
       const right = Math.max(...childCenters, parentCx);
       const paths: string[] = [];
-      // Down from parent to rail
       paths.push(vertPath(parentCx, parentBottom, railY));
-      // Horizontal rail
       if (childCenters.length > 1 || Math.abs(parentCx - childCenters[0]) > 4)
         paths.push(`M ${left.toFixed(1)} ${railY.toFixed(1)} H ${right.toFixed(1)}`);
-      // Drop from rail to each child
       childCenters.forEach(cx => paths.push(vertPath(cx, railY, childTop)));
       return paths;
     }
 
-    const COL_PAT   = "#3b82f6";  // blue
-    const COL_MAT   = "#f97316";  // orange
-    const COL_TEAL  = "#0d9488";  // teal
-    const COL_SLATE = "#94a3b8";  // neutral
+    const COL_PAT   = "#3b82f6";
+    const COL_MAT   = "#f97316";
+    const COL_TEAL  = "#0d9488";
+    const COL_SLATE = "#94a3b8";
 
-    // great-grandparents → grandparents
+    // ── Great-grandparents → grandparents ──────────────────────────────────────
     const ggpBox = getBox("ggp");
     if (ggpBox) {
-      const targets = [getBox("gpAll"), getBox("patGP"), getBox("matGP")].filter(Boolean) as ReturnType<typeof getBox>[];
-      targets.forEach(t => { if (t) newPaths.push({ d: elbowPath(ggpBox.cx, ggpBox.bottom, t!.cx, t!.top), color: COL_SLATE }); });
+      [getBox("gpAll"), getBox("patGP"), getBox("matGP")]
+        .filter(Boolean)
+        .forEach(t => newPaths.push({ d: elbowPath(ggpBox.cx, ggpBox.bottom, t!.cx, t!.top), color: COL_SLATE }));
     }
 
-    // within paternal column: grandparents → parents
+    // ── Grandparents → core parents ────────────────────────────────────────────
     const patGPBox = getBox("patGP");
-    const patPBox  = getBox("patP");
-    if (patGPBox && patPBox) newPaths.push({ d: elbowPath(patGPBox.cx, patGPBox.bottom, patPBox.cx, patPBox.top), color: COL_PAT });
-
-    // within maternal column: grandparents → parents
     const matGPBox = getBox("matGP");
-    const matPBox  = getBox("matP");
-    if (matGPBox && matPBox) newPaths.push({ d: elbowPath(matGPBox.cx, matGPBox.bottom, matPBox.cx, matPBox.top), color: COL_MAT });
+    const gpAllBox = getBox("gpAll");
 
-    // single-column: grandparents → parents
-    const gpAllBox  = getBox("gpAll");
-    const pAllBox   = getBox("parentsAll");
-    if (gpAllBox && pAllBox) newPaths.push({ d: elbowPath(gpAllBox.cx, gpAllBox.bottom, pAllBox.cx, pAllBox.top), color: COL_SLATE });
+    const fatherBoxes = patFathers.map(m => getBox(`p-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    const motherBoxes = matMothers.map(m => getBox(`p-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    const noSidePBoxes = noSideCoreParents.map(m => getBox(`p-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
 
-    // Horizontal line between paternal parent and maternal parent (spouse connection)
-    if (patPBox && matPBox) {
-      const lineY = (patPBox.top + patPBox.bottom) / 2;
-      newPaths.push({ d: `M ${patPBox.cx.toFixed(1)} ${lineY.toFixed(1)} H ${matPBox.cx.toFixed(1)}`, color: COL_SLATE });
+    if (patGPBox) {
+      fatherBoxes.forEach(fb => newPaths.push({ d: elbowPath(patGPBox.cx, patGPBox.bottom, fb.cx, fb.top), color: COL_PAT }));
+    }
+    if (matGPBox) {
+      motherBoxes.forEach(mb => newPaths.push({ d: elbowPath(matGPBox.cx, matGPBox.bottom, mb.cx, mb.top), color: COL_MAT }));
+    }
+    if (gpAllBox) {
+      noSidePBoxes.forEach(pb => newPaths.push({ d: elbowPath(gpAllBox.cx, gpAllBox.bottom, pb.cx, pb.top), color: COL_SLATE }));
     }
 
-    // Parents → yourGen (bracket from midpoint of parent pair or single parent)
-    const yourGenBox    = getBox("yourGen");
-    const patBottomBox  = patPBox ?? patGPBox;
-    const matBottomBox  = matPBox ?? matGPBox;
-    if (yourGenBox) {
-      if (patBottomBox && matBottomBox) {
-        const midX  = (patBottomBox.cx + matBottomBox.cx) / 2;
-        const railY = Math.max(patBottomBox.bottom, matBottomBox.bottom) + 18;
-        newPaths.push({ d: vertPath(midX, railY, yourGenBox.top), color: COL_TEAL });
-      } else {
-        const aboveBox = pAllBox ?? gpAllBox;
-        if (aboveBox) newPaths.push({ d: elbowPath(aboveBox.cx, aboveBox.bottom, yourGenBox.cx, yourGenBox.top), color: COL_TEAL });
-      }
+    // ── Father ↔ Mother marriage line ──────────────────────────────────────────
+    const fatherBox = fatherBoxes[0] ?? null;
+    const motherBox = motherBoxes[0] ?? null;
+    if (fatherBox && motherBox) {
+      const lineY = (Math.max(fatherBox.top, motherBox.top) + Math.min(fatherBox.bottom, motherBox.bottom)) / 2;
+      newPaths.push({ d: `M ${fatherBox.cx.toFixed(1)} ${lineY.toFixed(1)} H ${motherBox.cx.toFixed(1)}`, color: COL_SLATE });
     }
 
-    // yourGen → children (fan out with rail)
-    const childrenBox = getBox("children");
-    if (yourGenBox && childrenBox) {
-      const childCxs = [childrenBox.cx];
-      railPath(yourGenBox.cx, yourGenBox.bottom, childCxs, childrenBox.top)
+    // ── Parents couple midpoint → your-gen children (siblings + self) ──────────
+    let parentMidX: number | null = null;
+    let parentBottom: number | null = null;
+
+    if (fatherBox && motherBox) {
+      parentMidX   = (fatherBox.cx + motherBox.cx) / 2;
+      parentBottom = Math.max(fatherBox.bottom, motherBox.bottom);
+    } else if (fatherBox) {
+      parentMidX = fatherBox.cx; parentBottom = fatherBox.bottom;
+    } else if (motherBox) {
+      parentMidX = motherBox.cx; parentBottom = motherBox.bottom;
+    } else if (noSidePBoxes.length > 0) {
+      parentMidX   = noSidePBoxes.reduce((s, b) => s + b.cx, 0) / noSidePBoxes.length;
+      parentBottom = Math.max(...noSidePBoxes.map(b => b.bottom));
+    } else {
+      // fall back to grandparents
+      const gpBot = patGPBox ?? matGPBox ?? gpAllBox;
+      if (gpBot) { parentMidX = gpBot.cx; parentBottom = gpBot.bottom; }
+    }
+
+    const siblingBoxes  = siblings.map(m => getBox(`yg-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    const selfBox       = selfNodes[0] ? getBox(`yg-${selfNodes[0].id}`) : null;
+    const yourGenTargetBoxes = [...siblingBoxes, ...(selfBox ? [selfBox] : [])];
+
+    if (parentMidX !== null && parentBottom !== null && yourGenTargetBoxes.length > 0) {
+      railPath(parentMidX, parentBottom, yourGenTargetBoxes.map(b => b.cx), yourGenTargetBoxes[0].top)
         .forEach(d => newPaths.push({ d, color: COL_TEAL }));
     }
 
-    // children → grandchildren
-    const grandchildrenBox = getBox("grandchildren");
-    if (childrenBox && grandchildrenBox) {
-      railPath(childrenBox.cx, childrenBox.bottom, [grandchildrenBox.cx], grandchildrenBox.top)
+    // ── Self ↔ Spouse marriage line ────────────────────────────────────────────
+    const spouseBox = spouseNodes[0] ? getBox(`yg-${spouseNodes[0].id}`) : null;
+    if (selfBox && spouseBox) {
+      const lineY = (Math.max(selfBox.top, spouseBox.top) + Math.min(selfBox.bottom, spouseBox.bottom)) / 2;
+      newPaths.push({ d: `M ${selfBox.cx.toFixed(1)} ${lineY.toFixed(1)} H ${spouseBox.cx.toFixed(1)}`, color: COL_SLATE, dashed: true });
+    }
+
+    // ── Self + Spouse couple midpoint → children ───────────────────────────────
+    let coupleMidX: number | null = null;
+    let coupleBottom: number | null = null;
+
+    if (selfBox && spouseBox) {
+      coupleMidX   = (selfBox.cx + spouseBox.cx) / 2;
+      coupleBottom = Math.max(selfBox.bottom, spouseBox.bottom);
+    } else if (selfBox) {
+      coupleMidX = selfBox.cx; coupleBottom = selfBox.bottom;
+    } else if (spouseBox) {
+      coupleMidX = spouseBox.cx; coupleBottom = spouseBox.bottom;
+    }
+
+    const childBoxes = children.map(m => getBox(`ch-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    if (coupleMidX !== null && coupleBottom !== null && childBoxes.length > 0) {
+      railPath(coupleMidX, coupleBottom, childBoxes.map(b => b.cx), childBoxes[0].top)
+        .forEach(d => newPaths.push({ d, color: COL_TEAL }));
+    }
+
+    // ── Children → grandchildren ───────────────────────────────────────────────
+    const gcBoxes = grandchildren.map(m => getBox(`gc-${m.id}`)).filter(Boolean) as NonNullable<ReturnType<typeof getBox>>[];
+    if (childBoxes.length > 0 && gcBoxes.length > 0) {
+      const childMidX  = childBoxes.reduce((s, b) => s + b.cx, 0) / childBoxes.length;
+      const childBotY  = Math.max(...childBoxes.map(b => b.bottom));
+      railPath(childMidX, childBotY, gcBoxes.map(b => b.cx), gcBoxes[0].top)
         .forEach(d => newPaths.push({ d, color: COL_TEAL }));
     }
 
@@ -2197,12 +2232,26 @@ function FamilyTreeSection() {
   const grandchildren     = members.filter(m => m.role === "grandchild");
   const others            = members.filter(m => m.role === "other");
 
-  const patGrandparents   = grandparents.filter(m => m.side === "paternal");
-  const matGrandparents   = grandparents.filter(m => m.side === "maternal");
+  const patGrandparents    = grandparents.filter(m => m.side === "paternal");
+  const matGrandparents    = grandparents.filter(m => m.side === "maternal");
   const noSideGrandparents = grandparents.filter(m => !m.side || m.side === "none");
-  const patParents        = parents.filter(m => m.side === "paternal");
-  const matParents        = parents.filter(m => m.side === "maternal");
-  const noSideParents     = parents.filter(m => !m.side || m.side === "none");
+  const patParents         = parents.filter(m => m.side === "paternal");
+  const matParents         = parents.filter(m => m.side === "maternal");
+
+  // Split core parents (father/mother) from aunts & uncles
+  const coreParentNodes   = members.filter(m => m.role === "parent");
+  const auntUncleNodes    = members.filter(m => m.role === "aunt_uncle");
+  const patFathers        = coreParentNodes.filter(m => m.side === "paternal");
+  const matMothers        = coreParentNodes.filter(m => m.side === "maternal");
+  const noSideCoreParents = coreParentNodes.filter(m => !m.side || m.side === "none");
+  const patAUs            = auntUncleNodes.filter(m => m.side === "paternal");
+  const matAUs            = auntUncleNodes.filter(m => m.side === "maternal");
+  const noSideAUs         = auntUncleNodes.filter(m => !m.side || m.side === "none");
+
+  // Your-generation sub-groups
+  const selfNodes   = yourGen.filter(m => m.role === "self");
+  const siblings    = yourGen.filter(m => m.role === "sibling");
+  const spouseNodes = yourGen.filter(m => m.role === "spouse");
 
   const hasTwoSides = (patGrandparents.length > 0 || patParents.length > 0) &&
                       (matGrandparents.length > 0 || matParents.length > 0);
@@ -2366,38 +2415,84 @@ function FamilyTreeSection() {
                 {/* spacer between grandparents and parents */}
                 {(grandparents.length > 0 || greatGrandparents.length > 0) && parents.length > 0 && <div className="h-14" />}
 
-                {/* ── Parents ── */}
-                {hasTwoSides ? (
-                  <div className="flex justify-center gap-20 w-full">
-                    {patParents.length > 0 && (
-                      <div ref={setNodeRef("patP")} className="flex gap-8">
-                        {patParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
-                      </div>
-                    )}
-                    {matParents.length > 0 && (
-                      <div ref={setNodeRef("matP")} className="flex gap-8">
-                        {matParents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
-                      </div>
-                    )}
-                  </div>
-                ) : parents.length > 0 ? (
+                {/* ── Parents + Aunts/Uncles ── */}
+                {parents.length > 0 && (
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Parents</p>
-                    <div ref={setNodeRef("parentsAll")} className="flex flex-wrap justify-center gap-8">
-                      {parents.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                    {/* Layout: [paternal AUs] [father] ═══ [mother] [maternal AUs] */}
+                    <div className="flex items-start justify-center gap-6 flex-wrap w-full">
+                      {/* Paternal side: AUs first, then father */}
+                      {(patAUs.length > 0 || patFathers.length > 0) && (
+                        <div className="flex items-start gap-6">
+                          {patAUs.map(m => (
+                            <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                          {patFathers.map(m => (
+                            <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Maternal side: mother first, then AUs */}
+                      {(matMothers.length > 0 || matAUs.length > 0) && (
+                        <div className="flex items-start gap-6">
+                          {matMothers.map(m => (
+                            <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                          {matAUs.map(m => (
+                            <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                              <FamilyTreeNode {...cardProps(m)} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* No-side core parents */}
+                      {noSideCoreParents.map(m => (
+                        <div key={m.id} ref={setNodeRef(`p-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
+                      {/* No-side AUs */}
+                      {noSideAUs.map(m => (
+                        <div key={m.id} ref={setNodeRef(`au-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                   </>
-                ) : null}
+                )}
 
                 {/* spacer */}
                 {(parents.length > 0 || grandparents.length > 0) && yourGen.length > 0 && <div className="h-14" />}
 
-                {/* ── Your Generation ── */}
+                {/* ── Your Generation: siblings | you ═══ spouse ── */}
                 {yourGen.length > 0 && (
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Your Generation</p>
-                    <div ref={setNodeRef("yourGen")} className="flex flex-wrap justify-center gap-8">
-                      {yourGen.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                    <div className="flex items-start justify-center gap-6 flex-wrap">
+                      {/* Siblings to the left */}
+                      {siblings.map(m => (
+                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
+                      {/* You */}
+                      {selfNodes.map(m => (
+                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
+                      {/* Spouse(s) directly adjacent to you */}
+                      {spouseNodes.map(m => (
+                        <div key={m.id} ref={setNodeRef(`yg-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                   </>
                 )}
@@ -2409,8 +2504,12 @@ function FamilyTreeSection() {
                 {children.length > 0 && (
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Children</p>
-                    <div ref={setNodeRef("children")} className="flex flex-wrap justify-center gap-8">
-                      {children.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                    <div className="flex flex-wrap justify-center gap-8">
+                      {children.map(m => (
+                        <div key={m.id} ref={setNodeRef(`ch-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                   </>
                 )}
@@ -2422,8 +2521,12 @@ function FamilyTreeSection() {
                 {grandchildren.length > 0 && (
                   <>
                     <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-3">Grandchildren</p>
-                    <div ref={setNodeRef("grandchildren")} className="flex flex-wrap justify-center gap-8">
-                      {grandchildren.map(m => <FamilyTreeNode key={m.id} {...cardProps(m)} />)}
+                    <div className="flex flex-wrap justify-center gap-8">
+                      {grandchildren.map(m => (
+                        <div key={m.id} ref={setNodeRef(`gc-${m.id}`)}>
+                          <FamilyTreeNode {...cardProps(m)} />
+                        </div>
+                      ))}
                     </div>
                   </>
                 )}
