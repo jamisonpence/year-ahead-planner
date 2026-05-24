@@ -1901,6 +1901,8 @@ export type SharePayload = {
   emoji?: string;           // type emoji
   imageUrl?: string;
   note?: string;            // optional personal note
+  id?: number;              // source item id for fetching fresh details
+  details?: Record<string, any>; // snapshot of full item details at share time
 };
 
 export type MessageWithSender = Message & {

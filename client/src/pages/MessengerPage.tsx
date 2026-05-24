@@ -224,47 +224,286 @@ const SHARE_TYPE_META: Record<string, { icon: React.ReactNode; color: string; la
   workout: { icon: <Dumbbell size={14} />,  color: "#ef4444", label: "Workout" },
 };
 
+function ShareDetailModal({ payload, onClose }: { payload: SharePayload; onClose: () => void }) {
+  const meta = SHARE_TYPE_META[payload.shareType] ?? { icon: <Gift size={14} />, color: "#6b7280", label: "Share" };
+  const d = payload.details ?? {};
+
+  const renderDetails = () => {
+    if (payload.shareType === 'recipe') {
+      const totalMins = (d.prepTime ?? 0) + (d.cookTime ?? 0);
+      let ingredients: string[] = [];
+      try { ingredients = JSON.parse(d.ingredientsJson ?? '[]'); } catch {}
+
+      return (
+        <div className="space-y-4">
+          {/* Stats row */}
+          <div className="flex gap-3 flex-wrap">
+            {d.category && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Category</p>
+                <p className="text-sm font-semibold">{d.category}</p>
+              </div>
+            )}
+            {totalMins > 0 && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Total Time</p>
+                <p className="text-sm font-semibold">{totalMins} min</p>
+              </div>
+            )}
+            {d.servings && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Servings</p>
+                <p className="text-sm font-semibold">{d.servings}</p>
+              </div>
+            )}
+          </div>
+          {ingredients.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Ingredients</p>
+              <ul className="space-y-1">
+                {ingredients.map((ing: string, i: number) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: meta.color }} />
+                    {ing}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.instructions && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Instructions</p>
+              <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-line">{d.instructions}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (payload.shareType === 'spot') {
+      const tags: string[] = (() => {
+        try { return JSON.parse(d.tags ?? '[]'); } catch { return []; }
+      })();
+      return (
+        <div className="space-y-4">
+          {/* Address / location */}
+          {(d.address || d.city) && (
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin size={15} className="mt-0.5 shrink-0" style={{ color: meta.color }} />
+              <span>{[d.address, d.neighborhood, d.city].filter(Boolean).join(', ')}</span>
+            </div>
+          )}
+          {/* Stats row */}
+          <div className="flex gap-3 flex-wrap">
+            {d.type && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Type</p>
+                <p className="text-sm font-semibold capitalize">{d.type}</p>
+              </div>
+            )}
+            {d.priceRange && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Price</p>
+                <p className="text-sm font-semibold">{d.priceRange}</p>
+              </div>
+            )}
+            {d.rating && (
+              <div className="flex-1 min-w-[80px] rounded-xl bg-secondary/60 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Rating</p>
+                <p className="text-sm font-semibold">⭐ {d.rating}/5</p>
+              </div>
+            )}
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((t: string) => (
+                <span key={t} className="text-xs px-2.5 py-1 rounded-full border font-medium" style={{ borderColor: `${meta.color}50`, color: meta.color, background: `${meta.color}12` }}>
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+          {d.website && (
+            <a href={d.website} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm font-medium hover:underline"
+              style={{ color: meta.color }}
+            >
+              🔗 {d.website}
+            </a>
+          )}
+          {d.spotNotes && (
+            <div className="rounded-xl bg-secondary/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Notes</p>
+              <p className="text-sm leading-relaxed">{d.spotNotes}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (payload.shareType === 'movie') {
+      const genres: string[] = (() => {
+        try { return JSON.parse(d.genres ?? '[]'); } catch { return []; }
+      })();
+      const streaming: string[] = (() => {
+        try { return JSON.parse(d.streamingOn ?? '[]'); } catch { return []; }
+      })();
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            {d.posterUrl && (
+              <img src={d.posterUrl} alt={payload.name} className="w-20 rounded-xl object-cover shrink-0" />
+            )}
+            <div className="flex-1 space-y-3">
+              <div className="flex gap-2 flex-wrap">
+                {d.mediaType && (
+                  <div className="rounded-xl bg-secondary/60 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Type</p>
+                    <p className="text-sm font-semibold">{d.mediaType === 'tv' ? 'TV Show' : 'Movie'}</p>
+                  </div>
+                )}
+                {d.releaseYear && (
+                  <div className="rounded-xl bg-secondary/60 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Year</p>
+                    <p className="text-sm font-semibold">{d.releaseYear}</p>
+                  </div>
+                )}
+              </div>
+              {d.director && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Director</p>
+                  <p className="text-sm font-medium">{d.director}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          {genres.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {genres.map((g: string) => (
+                <span key={g} className="text-xs px-2.5 py-1 rounded-full border font-medium" style={{ borderColor: `${meta.color}50`, color: meta.color, background: `${meta.color}12` }}>
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
+          {streaming.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Watch on</p>
+              <div className="flex flex-wrap gap-1.5">
+                {streaming.map((s: string) => (
+                  <span key={s} className="text-xs px-2.5 py-1 rounded-full bg-secondary/80 border font-medium">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {d.movieNotes && (
+            <div className="rounded-xl bg-secondary/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Notes</p>
+              <p className="text-sm leading-relaxed">{d.movieNotes}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const hasDetails = payload.details && Object.values(payload.details).some(v => v != null && v !== '' && v !== '[]');
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="shrink-0">
+          {/* Type badge */}
+          <div
+            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest mb-2 w-fit px-2.5 py-1 rounded-full"
+            style={{ background: `${meta.color}20`, color: meta.color }}
+          >
+            {meta.icon}
+            {meta.label} Recommendation
+          </div>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            {payload.emoji && <span className="text-2xl">{payload.emoji}</span>}
+            {payload.name}
+          </DialogTitle>
+          {payload.subtitle && (
+            <p className="text-sm text-muted-foreground">{payload.subtitle}</p>
+          )}
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+          {payload.note && (
+            <div
+              className="rounded-xl px-3 py-2.5 text-sm italic"
+              style={{ background: `${meta.color}12`, borderLeft: `3px solid ${meta.color}` }}
+            >
+              <span className="not-italic text-[10px] font-semibold uppercase tracking-widest text-muted-foreground block mb-1">Personal note</span>
+              "{payload.note}"
+            </div>
+          )}
+
+          {hasDetails ? renderDetails() : (
+            <p className="text-sm text-muted-foreground text-center py-4">No additional details available.</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ShareCard({ shareType, shareData, isOwn }: {
   shareType: string;
   shareData: string;
   isOwn: boolean;
 }) {
+  const [showDetail, setShowDetail] = useState(false);
   let payload: SharePayload;
   try { payload = JSON.parse(shareData); }
   catch { return <span className="text-xs text-muted-foreground italic">Shared item</span>; }
 
   const meta = SHARE_TYPE_META[shareType] ?? { icon: <Gift size={14} />, color: "#6b7280", label: "Share" };
+  const hasDetails = !!(payload.details || payload.imageUrl);
 
   return (
-    <div
-      className={`rounded-2xl overflow-hidden border text-sm max-w-[260px] ${
-        isOwn ? "rounded-br-sm" : "rounded-bl-sm"
-      }`}
-      style={{ borderColor: `${meta.color}40`, background: `${meta.color}12` }}
-    >
-      {/* Header badge */}
+    <>
       <div
-        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest"
-        style={{ background: `${meta.color}25`, color: meta.color }}
+        onClick={() => hasDetails && setShowDetail(true)}
+        className={`rounded-2xl overflow-hidden border text-sm max-w-[260px] transition-all ${
+          isOwn ? "rounded-br-sm" : "rounded-bl-sm"
+        } ${hasDetails ? "cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-100" : ""}`}
+        style={{ borderColor: `${meta.color}40`, background: `${meta.color}12` }}
       >
-        {meta.icon}
-        {payload.emoji && <span>{payload.emoji}</span>}
-        {meta.label} Recommendation
-      </div>
+        {/* Header badge */}
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest"
+          style={{ background: `${meta.color}25`, color: meta.color }}
+        >
+          {meta.icon}
+          {payload.emoji && <span>{payload.emoji}</span>}
+          {meta.label} Recommendation
+        </div>
 
-      {/* Body */}
-      <div className="px-3 py-2.5">
-        <p className="font-semibold leading-tight">{payload.name}</p>
-        {payload.subtitle && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">{payload.subtitle}</p>
-        )}
-        {payload.note && (
-          <p className="mt-1.5 text-xs italic text-foreground/70 border-t pt-1.5" style={{ borderColor: `${meta.color}30` }}>
-            "{payload.note}"
-          </p>
-        )}
+        {/* Body */}
+        <div className="px-3 py-2.5">
+          <p className="font-semibold leading-tight">{payload.name}</p>
+          {payload.subtitle && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">{payload.subtitle}</p>
+          )}
+          {payload.note && (
+            <p className="mt-1.5 text-xs italic text-foreground/70 border-t pt-1.5" style={{ borderColor: `${meta.color}30` }}>
+              "{payload.note}"
+            </p>
+          )}
+          {hasDetails && (
+            <p className="mt-1.5 text-[10px] font-medium" style={{ color: meta.color }}>
+              Tap to view details →
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+      {showDetail && <ShareDetailModal payload={payload} onClose={() => setShowDetail(false)} />}
+    </>
   );
 }
 
@@ -298,6 +537,18 @@ function SharePicker({ onShare, onClose }: {
               shareType: 'spot', name: s.name,
               subtitle: [s.type, s.neighborhood || s.city].filter(Boolean).join(' · '),
               emoji: spotTypeEmoji[s.type] ?? '📍',
+              id: s.id,
+              details: {
+                type: s.type,
+                address: s.address,
+                neighborhood: s.neighborhood,
+                city: s.city,
+                website: s.website,
+                priceRange: s.priceRange,
+                tags: s.tags,
+                rating: s.rating,
+                spotNotes: s.spotNotes,
+              },
             } as SharePayload,
           };
         });
@@ -312,6 +563,16 @@ function SharePicker({ onShare, onClose }: {
             subtitle: [m.mediaType === 'tv' ? 'TV Show' : 'Movie', m.releaseYear ? String(m.releaseYear) : null].filter(Boolean).join(' · '),
             emoji: m.mediaType === 'tv' ? '📺' : '🎬',
             imageUrl: m.posterUrl ?? undefined,
+            id: m.id,
+            details: {
+              mediaType: m.mediaType,
+              releaseYear: m.releaseYear,
+              director: m.director,
+              genres: m.genres,
+              streamingOn: m.streamingOn,
+              posterUrl: m.posterUrl,
+              movieNotes: m.movieNotes,
+            },
           } as SharePayload,
         }));
     }
@@ -327,6 +588,15 @@ function SharePicker({ onShare, onClose }: {
               subtitle: [r.category, totalMins > 0 ? `${totalMins} min` : null].filter(Boolean).join(' · '),
               emoji: r.emoji ?? '🍽️',
               imageUrl: r.imageUrl ?? undefined,
+              id: r.id,
+              details: {
+                category: r.category,
+                prepTime: r.prepTime,
+                cookTime: r.cookTime,
+                servings: r.servings,
+                ingredientsJson: r.ingredientsJson,
+                instructions: r.instructions,
+              },
             } as SharePayload,
           };
         });
