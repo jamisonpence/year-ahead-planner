@@ -507,36 +507,50 @@ function FamilyClusterCard({
   );
 }
 
-// Cluster people in a group into family units for display
-function clusterFamilies(members: PersonWithSpouse[]): {
+// Cluster people in a group into family units for display.
+// members = people explicitly in the group; allPeople = full roster to look up children from
+function clusterFamilies(members: PersonWithSpouse[], allPeople: PersonWithSpouse[]): {
   adults: PersonWithSpouse[];
   children: PersonWithSpouse[];
 }[] {
-  const idSet = new Set(members.map((p) => p.id));
-  // Collect all IDs that appear as a child in someone's childrenJson
-  const childIdSet = new Set<number>();
+  const memberIdSet = new Set(members.map((p) => p.id));
+  const allPeopleMap = new Map(allPeople.map((p) => [p.id, p]));
+
+  // Collect child IDs that belong to group members (children may be outside the group)
+  const childOfMemberSet = new Set<number>();
   members.forEach((p) => {
-    parseChildIds(p.childrenJson).forEach((cid) => { if (idSet.has(cid)) childIdSet.add(cid); });
+    parseChildIds(p.childrenJson).forEach((cid) => childOfMemberSet.add(cid));
+  });
+
+  // Only treat someone as a "child row" (not a cluster head) if they are a member AND
+  // their parent is also a member — avoids hiding solo children
+  const suppressedAsChild = new Set<number>();
+  members.forEach((p) => {
+    parseChildIds(p.childrenJson).forEach((cid) => {
+      if (memberIdSet.has(cid)) suppressedAsChild.add(cid);
+    });
   });
 
   const visited = new Set<number>();
   const clusters: { adults: PersonWithSpouse[]; children: PersonWithSpouse[] }[] = [];
 
   members.forEach((p) => {
-    if (visited.has(p.id) || childIdSet.has(p.id)) return;
+    if (visited.has(p.id) || suppressedAsChild.has(p.id)) return;
     visited.add(p.id);
 
     const adults: PersonWithSpouse[] = [p];
     // Add spouse if they're in the group and not already visited
-    if (p.spouseId && idSet.has(p.spouseId) && !visited.has(p.spouseId)) {
+    if (p.spouseId && memberIdSet.has(p.spouseId) && !visited.has(p.spouseId)) {
       const spouse = members.find((m) => m.id === p.spouseId);
       if (spouse) { adults.push(spouse); visited.add(spouse.id); }
     }
 
-    // Gather children from both adults
+    // Gather children from both adults — look up from allPeople (not just group members)
     const childIds = new Set<number>();
-    adults.forEach((a) => parseChildIds(a.childrenJson).forEach((cid) => { if (idSet.has(cid)) childIds.add(cid); }));
-    const children = members.filter((m) => childIds.has(m.id));
+    adults.forEach((a) => parseChildIds(a.childrenJson).forEach((cid) => childIds.add(cid)));
+    const children = Array.from(childIds)
+      .map((cid) => allPeopleMap.get(cid))
+      .filter((c): c is PersonWithSpouse => c !== undefined);
     children.forEach((c) => visited.add(c.id));
 
     clusters.push({ adults, children });
@@ -2970,7 +2984,7 @@ export default function RelationshipsPage() {
                   </div>
                 ) : (
                   <div className="pt-3 space-y-3">
-                    {clusterFamilies(members).map((cluster, ci) => (
+                    {clusterFamilies(members, allPeople).map((cluster, ci) => (
                       <FamilyClusterCard
                         key={ci}
                         adults={cluster.adults}
