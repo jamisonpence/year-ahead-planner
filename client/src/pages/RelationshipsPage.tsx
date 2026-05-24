@@ -1307,7 +1307,9 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["never"]));
-  const [settingFreq, setSettingFreq] = useState<number | null>(null); // person id being edited
+  const [settingFreq, setSettingFreq] = useState<number | null>(null); // person id whose frequency is being changed
+  const [addingToFreq, setAddingToFreq] = useState<string | null>(null); // freq key for "Add contact" picker
+  const [pickerSearch, setPickerSearch] = useState("");
 
   async function setFrequency(personId: number, freq: KitFrequency | null) {
     try {
@@ -1318,6 +1320,8 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
       });
       qc.invalidateQueries({ queryKey: ["/api/people"] });
       setSettingFreq(null);
+      setAddingToFreq(null);
+      setPickerSearch("");
     } catch {
       toast({ title: "Failed to update", variant: "destructive" });
     }
@@ -1349,13 +1353,18 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
     acc[f.key] = people.filter(p => (p as any).keepInTouchFrequency === f.key);
     return acc;
   }, {});
-  const uncategorized = people.filter(p => !(p as any).keepInTouchFrequency);
 
   return (
     <div className="space-y-1">
       {[...KIT_FREQUENCIES].map(freq => {
         const group = categorized[freq.key] ?? [];
         const isCollapsed = collapsed.has(freq.key);
+        // People not already in this group, available to add
+        const available = people.filter(p => (p as any).keepInTouchFrequency !== freq.key);
+        const filteredAvailable = pickerSearch
+          ? available.filter(p => fullName(p).toLowerCase().includes(pickerSearch.toLowerCase()))
+          : available;
+
         return (
           <div key={freq.key}>
             <button
@@ -1366,11 +1375,10 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
               <div className="flex items-center gap-3">
                 {!isCollapsed && (
                   <button
-                    onClick={e => { e.stopPropagation(); setSettingFreq(-1); }}
+                    onClick={e => { e.stopPropagation(); setAddingToFreq(addingToFreq === freq.key ? null : freq.key); setPickerSearch(""); }}
                     className="text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity hover:underline"
-                    onClick={e => { e.stopPropagation(); }}
                   >
-                    Add contact
+                    + Add contact
                   </button>
                 )}
                 <ChevronDown size={14} className={`text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
@@ -1380,7 +1388,7 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
             {!isCollapsed && (
               <div className="ml-1 mb-1">
                 {group.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-1.5 px-2">No contacts with this frequency</p>
+                  <p className="text-xs text-muted-foreground py-1.5 px-2">No contacts — click "+ Add contact" to add someone</p>
                 ) : (
                   <div className="divide-y divide-border rounded-xl border overflow-hidden">
                     {group.map(p => {
@@ -1422,11 +1430,10 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
                     })}
                   </div>
                 )}
-                {settingFreq === -freq.key.length && <div />}
               </div>
             )}
 
-            {/* Frequency picker inline */}
+            {/* Frequency change picker */}
             {group.map(p => settingFreq === p.id && (
               <div key={`picker-${p.id}`} className="ml-1 mb-2 rounded-xl border bg-card p-3 space-y-1">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Keep in touch with {p.firstName}:</p>
@@ -1448,67 +1455,55 @@ function KeepInTouchSection({ people }: { people: PersonWithSpouse[] }) {
                 </div>
               </div>
             ))}
+
+            {/* Add contact picker */}
+            {addingToFreq === freq.key && (
+              <div className="ml-1 mb-2 rounded-xl border bg-card p-3">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Add someone to "{freq.label}":</p>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search contacts…"
+                  value={pickerSearch}
+                  onChange={e => setPickerSearch(e.target.value)}
+                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border bg-background mb-2 outline-none focus:ring-1 focus:ring-primary"
+                />
+                {filteredAvailable.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-2">No contacts found</p>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {filteredAvailable.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setFrequency(p.id, freq.key as KitFrequency)}
+                        className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">
+                          {initials(p.firstName, p.lastName)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{fullName(p)}</p>
+                          {(p as any).keepInTouchFrequency && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Currently: {KIT_FREQUENCIES.find(f => f.key === (p as any).keepInTouchFrequency)?.label}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => { setAddingToFreq(null); setPickerSearch(""); }}
+                  className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground text-center py-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         );
       })}
-
-      {/* Uncategorized */}
-      <div>
-        <button
-          onClick={() => toggleSection("uncategorized")}
-          className="w-full flex items-center justify-between py-2.5 px-1 hover:bg-muted/30 rounded-lg transition-colors"
-        >
-          <span className="text-sm font-semibold">Uncategorized</span>
-          <ChevronDown size={14} className={`text-muted-foreground transition-transform ${collapsed.has("uncategorized") ? "" : "rotate-180"}`} />
-        </button>
-        {!collapsed.has("uncategorized") && (
-          <div className="ml-1 mb-1">
-            {uncategorized.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-1.5 px-2">No uncategorized contacts</p>
-            ) : (
-              <>
-                <p className="text-xs text-muted-foreground px-2 py-1">{uncategorized.length} contacts — set a frequency to keep in touch</p>
-                <div className="divide-y divide-border rounded-xl border overflow-hidden mt-1">
-                  {uncategorized.map(p => (
-                    <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 bg-card hover:bg-muted/20 transition-colors">
-                      {(p as any).avatarUrl ? (
-                        <img src={(p as any).avatarUrl} alt={fullName(p)} className="w-8 h-8 rounded-full object-cover shrink-0" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                          {initials(p.firstName, p.lastName)}
-                        </div>
-                      )}
-                      <span className="flex-1 text-sm font-medium truncate">{fullName(p)}</span>
-                      <button
-                        onClick={() => setSettingFreq(settingFreq === p.id ? null : p.id)}
-                        className="text-xs text-primary hover:underline shrink-0"
-                      >
-                        Set frequency
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-        {uncategorized.map(p => settingFreq === p.id && (
-          <div key={`picker-${p.id}`} className="ml-1 mb-2 rounded-xl border bg-card p-3 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Keep in touch with {p.firstName}:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {KIT_FREQUENCIES.map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => setFrequency(p.id, f.key)}
-                  className="text-xs px-2.5 py-1 rounded-full border hover:bg-muted/50 transition-colors"
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
