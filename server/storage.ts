@@ -1572,6 +1572,16 @@ export async function initializeStorage() {
       is_deleted BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (message_id, user_id, emoji)
+    )
+  `);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -5670,6 +5680,14 @@ export const storage: IStorage = {
         created_at TEXT NOT NULL,
         is_deleted BOOLEAN NOT NULL DEFAULT FALSE
       );
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        id SERIAL PRIMARY KEY,
+        message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        emoji TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (message_id, user_id, emoji)
+      );
     `);
   },
 
@@ -5807,11 +5825,32 @@ export const storage: IStorage = {
       LIMIT $2
     `, [conversationId, limit]);
 
-    return rows.rows.reverse().map((m: any) => ({
+    const msgList = rows.rows.reverse().map((m: any) => ({
       id: m.id, conversationId: m.conversationId, senderId: m.senderId,
       content: m.content, createdAt: m.createdAt, isDeleted: m.isDeleted,
       sender: { id: m.sUid, name: m.sName, email: m.sEmail, avatarUrl: m.sAvatarUrl },
+      reactions: [] as any[],
     }));
+
+    if (msgList.length > 0) {
+      const ids = msgList.map((m: any) => m.id);
+      const rxRows = await pool.query(
+        `SELECT message_id AS "messageId", user_id AS "userId", emoji FROM message_reactions WHERE message_id = ANY($1)`,
+        [ids]
+      );
+      const byMsg: Record<number, { emoji: string; userIds: number[] }[]> = {};
+      for (const rx of rxRows.rows) {
+        if (!byMsg[rx.messageId]) byMsg[rx.messageId] = [];
+        let entry = byMsg[rx.messageId].find((e: any) => e.emoji === rx.emoji);
+        if (!entry) { entry = { emoji: rx.emoji, userIds: [] }; byMsg[rx.messageId].push(entry); }
+        entry.userIds.push(rx.userId);
+      }
+      for (const m of msgList) {
+        m.reactions = (byMsg[m.id] ?? []).map((e: any) => ({ emoji: e.emoji, count: e.userIds.length, userIds: e.userIds }));
+      }
+    }
+
+    return msgList;
   },
 
   async createMessage(conversationId: number, senderId: number, content: string): Promise<any> {
@@ -5867,6 +5906,23 @@ export const storage: IStorage = {
       [messageId, userId]
     );
     return (result.rowCount ?? 0) > 0;
+  },
+
+  async addMessageReaction(messageId: number, userId: number, emoji: string): Promise<void> {
+    // Upsert — one reaction per user per emoji per message
+    await pool.query(
+      `INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+      [messageId, userId, emoji, new Date().toISOString()]
+    );
+  },
+
+  async removeMessageReaction(messageId: number, userId: number, emoji: string): Promise<void> {
+    await pool.query(
+      `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+      [messageId, userId, emoji]
+    );
   },
 
   async addConversationParticipant(conversationId: number, userId: number): Promise<void> {

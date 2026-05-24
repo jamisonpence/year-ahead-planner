@@ -1874,13 +1874,23 @@ export const messages = pgTable("messages", {
   isDeleted:      boolean("is_deleted").notNull().default(false),
 });
 
+export const messageReactions = pgTable("message_reactions", {
+  id:        serial("id").primaryKey(),
+  messageId: integer("message_id").notNull(),
+  userId:    integer("user_id").notNull(),
+  emoji:     text("emoji").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Conversation = typeof conversations.$inferSelect;
 export type ConversationParticipant = typeof conversationParticipants.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type MessageReaction = typeof messageReactions.$inferSelect;
 
-export type MessageWithSender = Message & { sender: PublicUser };
+export type ReactionSummary = { emoji: string; count: number; userIds: number[] };
+export type MessageWithSender = Message & { sender: PublicUser; reactions: ReactionSummary[] };
 export type ConversationWithDetails = Conversation & {
   participants: (PublicUser & { lastReadAt: string | null })[];
   lastMessage: MessageWithSender | null;

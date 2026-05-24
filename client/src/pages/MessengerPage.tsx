@@ -12,7 +12,7 @@ import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal,
 } from "lucide-react";
-import type { ConversationWithDetails, MessageWithSender, PublicUser } from "@shared/schema";
+import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary } from "@shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -209,15 +209,41 @@ function NewGroupDialog({ friends, onCreate, onClose }: {
   );
 }
 
+// ── Reaction Picker ───────────────────────────────────────────────────────────
+
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢", "🎉", "👏"];
+
+function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
+  return (
+    <div
+      className="absolute z-50 flex gap-1 p-1.5 rounded-2xl bg-popover border shadow-lg"
+      onMouseLeave={onClose}
+    >
+      {QUICK_EMOJIS.map(e => (
+        <button
+          key={e}
+          onClick={() => { onPick(e); onClose(); }}
+          className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-secondary transition-colors text-base"
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Message Bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, onDelete }: {
+function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
   msg: MessageWithSender;
   isOwn: boolean;
+  myId: number;
   showAvatar: boolean;
   onDelete?: () => void;
+  onReact: (emoji: string, alreadyReacted: boolean) => void;
 }) {
   const [hover, setHover] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   if (msg.isDeleted) {
     return (
@@ -228,11 +254,13 @@ function MessageBubble({ msg, isOwn, showAvatar, onDelete }: {
     );
   }
 
+  const reactions: ReactionSummary[] = msg.reactions ?? [];
+
   return (
     <div
       className={`flex gap-2 my-0.5 group items-end ${isOwn ? "flex-row-reverse" : "flex-row"}`}
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseLeave={() => { setHover(false); }}
     >
       {/* Avatar placeholder (keeps alignment) */}
       {!isOwn && (
@@ -245,6 +273,7 @@ function MessageBubble({ msg, isOwn, showAvatar, onDelete }: {
         {showAvatar && !isOwn && (
           <p className="text-[10px] text-muted-foreground mb-0.5 px-1">{msg.sender.name}</p>
         )}
+
         <div className={`relative flex items-end gap-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
           <div
             className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
@@ -255,16 +284,68 @@ function MessageBubble({ msg, isOwn, showAvatar, onDelete }: {
           >
             {msg.content}
           </div>
-          {/* Delete button (own messages only) */}
-          {isOwn && hover && onDelete && (
-            <button
-              onClick={onDelete}
-              className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-            >
-              <Trash2 size={11} />
-            </button>
-          )}
+
+          {/* Action buttons: react + delete — visible on hover */}
+          <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+            {/* Emoji react button */}
+            <div className="relative">
+              <button
+                onClick={() => setPickerOpen(p => !p)}
+                className="p-1 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors text-base leading-none"
+                title="React"
+              >
+                😊
+              </button>
+              {pickerOpen && (
+                <div className={`absolute bottom-full mb-1 ${isOwn ? "right-0" : "left-0"}`}>
+                  <ReactionPicker
+                    onPick={emoji => {
+                      const already = reactions.find(r => r.emoji === emoji)?.userIds.includes(myId) ?? false;
+                      onReact(emoji, already);
+                      setPickerOpen(false);
+                    }}
+                    onClose={() => setPickerOpen(false)}
+                  />
+                </div>
+              )}
+            </div>
+            {/* Delete button (own messages only) */}
+            {isOwn && onDelete && (
+              <button
+                onClick={onDelete}
+                className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Reactions row */}
+        {reactions.length > 0 && (
+          <div className={`flex flex-wrap gap-1 mt-1 px-1 ${isOwn ? "justify-end" : "justify-start"}`}>
+            {reactions.map(r => {
+              const iMine = r.userIds.includes(myId);
+              return (
+                <button
+                  key={r.emoji}
+                  onClick={() => onReact(r.emoji, iMine)}
+                  title={`${r.count} reaction${r.count !== 1 ? "s" : ""}`}
+                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                    iMine
+                      ? "bg-primary/15 border-primary/40 text-primary"
+                      : "bg-secondary border-border text-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  <span>{r.emoji}</span>
+                  {r.count > 1 && <span className="font-medium">{r.count}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <p className="text-[10px] text-muted-foreground mt-0.5 px-1" title={fullTime(msg.createdAt)}>
           {msgTime(msg.createdAt)}
         </p>
@@ -391,6 +472,14 @@ export default function MessengerPage() {
 
   const deleteMessage = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/messenger/messages/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/messenger/conversations", activeConvId, "messages"] }),
+  });
+
+  const reactToMessage = useMutation({
+    mutationFn: ({ msgId, emoji, remove }: { msgId: number; emoji: string; remove: boolean }) =>
+      remove
+        ? apiRequest("DELETE", `/api/messenger/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+        : apiRequest("POST", `/api/messenger/messages/${msgId}/reactions`, { emoji }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/messenger/conversations", activeConvId, "messages"] }),
   });
 
@@ -555,8 +644,12 @@ export default function MessengerPage() {
                       key={msg.id}
                       msg={msg}
                       isOwn={msg.senderId === myId}
+                      myId={myId}
                       showAvatar={showAvatar}
                       onDelete={msg.senderId === myId ? () => deleteMessage.mutate(msg.id) : undefined}
+                      onReact={(emoji, alreadyReacted) =>
+                        reactToMessage.mutate({ msgId: msg.id, emoji, remove: alreadyReacted })
+                      }
                     />
                   );
                 })

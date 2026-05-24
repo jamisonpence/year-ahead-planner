@@ -7174,6 +7174,26 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Add a reaction to a message
+  app.post("/api/messenger/messages/:id/reactions", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const { emoji } = req.body;
+      if (!emoji) return res.status(400).json({ error: "emoji required" });
+      await storage.addMessageReaction(+req.params.id, userId, emoji);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Remove a reaction from a message
+  app.delete("/api/messenger/messages/:id/reactions/:emoji", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      await storage.removeMessageReaction(+req.params.id, userId, decodeURIComponent(req.params.emoji));
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Facebook OAuth ────────────────────────────────────────────────────────────
 
   function fbCallbackUrl(req: Request): string {
