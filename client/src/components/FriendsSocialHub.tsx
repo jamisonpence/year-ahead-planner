@@ -208,6 +208,7 @@ function SearchSection({ onSendRequest, onAccept, friends, requests, sendPending
   requests: { incoming: FriendRequest[]; outgoing: FriendRequest[] };
   sendPending: boolean;
 }) {
+  const [, navigate] = useLocation();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -265,12 +266,18 @@ function SearchSection({ onSendRequest, onAccept, friends, requests, sendPending
         const isIncoming = u.relationshipStatus === "incoming";
         const friendObj = friends.find(f => f.id === u.id) as EnrichedFriend | undefined;
         return (
-          <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+          <div
+            key={u.id}
+            onClick={isFriend ? () => navigate(`/profile/${u.id}`) : undefined}
+            className={`flex items-center gap-3 p-3 rounded-xl border bg-card ${isFriend ? "cursor-pointer hover:border-violet-300/50 hover:bg-violet-50/30 dark:hover:bg-violet-950/10 transition-colors" : ""}`}
+          >
             <Avatar user={u} size={40} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{u.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-              {isFriend && (friendObj as any)?.tasteMatchPct !== undefined && (
+              <p className="text-xs text-muted-foreground truncate">
+                {isFriend ? "Tap to view profile" : u.email}
+              </p>
+              {isFriend && (friendObj as any)?.tasteMatchPct !== undefined && (friendObj as any).tasteMatchPct > 0 && (
                 <p className="text-xs text-violet-500 mt-0.5">{(friendObj as any).tasteMatchPct}% taste match</p>
               )}
             </div>
@@ -281,7 +288,7 @@ function SearchSection({ onSendRequest, onAccept, friends, requests, sendPending
                 </span>
               ) : isIncoming ? (
                 <button
-                  onClick={() => onAccept(u.incomingRequestId!)}
+                  onClick={e => { e.stopPropagation(); onAccept(u.incomingRequestId!); }}
                   className="text-xs font-medium flex items-center gap-1 bg-blue-500 text-white px-2.5 py-1.5 rounded-full hover:bg-blue-600 transition-colors"
                 >
                   <Check size={11} />Accept
@@ -292,7 +299,7 @@ function SearchSection({ onSendRequest, onAccept, friends, requests, sendPending
                 </span>
               ) : (
                 <button
-                  onClick={() => onSendRequest(u.id)}
+                  onClick={e => { e.stopPropagation(); onSendRequest(u.id); }}
                   disabled={sendPending}
                   className="text-xs font-medium flex items-center gap-1 bg-violet-500 text-white px-2.5 py-1.5 rounded-full hover:bg-violet-600 disabled:opacity-50 transition-colors"
                 >
@@ -667,14 +674,6 @@ export default function FriendsSocialHub() {
       {/* Friends List */}
       <FriendsListSection
         onUnfriend={(id) => unfriendMut.mutate(id)}
-      />
-
-      {/* Pending Requests */}
-      <PendingSection
-        requests={requests}
-        onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
-        onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
-        onCancel={(id) => cancelMut.mutate(id)}
       />
     </div>
   );

@@ -3144,7 +3144,7 @@ export default function RelationshipsPage() {
             onClick={() => setSocialTab(tab)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${socialTab === tab ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
-            {tab === "friends" && "Friends"}
+            {tab === "friends" && "Overview"}
             {tab === "contacts" && "Contacts"}
             {tab === "keepintouch" && "Keep in Touch"}
             {tab === "timeline" && "Timeline"}
