@@ -398,6 +398,153 @@ function ChildRow({ child, color }: { child: PersonWithSpouse; color?: string })
   );
 }
 
+// ── Family Cluster Card ───────────────────────────────────────────────────────
+// Renders a household unit: adult(s) + their children, visually grouped together
+function FamilyClusterCard({
+  adults,
+  children,
+  color,
+  onEdit,
+}: {
+  adults: PersonWithSpouse[];
+  children: PersonWithSpouse[];
+  color?: string;
+  onEdit: (p: PersonWithSpouse) => void;
+}) {
+  const accentBg = color ? `${color}18` : "rgba(99,102,241,0.07)";
+  const accentBorder = color ? `${color}40` : "rgba(99,102,241,0.2)";
+  const dot = color || "#6366f1";
+
+  const Avatar = ({ p, size = 36 }: { p: PersonWithSpouse; size?: number }) => (
+    <div
+      className="rounded-full flex items-center justify-center font-bold text-white shrink-0 select-none"
+      style={{ width: size, height: size, backgroundColor: dot, fontSize: size * 0.38 }}
+    >
+      {initials(p.firstName, p.lastName)}
+    </div>
+  );
+
+  return (
+    <div
+      className="rounded-2xl border overflow-hidden"
+      style={{ backgroundColor: accentBg, borderColor: accentBorder }}
+    >
+      {/* Adults row */}
+      <div className="flex items-start gap-2 p-3">
+        {adults.map((adult, i) => (
+          <div key={adult.id} className="flex items-center gap-2 flex-1 min-w-0">
+            {i > 0 && (
+              <div className="flex flex-col items-center shrink-0">
+                <Heart size={13} className="text-rose-400" fill="currentColor" />
+              </div>
+            )}
+            <Avatar p={adult} size={38} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate leading-tight">{fullName(adult)}</p>
+              {adult.birthday && (
+                <p className="text-[10px] text-muted-foreground flex items-center gap-0.5 mt-0.5">
+                  <Cake size={9} /> {formatBirthday(adult.birthday)}
+                </p>
+              )}
+              {adult.notes && (
+                <p className="text-[10px] text-muted-foreground truncate mt-0.5 italic">{adult.notes}</p>
+              )}
+            </div>
+            <button
+              onClick={() => onEdit(adult)}
+              className="p-1 rounded-lg hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Edit"
+            >
+              <Pencil size={11} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Children row */}
+      {children.length > 0 && (
+        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: accentBorder }}>
+          <div className="flex items-center gap-1 mb-2 ml-1">
+            <div className="w-3 h-px" style={{ backgroundColor: dot + "80" }} />
+            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: dot }}>
+              {children.length === 1 ? "Child" : "Children"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 ml-2">
+            {children.map((child) => {
+              const bdayInfo = child.birthday ? nextBirthday(child.birthday) : null;
+              return (
+                <button
+                  key={child.id}
+                  onClick={() => onEdit(child)}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border bg-card/60 hover:bg-card transition-colors text-left"
+                  style={{ borderColor: accentBorder }}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                    style={{ backgroundColor: dot + "cc" }}
+                  >
+                    {initials(child.firstName, child.lastName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate leading-tight">{fullName(child)}</p>
+                    {child.birthday && (
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <Cake size={8} /> {formatBirthday(child.birthday)}
+                        {bdayInfo && bdayInfo.daysAway <= 14 && (
+                          <span className="ml-0.5 font-semibold text-amber-500">{bdayInfo.label}</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Cluster people in a group into family units for display
+function clusterFamilies(members: PersonWithSpouse[]): {
+  adults: PersonWithSpouse[];
+  children: PersonWithSpouse[];
+}[] {
+  const idSet = new Set(members.map((p) => p.id));
+  // Collect all IDs that appear as a child in someone's childrenJson
+  const childIdSet = new Set<number>();
+  members.forEach((p) => {
+    parseChildIds(p.childrenJson).forEach((cid) => { if (idSet.has(cid)) childIdSet.add(cid); });
+  });
+
+  const visited = new Set<number>();
+  const clusters: { adults: PersonWithSpouse[]; children: PersonWithSpouse[] }[] = [];
+
+  members.forEach((p) => {
+    if (visited.has(p.id) || childIdSet.has(p.id)) return;
+    visited.add(p.id);
+
+    const adults: PersonWithSpouse[] = [p];
+    // Add spouse if they're in the group and not already visited
+    if (p.spouseId && idSet.has(p.spouseId) && !visited.has(p.spouseId)) {
+      const spouse = members.find((m) => m.id === p.spouseId);
+      if (spouse) { adults.push(spouse); visited.add(spouse.id); }
+    }
+
+    // Gather children from both adults
+    const childIds = new Set<number>();
+    adults.forEach((a) => parseChildIds(a.childrenJson).forEach((cid) => { if (idSet.has(cid)) childIds.add(cid); }));
+    const children = members.filter((m) => childIds.has(m.id));
+    children.forEach((c) => visited.add(c.id));
+
+    clusters.push({ adults, children });
+  });
+
+  return clusters;
+}
+
 // ── Quick Add Child ───────────────────────────────────────────────────────────
 function QuickAddChild({ person, allPeople, onSave }: {
   person: Person; allPeople: PersonWithSpouse[]; onSave: () => void;
@@ -2822,26 +2969,15 @@ export default function RelationshipsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="pt-3 space-y-2">
-                    {members.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
-                        <div className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-                          style={{ backgroundColor: `${g.color}22`, color: g.color || "#888" }}>
-                          {(p.firstName?.[0] ?? "?").toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
-                          {(p.company || p.email) && (
-                            <p className="text-xs text-muted-foreground truncate">{p.company || p.email}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors"
-                        >
-                          Edit
-                        </button>
-                      </div>
+                  <div className="pt-3 space-y-3">
+                    {clusterFamilies(members).map((cluster, ci) => (
+                      <FamilyClusterCard
+                        key={ci}
+                        adults={cluster.adults}
+                        children={cluster.children}
+                        color={g.color ?? undefined}
+                        onEdit={(p) => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                      />
                     ))}
                   </div>
                 )}
