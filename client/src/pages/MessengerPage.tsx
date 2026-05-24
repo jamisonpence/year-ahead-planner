@@ -317,16 +317,19 @@ function SharePicker({ onShare, onClose }: {
     }
     if (tab === 'recipes') {
       return recipes
-        .filter((r: any) => !q || r.title?.toLowerCase().includes(q))
-        .map((r: any) => ({
-          type: 'recipe',
-          payload: {
-            shareType: 'recipe', name: r.title,
-            subtitle: [r.cuisine, r.totalTime ? `${r.totalTime} min` : null].filter(Boolean).join(' · '),
-            emoji: r.emoji ?? '🍽️',
-            imageUrl: r.imageUrl ?? undefined,
-          } as SharePayload,
-        }));
+        .filter((r: any) => !q || r.name?.toLowerCase().includes(q))
+        .map((r: any) => {
+          const totalMins = (r.prepTime ?? 0) + (r.cookTime ?? 0);
+          return {
+            type: 'recipe',
+            payload: {
+              shareType: 'recipe', name: r.name,
+              subtitle: [r.category, totalMins > 0 ? `${totalMins} min` : null].filter(Boolean).join(' · '),
+              emoji: r.emoji ?? '🍽️',
+              imageUrl: r.imageUrl ?? undefined,
+            } as SharePayload,
+          };
+        });
     }
     return [];
   })();
