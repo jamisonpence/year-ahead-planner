@@ -79,6 +79,11 @@ export default function MoviesPage() {
   const [listTmdbLoading, setListTmdbLoading] = useState(false);
   const [listTmdbAddingId, setListTmdbAddingId] = useState<number | null>(null);
   const listSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Main search bar TMDB state
+  const [mainTmdbResults, setMainTmdbResults] = useState<TMDBResult[]>([]);
+  const [mainTmdbLoading, setMainTmdbLoading] = useState(false);
+  const [mainTmdbAddingId, setMainTmdbAddingId] = useState<number | null>(null);
+  const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listSaving, setListSaving] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -203,6 +208,57 @@ export default function MoviesPage() {
     setListMovieSearch("");
     setListTmdbResults([]);
     setListModalOpen(true);
+  }
+
+  // Main search bar — updates local filter AND debounces a TMDB lookup
+  function handleMainSearch(val: string) {
+    setSearch(val);
+    setMainTmdbResults([]);
+    if (mainSearchDebounceRef.current) clearTimeout(mainSearchDebounceRef.current);
+    if (!val.trim()) return;
+    mainSearchDebounceRef.current = setTimeout(async () => {
+      setMainTmdbLoading(true);
+      try {
+        const r = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(val.trim())}&type=multi`);
+        const data = await r.json();
+        setMainTmdbResults(Array.isArray(data) ? data.slice(0, 12) : []);
+      } catch { /* silently fail */ }
+      finally { setMainTmdbLoading(false); }
+    }, 400);
+  }
+
+  // Add a TMDB result from the main search bar to the user's collection
+  async function addTmdbToMain(item: TMDBResult) {
+    setMainTmdbAddingId(item.id);
+    try {
+      const isTV = (item as any).media_type === "tv";
+      const detailRes = await apiRequest("GET", `/api/tmdb/${isTV ? "tv" : "movie"}/${item.id}`);
+      const detail: TMDBDetail = await detailRes.json();
+      const title = detail.title || detail.name || "";
+      const year = parseInt((detail.release_date || detail.first_air_date || "").slice(0, 4)) || null;
+      const genres = (detail.genres ?? []).map((g: any) => g.name).join(",") || null;
+      const director = isTV
+        ? (detail.credits?.created_by?.[0]?.name ?? null)
+        : (detail.credits?.crew?.find((c: any) => c.job === "Director")?.name ?? null);
+      const posterUrl = detail.poster_path ? `${TMDB_IMG_BASE}${detail.poster_path}` : null;
+      const payload = {
+        mediaType: isTV ? "show" : "movie",
+        title, year, director, genres,
+        status: "backlog", rating: null, notes: null,
+        listsJson: "[]", isFavorite: false,
+        posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+        streamingOn: null,
+        totalSeasons: isTV ? (detail.number_of_seasons ?? null) : null,
+        currentSeason: null, videoUrl: null, posterUrl,
+      };
+      await apiRequest("POST", "/api/movies", payload);
+      qc.invalidateQueries({ queryKey: ["/api/movies"] });
+      toast({ title: `✓ "${title}" added to your collection` });
+    } catch {
+      toast({ title: "Failed to add title", variant: "destructive" });
+    } finally {
+      setMainTmdbAddingId(null);
+    }
   }
 
   // TMDB search for the list modal — fires on each keystroke (debounced)
@@ -660,11 +716,6 @@ export default function MoviesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {!isVideoView && (
-            <Button size="sm" variant="outline" onClick={() => setTmdbOpen(true)} className="gap-1.5">
-              <Clapperboard size={13} /> Search
-            </Button>
-          )}
           <Button onClick={open_add} size="sm" className="gap-1.5">
             <Plus size={15} /> Add {isVideoView ? "Clip" : isShowView ? "Show" : "Movie"}
           </Button>
@@ -732,7 +783,7 @@ export default function MoviesPage() {
           <div className="flex flex-wrap gap-2 mb-4">
             <div className="relative flex-1 min-w-[120px]">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)}
+              <Input value={search} onChange={(e) => handleMainSearch(e.target.value)}
                 placeholder={`Search by title or ${isShowView ? "creator" : "director"}…`}
                 className="pl-8 h-8 text-sm" />
             </div>
@@ -763,7 +814,7 @@ export default function MoviesPage() {
               <Heart size={13} fill={showFavoritesOnly ? "currentColor" : "none"} /> Favorites
             </button>
             {(genreFilter || listFilter || search || showFavoritesOnly) && (
-              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); setShowFavoritesOnly(false); }}>
+              <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={() => { setSearch(""); setGenreFilter(null); setListFilter(null); setShowFavoritesOnly(false); setMainTmdbResults([]); }}>
                 <X size={13} /> Clear
               </Button>
             )}
@@ -815,6 +866,59 @@ export default function MoviesPage() {
             );
           })()}
         </>)}
+
+        {/* Inline TMDB results — shown when main search bar has a query */}
+        {(mainTab === "watchlist" || mainTab === "films") && search.trim() && (
+          <div className="mt-6">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Search size={12} /> Add from TMDB
+              {mainTmdbLoading && <Loader2 size={12} className="animate-spin ml-1" />}
+            </h3>
+            {mainTmdbLoading && mainTmdbResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Searching…</p>
+            ) : mainTmdbResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No results from TMDB.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {mainTmdbResults
+                  .filter((r) => {
+                    const rTitle = (r.title || r.name || "").toLowerCase();
+                    return !allItems.some((m) => m.title.toLowerCase() === rTitle);
+                  })
+                  .map((r) => {
+                    const title = r.title || r.name || "";
+                    const year = (r.release_date || r.first_air_date || "").slice(0, 4);
+                    const isAdding = mainTmdbAddingId === r.id;
+                    return (
+                      <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                        {r.poster_path ? (
+                          <img src={`${TMDB_IMG_BASE}${r.poster_path}`} alt={title}
+                            className="w-10 h-14 object-cover rounded shrink-0" />
+                        ) : (
+                          <div className="w-10 h-14 rounded shrink-0 bg-muted flex items-center justify-center">
+                            {(r as any).media_type === "tv" ? <Tv2 size={16} className="text-muted-foreground" /> : <Film size={16} className="text-muted-foreground" />}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{title}</p>
+                          <p className="text-xs text-muted-foreground">{year}{(r as any).media_type === "tv" ? " · Show" : " · Movie"}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isAdding}
+                          onClick={() => addTmdbToMain(r)}
+                          className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                        >
+                          {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                          Add
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Lists tab */}
         {mainTab === "lists" && (
