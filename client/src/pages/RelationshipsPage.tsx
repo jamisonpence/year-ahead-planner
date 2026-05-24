@@ -2671,71 +2671,6 @@ export default function RelationshipsPage() {
       </div>
 
       {/* ── Accordion helper ─────────────────────────────────────────────────── */}
-      {/* Lifos Friends ─────────────────────────────────────────────────────── */}
-      {(() => {
-        const linkedPersons = allPeople.filter((p) => (p as any).linkedUserId && friendMap.has((p as any).linkedUserId));
-        const unlinked = unlinkedFriends;
-        const count = linkedPersons.length + unlinked.length;
-        const open = contactSections.lifosFriends;
-        return (
-          <div className="rounded-xl border overflow-hidden">
-            <button
-              onClick={() => toggleContactSection("lifosFriends")}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <UserCheck size={14} className="text-primary shrink-0" />
-                <span className="text-sm font-semibold">Lifos Friends</span>
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
-              </div>
-              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-            </button>
-            {open && (
-              <div className="px-4 pb-4 border-t">
-                {count === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <UserCheck size={30} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">No Lifos friends yet</p>
-                    <p className="text-xs mt-1">Use Find Friends below to connect with people on the app</p>
-                  </div>
-                ) : (
-                  <div className="pt-3 space-y-2">
-                    {linkedPersons.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
-                        <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
-                          {(p.firstName?.[0] ?? "?").toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
-                          {p.company && <p className="text-xs text-muted-foreground truncate">{p.company}</p>}
-                        </div>
-                        <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
-                          Edit
-                        </button>
-                      </div>
-                    ))}
-                    {unlinked.map((f) => (
-                      <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
-                        <Avatar user={f} size={32} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{f.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{f.email}</p>
-                        </div>
-                        <button onClick={() => openFriendProfile(f)}
-                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
-                          Profile
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
       {/* Find Friends ───────────────────────────────────────────────────────── */}
       <div className={`rounded-xl border-2 transition-all overflow-hidden ${searchOpen ? "border-primary bg-primary/5" : "border-primary/40 bg-gradient-to-r from-primary/5 to-blue-500/5 hover:border-primary/60 cursor-pointer"}`}
         onClick={!searchOpen ? () => setSearchOpen(true) : undefined}
@@ -2774,6 +2709,71 @@ export default function RelationshipsPage() {
           </div>
         )}
       </div>
+
+      {/* Lifos Friends ─────────────────────────────────────────────────────── */}
+      {(() => {
+        const linkedPersons = allPeople.filter((p) => (p as any).linkedUserId && friendMap.has((p as any).linkedUserId));
+        const unlinked = unlinkedFriends;
+        const count = linkedPersons.length + unlinked.length;
+        const open = contactSections.lifosFriends;
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => toggleContactSection("lifosFriends")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <UserCheck size={14} className="text-primary shrink-0" />
+                <span className="text-sm font-semibold">Lifos Friends</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {count === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <UserCheck size={30} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">No Lifos friends yet</p>
+                    <p className="text-xs mt-1">Use Find Friends above to connect with people on the app</p>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {linkedPersons.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                          {(p.firstName?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
+                          {p.company && <p className="text-xs text-muted-foreground truncate">{p.company}</p>}
+                        </div>
+                        <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                          Edit
+                        </button>
+                      </div>
+                    ))}
+                    {unlinked.map((f) => (
+                      <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <Avatar user={f} size={32} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{f.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                        </div>
+                        <button onClick={() => openFriendProfile(f)}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                          Profile
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Pending ───────────────────────────────────────────────────────────── */}
       {(() => {
