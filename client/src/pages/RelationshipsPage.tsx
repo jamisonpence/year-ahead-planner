@@ -8,7 +8,7 @@ import {
   Plus, Users, Pencil, Trash2, MoreHorizontal, Heart,
   Baby, Cake, StickyNote, ChevronDown, ChevronUp,
   UserPlus, FolderPlus, X, Check, Search, UserCheck, Clock,
-  UserX, Send, Loader2, Link, Bell,
+  UserX, Send, Loader2, Link, Bell, GitMerge,
   Sparkles, LayoutGrid, Bot, Plug, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,178 @@ function ChildrenPicker({ value, onChange, candidates, currentPersonId }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Merge Contact Modal ───────────────────────────────────────────────────────
+function MergeContactModal({ open, onClose, person, allPeople, friends }: {
+  open: boolean;
+  onClose: () => void;
+  person: PersonWithSpouse | null;
+  allPeople: PersonWithSpouse[];
+  friends: PublicUser[];
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"mylifos" | "contact">("mylifos");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!open || !person) return null;
+
+  const unlinkedFriendsForMerge = friends.filter(
+    (f) => !allPeople.some((p) => (p as any).linkedUserId === f.id)
+  );
+
+  const otherPeople = allPeople.filter(
+    (p) => p.id !== person.id && !(p as any).linkedUserId
+  );
+
+  const filteredFriends = search
+    ? unlinkedFriendsForMerge.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    : unlinkedFriendsForMerge;
+
+  const filteredPeople = search
+    ? otherPeople.filter((p) => fullName(p).toLowerCase().includes(search.toLowerCase()))
+    : otherPeople;
+
+  async function doMerge(body: Record<string, unknown>) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/people/${person!.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Merge failed");
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Contacts merged successfully" });
+      onClose();
+    } catch {
+      toast({ title: "Merge failed", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <h2 className="font-bold text-base">Merge Contact</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Merging <span className="font-semibold text-foreground">{fullName(person)}</span> with…
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 p-3 border-b bg-secondary/30">
+          <button
+            onClick={() => { setTab("mylifos"); setSearch(""); }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === "mylifos" ? "bg-card shadow-sm text-violet-600" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <span className="flex items-center justify-center gap-1.5"><UserCheck size={12} /> MyLifos Friend</span>
+          </button>
+          <button
+            onClick={() => { setTab("contact"); setSearch(""); }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === "contact" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <span className="flex items-center justify-center gap-1.5"><Users size={12} /> Another Contact</span>
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 pt-3 pb-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              autoFocus
+              type="text"
+              placeholder={tab === "mylifos" ? "Search friends…" : "Search contacts…"}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border bg-background outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+          {tab === "mylifos" ? (
+            filteredFriends.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {search ? "No friends match your search" : "No unlinked MyLifos friends"}
+              </p>
+            ) : (
+              filteredFriends.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card/50 hover:bg-card transition-colors">
+                  <div className="w-9 h-9 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-600 dark:text-violet-400 text-sm font-bold shrink-0">
+                    {f.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{f.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                  </div>
+                  <button
+                    disabled={loading}
+                    onClick={() => doMerge({ linkUserId: f.id })}
+                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-50"
+                  >
+                    Link
+                  </button>
+                </div>
+              ))
+            )
+          ) : (
+            filteredPeople.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {search ? "No contacts match your search" : "No other contacts to merge with"}
+              </p>
+            ) : (
+              filteredPeople.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card/50 hover:bg-card transition-colors">
+                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0">
+                    {initials(p.firstName, p.lastName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{fullName(p)}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[p.company, p.birthday ? formatBirthday(p.birthday) : null].filter(Boolean).join(" · ") || "No extra info"}
+                    </p>
+                  </div>
+                  <button
+                    disabled={loading}
+                    onClick={() => doMerge({ mergePersonId: p.id })}
+                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    Merge
+                  </button>
+                </div>
+              ))
+            )
+          )}
+        </div>
+
+        {/* Footer note */}
+        <div className="px-5 py-3 border-t bg-muted/30">
+          {tab === "mylifos" ? (
+            <p className="text-[10px] text-muted-foreground">
+              <strong>Link</strong> connects this contact to their MyLifos account. Their profile data stays intact and you'll see live updates.
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">
+              <strong>Merge</strong> keeps <em>{fullName(person)}</em> and folds the other contact's data into it. The duplicate will be deleted.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -405,12 +577,14 @@ function FamilyClusterCard({
   children,
   color,
   onEdit,
+  onMerge,
   friendPersonIds,
 }: {
   adults: PersonWithSpouse[];
   children: PersonWithSpouse[];
   color?: string;
   onEdit: (p: PersonWithSpouse) => void;
+  onMerge: (p: PersonWithSpouse) => void;
   friendPersonIds: Set<number>;
 }) {
   const accentBg = color ? `${color}18` : "rgba(99,102,241,0.07)";
@@ -472,13 +646,24 @@ function FamilyClusterCard({
                 <p className="text-[10px] text-muted-foreground truncate mt-0.5 italic">{adult.notes}</p>
               )}
             </div>
-            <button
-              onClick={() => onEdit(adult)}
-              className="p-1 rounded-lg hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              title="Edit"
-            >
-              <Pencil size={11} />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {!isFriend(adult) && (
+                <button
+                  onClick={() => onMerge(adult)}
+                  className="p-1 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/30 text-violet-400 hover:text-violet-600 transition-colors"
+                  title="Merge contact"
+                >
+                  <GitMerge size={11} />
+                </button>
+              )}
+              <button
+                onClick={() => onEdit(adult)}
+                className="p-1 rounded-lg hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors"
+                title="Edit"
+              >
+                <Pencil size={11} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -2623,6 +2808,8 @@ export default function RelationshipsPage() {
   // ── UI State ──────────────────────────────────────────────────────────────────
   const [personModal, setPersonModal] = useState(false);
   const [groupModal, setGroupModal] = useState(false);
+  const [mergeModal, setMergeModal] = useState(false);
+  const [mergePerson, setMergePerson] = useState<PersonWithSpouse | null>(null);
   const [editPerson, setEditPerson] = useState<Person | null>(null);
   const [editGroup, setEditGroup] = useState<RelationshipGroup | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | "all" | "none" | "friends">("all");
@@ -3020,6 +3207,7 @@ export default function RelationshipsPage() {
                           children={cluster.children}
                           color={g.color ?? undefined}
                           onEdit={(p) => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          onMerge={(p) => { setMergePerson(p); setMergeModal(true); }}
                           friendPersonIds={friendPersonIds}
                         />
                       ));
@@ -3144,10 +3332,19 @@ export default function RelationshipsPage() {
                             <p className="text-xs text-muted-foreground truncate">{p.company || p.email}</p>
                           )}
                         </div>
-                        <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => { setMergePerson(p); setMergeModal(true); }}
+                            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 border border-violet-200 dark:border-violet-800 px-2 py-1 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+                            title="Merge with another contact"
+                          >
+                            Merge
+                          </button>
+                          <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                            className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                            Edit
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3290,6 +3487,13 @@ export default function RelationshipsPage() {
         open={groupModal}
         onClose={() => { setGroupModal(false); setEditGroup(null); }}
         editGroup={editGroup}
+      />
+      <MergeContactModal
+        open={mergeModal}
+        onClose={() => { setMergeModal(false); setMergePerson(null); }}
+        person={mergePerson}
+        allPeople={allPeople}
+        friends={friends}
       />
       </div>
       )}

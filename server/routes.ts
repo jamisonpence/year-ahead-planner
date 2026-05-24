@@ -1152,6 +1152,70 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Merge contacts ──────────────────────────────────────────────────────────
+  // POST /api/people/:id/merge
+  // Body: { mergePersonId: number }  — merge mergePersonId INTO :id, delete mergePersonId
+  // OR:   { linkUserId: number }     — link :id to a MyLifos user (set linkedUserId)
+  app.post("/api/people/:id/merge", async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const primaryId = +req.params.id;
+      const { mergePersonId, linkUserId } = req.body as { mergePersonId?: number; linkUserId?: number };
+
+      const all = await storage.getAllPeople(uid);
+      const primary = all.find(p => p.id === primaryId);
+      if (!primary) return res.status(404).json({ error: "Primary person not found" });
+
+      // ── Case 1: link to a MyLifos user ─────────────────────────────────────
+      if (linkUserId !== undefined) {
+        await storage.updatePerson(primaryId, { linkedUserId: linkUserId });
+        return res.json({ ok: true });
+      }
+
+      // ── Case 2: merge two people records ───────────────────────────────────
+      if (!mergePersonId) return res.status(400).json({ error: "mergePersonId required" });
+      const secondary = all.find(p => p.id === mergePersonId);
+      if (!secondary) return res.status(404).json({ error: "Secondary person not found" });
+
+      // Merge: keep non-null values from primary, fall back to secondary
+      const merged: Record<string, any> = {};
+      const fields = ["lastName","birthday","notes","spouseId","childrenJson","groupId","linkedUserId","keepInTouchFrequency","lastContactedAt"] as const;
+      for (const f of fields) {
+        const pv = (primary as any)[f];
+        const sv = (secondary as any)[f];
+        if (f === "childrenJson") {
+          // union child IDs from both
+          const pids: number[] = (() => { try { return JSON.parse(pv || "[]"); } catch { return []; } })();
+          const sids: number[] = (() => { try { return JSON.parse(sv || "[]"); } catch { return []; } })();
+          const union = Array.from(new Set([...pids, ...sids]).values());
+          merged[f] = JSON.stringify(union);
+        } else {
+          merged[f] = pv ?? sv ?? null;
+        }
+      }
+      await storage.updatePerson(primaryId, merged);
+
+      // Re-point anything that referenced secondaryId
+      // Spouse: if anyone had secondary as their spouse, redirect to primary
+      for (const p of all) {
+        if (p.id === primaryId || p.id === mergePersonId) continue;
+        if (p.spouseId === mergePersonId) {
+          await storage.updatePerson(p.id, { spouseId: primaryId });
+        }
+        const cids: number[] = (() => { try { return JSON.parse(p.childrenJson || "[]"); } catch { return []; } })();
+        if (cids.includes(mergePersonId)) {
+          const updated = cids.map(c => c === mergePersonId ? primaryId : c);
+          await storage.updatePerson(p.id, { childrenJson: JSON.stringify(updated) });
+        }
+      }
+
+      // Delete the secondary record
+      await storage.deletePerson(mergePersonId);
+
+      res.json({ ok: true, primaryId });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Recipes ────────────────────────────────────────────────────────────────
   app.get("/api/recipes", async (req, res) => {
     try {
