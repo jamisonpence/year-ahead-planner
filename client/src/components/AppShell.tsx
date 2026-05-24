@@ -876,13 +876,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t">
         <div className="flex items-end justify-around px-1 pt-2 pb-3">
 
-          {/* Discover */}
-          <Link href="/discover">
-            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Search size={22} className={location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discover</span>
-            </button>
-          </Link>
+          {/* MyLifos (profile sheet) */}
+          <button
+            onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
+            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
+          >
+            <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
+          </button>
 
           {/* Dashboard */}
           <Link href="/dashboard">
@@ -916,14 +917,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </Link>
 
-          {/* All tabs (profile sheet) */}
-          <button
-            onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
-          >
-            <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>More</span>
-          </button>
+          {/* Discover */}
+          <Link href="/discover">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <Search size={22} className={location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discovery</span>
+            </button>
+          </Link>
         </div>
       </div>
 
