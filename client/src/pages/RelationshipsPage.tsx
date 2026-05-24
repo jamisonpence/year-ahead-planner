@@ -2591,7 +2591,7 @@ export default function RelationshipsPage() {
     }
   }
 
-  const [socialTab, setSocialTab] = useState<"friends" | "contacts" | "keepintouch" | "assistant">("friends");
+  const [socialTab, setSocialTab] = useState<"friends" | "contacts" | "keepintouch" | "timeline" | "assistant">("friends");
 
   // Contacts tab accordion open/close state
   const [contactSections, setContactSections] = useState<Record<string, boolean>>({
@@ -2619,7 +2619,7 @@ export default function RelationshipsPage() {
 
       {/* ── Tab switcher ─────────────────────────────────────────────────────── */}
       <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit overflow-x-auto">
-        {(["friends", "contacts", "keepintouch", "assistant"] as const).map(tab => (
+        {(["friends", "contacts", "keepintouch", "timeline", "assistant"] as const).map(tab => (
           <button key={tab}
             onClick={() => setSocialTab(tab)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${socialTab === tab ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
@@ -2627,18 +2627,14 @@ export default function RelationshipsPage() {
             {tab === "friends" && "Friends"}
             {tab === "contacts" && "Contacts"}
             {tab === "keepintouch" && "Keep in Touch"}
+            {tab === "timeline" && "Timeline"}
             {tab === "assistant" && <span className="flex items-center gap-1.5"><Bot size={13} /> Assistant</span>}
           </button>
         ))}
       </div>
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
-      {socialTab === "friends" && (
-        <div className="space-y-8">
-          <FriendsSocialHub />
-          <TimelineSection people={allPeople} />
-        </div>
-      )}
+      {socialTab === "friends" && <FriendsSocialHub />}
 
       {/* ── Keep in Touch ─────────────────────────────────────────────────────── */}
       {socialTab === "keepintouch" && (
@@ -2650,6 +2646,9 @@ export default function RelationshipsPage() {
           <KeepInTouchSection people={allPeople} />
         </div>
       )}
+
+      {/* ── Timeline ──────────────────────────────────────────────────────────── */}
+      {socialTab === "timeline" && <TimelineSection people={allPeople} />}
 
       {/* ── Personal Assistant ────────────────────────────────────────────────── */}
       {socialTab === "assistant" && <PersonalAssistantSection />}
