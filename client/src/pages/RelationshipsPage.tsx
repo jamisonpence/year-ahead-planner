@@ -2591,31 +2591,45 @@ export default function RelationshipsPage() {
     }
   }
 
-  const [socialTab, setSocialTab] = useState<"friends" | "contacts" | "assistant">("friends");
+  const [socialTab, setSocialTab] = useState<"friends" | "contacts" | "keepintouch" | "assistant">("friends");
+
+  // Contacts tab accordion open/close state
+  const [contactSections, setContactSections] = useState<Record<string, boolean>>({
+    lifosFriends: false,
+    pending: false,
+    manuallyAdded: false,
+    googleContacts: false,
+    linkedin: false,
+  });
+  const toggleContactSection = (key: string) =>
+    setContactSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const { data: googleContacts = [] } = useQuery<Array<{ id: number; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; company: string | null; avatarUrl: string | null }>>({
+    queryKey: ["/api/gcontacts/contacts"],
+    queryFn: () => fetch("/api/gcontacts/contacts").then(r => r.json()),
+  });
+
+  const { data: linkedinContacts = [] } = useQuery<Array<{ id: number; firstName: string; lastName: string | null; email: string | null; company: string | null; position: string | null }>>({
+    queryKey: ["/api/linkedin/contacts"],
+    queryFn: () => fetch("/api/linkedin/contacts").then(r => r.json()),
+  });
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
 
       {/* ── Tab switcher ─────────────────────────────────────────────────────── */}
-      <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit">
-        <button
-          onClick={() => setSocialTab("friends")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "friends" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Friends
-        </button>
-        <button
-          onClick={() => setSocialTab("contacts")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "contacts" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Contacts
-        </button>
-        <button
-          onClick={() => setSocialTab("assistant")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${socialTab === "assistant" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          <Bot size={13} /> Assistant
-        </button>
+      <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit overflow-x-auto">
+        {(["friends", "contacts", "keepintouch", "assistant"] as const).map(tab => (
+          <button key={tab}
+            onClick={() => setSocialTab(tab)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${socialTab === tab ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {tab === "friends" && "Friends"}
+            {tab === "contacts" && "Contacts"}
+            {tab === "keepintouch" && "Keep in Touch"}
+            {tab === "assistant" && <span className="flex items-center gap-1.5"><Bot size={13} /> Assistant</span>}
+          </button>
+        ))}
       </div>
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
@@ -2623,47 +2637,107 @@ export default function RelationshipsPage() {
         <div className="space-y-8">
           <FriendsSocialHub />
           <TimelineSection people={allPeople} />
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-base font-bold">Keep in Touch</h3>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{allPeople.length}</span>
-            </div>
-            <KeepInTouchSection people={allPeople} />
+        </div>
+      )}
+
+      {/* ── Keep in Touch ─────────────────────────────────────────────────────── */}
+      {socialTab === "keepintouch" && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-base font-bold">Keep in Touch</h3>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{allPeople.length}</span>
           </div>
+          <KeepInTouchSection people={allPeople} />
         </div>
       )}
 
       {/* ── Personal Assistant ────────────────────────────────────────────────── */}
       {socialTab === "assistant" && <PersonalAssistantSection />}
 
-      {/* ── Contacts (existing CRM) ───────────────────────────────────────────── */}
+      {/* ── Contacts ─────────────────────────────────────────────────────────── */}
       {socialTab === "contacts" && (
-      <div className="space-y-5">
+      <div className="space-y-3">
 
       {/* ── Header ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold">Friends</h1>
-            <p className="text-xs text-muted-foreground">
-              {allPeople.length} {allPeople.length === 1 ? "person" : "people"} · {friends.length} connected
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="ghost" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5 text-muted-foreground">
-            <FolderPlus size={13} /> Add Group
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-base font-bold">Contacts</h2>
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => { setEditGroup(null); setGroupModal(true); }} className="gap-1.5 text-muted-foreground h-8 text-xs">
+            <FolderPlus size={12} /> Group
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }} className="gap-1.5 text-muted-foreground">
-            <UserPlus size={13} /> Add Person
+          <Button size="sm" variant="outline" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }} className="gap-1.5 h-8 text-xs">
+            <UserPlus size={12} /> Add Person
           </Button>
         </div>
       </div>
 
-      {/* ── Find Users (primary action) ───────────────────────────────────────── */}
+      {/* ── Accordion helper ─────────────────────────────────────────────────── */}
+      {/* Lifos Friends ─────────────────────────────────────────────────────── */}
+      {(() => {
+        const linkedPersons = allPeople.filter((p) => (p as any).linkedUserId && friendMap.has((p as any).linkedUserId));
+        const unlinked = unlinkedFriends;
+        const count = linkedPersons.length + unlinked.length;
+        const open = contactSections.lifosFriends;
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => toggleContactSection("lifosFriends")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <UserCheck size={14} className="text-primary shrink-0" />
+                <span className="text-sm font-semibold">Lifos Friends</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {count === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <UserCheck size={30} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">No Lifos friends yet</p>
+                    <p className="text-xs mt-1">Use Find Friends below to connect with people on the app</p>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {linkedPersons.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                          {(p.firstName?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
+                          {p.company && <p className="text-xs text-muted-foreground truncate">{p.company}</p>}
+                        </div>
+                        <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                          Edit
+                        </button>
+                      </div>
+                    ))}
+                    {unlinked.map((f) => (
+                      <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <Avatar user={f} size={32} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{f.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                        </div>
+                        <button onClick={() => openFriendProfile(f)}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                          Profile
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Find Friends ───────────────────────────────────────────────────────── */}
       <div className={`rounded-xl border-2 transition-all overflow-hidden ${searchOpen ? "border-primary bg-primary/5" : "border-primary/40 bg-gradient-to-r from-primary/5 to-blue-500/5 hover:border-primary/60 cursor-pointer"}`}
         onClick={!searchOpen ? () => setSearchOpen(true) : undefined}
       >
@@ -2686,7 +2760,6 @@ export default function RelationshipsPage() {
             </button>
           )}
         </div>
-
         {searchOpen && (
           <div className="px-4 pb-4">
             <UserSearchPanel
@@ -2699,8 +2772,6 @@ export default function RelationshipsPage() {
               onUnfriend={(id) => unfriendMut.mutate(id)}
               sendPending={sendMut.isPending}
             />
-
-            {/* Outgoing requests summary */}
             {requests.outgoing.length > 0 && (
               <div className="pt-3 border-t mt-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Sent Requests</p>
@@ -2725,314 +2796,242 @@ export default function RelationshipsPage() {
         )}
       </div>
 
-      {/* ── Incoming requests banner ──────────────────────────────────────────── */}
-      {incomingCount > 0 && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 overflow-hidden">
-          <button
-            onClick={() => setRequestsOpen((x) => !x)}
-            className="w-full flex items-center justify-between px-4 py-3 text-left"
-          >
-            <div className="flex items-center gap-2">
-              <Bell size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
-              <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
-                {incomingCount} friend {incomingCount === 1 ? "request" : "requests"} waiting
-              </span>
-            </div>
-            {requestsOpen ? <ChevronUp size={14} className="text-blue-600" /> : <ChevronDown size={14} className="text-blue-600" />}
-          </button>
-          {requestsOpen && (
-            <div className="px-4 pb-4 space-y-2">
-              {requests.incoming.map((req) => (
-                <IncomingRequestCard
-                  key={req.id}
-                  request={req}
-                  onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
-                  onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Upcoming birthdays ────────────────────────────────────────────────── */}
-      {upcomingBirthdays.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
-          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1.5">
-            <Cake size={13} /> Upcoming birthdays — next 30 days
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {upcomingBirthdays.map((b, i) => (
-              <span key={i} className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${b.days === 0 ? "bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700" : "bg-background border-border text-foreground"}`}>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.color || "#888" }} />
-                {b.name}
-                <span className="opacity-70">{b.label}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Search + Group filter row ─────────────────────────────────────────── */}
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search people & friends…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm w-full sm:w-52"
-          />
-        </div>
-
-        <div className="flex gap-1.5 flex-wrap">
-          {/* All */}
-          <button onClick={() => setSelectedGroupId("all")}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${selectedGroupId === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-            All
-          </button>
-
-          {/* Custom groups */}
-          {groups.map((g) => (
-            <div key={g.id} className="flex items-center">
-              <button onClick={() => setSelectedGroupId(g.id)}
-                className={`text-xs px-2.5 py-1.5 rounded-l-lg border-y border-l transition-colors flex items-center gap-1.5 ${selectedGroupId === g.id ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color || "#888" }} />
-                {g.name}
-                <span className="opacity-60">{allPeople.filter((p) => p.groupId === g.id).length}</span>
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className={`text-xs px-1.5 py-1.5 rounded-r-lg border transition-colors ${selectedGroupId === g.id ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-                    <MoreHorizontal size={11} />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => { setEditGroup(g); setGroupModal(true); }}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteGroupMut.mutate(g.id)}><Trash2 size={13} className="mr-2" />Delete</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ))}
-
-          {/* Ungrouped */}
-          <button onClick={() => setSelectedGroupId("none")}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${selectedGroupId === "none" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-            Ungrouped
-          </button>
-
-          {/* Connected Friends */}
-          <button
-            onClick={() => setSelectedGroupId("friends")}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${selectedGroupId === "friends" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}
-          >
-            <UserCheck size={11} /> Connected
-            {friends.length > 0 && <span className="opacity-70">{friends.length}</span>}
-          </button>
-        </div>
-      </div>
-
-      {/* ── People Grid (for normal + "Connected" filter) ─────────────────────── */}
-      {selectedGroupId === "friends" ? (
-        /* Connected filter: show linked-friend PersonTiles + unlinked FriendCards */
-        <div className="space-y-6">
-          {/* Linked-friend persons, grouped */}
-          {(() => {
-            if (filteredPeople.length === 0 && filteredUnlinkedFriends.length === 0) {
-              return (
-                <div className="text-center py-12 text-muted-foreground">
-                  <UserCheck size={36} className="mx-auto mb-3 opacity-20" />
-                  <p className="text-sm font-medium">No connected users yet</p>
-                  <p className="text-xs mt-1">Use "Find & Connect" above to send friend requests</p>
-                </div>
-              );
-            }
-
-            // Group linked persons by their group
-            const groupedLinked: Record<string, PersonWithSpouse[]> = {};
-            const ungroupedLinked: PersonWithSpouse[] = [];
-            filteredPeople.forEach((p) => {
-              if (p.groupId) {
-                const key = String(p.groupId);
-                if (!groupedLinked[key]) groupedLinked[key] = [];
-                groupedLinked[key].push(p);
-              } else {
-                ungroupedLinked.push(p);
-              }
-            });
-
-            return (
-              <>
-                {groups.map((g) => {
-                  const members = groupedLinked[String(g.id)] ?? [];
-                  if (!members.length) return null;
-                  return (
-                    <section key={g.id}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
-                        <h2 className="font-bold text-base">{g.name}</h2>
-                        <span className="text-xs text-muted-foreground">{members.length}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {members.map((p) => (
-                          <PersonTile key={p.id} person={p} allPeople={allPeople}
-                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                            onDelete={(id) => deletePersonMut.mutate(id)}
-                            color={g.color ?? undefined}
-                            friend={friendMap.get((p as any).linkedUserId) ?? null}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })}
-                {ungroupedLinked.length > 0 && (
-                  <section>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
-                      <h2 className="font-bold text-base">No Group</h2>
-                      <span className="text-xs text-muted-foreground">{ungroupedLinked.length}</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {ungroupedLinked.map((p) => (
-                        <PersonTile key={p.id} person={p} allPeople={allPeople}
-                          onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                          onDelete={(id) => deletePersonMut.mutate(id)}
-                          color={undefined}
-                          friend={friendMap.get((p as any).linkedUserId) ?? null}
-                        />
-                      ))}
-                    </div>
-                  </section>
+      {/* Pending ───────────────────────────────────────────────────────────── */}
+      {(() => {
+        const pendingCount = requests.incoming.length + requests.outgoing.length;
+        const open = contactSections.pending;
+        return (
+          <div className={`rounded-xl overflow-hidden ${pendingCount > 0 ? "border border-amber-200 dark:border-amber-800" : "border"}`}>
+            <button
+              onClick={() => toggleContactSection("pending")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Clock size={14} className={pendingCount > 0 ? "text-amber-500 shrink-0" : "text-muted-foreground shrink-0"} />
+                <span className="text-sm font-semibold">Pending</span>
+                {pendingCount > 0 && (
+                  <span className="text-xs bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">{pendingCount}</span>
                 )}
-
-                {/* Unlinked friends at the bottom of "Connected" view */}
-                {filteredUnlinkedFriends.length > 0 && (
-                  <section>
-                    <div className="flex items-center gap-2 mb-3">
-                      <UserCheck size={13} className="text-muted-foreground" />
-                      <h2 className="font-bold text-base">No Profile Yet</h2>
-                      <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
-                      <span className="text-xs text-muted-foreground">· click Edit to add to a group</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {filteredUnlinkedFriends.map((f) => (
-                        <FriendCard key={f.id} friend={f} groups={groups}
-                          onUnfriend={(id) => unfriendMut.mutate(id)}
-                          onEditProfile={openFriendProfile}
-                        />
-                      ))}
-                    </div>
-                  </section>
+                {pendingCount === 0 && (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">0</span>
                 )}
-              </>
-            );
-          })()}
-        </div>
-      ) : (
-        /* Normal view: people sections */
-        showPeople && (
-          <>
-            {filteredPeople.length === 0 && allPeople.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Users size={36} className="mx-auto mb-3 opacity-20" />
-                <p className="text-sm font-medium">No people yet</p>
-                <p className="text-xs mt-1">Add someone to get started, or connect with users above</p>
-                <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
-                  <UserPlus size={13} /> Add your first person
-                </Button>
               </div>
-            ) : selectedGroupId !== "all" ? (
-              // Single group or ungrouped view
-              filteredPeople.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">No people in this group</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {filteredPeople.map((p) => (
-                    <PersonTile key={p.id} person={p} allPeople={allPeople}
-                      onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                      onDelete={(id) => deletePersonMut.mutate(id)}
-                      color={groupColor(p.groupId)}
-                      friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
-                    />
-                  ))}
-                </div>
-              )
-            ) : (
-              // "All" view — grouped sections
-              <div className="space-y-8">
-                {groups.map((g) => {
-                  const members = filteredPeople.filter((p) => p.groupId === g.id);
-                  if (members.length === 0) return null;
-                  return (
-                    <section key={g.id}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: g.color || "#888" }} />
-                        <h2 className="font-bold text-base">{g.name}</h2>
-                        <span className="text-xs text-muted-foreground">{members.length}</span>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {pendingCount === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No pending requests</p>
+                ) : (
+                  <div className="pt-3 space-y-3">
+                    {requests.incoming.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Incoming</p>
+                        <div className="space-y-2">
+                          {requests.incoming.map((req) => (
+                            <IncomingRequestCard
+                              key={req.id}
+                              request={req}
+                              onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
+                              onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {members.map((p) => (
-                          <PersonTile key={p.id} person={p} allPeople={allPeople}
-                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                            onDelete={(id) => deletePersonMut.mutate(id)}
-                            color={g.color ?? undefined}
-                            friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
-                          />
-                        ))}
+                    )}
+                    {requests.outgoing.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Outgoing</p>
+                        <div className="space-y-2">
+                          {requests.outgoing.map((req) => (
+                            <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                              <Avatar user={req.otherUser} size={32} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{req.otherUser.name}</p>
+                                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Clock size={10} /> Pending</p>
+                              </div>
+                              <button onClick={() => cancelMut.mutate(req.id)}
+                                className="text-xs text-muted-foreground hover:text-destructive border px-2 py-1 rounded-lg hover:border-destructive/30 transition-colors">
+                                Cancel
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </section>
-                  );
-                })}
-
-                {/* Ungrouped people */}
-                {(() => {
-                  const ungrouped = filteredPeople.filter((p) => !p.groupId);
-                  if (!ungrouped.length) return null;
-                  return (
-                    <section>
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="w-3 h-3 rounded-full bg-muted-foreground/40" />
-                        <h2 className="font-bold text-base">Other</h2>
-                        <span className="text-xs text-muted-foreground">{ungrouped.length}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {ungrouped.map((p) => (
-                          <PersonTile key={p.id} person={p} allPeople={allPeople}
-                            onEdit={(person) => { setEditPerson(person); setEditFriendLinkedUserId(null); setPersonModal(true); }}
-                            onDelete={(id) => deletePersonMut.mutate(id)}
-                            color={undefined}
-                            friend={(p as any).linkedUserId ? (friendMap.get((p as any).linkedUserId) ?? null) : null}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })()}
+                    )}
+                  </div>
+                )}
               </div>
             )}
-          </>
-        )
-      )}
+          </div>
+        );
+      })()}
 
-      {/* ── Unlinked Connected Friends (in All view) ──────────────────────────── */}
-      {selectedGroupId === "all" && filteredUnlinkedFriends.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <UserCheck size={13} className="text-primary" />
-            <h2 className="font-bold text-base">Connected — No Profile Yet</h2>
-            <span className="text-xs text-muted-foreground">{filteredUnlinkedFriends.length}</span>
+      {/* Manually Added ────────────────────────────────────────────────────── */}
+      {(() => {
+        const manualPeople = allPeople.filter((p) => !(p as any).linkedUserId);
+        const count = manualPeople.length;
+        const open = contactSections.manuallyAdded;
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => toggleContactSection("manuallyAdded")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <UserPlus size={14} className="text-muted-foreground shrink-0" />
+                <span className="text-sm font-semibold">Manually Added</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {count === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users size={30} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">No manually added contacts</p>
+                    <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
+                      <UserPlus size={13} /> Add Person
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {manualPeople.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
+                          {(p.firstName?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{fullName(p)}</p>
+                          {(p.company || p.email) && (
+                            <p className="text-xs text-muted-foreground truncate">{p.company || p.email}</p>
+                          )}
+                        </div>
+                        <button onClick={() => { setEditPerson(p); setEditFriendLinkedUserId(null); setPersonModal(true); }}
+                          className="text-xs text-muted-foreground hover:text-foreground border px-2 py-1 rounded-lg hover:bg-secondary transition-colors">
+                          Edit
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredUnlinkedFriends.map((f) => (
-              <FriendCard key={f.id} friend={f} groups={groups}
-                onUnfriend={(id) => unfriendMut.mutate(id)}
-                onEditProfile={openFriendProfile}
-              />
-            ))}
+        );
+      })()}
+
+      {/* Google Contacts ────────────────────────────────────────────────────── */}
+      {(() => {
+        const count = googleContacts.length;
+        const open = contactSections.googleContacts;
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => toggleContactSection("googleContacts")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <span className="text-sm font-semibold">Google Contacts</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {count === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">No Google contacts synced</p>
+                    <p className="text-xs mt-1">Connect your Google account in the Assistant tab</p>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {googleContacts.map((c) => (
+                      <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        {c.avatarUrl ? (
+                          <img src={c.avatarUrl} className="h-8 w-8 rounded-full object-cover shrink-0" alt="" />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-sm font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+                            {((c.firstName || c.email || "?")[0]).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || "Unknown"}
+                          </p>
+                          {(c.company || c.email) && (
+                            <p className="text-xs text-muted-foreground truncate">{c.company || c.email}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </section>
-      )}
+        );
+      })()}
+
+      {/* LinkedIn ───────────────────────────────────────────────────────────── */}
+      {(() => {
+        const count = linkedinContacts.length;
+        const open = contactSections.linkedin;
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            <button
+              onClick={() => toggleContactSection("linkedin")}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="#0A66C2">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+                <span className="text-sm font-semibold">LinkedIn</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+              {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="px-4 pb-4 border-t">
+                {count === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">No LinkedIn contacts imported</p>
+                    <p className="text-xs mt-1">Import your connections in the Assistant tab</p>
+                  </div>
+                ) : (
+                  <div className="pt-3 space-y-2">
+                    {linkedinContacts.map((c) => (
+                      <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card/50">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-sm font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+                          {(c.firstName?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {[c.firstName, c.lastName].filter(Boolean).join(" ") || "Unknown"}
+                          </p>
+                          {(c.position || c.company) && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {[c.position, c.company].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <PersonFormModal
