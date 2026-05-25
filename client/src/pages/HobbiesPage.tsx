@@ -410,6 +410,16 @@ interface HobbyPlan {
   sessions?: SessionLog[];
   dayLabels?: Record<string, string>; // Maps "Mon" → custom session label for that day
   dayNotes?: Record<string, string>;  // Maps "Mon" → detailed task description for that day
+  weeklyPlan?: WeekPlanEntry[];       // Week-by-week schedule (overrides dayLabels/dayNotes per week)
+}
+
+interface WeekPlanEntry {
+  week: number;
+  day: string; // "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun"
+  theme: string;
+  whiteOpenings: string;
+  blackOpenings: string;
+  tasks: string;
 }
 
 interface PlanTemplate {
@@ -528,6 +538,165 @@ const CHESS_WEEKLY_SCHEDULES: ChessWeeklyBand[] = [
 function getChessWeeklyBand(currentElo: number): ChessWeeklyBand {
   return CHESS_WEEKLY_SCHEDULES.find(b => currentElo >= b.minElo && currentElo < b.maxElo)
     ?? CHESS_WEEKLY_SCHEDULES[CHESS_WEEKLY_SCHEDULES.length - 1];
+}
+
+// ── Chess Opening Repertoire — 4-week weekly plan ─────────────────────────────
+
+const CHESS_OPENING_WEEKLY_PLAN: WeekPlanEntry[] = [
+  // Week 1 — White openings vs 1...e5
+  { week: 1, day: "Mon", theme: "Italian Game — introduction",
+    whiteOpenings: "1.e4 e5 2.Nf3 Nc6 3.Bc4 (Italian Game)",
+    blackOpenings: "—",
+    tasks: "Watch 1 Italian Game intro video; learn the basic pawn structure and key ideas; play through 3 illustrative master games as White" },
+  { week: 1, day: "Tue", theme: "Giuoco Piano — main line",
+    whiteOpenings: "4.c3 d5 — Giuoco Piano main line",
+    blackOpenings: "—",
+    tasks: "Study the Giuoco Piano main line and the key c3-d4 break idea; replay 2 master games from this variation; note key squares and targets" },
+  { week: 1, day: "Wed", theme: "Italian sidelines — Two Knights & Evans",
+    whiteOpenings: "Two Knights Defense (3...Nf6); Evans Gambit intro",
+    blackOpenings: "—",
+    tasks: "Learn how to handle 3...Nf6 (Two Knights); understand the Evans Gambit concept; play 2 rapid games as White aiming for the Italian" },
+  { week: 1, day: "Thu", theme: "Ruy Lopez — the Spanish Gun",
+    whiteOpenings: "1.e4 e5 2.Nf3 Nc6 3.Bb5 (Ruy Lopez) — basic ideas",
+    blackOpenings: "—",
+    tasks: "Compare Italian vs Spanish — choose your preferred White weapon; study the Ruy Lopez pin concept; annotate 1 game from each opening" },
+  { week: 1, day: "Fri", theme: "Practice — White vs 1...e5",
+    whiteOpenings: "Practice your chosen 1.e4 e5 system",
+    blackOpenings: "—",
+    tasks: "Play 3 rapid games as White from 1.e4; focus on reaching your opening preparation; review each game and find one improvement per game" },
+  { week: 1, day: "Sat", theme: "Long game session — White openings",
+    whiteOpenings: "Full game using e4 system",
+    blackOpenings: "—",
+    tasks: "Play 2 long games (15+10) as White using your 1.e4 system; deep analysis focusing on the opening phase and transition to middlegame" },
+  { week: 1, day: "Sun", theme: "Review & build opening notes",
+    whiteOpenings: "Update repertoire notes",
+    blackOpenings: "—",
+    tasks: "Write a 1-page summary of your White 1.e4 system: key moves, ideas, and what to avoid; replay your 2 favorite games from the week" },
+
+  // Week 2 — White openings vs other Black responses
+  { week: 2, day: "Mon", theme: "White vs Sicilian Defense",
+    whiteOpenings: "Anti-Sicilian: Alapin (2.c3) or Grand Prix Attack (2.Nc3 + 3.f4)",
+    blackOpenings: "—",
+    tasks: "Choose an anti-Sicilian system; study the Alapin (2.c3 d5 3.exd5 Qxd5 4.d4) key ideas; watch 1 instructional video on your chosen line" },
+  { week: 2, day: "Tue", theme: "White vs French Defense",
+    whiteOpenings: "vs 1...e6: Advance Variation (3.e5) or Exchange (3.exd5)",
+    blackOpenings: "—",
+    tasks: "Study Advance Variation key plan (f4, c3, Nf3 setup); learn the Exchange for simplicity; play 2 rapid games handling the French as White" },
+  { week: 2, day: "Wed", theme: "White vs Caro-Kann Defense",
+    whiteOpenings: "vs 1...c6: Classical (3.Nc3) or Advance (3.e5)",
+    blackOpenings: "—",
+    tasks: "Understand the Caro-Kann pawn structure; learn key plans for White; play 2 games against engine set to play 1...c6; annotate each" },
+  { week: 2, day: "Thu", theme: "White vs minor defenses",
+    whiteOpenings: "vs 1...d5 (Scandinavian); vs 1...Nf6 (Alekhine's Defense)",
+    blackOpenings: "—",
+    tasks: "Build brief notes on rare Black defenses; know the key White response to each; play 1 rapid game dealing with an unusual Black reply" },
+  { week: 2, day: "Fri", theme: "White full repertoire review",
+    whiteOpenings: "Full White 1.e4 repertoire recap",
+    blackOpenings: "—",
+    tasks: "Cover the board — can you recall all your White lines from memory? Identify gaps; play 2 rapid games as White using the full repertoire" },
+  { week: 2, day: "Sat", theme: "White full repertoire long session",
+    whiteOpenings: "All White lines in long games",
+    blackOpenings: "—",
+    tasks: "2 long games as White targeting your preparation; 90 min post-game analysis focusing on opening transitions; update your repertoire notes" },
+  { week: 2, day: "Sun", theme: "Consolidate White repertoire",
+    whiteOpenings: "Finalize White notes",
+    blackOpenings: "—",
+    tasks: "Finalize White repertoire document; note 3 critical positions you must know by heart; test with a 10-question position quiz or Chessable drills" },
+
+  // Week 3 — Black openings vs 1.e4
+  { week: 3, day: "Mon", theme: "Choose your Black defense vs 1.e4",
+    whiteOpenings: "—",
+    blackOpenings: "Survey: 1...e5 (Open), Sicilian (1...c5), French (1...e6), Caro-Kann (1...c6)",
+    tasks: "Decide your Black defense vs 1.e4; watch a 'choose your defense' overview; read about the pawn structure and character of each option" },
+  { week: 3, day: "Tue", theme: "Black main line — your chosen defense",
+    whiteOpenings: "—",
+    blackOpenings: "Main line of your chosen Black defense vs 1.e4",
+    tasks: "Study the mainline of your Black defense deeply; learn key pawn structures and typical Black plans; play through 3 master games as Black" },
+  { week: 3, day: "Wed", theme: "Black sidelines — handling White's alternatives",
+    whiteOpenings: "—",
+    blackOpenings: "Key White sidelines and traps vs your defense",
+    tasks: "Study White's tricky alternatives; learn how to handle the most critical early deviations; play 2 rapid games as Black reaching your defense" },
+  { week: 3, day: "Thu", theme: "Black backup defense",
+    whiteOpenings: "—",
+    blackOpenings: "Secondary Black defense for variety (e.g. Caro-Kann if main is Sicilian)",
+    tasks: "Add a secondary Black defense for variety and surprise value; study its key ideas; play 2 games trying the backup defense vs 1.e4" },
+  { week: 3, day: "Fri", theme: "Black vs 1.e4 — consolidation",
+    whiteOpenings: "—",
+    blackOpenings: "Test your full Black vs 1.e4 preparation",
+    tasks: "Play 3 rapid games as Black vs 1.e4; focus on reaching your prepared lines; analyze what went right or wrong in the opening phase" },
+  { week: 3, day: "Sat", theme: "Long session — Black vs 1.e4",
+    whiteOpenings: "—",
+    blackOpenings: "Full Black game practice vs 1.e4",
+    tasks: "2 long games as Black vs 1.e4; deep analysis of the opening phase; compare to your preparation notes and update where needed" },
+  { week: 3, day: "Sun", theme: "Review — Black vs 1.e4 notes",
+    whiteOpenings: "—",
+    blackOpenings: "Update and finalize Black vs 1.e4 repertoire",
+    tasks: "Write your Black vs 1.e4 repertoire summary; key ideas and critical positions; quiz yourself on 5 key positions without looking at notes" },
+
+  // Week 4 — Black openings vs 1.d4 + full repertoire consolidation
+  { week: 4, day: "Mon", theme: "Choose Black defense vs 1.d4",
+    whiteOpenings: "—",
+    blackOpenings: "Survey: QGD (1...d5), King's Indian (1...Nf6 + g6), Nimzo-Indian, Slav",
+    tasks: "Decide your Black weapon vs 1.d4; watch an intro video; study the mainline and key ideas for your chosen defense" },
+  { week: 4, day: "Tue", theme: "Black vs 1.d4 — main line deep dive",
+    whiteOpenings: "—",
+    blackOpenings: "Main line of your chosen d4 defense",
+    tasks: "Learn the mainline deeply; key plans for both sides; play through 3 master games as Black; note 3 critical positions to memorize" },
+  { week: 4, day: "Wed", theme: "Black vs English (1.c4) and Reti (1.Nf3)",
+    whiteOpenings: "—",
+    blackOpenings: "Universal setup or specific response to 1.c4 and 1.Nf3",
+    tasks: "Develop a solid response to English and Reti; keep it simple (mirror or transpose); play 2 practice games handling these openings as Black" },
+  { week: 4, day: "Thu", theme: "Full repertoire integration — both colors",
+    whiteOpenings: "Practice White 1.e4 system",
+    blackOpenings: "Practice Black defenses vs 1.e4 and 1.d4",
+    tasks: "Alternate playing White and Black; aim to reach your prepared lines in every game; annotate each game with a focus on opening accuracy" },
+  { week: 4, day: "Fri", theme: "Pressure test — rated games with full repertoire",
+    whiteOpenings: "Full White repertoire test",
+    blackOpenings: "Full Black repertoire test",
+    tasks: "Play 3+ rated games using your complete repertoire; note every deviation from preparation; record your rating before and after the session" },
+  { week: 4, day: "Sat", theme: "Long repertoire showcase session",
+    whiteOpenings: "White system in full-length game",
+    blackOpenings: "Black defenses in full-length game",
+    tasks: "2 long games with full pre-game repertoire review; 2+ hours post-game analysis of the opening phases only; find moments to improve" },
+  { week: 4, day: "Sun", theme: "Repertoire completion & next steps",
+    whiteOpenings: "Finalize White notes & key positions",
+    blackOpenings: "Finalize Black notes & key positions",
+    tasks: "Complete your full repertoire document; identify the 5 most important positions to memorize; plan your next 4 weeks of continued opening study" },
+];
+
+// ── Plan day info helper (week-aware, falls back to static labels/notes) ───────
+
+function getPlanDayInfo(
+  plan: HobbyPlan,
+  dayLabel: string, // "Mon" | "Tue" | etc.
+): { label: string; notes: string } {
+  if (plan.weeklyPlan && plan.weeklyPlan.length > 0) {
+    // Compute current week number (1-indexed) from plan start date
+    let currentWeek = 1;
+    if (plan.startDate) {
+      const start = new Date(plan.startDate);
+      const today = new Date();
+      const daysDiff = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      currentWeek = Math.max(1, Math.floor(daysDiff / 7) + 1);
+    }
+    // Cap to max available week
+    const maxWeek = Math.max(...plan.weeklyPlan.map(e => e.week));
+    const week = Math.min(currentWeek, maxWeek);
+    const entry = plan.weeklyPlan.find(e => e.week === week && e.day === dayLabel);
+    if (entry) {
+      const noteParts = [
+        entry.whiteOpenings && entry.whiteOpenings !== "—" ? `White: ${entry.whiteOpenings}` : "",
+        entry.blackOpenings && entry.blackOpenings !== "—" ? `Black: ${entry.blackOpenings}` : "",
+        entry.tasks,
+      ].filter(Boolean);
+      return { label: entry.theme, notes: noteParts.join(" · ") };
+    }
+  }
+  // Fall back to static dayLabels/dayNotes
+  return {
+    label: plan.dayLabels?.[dayLabel] ?? "",
+    notes: plan.dayNotes?.[dayLabel] ?? "",
+  };
 }
 
 // ── Chess ELO helpers ──────────────────────────────────────────────────────────
@@ -2557,21 +2726,28 @@ function HobbyPlanRichCard({
                   >
                     <div className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ background: isLogged ? hobbyColor : `${hobbyColor}60` }} />
                     <div className="flex-1 min-w-0">
-                      {isLogged && session.notes ? (
-                        <>
-                          <p className="text-xs font-semibold leading-tight">{plan.dayLabels?.[dayLabel] || plan.title}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{session.notes}</p>
-                        </>
-                      ) : plan.dayLabels?.[dayLabel] ? (
-                        <>
-                          <p className="text-xs font-semibold leading-tight">{plan.dayLabels[dayLabel]}</p>
-                          {plan.dayNotes?.[dayLabel] && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{plan.dayNotes[dayLabel]}</p>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-xs font-medium">{plan.title}</p>
-                      )}
+                      {(() => {
+                        const dayInfo = getPlanDayInfo(plan, dayLabel);
+                        if (isLogged && session.notes) {
+                          return (
+                            <>
+                              <p className="text-xs font-semibold leading-tight">{dayInfo.label || plan.title}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{session.notes}</p>
+                            </>
+                          );
+                        } else if (dayInfo.label) {
+                          return (
+                            <>
+                              <p className="text-xs font-semibold leading-tight">{dayInfo.label}</p>
+                              {dayInfo.notes && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{dayInfo.notes}</p>
+                              )}
+                            </>
+                          );
+                        } else {
+                          return <p className="text-xs font-medium">{plan.title}</p>;
+                        }
+                      })()}
                     </div>
                     {isLogged ? (
                       <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5"
@@ -2677,6 +2853,7 @@ function PlanWizard({
   const [planDayLabels, setPlanDayLabels] = useState<Record<string, string>>({});
   const [planDayNotes, setPlanDayNotes] = useState<Record<string, string>>({});
   const [planMilestones, setPlanMilestones] = useState<PlanMilestone[]>([]);
+  const [planWeeklyPlan, setPlanWeeklyPlan] = useState<WeekPlanEntry[]>([]);
 
   // Chess wizard state
   const [chessMode, setChessMode] = useState(false);
@@ -2880,7 +3057,7 @@ function PlanWizard({
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setScheduleDays([]); setSteps([]); setStepInput(""); setStepDate("");
-    setPlanDayLabels({}); setPlanDayNotes({}); setPlanMilestones([]);
+    setPlanDayLabels({}); setPlanDayNotes({}); setPlanMilestones([]); setPlanWeeklyPlan([]);
     setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
@@ -2977,7 +3154,19 @@ function PlanWizard({
       case "tournament": planTitle = `${tournamentType} tournament prep${tournamentDate ? ` — ${tournamentDate}` : ""}`;  desc = `Prepare for and compete in a ${tournamentType} event.`; break;
     }
     setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setChessMode(false); setChessGoalType(""); setStep(2);
+    setSteps(generatedSteps);
+    // Opening repertoire — wire up the 4-week weekly plan and milestones
+    if (chessGoalType === "openings") {
+      setScheduleDays(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]);
+      setPlanWeeklyPlan(CHESS_OPENING_WEEKLY_PLAN);
+      setPlanMilestones([
+        { id: genId(), title: "Week 1 — White vs 1...e5 repertoire mapped", order: 1 },
+        { id: genId(), title: "Week 2 — White vs all Black responses covered", order: 2 },
+        { id: genId(), title: "Week 3 — Black vs 1.e4 repertoire built", order: 3 },
+        { id: genId(), title: "Week 4 — Full repertoire ready to play", order: 4 },
+      ]);
+    }
+    setChessMode(false); setChessGoalType(""); setStep(2);
   }
 
   function applyHikingSettings() {
@@ -3321,6 +3510,7 @@ function PlanWizard({
       ...(Object.keys(planDayLabels).length > 0 ? { dayLabels: planDayLabels } : {}),
       ...(Object.keys(planDayNotes).length > 0 ? { dayNotes: planDayNotes } : {}),
       ...(planMilestones.length > 0 ? { milestones: planMilestones } : {}),
+      ...(planWeeklyPlan.length > 0 ? { weeklyPlan: planWeeklyPlan } : {}),
     };
     onSave(selectedHobbyId, plan);
     handleClose();
@@ -8993,7 +9183,8 @@ function HobbyActivePlanSection({
                 {entries.length > 0 ? (
                   <div className="flex-1 min-w-0 space-y-2">
                     {entries.map(({ hobby, plan, typeInfo, color, loggedSession }, i) => {
-                      const pillLabel = plan.dayLabels?.[dayLabel] || plan.title;
+                      const dayInfo = getPlanDayInfo(plan, dayLabel);
+                      const pillLabel = dayInfo.label || plan.title;
                       return (
                         <div key={`${plan.id}-${i}`} className="flex items-start gap-1.5 group/entry">
                           <button
@@ -9024,8 +9215,8 @@ function HobbyActivePlanSection({
                                 <span className="text-sm font-medium">{hobby.name}</span>
                                 {loggedSession?.notes ? (
                                   <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{loggedSession.notes}</p>
-                                ) : plan.dayNotes?.[dayLabel] ? (
-                                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{plan.dayNotes[dayLabel]}</p>
+                                ) : dayInfo.notes ? (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{dayInfo.notes}</p>
                                 ) : null}
                               </div>
                               {loggedSession ? (
