@@ -147,6 +147,8 @@ interface HobbyGoal {
   createdAt: string;
   // accountability
   buddyUserId?: number;
+  // link back to the plan that auto-created this goal
+  linkedPlanId?: string;
 }
 
 interface GoalTemplate {
@@ -1776,6 +1778,33 @@ function parsePlans(extraJson: string): HobbyPlan[] {
     const obj = JSON.parse(extraJson || "{}");
     return Array.isArray(obj.plans) ? obj.plans : [];
   } catch { return []; }
+}
+
+/**
+ * Backfill: for each plan that lacks a linked goal, auto-create one.
+ * Returns null if nothing needed adding (no write needed).
+ */
+function backfillGoalsForPlans(extraJson: string): string | null {
+  const plans = parsePlans(extraJson);
+  const goals = parseGoals(extraJson);
+  if (plans.length === 0) return null;
+
+  const linkedIds = new Set(goals.map(g => g.linkedPlanId).filter(Boolean));
+  const missing = plans.filter(p => !linkedIds.has(p.id));
+  if (missing.length === 0) return null;
+
+  const newGoals: HobbyGoal[] = missing.map(plan => ({
+    id: genId(),
+    title: plan.title,
+    description: plan.description || undefined,
+    goalType: "milestone" as const,
+    durationWeeks: plan.durationWeeks,
+    status: (plan.completedAt ? "completed" : plan.isActive ? "active" : "paused") as HobbyGoal["status"],
+    createdAt: plan.createdAt,
+    linkedPlanId: plan.id,
+  }));
+
+  return setGoalsInExtra(extraJson, [...goals, ...newGoals]);
 }
 
 function setPlansInExtra(extraJson: string, plans: HobbyPlan[]): string {
@@ -8659,7 +8688,17 @@ function HobbyDetailDialog({
   }
   function completePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p)); }
   function deletePlan(planId: string) { onUpdatePlans(plans.filter(p => p.id !== planId)); }
-  function savePlanEdit(updated: HobbyPlan) { onUpdatePlans(plans.map(p => p.id === updated.id ? updated : p)); setEditingPlan(null); }
+  function savePlanEdit(updated: HobbyPlan) {
+    // Sync linked goal title/description/status alongside the plan edit
+    const updatedGoals = goals.map(g =>
+      g.linkedPlanId === updated.id
+        ? { ...g, title: updated.title, description: updated.description, durationWeeks: updated.durationWeeks,
+            status: updated.completedAt ? "completed" as const : updated.isActive ? "active" as const : g.status }
+        : g
+    );
+    onUpdateExtra(setPlansAndGoalsInExtra(hobby?.extraJson ?? "{}", plans.map(p => p.id === updated.id ? updated : p), updatedGoals));
+    setEditingPlan(null);
+  }
   function saveGoalEdit(updated: HobbyGoal) { updateGoal(updated); setEditingGoal(null); }
 
   return (
@@ -8825,6 +8864,7 @@ function HobbyDetailDialog({
                 durationWeeks: plan.durationWeeks,
                 status: plan.isActive ? "active" : "paused",
                 createdAt: plan.createdAt,
+                linkedPlanId: plan.id,
               };
               onUpdateExtra(setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", [...plans, plan], [...goals, autoGoal]));
               if (isLanguageLearningHobby(hobby)) onCreateSystemGoal?.(hobby, plan);
@@ -8965,7 +9005,20 @@ function PlansGoalsTab({
     onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
   }
   function savePlanEdit(updated: HobbyPlan & { hobby: Hobby }) {
-    updatePlan(updated.hobby, updated);
+    // Sync linked goal title/description/status alongside the plan edit
+    const existingGoals = parseGoals(updated.hobby.extraJson ?? "{}");
+    const syncedGoals = existingGoals.map(g =>
+      g.linkedPlanId === updated.id
+        ? { ...g, title: updated.title, description: updated.description, durationWeeks: updated.durationWeeks,
+            status: updated.completedAt ? "completed" as const : updated.isActive ? "active" as const : g.status }
+        : g
+    );
+    const newExtra = setPlansAndGoalsInExtra(
+      updated.hobby.extraJson ?? "{}",
+      parsePlans(updated.hobby.extraJson ?? "{}").map(p => p.id === updated.id ? updated : p),
+      syncedGoals,
+    );
+    onUpdateHobby(updated.hobby.id, newExtra);
     setEditingPlan(null);
   }
   function saveGoalEdit(updated: HobbyGoal & { hobby: Hobby }) {
@@ -8976,12 +9029,22 @@ function PlansGoalsTab({
     const plans = parsePlans(hobby.extraJson ?? "{}").filter(p => p.id !== planId);
     onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
   }
+  function syncGoalStatus(hobby: Hobby, planId: string, planIsActive: boolean, planCompleted: boolean) {
+    const goals = parseGoals(hobby.extraJson ?? "{}");
+    return goals.map(g =>
+      g.linkedPlanId === planId
+        ? { ...g, status: planCompleted ? "completed" as const : planIsActive ? "active" as const : "paused" as const }
+        : g
+    );
+  }
   function togglePlanActive(hobby: Hobby, planId: string) {
     const plans = parsePlans(hobby.extraJson ?? "{}");
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
-    const updated = { ...plan, isActive: !plan.isActive, startDate: (!plan.isActive && !plan.startDate) ? new Date().toISOString().slice(0, 10) : plan.startDate };
-    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? updated : p)));
+    const nowActive = !plan.isActive;
+    const updated = { ...plan, isActive: nowActive, startDate: (nowActive && !plan.startDate) ? new Date().toISOString().slice(0, 10) : plan.startDate };
+    const syncedGoals = syncGoalStatus(hobby, planId, nowActive, false);
+    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? updated : p), syncedGoals));
   }
   function togglePlanStep(hobby: Hobby, planId: string, stepId: string, done: boolean) {
     const plans = parsePlans(hobby.extraJson ?? "{}");
@@ -8992,7 +9055,8 @@ function PlansGoalsTab({
   }
   function completePlan(hobby: Hobby, planId: string) {
     const plans = parsePlans(hobby.extraJson ?? "{}");
-    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p)));
+    const syncedGoals = syncGoalStatus(hobby, planId, false, true);
+    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p), syncedGoals));
   }
 
   // ── Goal mutations ─────────────────────────────────────────────────────────
@@ -9234,6 +9298,7 @@ function PlansGoalsTab({
             durationWeeks: plan.durationWeeks,
             status: plan.isActive ? "active" : "paused",
             createdAt: plan.createdAt,
+            linkedPlanId: plan.id,
           };
           const newExtra = setPlansAndGoalsInExtra(
             hobby.extraJson ?? "{}",
@@ -9700,6 +9765,20 @@ export default function HobbiesPage() {
     if (activePlanCount > 0 && activeTab === "hobbies") setActiveTab("active");
     if (activePlanCount === 0 && activeTab === "active") setActiveTab("hobbies");
   }, [activePlanCount]);
+
+  // Backfill: ensure every plan has a linked goal (handles data created before auto-goal was added)
+  useEffect(() => {
+    if (isLoading || hobbies.length === 0) return;
+    const updates: { id: number; extraJson: string }[] = [];
+    for (const hobby of hobbies) {
+      const backfilled = backfillGoalsForPlans(hobby.extraJson ?? "{}");
+      if (backfilled !== null) updates.push({ id: hobby.id, extraJson: backfilled });
+    }
+    if (updates.length === 0) return;
+    // Fire-and-forget: write each hobby that needed backfilling
+    Promise.all(updates.map(u => updateMut.mutateAsync({ id: u.id, data: { extraJson: u.extraJson } })))
+      .catch(() => {}); // non-fatal
+  }, [isLoading]); // runs once after data loads
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
