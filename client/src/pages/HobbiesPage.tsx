@@ -396,6 +396,7 @@ interface HobbyPlan {
   completedAt?: string;
   scheduleDays?: string[];
   sessions?: SessionLog[];
+  dayLabels?: Record<string, string>; // Maps "Mon" → custom session label for that day
 }
 
 interface PlanTemplate {
@@ -8008,6 +8009,80 @@ function LogSessionDialog({
   );
 }
 
+// ── Day Label Dialog ────────────────────────────────────────────────────────────
+
+function DayLabelDialog({
+  open, onClose, onSave,
+  planTitle, dayLabel, currentLabel,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (label: string) => void;
+  planTitle: string;
+  dayLabel: string;
+  currentLabel: string;
+}) {
+  const [label, setLabel] = useState(currentLabel);
+
+  useEffect(() => {
+    if (open) setLabel(currentLabel);
+  }, [open, currentLabel]);
+
+  function handleSave() {
+    onSave(label.trim());
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil size={15} className="text-primary" />
+            {dayLabel} Session Label
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-1">
+          <div className="p-2.5 rounded-lg bg-muted/50 border">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Plan</p>
+            <p className="text-xs font-semibold">{planTitle}</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              What will you work on {dayLabel}?
+            </label>
+            <Input
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder={planTitle}
+              className="text-sm"
+              autoFocus
+              onKeyDown={e => e.key === "Enter" && handleSave()}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Leave blank to use the plan name. This replaces the pill label for this day only.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-between pt-2">
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            {currentLabel && (
+              <Button variant="ghost" size="sm" onClick={() => { onSave(""); onClose(); }}
+                className="text-muted-foreground hover:text-foreground">
+                Clear
+              </Button>
+            )}
+          </div>
+          <Button size="sm" onClick={handleSave} className="gap-1.5">
+            <Check size={13} /> Set Label
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── HobbyActivePlanSection ─────────────────────────────────────────────────────
 
 function HobbyActivePlanSection({
@@ -8025,6 +8100,9 @@ function HobbyActivePlanSection({
   const [editTarget, setEditTarget] = useState<{ hobby: Hobby; plan: HobbyPlan } | null>(null);
   const [editSessionTarget, setEditSessionTarget] = useState<{
     hobby: Hobby; plan: HobbyPlan; session: SessionLog; dayLabel: string;
+  } | null>(null);
+  const [editDayLabel, setEditDayLabel] = useState<{
+    hobby: Hobby; plan: HobbyPlan; dayLabel: string;
   } | null>(null);
 
   const today = new Date();
@@ -8089,6 +8167,19 @@ function HobbyActivePlanSection({
     if (!editSessionTarget) return;
     deleteSession(editSessionTarget.hobby, editSessionTarget.plan, editSessionTarget.session.id);
     setEditSessionTarget(null);
+  }
+
+  function saveDayLabel(dayLabel: string, label: string) {
+    if (!editDayLabel) return;
+    const { hobby, plan } = editDayLabel;
+    const updatedDayLabels = { ...(plan.dayLabels ?? {}) };
+    if (label) {
+      updatedDayLabels[dayLabel] = label;
+    } else {
+      delete updatedDayLabels[dayLabel];
+    }
+    savePlanUpdate(hobby, { ...plan, dayLabels: Object.keys(updatedDayLabels).length > 0 ? updatedDayLabels : undefined });
+    setEditDayLabel(null);
   }
 
   // ── Determine scheduled days for a plan ──────────────────────────────────────
@@ -8176,46 +8267,60 @@ function HobbyActivePlanSection({
                 {/* Activities */}
                 {entries.length > 0 ? (
                   <div className="flex-1 min-w-0 space-y-2">
-                    {entries.map(({ hobby, plan, typeInfo, color, loggedSession }, i) => (
-                      <button
-                        key={`${plan.id}-${i}`}
-                        type="button"
-                        className="w-full text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
-                        onClick={() => {
-                          if (loggedSession) {
-                            setEditSessionTarget({ hobby, plan, session: loggedSession, dayLabel });
-                          } else {
-                            setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
-                          }
-                        }}
-                      >
-                        {/* Plan name tag (like Workouts colored pill) */}
-                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                          <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                            style={{ background: `${color}22`, color, border: `1px solid ${color}44` }}>
-                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
-                            {plan.title}
-                          </div>
-                          {isToday && i === 0 && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>
-                          )}
+                    {entries.map(({ hobby, plan, typeInfo, color, loggedSession }, i) => {
+                      const pillLabel = plan.dayLabels?.[dayLabel] || plan.title;
+                      return (
+                        <div key={`${plan.id}-${i}`} className="flex items-start gap-1.5 group/entry">
+                          <button
+                            type="button"
+                            className="flex-1 min-w-0 text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
+                            onClick={() => {
+                              if (loggedSession) {
+                                setEditSessionTarget({ hobby, plan, session: loggedSession, dayLabel });
+                              } else {
+                                setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
+                              }
+                            }}
+                          >
+                            {/* Plan name tag (colored pill) */}
+                            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                              <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: `${color}22`, color, border: `1px solid ${color}44` }}>
+                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+                                {pillLabel}
+                              </div>
+                              {isToday && i === 0 && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>
+                              )}
+                            </div>
+                            {/* Activity label */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{hobby.name}</span>
+                              {loggedSession ? (
+                                <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{ background: `${color}20`, color }}>
+                                  <CheckCircle2 size={9} /> Logged · tap to edit
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                                  + Log session
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {/* Edit day label pencil */}
+                          <button
+                            type="button"
+                            title={`Edit ${dayLabel} session name`}
+                            className="mt-2 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0 opacity-0 group-hover/entry:opacity-100"
+                            style={{ color }}
+                            onClick={e => { e.stopPropagation(); setEditDayLabel({ hobby, plan, dayLabel }); }}
+                          >
+                            <Pencil size={11} />
+                          </button>
                         </div>
-                        {/* Activity label */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{hobby.name}</span>
-                          {loggedSession ? (
-                            <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                              style={{ background: `${color}20`, color }}>
-                              <CheckCircle2 size={9} /> Logged · tap to edit
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                              + Log session
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground flex-1 pt-0.5">Rest</p>
@@ -8369,7 +8474,9 @@ function HobbyActivePlanSection({
                           >
                             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: isLogged ? typeInfo.color : `${typeInfo.color}60` }} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{plan.title}</p>
+                              <p className="text-sm font-medium truncate">
+                                {plan.dayLabels?.[dayLabel] || plan.title}
+                              </p>
                               {isLogged && existingSession.notes && (
                                 <p className="text-[10px] text-muted-foreground truncate">{existingSession.notes}</p>
                               )}
@@ -8471,6 +8578,16 @@ function HobbyActivePlanSection({
         planTitle={logTarget?.plan.title ?? ""}
         dayLabel={logTarget?.dayLabel ?? ""}
         defaultDate={logTarget?.defaultDate ?? today.toISOString().slice(0, 10)}
+      />
+
+      {/* Day Label Dialog */}
+      <DayLabelDialog
+        open={!!editDayLabel}
+        onClose={() => setEditDayLabel(null)}
+        onSave={(label) => saveDayLabel(editDayLabel?.dayLabel ?? "", label)}
+        planTitle={editDayLabel?.plan.title ?? ""}
+        dayLabel={editDayLabel?.dayLabel ?? ""}
+        currentLabel={editDayLabel ? (editDayLabel.plan.dayLabels?.[editDayLabel.dayLabel] ?? "") : ""}
       />
 
       {/* Edit Session Dialog */}
@@ -8932,7 +9049,82 @@ function PlansGoalsTab({
       {/* ── Type filter ── */}
       {typeFilterBar}
 
-      {/* ══════════════════ PLANS SECTION ══════════════════ */}
+      {/* ══════════════════ GOALS SECTION (top) ══════════════════ */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <Target size={14} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">Goals</h2>
+              <p className="text-xs text-muted-foreground">Outcome-focused targets — count, milestone, or frequency</p>
+            </div>
+            {activeGoals.length > 0 && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 ml-1">
+                {activeGoals.length} active
+              </span>
+            )}
+          </div>
+          <Button size="sm" onClick={() => setGoalWizardOpen(true)} variant="outline" className="gap-1.5 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30">
+            <Plus size={12} /> New Goal
+          </Button>
+        </div>
+
+        {allGoals.length === 0 && (
+          <div className="text-center py-8 border-2 border-dashed rounded-xl text-muted-foreground">
+            <Target size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-xs font-medium">No goals yet</p>
+            <p className="text-xs mt-1 mb-3">Set a count, milestone, or frequency goal</p>
+            <Button size="sm" variant="outline" onClick={() => setGoalWizardOpen(true)} className="gap-1.5">
+              <Plus size={12} /> Create first goal
+            </Button>
+          </div>
+        )}
+
+        {filteredActiveGoals.length > 0 && (
+          <div className="space-y-3">
+            {filteredActiveGoals.map(g => {
+              const ti = HOBBY_TYPE_MAP[g.hobby.hobbyType as HobbyType];
+              return (
+                <GoalCard key={g.id} goal={g} hobbyName={g.hobby.name} hobbyColor={ti?.color ?? "#888"}
+                  onUpdateCount={(val) => updateCount(g.hobby, g.id, val)}
+                  onToggleStep={(sid, done) => toggleGoalStep(g.hobby, g.id, sid, done)}
+                  onComplete={() => completeGoal(g.hobby, g.id)}
+                  onDelete={() => deleteGoal(g.hobby, g.id)}
+                  onEdit={() => setEditingGoal(g)}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {filteredActiveGoals.length === 0 && allGoals.length > 0 && (
+          <p className="text-center text-xs text-muted-foreground py-4">No active goals match this filter.</p>
+        )}
+
+        {completedGoals.length > 0 && (
+          <details open={showCompletedGoals} onToggle={e => setShowCompletedGoals((e.target as HTMLDetailsElement).open)} className="group">
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground list-none flex items-center gap-1 px-1 py-1">
+              <ChevronRight size={11} className="group-open:rotate-90 transition-transform" />
+              {completedGoals.length} completed goal{completedGoals.length !== 1 ? "s" : ""}
+            </summary>
+            <div className="space-y-2 mt-1">
+              {completedGoals.map(g => {
+                const ti = HOBBY_TYPE_MAP[g.hobby.hobbyType as HobbyType];
+                return (
+                  <GoalCard key={g.id} goal={g} hobbyName={g.hobby.name} hobbyColor={ti?.color ?? "#888"} onDelete={() => deleteGoal(g.hobby, g.id)} />
+                );
+              })}
+            </div>
+          </details>
+        )}
+      </section>
+
+      {/* Divider */}
+      <div className="h-px bg-border" />
+
+      {/* ══════════════════ PLAN OVERVIEW SECTION ══════════════════ */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -8940,7 +9132,7 @@ function PlansGoalsTab({
               <ClipboardList size={14} className="text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-sm font-bold">Plans</h2>
+              <h2 className="text-sm font-bold">Plan Overview</h2>
               <p className="text-xs text-muted-foreground">Structured, step-by-step plans with activate/deactivate</p>
             </div>
             {activePlans.length > 0 && (
@@ -9016,81 +9208,6 @@ function PlansGoalsTab({
                   <PlanCard key={p.id} plan={p} hobbyName={p.hobby.name} hobbyColor={ti?.color ?? "#888"}
                     onDelete={() => deletePlan(p.hobby, p.id)}
                   />
-                );
-              })}
-            </div>
-          </details>
-        )}
-      </section>
-
-      {/* Divider */}
-      <div className="h-px bg-border" />
-
-      {/* ══════════════════ GOALS SECTION ══════════════════ */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Target size={14} className="text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold">Goals</h2>
-              <p className="text-xs text-muted-foreground">Outcome-focused targets — count, milestone, or frequency</p>
-            </div>
-            {activeGoals.length > 0 && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 ml-1">
-                {activeGoals.length} active
-              </span>
-            )}
-          </div>
-          <Button size="sm" onClick={() => setGoalWizardOpen(true)} variant="outline" className="gap-1.5 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30">
-            <Plus size={12} /> New Goal
-          </Button>
-        </div>
-
-        {allGoals.length === 0 && (
-          <div className="text-center py-8 border-2 border-dashed rounded-xl text-muted-foreground">
-            <Target size={28} className="mx-auto mb-2 opacity-20" />
-            <p className="text-xs font-medium">No goals yet</p>
-            <p className="text-xs mt-1 mb-3">Set a count, milestone, or frequency goal</p>
-            <Button size="sm" variant="outline" onClick={() => setGoalWizardOpen(true)} className="gap-1.5">
-              <Plus size={12} /> Create first goal
-            </Button>
-          </div>
-        )}
-
-        {filteredActiveGoals.length > 0 && (
-          <div className="space-y-3">
-            {filteredActiveGoals.map(g => {
-              const ti = HOBBY_TYPE_MAP[g.hobby.hobbyType as HobbyType];
-              return (
-                <GoalCard key={g.id} goal={g} hobbyName={g.hobby.name} hobbyColor={ti?.color ?? "#888"}
-                  onUpdateCount={(val) => updateCount(g.hobby, g.id, val)}
-                  onToggleStep={(sid, done) => toggleGoalStep(g.hobby, g.id, sid, done)}
-                  onComplete={() => completeGoal(g.hobby, g.id)}
-                  onDelete={() => deleteGoal(g.hobby, g.id)}
-                  onEdit={() => setEditingGoal(g)}
-                />
-              );
-            })}
-          </div>
-        )}
-
-        {filteredActiveGoals.length === 0 && allGoals.length > 0 && (
-          <p className="text-center text-xs text-muted-foreground py-4">No active goals match this filter.</p>
-        )}
-
-        {completedGoals.length > 0 && (
-          <details open={showCompletedGoals} onToggle={e => setShowCompletedGoals((e.target as HTMLDetailsElement).open)} className="group">
-            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground list-none flex items-center gap-1 px-1 py-1">
-              <ChevronRight size={11} className="group-open:rotate-90 transition-transform" />
-              {completedGoals.length} completed goal{completedGoals.length !== 1 ? "s" : ""}
-            </summary>
-            <div className="space-y-2 mt-1">
-              {completedGoals.map(g => {
-                const ti = HOBBY_TYPE_MAP[g.hobby.hobbyType as HobbyType];
-                return (
-                  <GoalCard key={g.id} goal={g} hobbyName={g.hobby.name} hobbyColor={ti?.color ?? "#888"} onDelete={() => deleteGoal(g.hobby, g.id)} />
                 );
               })}
             </div>
