@@ -386,6 +386,14 @@ interface SessionLog {
   planId: string;
 }
 
+interface PlanMilestone {
+  id: string;
+  title: string;         // e.g. "Hit 1300 ELO"
+  description?: string;
+  completedAt?: string;  // ISO date string when achieved
+  order: number;
+}
+
 interface HobbyPlan {
   id: string;
   title: string;
@@ -393,7 +401,9 @@ interface HobbyPlan {
   durationWeeks?: number;
   startDate?: string;
   isActive: boolean;
+  isPaused?: boolean;    // paused = !isActive && isPaused && !completedAt
   steps: GoalStep[];
+  milestones?: PlanMilestone[];
   createdAt: string;
   completedAt?: string;
   scheduleDays?: string[];
@@ -2040,7 +2050,10 @@ function PlanCard({
   hobbyName,
   hobbyColor,
   onToggleStep,
+  onToggleMilestone,
   onToggleActive,
+  onPause,
+  onResume,
   onComplete,
   onDelete,
   onEdit,
@@ -2049,19 +2062,34 @@ function PlanCard({
   hobbyName: string;
   hobbyColor: string;
   onToggleStep?: (stepId: string, done: boolean) => void;
+  onToggleMilestone?: (milestoneId: string, completed: boolean) => void;
   onToggleActive?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
   onComplete?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
 }) {
+  const [stepsOpen, setStepsOpen] = useState(false);
   const { pct, done, total } = planProgress(plan);
   const isCompleted = !!plan.completedAt;
+  const isPaused = !plan.isActive && !!plan.isPaused && !plan.completedAt;
+  const milestones = plan.milestones ?? [];
+  const milestoneDone = milestones.filter(m => !!m.completedAt).length;
   const days = plan.startDate && plan.durationWeeks
     ? Math.round((new Date(plan.startDate).getTime() + plan.durationWeeks * 7 * 86400000 - Date.now()) / 86400000)
     : null;
 
+  const borderClass = isCompleted
+    ? "bg-secondary/30 opacity-75"
+    : plan.isActive
+      ? "bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800"
+      : isPaused
+        ? "bg-amber-50/40 dark:bg-amber-950/10 border-amber-200 dark:border-amber-800"
+        : "bg-card";
+
   return (
-    <div className={`rounded-xl border p-4 space-y-3 ${isCompleted ? "bg-secondary/30 opacity-75" : plan.isActive ? "bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800" : "bg-card"}`}>
+    <div className={`rounded-xl border p-4 space-y-3 ${borderClass}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -2079,6 +2107,11 @@ function PlanCard({
           {plan.isActive && (
             <span className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
               <Zap size={9} /> Active
+            </span>
+          )}
+          {isPaused && (
+            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+              ⏸ Paused
             </span>
           )}
           {!isCompleted && onEdit && (
@@ -2099,38 +2132,79 @@ function PlanCard({
         </div>
       </div>
 
-      {/* Progress */}
-      {total > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{done} / {total} steps</span>
-            <span className="font-semibold">{pct}%</span>
+      {/* ── Milestones ── */}
+      {milestones.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Trophy size={9} /> Milestones
+            </p>
+            <span className="text-[10px] text-muted-foreground">{milestoneDone}/{milestones.length}</span>
           </div>
-          <Progress value={pct} className="h-1.5" />
+          <div className="space-y-1">
+            {milestones.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onToggleMilestone?.(m.id, !m.completedAt)}
+                disabled={isCompleted || !onToggleMilestone}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left group"
+              >
+                {m.completedAt
+                  ? <Trophy size={12} className="text-amber-500 shrink-0" />
+                  : <Circle size={12} className="text-muted-foreground/40 shrink-0" />}
+                <span className={`text-xs flex-1 ${m.completedAt ? "line-through text-muted-foreground" : "font-medium"}`}>{m.title}</span>
+                {m.completedAt && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">{format(parseISO(m.completedAt), "MMM d")}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          {milestones.length > 1 && (
+            <div className="h-1 bg-secondary rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((milestoneDone / milestones.length) * 100)}%`, backgroundColor: hobbyColor }} />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Steps */}
-      {plan.steps.length > 0 && (
-        <div className="space-y-1 max-h-44 overflow-y-auto">
-          {plan.steps.map((step) => (
-            <button
-              key={step.id}
-              onClick={() => onToggleStep?.(step.id, !step.done)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left"
-              disabled={isCompleted || !onToggleStep}
-            >
-              {step.done
-                ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                : <Circle size={13} className="text-muted-foreground/40 shrink-0" />}
-              <span className={`text-xs flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.text}</span>
-              {step.dueDate && (
-                <span className={`text-[10px] shrink-0 ${(() => { const d = daysUntilDate(step.dueDate); return d !== null && d < 0 ? "text-destructive" : d !== null && d <= 3 ? "text-amber-500" : "text-muted-foreground"; })()}`}>
-                  {format(parseISO(step.dueDate), "MMM d")}
-                </span>
-              )}
-            </button>
-          ))}
+      {/* ── Plan Overview (steps) — collapsible ── */}
+      {total > 0 && (
+        <div className="space-y-1.5">
+          <button type="button"
+            onClick={() => setStepsOpen(o => !o)}
+            className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <ListChecks size={9} /> Plan Overview
+              <span className="font-normal ml-1 text-muted-foreground/60">{done}/{total} steps · {pct}%</span>
+            </p>
+            {stepsOpen ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
+          </button>
+
+          <Progress value={pct} className="h-1" />
+
+          {stepsOpen && (
+            <div className="space-y-0.5 max-h-52 overflow-y-auto mt-1">
+              {plan.steps.map((step) => (
+                <button
+                  key={step.id}
+                  onClick={() => onToggleStep?.(step.id, !step.done)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+                  disabled={isCompleted || !onToggleStep}
+                >
+                  {step.done
+                    ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                    : <Circle size={13} className="text-muted-foreground/40 shrink-0" />}
+                  <span className={`text-xs flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.text}</span>
+                  {step.dueDate && (
+                    <span className={`text-[10px] shrink-0 ${(() => { const d = daysUntilDate(step.dueDate); return d !== null && d < 0 ? "text-destructive" : d !== null && d <= 3 ? "text-amber-500" : "text-muted-foreground"; })()}`}>
+                      {format(parseISO(step.dueDate), "MMM d")}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -2148,22 +2222,38 @@ function PlanCard({
         </span>
       )}
 
-      {/* Activate / Deactivate toggle */}
-      {!isCompleted && onToggleActive && (
-        <div className="pt-1 border-t flex items-center justify-between">
+      {/* Action bar: Activate / Pause / Resume / Deactivate */}
+      {!isCompleted && (onToggleActive || onPause || onResume) && (
+        <div className="pt-1 border-t flex items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">
-            {plan.isActive ? "This plan is active" : "This plan is inactive"}
+            {plan.isActive ? "Active" : isPaused ? "Paused" : "Inactive"}
           </span>
-          <button
-            onClick={onToggleActive}
-            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
-              plan.isActive
-                ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/50"
-                : "bg-secondary border-border text-muted-foreground hover:bg-primary/5 hover:border-primary/30 hover:text-primary"
-            }`}
-          >
-            {plan.isActive ? <><PowerOff size={11} /> Deactivate</> : <><Power size={11} /> Activate</>}
-          </button>
+          <div className="flex items-center gap-1">
+            {plan.isActive && onPause && (
+              <button onClick={onPause}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-100">
+                ⏸ Pause
+              </button>
+            )}
+            {isPaused && onResume && (
+              <button onClick={onResume}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100">
+                <Play size={10} /> Resume
+              </button>
+            )}
+            {plan.isActive && onToggleActive && (
+              <button onClick={onToggleActive}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all bg-secondary border-border text-muted-foreground hover:bg-primary/5 hover:border-primary/30 hover:text-primary">
+                <PowerOff size={10} /> Deactivate
+              </button>
+            )}
+            {!plan.isActive && !isPaused && onToggleActive && (
+              <button onClick={onToggleActive}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all bg-secondary border-border text-muted-foreground hover:bg-primary/5 hover:border-primary/30 hover:text-primary">
+                <Power size={10} /> Activate
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -7721,21 +7811,30 @@ function PlanEditDialog({
   onClose: () => void;
   onSave: (updated: HobbyPlan) => void;
 }) {
+  const [tab, setTab] = useState<"info" | "steps" | "milestones">("info");
   const [title, setTitle] = useState(plan?.title ?? "");
   const [description, setDescription] = useState(plan?.description ?? "");
   const [durationWeeks, setDurationWeeks] = useState(plan?.durationWeeks ? String(plan.durationWeeks) : "");
   const [startDate, setStartDate] = useState(plan?.startDate ?? "");
   const [scheduleDays, setScheduleDays] = useState<string[]>(plan?.scheduleDays ?? []);
+  const [steps, setSteps] = useState<GoalStep[]>(plan?.steps ?? []);
+  const [newStep, setNewStep] = useState("");
+  const [milestones, setMilestones] = useState<PlanMilestone[]>(plan?.milestones ?? []);
+  const [newMilestone, setNewMilestone] = useState("");
 
   useEffect(() => {
-    if (plan) {
+    if (plan && open) {
+      setTab("info");
       setTitle(plan.title);
       setDescription(plan.description ?? "");
       setDurationWeeks(plan.durationWeeks ? String(plan.durationWeeks) : "");
       setStartDate(plan.startDate ?? "");
       setScheduleDays(plan.scheduleDays ?? []);
+      setSteps(plan.steps ?? []);
+      setMilestones(plan.milestones ?? []);
+      setNewStep(""); setNewMilestone("");
     }
-  }, [plan]);
+  }, [plan, open]);
 
   if (!plan) return null;
 
@@ -7748,64 +7847,213 @@ function PlanEditDialog({
       durationWeeks: durationWeeks ? Number(durationWeeks) : undefined,
       startDate: startDate || undefined,
       scheduleDays: scheduleDays.length > 0 ? scheduleDays : undefined,
+      steps,
+      milestones: milestones.length > 0 ? milestones : undefined,
     });
     onClose();
   }
 
+  function addStep() {
+    if (!newStep.trim()) return;
+    setSteps(prev => [...prev, { id: genId(), text: newStep.trim(), done: false }]);
+    setNewStep("");
+  }
+  function updateStepText(id: string, text: string) {
+    setSteps(prev => prev.map(s => s.id === id ? { ...s, text } : s));
+  }
+  function removeStep(id: string) { setSteps(prev => prev.filter(s => s.id !== id)); }
+  function moveStep(idx: number, dir: -1 | 1) {
+    setSteps(prev => {
+      const arr = [...prev];
+      const swap = idx + dir;
+      if (swap < 0 || swap >= arr.length) return arr;
+      [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+      return arr;
+    });
+  }
+
+  function addMilestone() {
+    if (!newMilestone.trim()) return;
+    setMilestones(prev => [...prev, { id: genId(), title: newMilestone.trim(), order: prev.length }]);
+    setNewMilestone("");
+  }
+  function updateMilestoneTitle(id: string, title: string) {
+    setMilestones(prev => prev.map(m => m.id === id ? { ...m, title } : m));
+  }
+  function removeMilestone(id: string) { setMilestones(prev => prev.filter(m => m.id !== id)); }
+  function moveMilestone(idx: number, dir: -1 | 1) {
+    setMilestones(prev => {
+      const arr = [...prev];
+      const swap = idx + dir;
+      if (swap < 0 || swap >= arr.length) return arr;
+      [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+      return arr.map((m, i) => ({ ...m, order: i }));
+    });
+  }
+
+  const tabs = [
+    { id: "info" as const, label: "Info" },
+    { id: "steps" as const, label: `Steps${steps.length > 0 ? ` (${steps.length})` : ""}` },
+    { id: "milestones" as const, label: `Milestones${milestones.length > 0 ? ` (${milestones.length})` : ""}` },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[88vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Edit Plan</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 mt-2">
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Title *</label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Plan title…" className="text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What is this plan for?" className="text-sm min-h-[60px]" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
-              <Input type="number" min={1} value={durationWeeks} onChange={e => setDurationWeeks(e.target.value)} className="text-sm" placeholder="e.g. 8" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Start date</label>
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Practice Days</label>
-            <div className="grid grid-cols-7 gap-1">
-              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day => {
-                const active = scheduleDays.includes(day);
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => setScheduleDays(prev =>
-                      active ? prev.filter(d => d !== day) : [...prev, day]
-                    )}
-                    className={`flex flex-col items-center py-2 rounded-lg border text-[10px] font-bold transition-all ${
-                      active
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                    }`}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-            {scheduleDays.length > 0 && (
-              <p className="text-[11px] text-primary mt-1.5">{scheduleDays.length}×/week: {scheduleDays.join(", ")}</p>
-            )}
-          </div>
+
+        {/* Tab bar */}
+        <div className="flex gap-1 p-1 rounded-lg bg-muted/50 shrink-0">
+          {tabs.map(t => (
+            <button key={t.id} type="button"
+              onClick={() => setTab(t.id)}
+              className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
+                tab === t.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}>
+              {t.label}
+            </button>
+          ))}
         </div>
-        <div className="flex justify-between pt-3">
+
+        <div className="overflow-y-auto flex-1 min-h-0">
+          {/* ── Info tab ── */}
+          {tab === "info" && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Title *</label>
+                <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Plan title…" className="text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What is this plan for?" className="text-sm min-h-[60px]" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+                  <Input type="number" min={1} value={durationWeeks} onChange={e => setDurationWeeks(e.target.value)} className="text-sm" placeholder="e.g. 8" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Start date</label>
+                  <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Practice Days</label>
+                <div className="grid grid-cols-7 gap-1">
+                  {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day => {
+                    const active = scheduleDays.includes(day);
+                    return (
+                      <button key={day} type="button"
+                        onClick={() => setScheduleDays(prev => active ? prev.filter(d => d !== day) : [...prev, day])}
+                        className={`flex flex-col items-center py-2 rounded-lg border text-[10px] font-bold transition-all ${
+                          active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}>
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                {scheduleDays.length > 0 && (
+                  <p className="text-[11px] text-primary mt-1.5">{scheduleDays.length}×/week: {scheduleDays.join(", ")}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Steps tab ── */}
+          {tab === "steps" && (
+            <div className="space-y-2 pt-1">
+              <p className="text-xs text-muted-foreground">Edit the step-by-step breakdown of this plan.</p>
+              {steps.length === 0 && (
+                <p className="text-xs text-muted-foreground italic py-3 text-center">No steps yet — add some below.</p>
+              )}
+              {steps.map((step, idx) => (
+                <div key={step.id} className="flex items-center gap-1.5 group">
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button type="button" onClick={() => moveStep(idx, -1)} disabled={idx === 0}
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors">
+                      <ChevronUp size={11} />
+                    </button>
+                    <button type="button" onClick={() => moveStep(idx, 1)} disabled={idx === steps.length - 1}
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors">
+                      <ChevronDown size={11} />
+                    </button>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[9px] font-bold ${step.done ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+                    {step.done ? <Check size={8} /> : idx + 1}
+                  </div>
+                  <Input
+                    value={step.text}
+                    onChange={e => updateStepText(step.id, e.target.value)}
+                    className="text-xs h-8 flex-1"
+                    placeholder={`Step ${idx + 1}`}
+                  />
+                  <button type="button" onClick={() => removeStep(step.id)}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-1.5 pt-1">
+                <Input value={newStep} onChange={e => setNewStep(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addStep()}
+                  placeholder="Add a step…" className="text-xs h-8" />
+                <Button size="sm" variant="outline" onClick={addStep} disabled={!newStep.trim()} className="shrink-0 h-8 px-2.5">
+                  <Plus size={13} />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Milestones tab ── */}
+          {tab === "milestones" && (
+            <div className="space-y-2 pt-1">
+              <p className="text-xs text-muted-foreground">Key checkpoints to hit along the way — e.g. "Hit 1300 ELO" or "Learn Song #2".</p>
+              {milestones.length === 0 && (
+                <p className="text-xs text-muted-foreground italic py-3 text-center">No milestones yet — add some below.</p>
+              )}
+              {milestones.map((m, idx) => (
+                <div key={m.id} className="flex items-center gap-1.5 group">
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button type="button" onClick={() => moveMilestone(idx, -1)} disabled={idx === 0}
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors">
+                      <ChevronUp size={11} />
+                    </button>
+                    <button type="button" onClick={() => moveMilestone(idx, 1)} disabled={idx === milestones.length - 1}
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors">
+                      <ChevronDown size={11} />
+                    </button>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center ${m.completedAt ? "bg-amber-100 text-amber-600" : "bg-muted text-muted-foreground"}`}>
+                    <Trophy size={10} />
+                  </div>
+                  <Input
+                    value={m.title}
+                    onChange={e => updateMilestoneTitle(m.id, e.target.value)}
+                    className="text-xs h-8 flex-1"
+                    placeholder={`Milestone ${idx + 1}`}
+                  />
+                  <button type="button" onClick={() => removeMilestone(m.id)}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-1.5 pt-1">
+                <Input value={newMilestone} onChange={e => setNewMilestone(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addMilestone()}
+                  placeholder="Add a milestone…" className="text-xs h-8" />
+                <Button size="sm" variant="outline" onClick={addMilestone} disabled={!newMilestone.trim()} className="shrink-0 h-8 px-2.5">
+                  <Plus size={13} />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between pt-3 shrink-0 border-t mt-2">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" disabled={!title.trim()} onClick={handleSave} className="gap-1.5">
             <Check size={13} /> Save Changes
@@ -8686,7 +8934,14 @@ function HobbyDetailDialog({
     const plan = plans.find(p => p.id === planId); if (!plan) return;
     onUpdatePlans(plans.map(p => p.id === planId ? { ...p, steps: p.steps.map(s => s.id === stepId ? { ...s, done } : s) } : p));
   }
-  function completePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p)); }
+  function completePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: false, isPaused: false, completedAt: new Date().toISOString() } : p)); }
+  function pausePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: false, isPaused: true } : p)); }
+  function resumePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: true, isPaused: false } : p)); }
+  function toggleMilestone(planId: string, milestoneId: string, completed: boolean) {
+    onUpdatePlans(plans.map(p => p.id === planId
+      ? { ...p, milestones: (p.milestones ?? []).map(m => m.id === milestoneId ? { ...m, completedAt: completed ? new Date().toISOString() : undefined } : m) }
+      : p));
+  }
   function deletePlan(planId: string) { onUpdatePlans(plans.filter(p => p.id !== planId)); }
   function savePlanEdit(updated: HobbyPlan) {
     // Sync linked goal title/description/status alongside the plan edit
@@ -8776,7 +9031,10 @@ function HobbyDetailDialog({
                 {[...activePlans, ...inactivePlans].map(p => (
                   <PlanCard key={p.id} plan={p} hobbyName={hobby.name} hobbyColor={typeInfo.color}
                     onToggleStep={(sid, done) => togglePlanStep(p.id, sid, done)}
+                    onToggleMilestone={(mid, done) => toggleMilestone(p.id, mid, done)}
                     onToggleActive={() => togglePlanActive(p.id)}
+                    onPause={() => pausePlan(p.id)}
+                    onResume={() => resumePlan(p.id)}
                     onComplete={() => completePlan(p.id)}
                     onDelete={() => deletePlan(p.id)}
                     onEdit={() => setEditingPlan(p)}
@@ -9056,7 +9314,25 @@ function PlansGoalsTab({
   function completePlan(hobby: Hobby, planId: string) {
     const plans = parsePlans(hobby.extraJson ?? "{}");
     const syncedGoals = syncGoalStatus(hobby, planId, false, true);
-    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p), syncedGoals));
+    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: false, isPaused: false, completedAt: new Date().toISOString() } : p), syncedGoals));
+  }
+  function pausePlan(hobby: Hobby, planId: string) {
+    const plans = parsePlans(hobby.extraJson ?? "{}");
+    const syncedGoals = syncGoalStatus(hobby, planId, false, false);
+    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: false, isPaused: true } : p), syncedGoals));
+  }
+  function resumePlan(hobby: Hobby, planId: string) {
+    const plans = parsePlans(hobby.extraJson ?? "{}");
+    const syncedGoals = syncGoalStatus(hobby, planId, true, false);
+    onUpdateHobby(hobby.id, setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", plans.map(p => p.id === planId ? { ...p, isActive: true, isPaused: false } : p), syncedGoals));
+  }
+  function toggleMilestone(hobby: Hobby, planId: string, milestoneId: string, completed: boolean) {
+    const plans = parsePlans(hobby.extraJson ?? "{}");
+    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans.map(p =>
+      p.id === planId
+        ? { ...p, milestones: (p.milestones ?? []).map(m => m.id === milestoneId ? { ...m, completedAt: completed ? new Date().toISOString() : undefined } : m) }
+        : p
+    )));
   }
 
   // ── Goal mutations ─────────────────────────────────────────────────────────
@@ -9229,7 +9505,9 @@ function PlansGoalsTab({
               return (
                 <PlanCard key={p.id} plan={p} hobbyName={p.hobby.name} hobbyColor={ti?.color ?? "#888"}
                   onToggleStep={(sid, done) => togglePlanStep(p.hobby, p.id, sid, done)}
+                  onToggleMilestone={(mid, done) => toggleMilestone(p.hobby, p.id, mid, done)}
                   onToggleActive={() => togglePlanActive(p.hobby, p.id)}
+                  onPause={() => pausePlan(p.hobby, p.id)}
                   onComplete={() => completePlan(p.hobby, p.id)}
                   onDelete={() => deletePlan(p.hobby, p.id)}
                   onEdit={() => setEditingPlan(p)}
@@ -9239,15 +9517,39 @@ function PlansGoalsTab({
           </div>
         )}
 
-        {/* Inactive plans */}
-        {filteredInactivePlans.length > 0 && (
+        {/* Paused plans */}
+        {filteredInactivePlans.filter(p => p.isPaused).length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Inactive</p>
-            {filteredInactivePlans.map(p => {
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-1.5">
+              ⏸ Paused
+            </p>
+            {filteredInactivePlans.filter(p => p.isPaused).map(p => {
               const ti = HOBBY_TYPE_MAP[p.hobby.hobbyType as HobbyType];
               return (
                 <PlanCard key={p.id} plan={p} hobbyName={p.hobby.name} hobbyColor={ti?.color ?? "#888"}
                   onToggleStep={(sid, done) => togglePlanStep(p.hobby, p.id, sid, done)}
+                  onToggleMilestone={(mid, done) => toggleMilestone(p.hobby, p.id, mid, done)}
+                  onToggleActive={() => togglePlanActive(p.hobby, p.id)}
+                  onResume={() => resumePlan(p.hobby, p.id)}
+                  onComplete={() => completePlan(p.hobby, p.id)}
+                  onDelete={() => deletePlan(p.hobby, p.id)}
+                  onEdit={() => setEditingPlan(p)}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Inactive plans (not paused) */}
+        {filteredInactivePlans.filter(p => !p.isPaused).length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Inactive</p>
+            {filteredInactivePlans.filter(p => !p.isPaused).map(p => {
+              const ti = HOBBY_TYPE_MAP[p.hobby.hobbyType as HobbyType];
+              return (
+                <PlanCard key={p.id} plan={p} hobbyName={p.hobby.name} hobbyColor={ti?.color ?? "#888"}
+                  onToggleStep={(sid, done) => togglePlanStep(p.hobby, p.id, sid, done)}
+                  onToggleMilestone={(mid, done) => toggleMilestone(p.hobby, p.id, mid, done)}
                   onToggleActive={() => togglePlanActive(p.hobby, p.id)}
                   onComplete={() => completePlan(p.hobby, p.id)}
                   onDelete={() => deletePlan(p.hobby, p.id)}
