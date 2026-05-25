@@ -10829,13 +10829,11 @@ export default function HobbiesPage() {
           {activeGoalCount > 0 && ` · ${activeGoalCount} active goal${activeGoalCount !== 1 ? "s" : ""}`}
           </p>
         </div>
-        <Button size="sm" onClick={() => {
-          if (activeTab === "active") return;
-          if (activeTab === "plans") return;
-          openAdd();
-        }}>
-          {activeTab === "active" ? null : activeTab === "plans" ? null : <><Plus size={15} className="mr-1.5" /> Add Hobby</>}
-        </Button>
+        {activeTab === "hobbies" && (
+          <Button size="sm" onClick={openAdd}>
+            <Plus size={15} className="mr-1.5" /> Add Hobby
+          </Button>
+        )}
       </div>
 
       {/* Tab bar */}
