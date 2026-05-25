@@ -409,6 +409,7 @@ interface HobbyPlan {
   scheduleDays?: string[];
   sessions?: SessionLog[];
   dayLabels?: Record<string, string>; // Maps "Mon" → custom session label for that day
+  dayNotes?: Record<string, string>;  // Maps "Mon" → detailed task description for that day
 }
 
 interface PlanTemplate {
@@ -2518,9 +2519,9 @@ function HobbyPlanRichCard({
         </div>
       )}
 
-      {/* ── Weekly schedule grid (7 columns) ── */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between mb-2">
+      {/* ── Weekly schedule (vertical list with task detail) ── */}
+      <div className="border-t">
+        <div className="px-4 py-2 flex items-center justify-between">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             {currentWeek && totalWeeks ? `Week ${currentWeek} schedule` : "Weekly Schedule"}
           </p>
@@ -2530,48 +2531,69 @@ function HobbyPlanRichCard({
             </button>
           )}
         </div>
-        <div className="grid grid-cols-7 gap-1">
+        <div className="divide-y">
           {_DAYS_ORDERED_LOCAL.map(dayLabel => {
             const isToday = dayLabel === todayDowLabel;
             const hasActivity = scheduledDays.has(dayLabel);
             const session = thisWeekSessionByDay.get(dayLabel);
             const isLogged = !!session;
-            const dayLabelText = plan.dayLabels?.[dayLabel];
 
             return (
-              <button key={dayLabel} type="button"
-                onClick={() => {
-                  if (!hasActivity) return;
-                  if (session) onEditSession?.(dayLabel, session);
-                  else onLogSession?.(dayLabel, dateForDay(dayLabel));
-                }}
-                className={[
-                  "flex flex-col items-center rounded-lg py-2 px-0.5 min-h-[58px] border transition-colors",
-                  isLogged
-                    ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/20"
-                    : hasActivity
-                      ? isToday
-                        ? "border-primary/40 bg-primary/8 hover:bg-primary/12"
-                        : "border-border bg-muted/50 hover:bg-muted"
-                      : "border-transparent bg-transparent opacity-30 cursor-default",
-                ].join(" ")}
-              >
-                <span className={`text-[9px] font-bold uppercase leading-none ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</span>
-                <div className="flex-1 flex flex-col items-center justify-center gap-0.5 mt-1">
-                  {isLogged ? (
-                    <CheckCircle2 size={12} className="text-emerald-500" />
-                  ) : hasActivity ? (
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: hobbyColor }} />
-                  ) : (
-                    <span className="text-[9px] text-muted-foreground/30">—</span>
-                  )}
-                  {hasActivity && (
-                    <span className="text-[8px] text-muted-foreground leading-tight text-center line-clamp-2 px-0.5 max-w-full break-words">
-                      {isLogged && session?.durationMins ? `${session.durationMins}m` : dayLabelText ? dayLabelText.slice(0, 9) : ""}
-                    </span>
-                  )}
+              <div key={dayLabel}
+                className={`flex items-start gap-3 px-4 py-2.5 ${isToday ? "bg-primary/5" : ""} ${!hasActivity ? "opacity-35" : ""}`}>
+                {/* Day column */}
+                <div className="w-9 shrink-0 pt-0.5">
+                  <p className={`text-xs font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</p>
+                  {isToday && <div className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
                 </div>
-              </button>
+                {/* Content */}
+                {hasActivity ? (
+                  <button type="button"
+                    className="flex-1 flex items-start gap-2 text-left rounded-lg px-2 py-1.5 hover:bg-muted/60 active:bg-muted transition-colors group/row -mx-2"
+                    onClick={() => {
+                      if (session) onEditSession?.(dayLabel, session);
+                      else onLogSession?.(dayLabel, dateForDay(dayLabel));
+                    }}
+                  >
+                    <div className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ background: isLogged ? hobbyColor : `${hobbyColor}60` }} />
+                    <div className="flex-1 min-w-0">
+                      {isLogged && session.notes ? (
+                        <>
+                          <p className="text-xs font-semibold leading-tight">{plan.dayLabels?.[dayLabel] || plan.title}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{session.notes}</p>
+                        </>
+                      ) : plan.dayLabels?.[dayLabel] ? (
+                        <>
+                          <p className="text-xs font-semibold leading-tight">{plan.dayLabels[dayLabel]}</p>
+                          {plan.dayNotes?.[dayLabel] && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">{plan.dayNotes[dayLabel]}</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-xs font-medium">{plan.title}</p>
+                      )}
+                    </div>
+                    {isLogged ? (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5"
+                        style={{ background: `${hobbyColor}20`, color: hobbyColor }}>
+                        <CheckCircle2 size={9} />
+                        {session.durationMins ? `${session.durationMins}m` : "Logged"}
+                        <Pencil size={8} className="ml-0.5 opacity-60" />
+                      </span>
+                    ) : isToday ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground shrink-0 mt-0.5">
+                        Log Today
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground opacity-0 group-hover/row:opacity-100 shrink-0 mt-0.5 transition-opacity">
+                        + Log
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <p className="text-xs text-muted-foreground flex-1 px-2 py-1.5">Rest</p>
+                )}
+              </div>
             );
           })}
         </div>
@@ -2653,6 +2675,7 @@ function PlanWizard({
   const [stepDate, setStepDate] = useState("");
   // Auto-generated schedule metadata (set by specialty wizards like chess ELO)
   const [planDayLabels, setPlanDayLabels] = useState<Record<string, string>>({});
+  const [planDayNotes, setPlanDayNotes] = useState<Record<string, string>>({});
   const [planMilestones, setPlanMilestones] = useState<PlanMilestone[]>([]);
 
   // Chess wizard state
@@ -2857,7 +2880,7 @@ function PlanWizard({
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setScheduleDays([]); setSteps([]); setStepInput(""); setStepDate("");
-    setPlanDayLabels({}); setPlanMilestones([]);
+    setPlanDayLabels({}); setPlanDayNotes({}); setPlanMilestones([]);
     setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
@@ -3167,6 +3190,9 @@ function PlanWizard({
     setPlanDayLabels(Object.fromEntries(
       Object.entries(band.days).map(([day, d]) => [day, d.dayLabel])
     ));
+    setPlanDayNotes(Object.fromEntries(
+      Object.entries(band.days).map(([day, d]) => [day, d.taskDetail])
+    ));
 
     // ── Auto-generate ELO milestone checkpoints ──
     const gap = tgt - cur;
@@ -3293,6 +3319,7 @@ function PlanWizard({
       isActive: activateNow, steps, createdAt: new Date().toISOString(),
       ...(scheduleDays.length > 0 ? { scheduleDays } : {}),
       ...(Object.keys(planDayLabels).length > 0 ? { dayLabels: planDayLabels } : {}),
+      ...(Object.keys(planDayNotes).length > 0 ? { dayNotes: planDayNotes } : {}),
       ...(planMilestones.length > 0 ? { milestones: planMilestones } : {}),
     };
     onSave(selectedHobbyId, plan);
@@ -9175,9 +9202,11 @@ function HobbyActivePlanSection({
                               <p className="text-sm font-medium truncate">
                                 {plan.dayLabels?.[dayLabel] || plan.title}
                               </p>
-                              {isLogged && existingSession.notes && (
+                              {isLogged && existingSession.notes ? (
                                 <p className="text-[10px] text-muted-foreground truncate">{existingSession.notes}</p>
-                              )}
+                              ) : plan.dayNotes?.[dayLabel] ? (
+                                <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">{plan.dayNotes[dayLabel]}</p>
+                              ) : null}
                             </div>
                             {isLogged ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
