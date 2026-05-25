@@ -9018,17 +9018,24 @@ function HobbyActivePlanSection({
                                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>
                               )}
                             </div>
-                            {/* Activity label */}
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{hobby.name}</span>
+                            {/* Activity label + task detail */}
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium">{hobby.name}</span>
+                                {loggedSession?.notes ? (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{loggedSession.notes}</p>
+                                ) : plan.dayNotes?.[dayLabel] ? (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{plan.dayNotes[dayLabel]}</p>
+                                ) : null}
+                              </div>
                               {loggedSession ? (
-                                <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5"
                                   style={{ background: `${color}20`, color }}>
-                                  <CheckCircle2 size={9} /> Logged · tap to edit
+                                  <CheckCircle2 size={9} /> Logged
                                 </span>
                               ) : (
-                                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                                  + Log session
+                                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                                  + Log
                                 </span>
                               )}
                             </div>
@@ -9444,6 +9451,26 @@ function HobbyDetailDialog({
             {hobby.dateStarted && <span className="text-xs text-muted-foreground px-2.5 py-1 rounded-full bg-muted">Started {hobby.dateStarted}</span>}
           </div>
 
+          {/* ── Active Plan(s) — shown first if any exist ── */}
+          {activePlans.length > 0 && (
+            <div className="space-y-3">
+              {activePlans.map(p => (
+                <HobbyPlanRichCard key={p.id} plan={p} hobbyColor={typeInfo.color} hobbyTypeLabel={typeInfo.label}
+                  onToggleStep={(sid, done) => togglePlanStep(p.id, sid, done)}
+                  onToggleMilestone={(mid, done) => toggleMilestone(p.id, mid, done)}
+                  onToggleActive={() => togglePlanActive(p.id)}
+                  onPause={() => pausePlan(p.id)}
+                  onResume={() => resumePlan(p.id)}
+                  onComplete={() => completePlan(p.id)}
+                  onDelete={() => deletePlan(p.id)}
+                  onEdit={() => setEditingPlan(p)}
+                  onLogSession={(dayLabel, defaultDate) => setLogSessionTarget({ plan: p, dayLabel, defaultDate })}
+                  onEditSession={(dayLabel, session) => setEditSessionTarget({ plan: p, dayLabel, session })}
+                />
+              ))}
+            </div>
+          )}
+
           {hobby.coverUrl && <img src={hobby.coverUrl} alt={hobby.name} className="w-full h-48 object-cover rounded-lg" />}
           {Object.values(extra).some(v => v !== "" && v != null && !Array.isArray(v)) && (
             <div>
@@ -9473,7 +9500,7 @@ function HobbyDetailDialog({
             </div>
           )}
 
-          {/* ── Plans section (shown when there are plans, or goals exist to keep the layout consistent) ── */}
+          {/* ── Plans section — inactive/paused + add button ── */}
           {(plans.length > 0 || goals.length > 0) && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -9492,7 +9519,23 @@ function HobbyDetailDialog({
               </button>
             ) : (
               <div className="space-y-3">
-                {[...activePlans, ...inactivePlans].map(p => (
+                {/* Paused plans (not shown at top) */}
+                {inactivePlans.filter(p => p.isPaused).map(p => (
+                  <HobbyPlanRichCard key={p.id} plan={p} hobbyColor={typeInfo.color} hobbyTypeLabel={typeInfo.label}
+                    onToggleStep={(sid, done) => togglePlanStep(p.id, sid, done)}
+                    onToggleMilestone={(mid, done) => toggleMilestone(p.id, mid, done)}
+                    onToggleActive={() => togglePlanActive(p.id)}
+                    onPause={() => pausePlan(p.id)}
+                    onResume={() => resumePlan(p.id)}
+                    onComplete={() => completePlan(p.id)}
+                    onDelete={() => deletePlan(p.id)}
+                    onEdit={() => setEditingPlan(p)}
+                    onLogSession={(dayLabel, defaultDate) => setLogSessionTarget({ plan: p, dayLabel, defaultDate })}
+                    onEditSession={(dayLabel, session) => setEditSessionTarget({ plan: p, dayLabel, session })}
+                  />
+                ))}
+                {/* Inactive (not paused) plans */}
+                {inactivePlans.filter(p => !p.isPaused).map(p => (
                   <HobbyPlanRichCard key={p.id} plan={p} hobbyColor={typeInfo.color} hobbyTypeLabel={typeInfo.label}
                     onToggleStep={(sid, done) => togglePlanStep(p.id, sid, done)}
                     onToggleMilestone={(mid, done) => toggleMilestone(p.id, mid, done)}
@@ -9518,6 +9561,10 @@ function HobbyDetailDialog({
                       ))}
                     </div>
                   </details>
+                )}
+                {/* If no inactive/paused/completed, show hint */}
+                {inactivePlans.length === 0 && completedPlans.length === 0 && activePlans.length > 0 && (
+                  <p className="text-xs text-muted-foreground px-1 py-1">All plans are active ↑</p>
                 )}
               </div>
             )}
