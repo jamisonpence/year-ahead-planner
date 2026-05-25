@@ -2260,6 +2260,300 @@ function PlanCard({
   );
 }
 
+// ── Hobby Plan Rich Card (Workouts-style) ─────────────────────────────────────
+
+function HobbyPlanRichCard({
+  plan, hobbyColor, hobbyTypeLabel,
+  onToggleStep, onToggleMilestone,
+  onToggleActive, onPause, onResume, onComplete, onDelete, onEdit,
+  onLogSession, onEditSession,
+}: {
+  plan: HobbyPlan;
+  hobbyColor: string;
+  hobbyTypeLabel: string;
+  onToggleStep?: (stepId: string, done: boolean) => void;
+  onToggleMilestone?: (milestoneId: string, completed: boolean) => void;
+  onToggleActive?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
+  onComplete?: () => void;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onLogSession?: (dayLabel: string, defaultDate: string) => void;
+  onEditSession?: (dayLabel: string, session: SessionLog) => void;
+}) {
+  const today = new Date();
+  const todayDow = today.getDay(); // 0=Sun
+  const _DAYS_SHORT_LOCAL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const todayDowLabel = _DAYS_SHORT_LOCAL[todayDow];
+
+  const [stepsOpen, setStepsOpen] = useState(false);
+
+  const isCompleted = !!plan.completedAt;
+  const isPaused = !plan.isActive && !!plan.isPaused && !isCompleted;
+
+  const startDateObj = plan.startDate ? new Date(plan.startDate) : null;
+  const weeksElapsed = startDateObj
+    ? Math.max(0, Math.floor((today.getTime() - startDateObj.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+    : 0;
+  const totalWeeks = plan.durationWeeks ?? null;
+  const currentWeek = totalWeeks ? Math.min(weeksElapsed + 1, totalWeeks) : null;
+  const progressPct = totalWeeks ? Math.min(100, Math.round((weeksElapsed / totalWeeks) * 100)) : 0;
+  const { pct: stepPct, done: doneSteps, total: totalSteps } = planProgress(plan);
+  const displayPct = totalWeeks ? Math.max(progressPct, stepPct) : stepPct;
+
+  const milestones = plan.milestones ?? [];
+  const milestoneDone = milestones.filter(m => !!m.completedAt).length;
+  const nextMilestone = milestones.find(m => !m.completedAt);
+
+  // Determine scheduled days
+  function calcScheduledDays(): string[] {
+    if (plan.scheduleDays && plan.scheduleDays.length > 0) return plan.scheduleDays;
+    const _SPREAD: Record<number, string[]> = {
+      1: ["Wed"], 2: ["Tue", "Fri"], 3: ["Mon", "Wed", "Fri"],
+      4: ["Mon", "Tue", "Thu", "Fri"], 5: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      6: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      7: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    };
+    const stepsPerWeek = Math.ceil(plan.steps.length / (plan.durationWeeks ?? 1)) || 3;
+    return _SPREAD[Math.min(stepsPerWeek, 7)] ?? ["Mon", "Wed", "Fri"];
+  }
+  const scheduledDays = new Set(calcScheduledDays());
+
+  // This week's sessions map: dayOfWeek → SessionLog
+  const thisWeekStart = new Date(today);
+  thisWeekStart.setDate(today.getDate() - todayDow);
+  const thisWeekEnd = new Date(thisWeekStart);
+  thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+  const startStr = thisWeekStart.toISOString().slice(0, 10);
+  const endStr = thisWeekEnd.toISOString().slice(0, 10);
+  const thisWeekSessionByDay = new Map<string, SessionLog>(
+    (plan.sessions ?? [])
+      .filter(s => s.date >= startStr && s.date <= endStr && !!s.dayOfWeek)
+      .map(s => [s.dayOfWeek!, s])
+  );
+
+  function dateForDay(dayLabel: string): string {
+    const _DAY_TO_IDX_LOCAL: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const diff = (_DAY_TO_IDX_LOCAL[dayLabel] ?? 1) - todayDow;
+    const d = new Date(today);
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  const _DAYS_ORDERED_LOCAL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const borderStyle = isCompleted ? "opacity-70" : plan.isActive ? "border-blue-200 dark:border-blue-800" : isPaused ? "border-amber-200 dark:border-amber-800" : "";
+
+  return (
+    <div className={`rounded-xl border overflow-hidden ${borderStyle}`}>
+      {/* ── Status header bar ── */}
+      <div className="px-4 py-2.5 flex items-center justify-between gap-2"
+        style={{ background: plan.isActive ? `${hobbyColor}18` : isPaused ? "#f59e0b18" : "#6b728018" }}>
+        <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: plan.isActive ? hobbyColor : isPaused ? "#d97706" : undefined }}>
+          {plan.isActive ? <Zap size={10} /> : isPaused ? <span>⏸</span> : <Power size={10} />}
+          {plan.isActive ? "Active Plan" : isPaused ? "Paused" : "Inactive"}
+          {currentWeek && totalWeeks ? ` — Week ${currentWeek} of ${totalWeeks}` : ""}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {plan.isActive && onPause && (
+            <button onClick={onPause} title="Pause" className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-500 transition-colors">
+              <span className="text-[11px] leading-none">⏸</span>
+            </button>
+          )}
+          {isPaused && onResume && (
+            <button onClick={onResume} title="Resume" className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors" style={{ color: hobbyColor }}>
+              <Play size={11} />
+            </button>
+          )}
+          {!isCompleted && onEdit && (
+            <button onClick={onEdit} title="Edit plan" className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil size={11} />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} title="Delete" className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Plan name + type tag + metadata ── */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-bold leading-tight ${isCompleted ? "line-through text-muted-foreground" : ""}`}>{plan.title}</p>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border"
+                style={{ background: `${hobbyColor}18`, color: hobbyColor, borderColor: `${hobbyColor}40` }}>
+                {hobbyTypeLabel}
+              </span>
+              {totalWeeks && <span className="text-[10px] text-muted-foreground">{totalWeeks}w</span>}
+              {scheduledDays.size > 0 && <span className="text-[10px] text-muted-foreground">{scheduledDays.size}d/wk</span>}
+              {startDateObj && <span className="text-[10px] text-muted-foreground">{totalWeeks} wks planned</span>}
+            </div>
+          </div>
+          {isCompleted && (
+            <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
+              <CheckCircle2 size={12} /> Done
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Next milestone highlight ── */}
+      {nextMilestone && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-lg flex items-center gap-2"
+          style={{ background: `${hobbyColor}10`, border: `1px solid ${hobbyColor}30` }}>
+          <Trophy size={11} style={{ color: hobbyColor }} className="shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Next Milestone</p>
+            <p className="text-xs font-semibold truncate">{nextMilestone.title}</p>
+          </div>
+          <span className="text-[10px] text-muted-foreground shrink-0">{milestoneDone}/{milestones.length}</span>
+        </div>
+      )}
+
+      {/* ── Progress bar ── */}
+      <div className="px-4 pb-3">
+        <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
+          <span>{currentWeek && totalWeeks ? `Week ${currentWeek} of ${totalWeeks}` : "Progress"}{totalSteps > 0 ? ` · ${doneSteps}/${totalSteps} steps` : ""}</span>
+          <span className="font-semibold" style={{ color: hobbyColor }}>{displayPct}% complete</span>
+        </div>
+        <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${displayPct}%`, backgroundColor: hobbyColor }} />
+        </div>
+      </div>
+
+      {/* ── Milestone checklist ── */}
+      {milestones.length > 0 && (
+        <div className="px-4 pb-3 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-1">
+            <Trophy size={9} /> Milestones
+            <span className="font-normal ml-1">{milestoneDone}/{milestones.length}</span>
+          </p>
+          {milestones.map(m => (
+            <button key={m.id} type="button"
+              onClick={() => onToggleMilestone?.(m.id, !m.completedAt)}
+              disabled={isCompleted || !onToggleMilestone}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left">
+              {m.completedAt
+                ? <CheckCircle2 size={12} className="text-amber-500 shrink-0" />
+                : <Circle size={12} className="text-muted-foreground/40 shrink-0" />}
+              <span className={`text-xs flex-1 ${m.completedAt ? "line-through text-muted-foreground" : "font-medium"}`}>{m.title}</span>
+              {m.completedAt && <span className="text-[10px] text-muted-foreground shrink-0">{format(parseISO(m.completedAt), "MMM d")}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Weekly schedule grid (7 columns) ── */}
+      <div className="px-4 pb-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {currentWeek && totalWeeks ? `Week ${currentWeek} schedule` : "Weekly Schedule"}
+          </p>
+          {onEdit && (
+            <button onClick={onEdit} className="text-[10px] flex items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil size={9} /> Edit schedule
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {_DAYS_ORDERED_LOCAL.map(dayLabel => {
+            const isToday = dayLabel === todayDowLabel;
+            const hasActivity = scheduledDays.has(dayLabel);
+            const session = thisWeekSessionByDay.get(dayLabel);
+            const isLogged = !!session;
+            const dayLabelText = plan.dayLabels?.[dayLabel];
+
+            return (
+              <button key={dayLabel} type="button"
+                onClick={() => {
+                  if (!hasActivity) return;
+                  if (session) onEditSession?.(dayLabel, session);
+                  else onLogSession?.(dayLabel, dateForDay(dayLabel));
+                }}
+                className={[
+                  "flex flex-col items-center rounded-lg py-2 px-0.5 min-h-[58px] border transition-colors",
+                  isLogged
+                    ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/20"
+                    : hasActivity
+                      ? isToday
+                        ? "border-primary/40 bg-primary/8 hover:bg-primary/12"
+                        : "border-border bg-muted/50 hover:bg-muted"
+                      : "border-transparent bg-transparent opacity-30 cursor-default",
+                ].join(" ")}
+              >
+                <span className={`text-[9px] font-bold uppercase leading-none ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</span>
+                <div className="flex-1 flex flex-col items-center justify-center gap-0.5 mt-1">
+                  {isLogged ? (
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                  ) : hasActivity ? (
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: hobbyColor }} />
+                  ) : (
+                    <span className="text-[9px] text-muted-foreground/30">—</span>
+                  )}
+                  {hasActivity && (
+                    <span className="text-[8px] text-muted-foreground leading-tight text-center line-clamp-2 px-0.5 max-w-full break-words">
+                      {isLogged && session?.durationMins ? `${session.durationMins}m` : dayLabelText ? dayLabelText.slice(0, 9) : ""}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Plan Overview (steps) — collapsible ── */}
+      {totalSteps > 0 && (
+        <div className="px-4 pb-3 border-t pt-3">
+          <button type="button" onClick={() => setStepsOpen(o => !o)}
+            className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <ListChecks size={9} /> Plan Overview
+              <span className="font-normal ml-1 text-muted-foreground/60">{doneSteps}/{totalSteps} · {stepPct}%</span>
+            </p>
+            {stepsOpen ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
+          </button>
+          {stepsOpen && (
+            <div className="space-y-0.5 mt-1.5 max-h-40 overflow-y-auto">
+              {plan.steps.map(step => (
+                <button key={step.id} type="button"
+                  onClick={() => onToggleStep?.(step.id, !step.done)}
+                  disabled={isCompleted || !onToggleStep}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left">
+                  {step.done
+                    ? <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+                    : <Circle size={12} className="text-muted-foreground/40 shrink-0" />}
+                  <span className={`text-xs flex-1 ${step.done ? "line-through text-muted-foreground" : ""}`}>{step.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Action bar ── */}
+      {!isCompleted && (onToggleActive || onResume) && (
+        <button type="button"
+          onClick={plan.isActive ? onToggleActive : isPaused ? onResume : onToggleActive}
+          className="w-full px-4 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-t transition-colors hover:opacity-80"
+          style={{
+            background: plan.isActive ? `${hobbyColor}12` : isPaused ? "#f59e0b12" : "#6b728012",
+            color: plan.isActive ? hobbyColor : isPaused ? "#d97706" : "#6b7280",
+          }}
+        >
+          {plan.isActive ? <Zap size={10} /> : isPaused ? <Play size={10} /> : <Power size={10} />}
+          {plan.isActive ? "Active — tap to deactivate" : isPaused ? "Paused — tap to resume" : "Inactive — tap to activate"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Plan Wizard (2-step) ───────────────────────────────────────────────────────
 
 function PlanWizard({
@@ -8903,6 +9197,8 @@ function HobbyDetailDialog({
   const [addingPlan, setAddingPlan] = useState(false);
   const [editingPlan, setEditingPlan] = useState<HobbyPlan | null>(null);
   const [editingGoal, setEditingGoal] = useState<HobbyGoal | null>(null);
+  const [logSessionTarget, setLogSessionTarget] = useState<{ plan: HobbyPlan; dayLabel: string; defaultDate: string } | null>(null);
+  const [editSessionTarget, setEditSessionTarget] = useState<{ plan: HobbyPlan; dayLabel: string; session: SessionLog } | null>(null);
   if (!hobby) return null;
   const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
   const TypeIcon = typeInfo.icon;
@@ -8955,6 +9251,18 @@ function HobbyDetailDialog({
     setEditingPlan(null);
   }
   function saveGoalEdit(updated: HobbyGoal) { updateGoal(updated); setEditingGoal(null); }
+
+  function saveNewSession(plan: HobbyPlan, sessionData: Omit<SessionLog, "id" | "planId">) {
+    const newSession: SessionLog = { ...sessionData, id: genId(), planId: plan.id };
+    onUpdatePlans(plans.map(p => p.id === plan.id ? { ...p, sessions: [...(p.sessions ?? []), newSession] } : p));
+  }
+  function saveEditedSession(plan: HobbyPlan, session: SessionLog, sessionData: Omit<SessionLog, "id" | "planId">) {
+    const updated: SessionLog = { ...sessionData, id: session.id, planId: plan.id };
+    onUpdatePlans(plans.map(p => p.id === plan.id ? { ...p, sessions: (p.sessions ?? []).map(s => s.id === session.id ? updated : s) } : p));
+  }
+  function deleteSession(plan: HobbyPlan, sessionId: string) {
+    onUpdatePlans(plans.map(p => p.id === plan.id ? { ...p, sessions: (p.sessions ?? []).filter(s => s.id !== sessionId) } : p));
+  }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -9027,9 +9335,9 @@ function HobbyDetailDialog({
                 <p className="text-xs">No plans yet — add one</p>
               </button>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {[...activePlans, ...inactivePlans].map(p => (
-                  <PlanCard key={p.id} plan={p} hobbyName={hobby.name} hobbyColor={typeInfo.color}
+                  <HobbyPlanRichCard key={p.id} plan={p} hobbyColor={typeInfo.color} hobbyTypeLabel={typeInfo.label}
                     onToggleStep={(sid, done) => togglePlanStep(p.id, sid, done)}
                     onToggleMilestone={(mid, done) => toggleMilestone(p.id, mid, done)}
                     onToggleActive={() => togglePlanActive(p.id)}
@@ -9038,6 +9346,8 @@ function HobbyDetailDialog({
                     onComplete={() => completePlan(p.id)}
                     onDelete={() => deletePlan(p.id)}
                     onEdit={() => setEditingPlan(p)}
+                    onLogSession={(dayLabel, defaultDate) => setLogSessionTarget({ plan: p, dayLabel, defaultDate })}
+                    onEditSession={(dayLabel, session) => setEditSessionTarget({ plan: p, dayLabel, session })}
                   />
                 ))}
                 {completedPlans.length > 0 && (
@@ -9147,6 +9457,35 @@ function HobbyDetailDialog({
           open={!!editingGoal}
           onClose={() => setEditingGoal(null)}
           onSave={saveGoalEdit}
+        />
+        {/* ── Log new session from rich card ── */}
+        <LogSessionDialog
+          open={!!logSessionTarget}
+          onClose={() => setLogSessionTarget(null)}
+          planTitle={logSessionTarget?.plan.title ?? ""}
+          dayLabel={logSessionTarget?.dayLabel ?? ""}
+          defaultDate={logSessionTarget?.defaultDate ?? ""}
+          onSave={(sessionData) => {
+            if (logSessionTarget) saveNewSession(logSessionTarget.plan, sessionData);
+            setLogSessionTarget(null);
+          }}
+        />
+        {/* ── Edit existing session from rich card ── */}
+        <LogSessionDialog
+          open={!!editSessionTarget}
+          onClose={() => setEditSessionTarget(null)}
+          planTitle={editSessionTarget?.plan.title ?? ""}
+          dayLabel={editSessionTarget?.dayLabel ?? ""}
+          defaultDate={editSessionTarget?.session.date ?? ""}
+          existingSession={editSessionTarget?.session}
+          onSave={(sessionData) => {
+            if (editSessionTarget) saveEditedSession(editSessionTarget.plan, editSessionTarget.session, sessionData);
+            setEditSessionTarget(null);
+          }}
+          onDelete={() => {
+            if (editSessionTarget) deleteSession(editSessionTarget.plan, editSessionTarget.session.id);
+            setEditSessionTarget(null);
+          }}
         />
 
         {/* ── Hiking section (only for hiking hobbies) ── */}
