@@ -8072,24 +8072,120 @@ function HobbyActivePlanSection({
     return d.toISOString().slice(0, 10);
   }
 
+  // ── Build merged day map (all plans → all their scheduled days) ─────────────
+
+  // Collect plan colors (one per plan, cycling through palette)
+  const PLAN_COLORS = [
+    "#3b82f6", "#f97316", "#10b981", "#8b5cf6", "#ec4899",
+    "#06b6d4", "#f59e0b", "#84cc16", "#6366f1", "#ef4444",
+  ];
+
+  type MergedEntry = {
+    hobby: Hobby; plan: HobbyPlan; typeInfo: typeof HOBBY_TYPES[0];
+    color: string; isLoggedToday: boolean;
+  };
+  const mergedByDay = useMemo((): Record<string, MergedEntry[]> => {
+    const map: Record<string, MergedEntry[]> = {};
+    DAYS_ORDERED.forEach(d => { map[d] = []; });
+    activePlanEntries.forEach(({ hobby, plan }, idx) => {
+      const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
+      const color = PLAN_COLORS[idx % PLAN_COLORS.length];
+      const scheduledDays = getScheduledDays(plan);
+      // week boundary
+      const weekStart = new Date(today); weekStart.setDate(today.getDate() - todayDowIdx);
+      const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+      const sessions = plan.sessions ?? [];
+      scheduledDays.forEach(day => {
+        const isLoggedToday = sessions.some(s =>
+          s.dayOfWeek === day &&
+          s.date >= weekStart.toISOString().slice(0, 10) &&
+          s.date <= weekEnd.toISOString().slice(0, 10)
+        );
+        map[day]?.push({ hobby, plan, typeInfo, color, isLoggedToday });
+      });
+    });
+    return map;
+  }, [activePlanEntries, today]);
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
-      {/* Section header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          <p className="text-sm font-semibold">
-            Active Plan{activePlanEntries.length > 1 ? `s (${activePlanEntries.length})` : ""}
-          </p>
+    <div className="space-y-6">
+
+      {/* ── This Week's Schedule (merged) ── */}
+      <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+          <p className="text-sm font-semibold">This Week's Schedule</p>
+          <span className="text-xs text-muted-foreground">
+            {activePlanEntries.length > 1 ? `${activePlanEntries.length} plans merged` : activePlanEntries[0]?.plan.title}
+          </span>
         </div>
-        <button onClick={onGoToPlans} className="text-xs text-primary hover:underline flex items-center gap-0.5">
-          View all <ChevronRight size={11} />
-        </button>
+        <div className="divide-y">
+          {DAYS_ORDERED.map(dayLabel => {
+            const entries = mergedByDay[dayLabel] ?? [];
+            const dayIdx = DAY_TO_IDX[dayLabel];
+            const isToday = dayLabel === todayDowLabel;
+            return (
+              <div
+                key={dayLabel}
+                className={`flex items-start gap-3 px-4 py-3 ${isToday ? "bg-primary/5" : ""} ${entries.length === 0 ? "opacity-40" : ""}`}
+              >
+                {/* Day column */}
+                <div className="w-10 shrink-0 pt-0.5">
+                  <p className={`text-xs font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</p>
+                  {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-0.5" />}
+                </div>
+
+                {/* Activities */}
+                {entries.length > 0 ? (
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {entries.map(({ hobby, plan, typeInfo, color, isLoggedToday }, i) => (
+                      <button
+                        key={`${plan.id}-${i}`}
+                        type="button"
+                        className="w-full text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
+                        onClick={() => setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) })}
+                      >
+                        {/* Plan name tag (like Workouts colored pill) */}
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: `${color}22`, color, border: `1px solid ${color}44` }}>
+                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+                            {plan.title}
+                          </div>
+                          {isToday && i === 0 && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>
+                          )}
+                        </div>
+                        {/* Activity label */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{hobby.name}</span>
+                          {isLoggedToday ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                              style={{ background: `${color}20`, color }}>
+                              <CheckCircle2 size={9} /> Logged
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                              + Log session
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground flex-1 pt-0.5">Rest</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {activePlanEntries.map(({ hobby, plan }) => {
+      {/* ── Per-plan progress cards ── */}
+      <div className="space-y-4">
+        {activePlanEntries.map(({ hobby, plan }, planIdx) => {
         const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
         const startDate = plan.startDate ? new Date(plan.startDate) : null;
         const weeksElapsed = startDate
@@ -8127,7 +8223,11 @@ function HobbyActivePlanSection({
             <div className="px-4 py-3 border-b flex items-center justify-between gap-2"
               style={{ background: `${typeInfo.color}10`, borderBottomColor: `${typeInfo.color}30` }}>
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-lg shrink-0">{typeInfo.emoji}</span>
+                <div className="relative shrink-0">
+                  <span className="text-lg">{typeInfo.emoji}</span>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card"
+                    style={{ background: PLAN_COLORS[planIdx % PLAN_COLORS.length] }} />
+                </div>
                 <div className="min-w-0">
                   <p className="text-[11px] text-muted-foreground truncate">{hobby.name}</p>
                   <p className="text-sm font-semibold truncate">{plan.title}</p>
@@ -8290,6 +8390,7 @@ function HobbyActivePlanSection({
           </div>
         );
       })}
+      </div>
 
       {/* Log Session Dialog */}
       <LogSessionDialog
@@ -9273,7 +9374,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
 export default function HobbiesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"hobbies" | "plans">("hobbies");
+  const [activeTab, setActiveTab] = useState<"hobbies" | "active" | "plans">("hobbies");
 
   const { data: hobbies = [], isLoading } = useQuery<Hobby[]>({
     queryKey: ["/api/hobbies"],
@@ -9394,6 +9495,12 @@ export default function HobbiesPage() {
   const activeCount = hobbies.filter(h => h.status === "active").length;
   const favCount = hobbies.filter(h => h.isFavorite).length;
 
+  // Auto-navigate to Active Plans tab when plans become active; fall back when none
+  useEffect(() => {
+    if (activePlanCount > 0 && activeTab === "hobbies") setActiveTab("active");
+    if (activePlanCount === 0 && activeTab === "active") setActiveTab("hobbies");
+  }, [activePlanCount]);
+
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -9408,8 +9515,12 @@ export default function HobbiesPage() {
           {activeGoalCount > 0 && ` · ${activeGoalCount} active goal${activeGoalCount !== 1 ? "s" : ""}`}
           </p>
         </div>
-        <Button size="sm" onClick={() => activeTab === "plans" ? setActiveTab("plans") : openAdd()}>
-          {activeTab === "plans" ? <><Target size={15} className="mr-1.5" /> New Goal</> : <><Plus size={15} className="mr-1.5" /> Add Hobby</>}
+        <Button size="sm" onClick={() => {
+          if (activeTab === "active") return;
+          if (activeTab === "plans") return;
+          openAdd();
+        }}>
+          {activeTab === "active" ? null : activeTab === "plans" ? null : <><Plus size={15} className="mr-1.5" /> Add Hobby</>}
         </Button>
       </div>
 
@@ -9420,12 +9531,28 @@ export default function HobbiesPage() {
           <Heart size={13} /> Hobbies
           {hobbies.length > 0 && <span className="text-xs opacity-60">{hobbies.length}</span>}
         </button>
+        {activePlanCount > 0 && (
+          <button onClick={() => setActiveTab("active")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "active" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            <Play size={13} /> Active Plans
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${activeTab === "active" ? "bg-primary/15 text-primary" : "opacity-60"}`}>{activePlanCount}</span>
+          </button>
+        )}
         <button onClick={() => setActiveTab("plans")}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "plans" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
           <Target size={13} /> Plans & Goals
           {(activePlanCount + activeGoalCount) > 0 && <span className="text-xs opacity-60">{activePlanCount + activeGoalCount}</span>}
         </button>
       </div>
+
+      {/* ── Active Plans tab ── */}
+      {activeTab === "active" && (
+        <HobbyActivePlanSection
+          hobbies={hobbies}
+          onUpdateHobby={handleUpdateHobbyExtra}
+          onGoToPlans={() => setActiveTab("plans")}
+        />
+      )}
 
       {/* ── Plans & Goals tab ── */}
       {activeTab === "plans" && (
@@ -9435,14 +9562,6 @@ export default function HobbiesPage() {
       {/* ── Hobbies tab ── */}
       {activeTab === "hobbies" && (
         <>
-          {/* Active Plan section */}
-          {activePlanCount > 0 && (
-            <HobbyActivePlanSection
-              hobbies={hobbies}
-              onUpdateHobby={handleUpdateHobbyExtra}
-              onGoToPlans={() => setActiveTab("plans")}
-            />
-          )}
 
           {/* Stats row */}
           {hobbies.length > 0 && (
