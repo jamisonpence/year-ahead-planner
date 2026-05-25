@@ -384,6 +384,7 @@ interface HobbyPlan {
   steps: GoalStep[];
   createdAt: string;
   completedAt?: string;
+  scheduleDays?: string[];
 }
 
 interface PlanTemplate {
@@ -1829,6 +1830,7 @@ function GoalCard({
   onToggleStep,
   onComplete,
   onDelete,
+  onEdit,
 }: {
   goal: HobbyGoal;
   hobbyName: string;
@@ -1837,6 +1839,7 @@ function GoalCard({
   onToggleStep?: (stepId: string, done: boolean) => void;
   onComplete?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
 }) {
   const [editingCount, setEditingCount] = useState(false);
   const [countInput, setCountInput] = useState(String(goal.currentValue ?? 0));
@@ -1862,6 +1865,11 @@ function GoalCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {!isCompleted && onEdit && (
+            <button onClick={onEdit} title="Edit goal" className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil size={13} />
+            </button>
+          )}
           {!isCompleted && onComplete && (
             <button onClick={onComplete} title="Mark complete" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-muted-foreground hover:text-emerald-600 transition-colors">
               <CheckCircle2 size={14} />
@@ -1994,6 +2002,7 @@ function PlanCard({
   onToggleActive,
   onComplete,
   onDelete,
+  onEdit,
 }: {
   plan: HobbyPlan;
   hobbyName: string;
@@ -2002,6 +2011,7 @@ function PlanCard({
   onToggleActive?: () => void;
   onComplete?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
 }) {
   const { pct, done, total } = planProgress(plan);
   const isCompleted = !!plan.completedAt;
@@ -2029,6 +2039,11 @@ function PlanCard({
             <span className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
               <Zap size={9} /> Active
             </span>
+          )}
+          {!isCompleted && onEdit && (
+            <button onClick={onEdit} title="Edit plan" className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil size={13} />
+            </button>
           )}
           {!isCompleted && onComplete && (
             <button onClick={onComplete} title="Mark complete" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-muted-foreground hover:text-emerald-600 transition-colors">
@@ -2137,6 +2152,7 @@ function PlanWizard({
   const [durationWeeks, setDurationWeeks] = useState("");
   const [startDate, setStartDate] = useState("");
   const [activateNow, setActivateNow] = useState(true);
+  const [scheduleDays, setScheduleDays] = useState<string[]>([]);
   const [steps, setSteps] = useState<GoalStep[]>([]);
   const [stepInput, setStepInput] = useState("");
   const [stepDate, setStepDate] = useState("");
@@ -2342,7 +2358,7 @@ function PlanWizard({
   function reset() {
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
-    setActivateNow(true); setSteps([]); setStepInput(""); setStepDate("");
+    setActivateNow(true); setScheduleDays([]); setSteps([]); setStepInput(""); setStepDate("");
     setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
@@ -2753,6 +2769,7 @@ function PlanWizard({
       durationWeeks: durationWeeks ? Number(durationWeeks) : undefined,
       startDate: startDate || (activateNow ? new Date().toISOString().slice(0, 10) : undefined),
       isActive: activateNow, steps, createdAt: new Date().toISOString(),
+      ...(scheduleDays.length > 0 ? { scheduleDays } : {}),
     };
     onSave(selectedHobbyId, plan);
     handleClose();
@@ -4748,6 +4765,36 @@ function PlanWizard({
                   </button>
                 </div>
               </div>
+              {/* ── Weekly schedule day picker ── */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Practice Days (optional)</label>
+                <p className="text-[11px] text-muted-foreground mb-2">Select which days of the week you'll practice. This will populate the Active Plan schedule.</p>
+                <div className="grid grid-cols-7 gap-1">
+                  {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day => {
+                    const active = scheduleDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setScheduleDays(prev =>
+                          active ? prev.filter(d => d !== day) : [...prev, day]
+                        )}
+                        className={`flex flex-col items-center py-2 rounded-lg border text-[10px] font-bold transition-all ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                {scheduleDays.length > 0 && (
+                  <p className="text-[11px] text-primary mt-1.5">{scheduleDays.length}×/week: {scheduleDays.join(", ")}</p>
+                )}
+              </div>
+
               <button
                 onClick={() => setActivateNow(v => !v)}
                 className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${activateNow ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800" : "border-border hover:border-primary/30"}`}
@@ -7620,6 +7667,234 @@ function RunningSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── Plan Edit Dialog ───────────────────────────────────────────────────────────
+
+function PlanEditDialog({
+  plan,
+  open,
+  onClose,
+  onSave,
+}: {
+  plan: HobbyPlan | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (updated: HobbyPlan) => void;
+}) {
+  const [title, setTitle] = useState(plan?.title ?? "");
+  const [description, setDescription] = useState(plan?.description ?? "");
+  const [durationWeeks, setDurationWeeks] = useState(plan?.durationWeeks ? String(plan.durationWeeks) : "");
+  const [startDate, setStartDate] = useState(plan?.startDate ?? "");
+  const [scheduleDays, setScheduleDays] = useState<string[]>(plan?.scheduleDays ?? []);
+
+  useEffect(() => {
+    if (plan) {
+      setTitle(plan.title);
+      setDescription(plan.description ?? "");
+      setDurationWeeks(plan.durationWeeks ? String(plan.durationWeeks) : "");
+      setStartDate(plan.startDate ?? "");
+      setScheduleDays(plan.scheduleDays ?? []);
+    }
+  }, [plan]);
+
+  if (!plan) return null;
+
+  function handleSave() {
+    if (!title.trim() || !plan) return;
+    onSave({
+      ...plan,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      durationWeeks: durationWeeks ? Number(durationWeeks) : undefined,
+      startDate: startDate || undefined,
+      scheduleDays: scheduleDays.length > 0 ? scheduleDays : undefined,
+    });
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Plan</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-2">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Title *</label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Plan title…" className="text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What is this plan for?" className="text-sm min-h-[60px]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+              <Input type="number" min={1} value={durationWeeks} onChange={e => setDurationWeeks(e.target.value)} className="text-sm" placeholder="e.g. 8" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Start date</label>
+              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Practice Days</label>
+            <div className="grid grid-cols-7 gap-1">
+              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day => {
+                const active = scheduleDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setScheduleDays(prev =>
+                      active ? prev.filter(d => d !== day) : [...prev, day]
+                    )}
+                    className={`flex flex-col items-center py-2 rounded-lg border text-[10px] font-bold transition-all ${
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            {scheduleDays.length > 0 && (
+              <p className="text-[11px] text-primary mt-1.5">{scheduleDays.length}×/week: {scheduleDays.join(", ")}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-between pt-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={!title.trim()} onClick={handleSave} className="gap-1.5">
+            <Check size={13} /> Save Changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Goal Edit Dialog ───────────────────────────────────────────────────────────
+
+function GoalEditDialog({
+  goal,
+  open,
+  onClose,
+  onSave,
+}: {
+  goal: HobbyGoal | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (updated: HobbyGoal) => void;
+}) {
+  const [title, setTitle] = useState(goal?.title ?? "");
+  const [description, setDescription] = useState(goal?.description ?? "");
+  const [targetDate, setTargetDate] = useState(goal?.targetDate ?? "");
+  const [targetValue, setTargetValue] = useState(goal?.targetValue != null ? String(goal.targetValue) : "");
+  const [unit, setUnit] = useState(goal?.unit ?? "");
+  const [freqTimes, setFreqTimes] = useState(goal?.freqTimes != null ? String(goal.freqTimes) : "3");
+  const [freqPeriod, setFreqPeriod] = useState<"week" | "month">(goal?.freqPeriod ?? "week");
+  const [durationWeeks, setDurationWeeks] = useState(goal?.durationWeeks != null ? String(goal.durationWeeks) : "");
+
+  useEffect(() => {
+    if (goal) {
+      setTitle(goal.title);
+      setDescription(goal.description ?? "");
+      setTargetDate(goal.targetDate ?? "");
+      setTargetValue(goal.targetValue != null ? String(goal.targetValue) : "");
+      setUnit(goal.unit ?? "");
+      setFreqTimes(goal.freqTimes != null ? String(goal.freqTimes) : "3");
+      setFreqPeriod(goal.freqPeriod ?? "week");
+      setDurationWeeks(goal.durationWeeks != null ? String(goal.durationWeeks) : "");
+    }
+  }, [goal]);
+
+  if (!goal) return null;
+
+  function handleSave() {
+    if (!title.trim() || !goal) return;
+    onSave({
+      ...goal,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      targetDate: targetDate || undefined,
+      targetValue: targetValue ? Number(targetValue) : undefined,
+      unit: unit || undefined,
+      freqTimes: freqTimes ? Number(freqTimes) : undefined,
+      freqPeriod,
+      durationWeeks: durationWeeks ? Number(durationWeeks) : undefined,
+    });
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Goal</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-2">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Title *</label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Goal title…" className="text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What does success look like?" className="text-sm min-h-[55px]" />
+          </div>
+          {(goal.goalType === "count") && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Target value</label>
+                <Input type="number" min={0} value={targetValue} onChange={e => setTargetValue(e.target.value)} className="text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Unit</label>
+                <Input value={unit} onChange={e => setUnit(e.target.value)} placeholder="miles, items…" className="text-sm" />
+              </div>
+            </div>
+          )}
+          {goal.goalType === "frequency" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Times per period</label>
+                <Input type="number" min={1} value={freqTimes} onChange={e => setFreqTimes(e.target.value)} className="text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
+                <Select value={freqPeriod} onValueChange={v => setFreqPeriod(v as "week" | "month")}>
+                  <SelectTrigger className="text-sm h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="week">Week</SelectItem>
+                    <SelectItem value="month">Month</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          {(goal.goalType === "frequency" || goal.goalType === "plan") && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+              <Input type="number" min={1} value={durationWeeks} onChange={e => setDurationWeeks(e.target.value)} placeholder="e.g. 12" className="text-sm" />
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Target date (optional)</label>
+            <Input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="text-sm" />
+          </div>
+        </div>
+        <div className="flex justify-between pt-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={!title.trim()} onClick={handleSave} className="gap-1.5">
+            <Check size={13} /> Save Changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Active Plan Section ────────────────────────────────────────────────────────
 
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -7711,15 +7986,21 @@ function HobbyActivePlanSection({
           ? thisWeekSteps
           : plan.steps.filter(s => !s.done).slice(0, 3);
 
-        // "Weekly schedule" grid: show 7 days; highlight study/practice days inferred from steps per week
-        // If there are steps, mark days with activity based on step count per week
-        const stepsThisWeek = thisWeekSteps.length || Math.ceil(totalSteps / totalWeeks) || 1;
-        // Spread study days evenly across the week (Mon/Wed/Fri or daily etc.)
+        // "Weekly schedule" grid: use explicit scheduleDays if set, otherwise infer from step count
         const SPREAD_PATTERNS: Record<number, number[]> = {
           1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5],
           5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6],
         };
-        const scheduledDays = new Set(SPREAD_PATTERNS[Math.min(stepsThisWeek, 7)] ?? [1, 3, 5]);
+        const DAY_TO_IDX: Record<string, number> = {
+          "Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6,
+        };
+        let scheduledDays: Set<number>;
+        if (plan.scheduleDays && plan.scheduleDays.length > 0) {
+          scheduledDays = new Set(plan.scheduleDays.map(d => DAY_TO_IDX[d] ?? -1).filter(n => n >= 0));
+        } else {
+          const stepsThisWeek = thisWeekSteps.length || Math.ceil(totalSteps / totalWeeks) || 1;
+          scheduledDays = new Set(SPREAD_PATTERNS[Math.min(stepsThisWeek, 7)] ?? [1, 3, 5]);
+        }
 
         const allDone = totalSteps > 0 && doneSteps === totalSteps;
 
@@ -7895,6 +8176,8 @@ function HobbyDetailDialog({
 }) {
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingPlan, setAddingPlan] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<HobbyPlan | null>(null);
+  const [editingGoal, setEditingGoal] = useState<HobbyGoal | null>(null);
   if (!hobby) return null;
   const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
   const TypeIcon = typeInfo.icon;
@@ -7928,6 +8211,8 @@ function HobbyDetailDialog({
   }
   function completePlan(planId: string) { onUpdatePlans(plans.map(p => p.id === planId ? { ...p, isActive: false, completedAt: new Date().toISOString() } : p)); }
   function deletePlan(planId: string) { onUpdatePlans(plans.filter(p => p.id !== planId)); }
+  function savePlanEdit(updated: HobbyPlan) { onUpdatePlans(plans.map(p => p.id === updated.id ? updated : p)); setEditingPlan(null); }
+  function saveGoalEdit(updated: HobbyGoal) { updateGoal(updated); setEditingGoal(null); }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -8007,6 +8292,7 @@ function HobbyDetailDialog({
                     onToggleActive={() => togglePlanActive(p.id)}
                     onComplete={() => completePlan(p.id)}
                     onDelete={() => deletePlan(p.id)}
+                    onEdit={() => setEditingPlan(p)}
                   />
                 ))}
                 {completedPlans.length > 0 && (
@@ -8052,6 +8338,7 @@ function HobbyDetailDialog({
                     onToggleStep={(sid, done) => toggleGoalStep(g.id, sid, done)}
                     onComplete={() => completeGoal(g.id)}
                     onDelete={() => deleteGoal(g.id)}
+                    onEdit={() => setEditingGoal(g)}
                   />
                 ))}
                 {completedGoals.length > 0 && (
@@ -8102,6 +8389,19 @@ function HobbyDetailDialog({
             onSave={(_, goal) => { onUpdateGoals([...goals, goal]); setAddingGoal(false); }}
           />
         )}
+
+        <PlanEditDialog
+          plan={editingPlan}
+          open={!!editingPlan}
+          onClose={() => setEditingPlan(null)}
+          onSave={savePlanEdit}
+        />
+        <GoalEditDialog
+          goal={editingGoal}
+          open={!!editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSave={saveGoalEdit}
+        />
 
         {/* ── Hiking section (only for hiking hobbies) ── */}
         {hobby.name.toLowerCase().includes("hiking") && (
@@ -8187,6 +8487,8 @@ function PlansGoalsTab({
   const [filterType, setFilterType] = useState<HobbyType | "all">("all");
   const [showCompletedPlans, setShowCompletedPlans] = useState(false);
   const [showCompletedGoals, setShowCompletedGoals] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<(HobbyPlan & { hobby: Hobby }) | null>(null);
+  const [editingGoal, setEditingGoal] = useState<(HobbyGoal & { hobby: Hobby }) | null>(null);
 
   type FlatPlan = HobbyPlan & { hobby: Hobby };
   type FlatGoal = HobbyGoal & { hobby: Hobby };
@@ -8213,6 +8515,14 @@ function PlansGoalsTab({
   function updatePlan(hobby: Hobby, updated: HobbyPlan) {
     const plans = parsePlans(hobby.extraJson ?? "{}").map(p => p.id === updated.id ? updated : p);
     onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
+  }
+  function savePlanEdit(updated: HobbyPlan & { hobby: Hobby }) {
+    updatePlan(updated.hobby, updated);
+    setEditingPlan(null);
+  }
+  function saveGoalEdit(updated: HobbyGoal & { hobby: Hobby }) {
+    updateGoal(updated.hobby, updated);
+    setEditingGoal(null);
   }
   function deletePlan(hobby: Hobby, planId: string) {
     const plans = parsePlans(hobby.extraJson ?? "{}").filter(p => p.id !== planId);
@@ -8335,6 +8645,7 @@ function PlansGoalsTab({
                   onToggleActive={() => togglePlanActive(p.hobby, p.id)}
                   onComplete={() => completePlan(p.hobby, p.id)}
                   onDelete={() => deletePlan(p.hobby, p.id)}
+                  onEdit={() => setEditingPlan(p)}
                 />
               );
             })}
@@ -8353,6 +8664,7 @@ function PlansGoalsTab({
                   onToggleActive={() => togglePlanActive(p.hobby, p.id)}
                   onComplete={() => completePlan(p.hobby, p.id)}
                   onDelete={() => deletePlan(p.hobby, p.id)}
+                  onEdit={() => setEditingPlan(p)}
                 />
               );
             })}
@@ -8426,6 +8738,7 @@ function PlansGoalsTab({
                   onToggleStep={(sid, done) => toggleGoalStep(g.hobby, g.id, sid, done)}
                   onComplete={() => completeGoal(g.hobby, g.id)}
                   onDelete={() => deleteGoal(g.hobby, g.id)}
+                  onEdit={() => setEditingGoal(g)}
                 />
               );
             })}
@@ -8492,6 +8805,20 @@ function PlansGoalsTab({
           if (!hobby) return;
           onUpdateHobby(hobbyId, setGoalsInExtra(hobby.extraJson ?? "{}", [...parseGoals(hobby.extraJson ?? "{}"), goal]));
         }}
+      />
+
+      {/* Edit dialogs */}
+      <PlanEditDialog
+        plan={editingPlan}
+        open={!!editingPlan}
+        onClose={() => setEditingPlan(null)}
+        onSave={updated => savePlanEdit({ ...updated, hobby: editingPlan!.hobby })}
+      />
+      <GoalEditDialog
+        goal={editingGoal}
+        open={!!editingGoal}
+        onClose={() => setEditingGoal(null)}
+        onSave={updated => saveGoalEdit({ ...updated, hobby: editingGoal!.hobby })}
       />
     </div>
   );
