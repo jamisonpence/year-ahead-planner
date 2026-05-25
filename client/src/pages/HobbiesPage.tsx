@@ -459,6 +459,76 @@ const PLAN_TEMPLATES: Record<HobbyType, PlanTemplate[]> = {
   ],
 };
 
+// ── Chess weekly schedule data (from CSV, by rating band) ─────────────────────
+
+interface ChessWeeklyBand {
+  minElo: number;
+  maxElo: number;
+  bandLabel: string;
+  highLevelFocus: string;
+  days: Record<string, { dayLabel: string; taskDetail: string }>;
+}
+
+const CHESS_WEEKLY_SCHEDULES: ChessWeeklyBand[] = [
+  {
+    minElo: 0, maxElo: 800, bandLabel: "Beginner",
+    highLevelFocus: "Tactics pattern recognition & blunder avoidance; basic opening principles; simple endgames",
+    days: {
+      Mon: { dayLabel: "Tactics + rapid games",    taskDetail: "30 min puzzles (forks, pins, mates 1–2); 2 rapid 10+0 games focusing on not hanging pieces; review blunders and write 1 takeaway rule" },
+      Tue: { dayLabel: "Opening principles",        taskDetail: "20 min on opening principles (control center, develop knights/bishops, castle); watch 1 beginner lesson; 1 slow 15+10 game applying principles" },
+      Wed: { dayLabel: "Tactics + rapid games",    taskDetail: "30 min puzzles slightly above comfort level; 2 rapid games; after each, find 3 better moves without engine" },
+      Thu: { dayLabel: "Endgame drills",           taskDetail: "30 min studying K+P vs K and rook ladder mates; practice against engine or drills; 1 training game from a winning endgame position" },
+      Fri: { dayLabel: "Tactics + blunder check",  taskDetail: "20 min puzzles (mates 2–3); 2 rapid games; practice blunder-check before every move (look for loose pieces and checks)" },
+      Sat: { dayLabel: "Long game + analysis",     taskDetail: "2 long games (15+10 or slower); take notes during critical moments; 45–60 min replaying games, compare with engine after self-analysis" },
+      Sun: { dayLabel: "Light review",             taskDetail: "Review your notes for the week; replay 5 key positions from your own games; 15-min puzzle rush or streak" },
+    },
+  },
+  {
+    minElo: 800, maxElo: 1200, bandLabel: "Developing",
+    highLevelFocus: "Deeper tactics; consistent opening repertoire; fundamental endgames; game analysis habits",
+    days: {
+      Mon: { dayLabel: "Tactics + rapid games",    taskDetail: "40 min tactics (pins, skewers, discovered attacks, combos); 2 rapid 10+5 games focusing on piece activity; quick review" },
+      Tue: { dayLabel: "Opening repertoire",        taskDetail: "30 min on 1 main opening as White (ideas, not memorization); build a mini-repertoire card; 1 slow 15+10 game from that opening" },
+      Wed: { dayLabel: "Tactics + defense",        taskDetail: "40 min tactics including defensive puzzles; 2 rapid games; mark every move where you spent <5 seconds and blundered" },
+      Thu: { dayLabel: "Endgames",                 taskDetail: "30–40 min basic rook and minor-piece endgames; solve 5 endgame studies; 1 training game starting from equal rook endgame" },
+      Fri: { dayLabel: "Tactics + CCT check",      taskDetail: "30 min mixed tactics; 2–3 rapid games; structured blunder check every move (checks, captures, threats)" },
+      Sat: { dayLabel: "Long game + analysis",     taskDetail: "1–2 long games (15+10 or 30+0); 60–90 min analysis focusing on opening mistakes and missed tactics; update repertoire notes" },
+      Sun: { dayLabel: "Master game + review",     taskDetail: "Replay 1 annotated master game in your openings; review best and worst game of the week; light puzzle session 15–20 min" },
+    },
+  },
+  {
+    minElo: 1200, maxElo: 1600, bandLabel: "Intermediate",
+    highLevelFocus: "Calculation depth; strategic planning; typical middlegame structures; more complex endgames",
+    days: {
+      Mon: { dayLabel: "Calculation + long game",  taskDetail: "45 min tactics (set 3–5 min/puzzle, write candidate moves); 1 long 30+0 game and deep self-review" },
+      Tue: { dayLabel: "Opening study",            taskDetail: "60 min structured opening study (one line each as White and Black); build a file with model games; no blitz" },
+      Wed: { dayLabel: "Tactics + rapid games",    taskDetail: "45 min complex motifs (deflection, interference, decoy, quiet moves); 2 rapid 15+10 games focusing on time management" },
+      Thu: { dayLabel: "Positional study",         taskDetail: "45–60 min positional study (weak squares, open files, good vs bad bishops) via book/video; pause and guess moves" },
+      Fri: { dayLabel: "Tactics + middlegame",     taskDetail: "30 min tactics + 1 training game from an instructive middlegame; analyze plans, not just tactics" },
+      Sat: { dayLabel: "Tournament session",       taskDetail: "1–2 classical games or long match; 90 min analysis including critical positions and alternative plans" },
+      Sun: { dayLabel: "Endgame clinic",           taskDetail: "60 min on technical endings (R+P vs R, opposite-colored bishops); review all notes from the week" },
+    },
+  },
+  {
+    minElo: 1600, maxElo: 2000, bandLabel: "Advanced",
+    highLevelFocus: "Advanced calculation; positional nuances; opening prep; practical endgames; serious game review",
+    days: {
+      Mon: { dayLabel: "Advanced calculation",     taskDetail: "60 min advanced tactics (3–4 tough puzzles, full variation trees); 1 serious 30+0 game; annotate without engine" },
+      Tue: { dayLabel: "Opening prep",             taskDetail: "90 min opening prep in main repertoire using a database; update files, note novelties; spar training positions" },
+      Wed: { dayLabel: "Strategy + training",      taskDetail: "60 min middlegame strategy (classic GM game collection, guess moves and compare plans); 1 rapid training game" },
+      Thu: { dayLabel: "Practical endgames",       taskDetail: "60 min practical endgames (rook and minor-piece endings from recent GM games); convert advantageous positions vs engine" },
+      Fri: { dayLabel: "Tactics + rapid games",    taskDetail: "30–45 min mixed tactics; 1–2 rapid games focusing on practical decision-making under time; post-game blunder review" },
+      Sat: { dayLabel: "Tournament simulation",    taskDetail: "1–2 classical games with full pre- and post-game routine; 2–3 hours total analysis" },
+      Sun: { dayLabel: "Global review",            taskDetail: "Summarize recurring weaknesses; adjust next week's plan; replay 3 instructive games from top-level play" },
+    },
+  },
+];
+
+function getChessWeeklyBand(currentElo: number): ChessWeeklyBand {
+  return CHESS_WEEKLY_SCHEDULES.find(b => currentElo >= b.minElo && currentElo < b.maxElo)
+    ?? CHESS_WEEKLY_SCHEDULES[CHESS_WEEKLY_SCHEDULES.length - 1];
+}
+
 // ── Chess ELO helpers ──────────────────────────────────────────────────────────
 
 // 400 ELO gain = 12 months baseline; 1000 ELO gain = 30 months.
@@ -2581,6 +2651,9 @@ function PlanWizard({
   const [steps, setSteps] = useState<GoalStep[]>([]);
   const [stepInput, setStepInput] = useState("");
   const [stepDate, setStepDate] = useState("");
+  // Auto-generated schedule metadata (set by specialty wizards like chess ELO)
+  const [planDayLabels, setPlanDayLabels] = useState<Record<string, string>>({});
+  const [planMilestones, setPlanMilestones] = useState<PlanMilestone[]>([]);
 
   // Chess wizard state
   const [chessMode, setChessMode] = useState(false);
@@ -2784,6 +2857,7 @@ function PlanWizard({
     setStep(1); setSelectedHobbyId(defaultHobbyId ?? null); setSelectedTemplate(null);
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setScheduleDays([]); setSteps([]); setStepInput(""); setStepDate("");
+    setPlanDayLabels({}); setPlanMilestones([]);
     setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
@@ -3086,6 +3160,29 @@ function PlanWizard({
     setDescription(`Structured improvement plan to gain ${eloGap} ELO rating points over ${eloDuration.months} months.`);
     setDurationWeeks(String(eloDuration.weeks));
     setSteps(generatedSteps);
+
+    // ── Auto-populate weekly schedule from CSV data ──
+    const band = getChessWeeklyBand(cur);
+    setScheduleDays(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    setPlanDayLabels(Object.fromEntries(
+      Object.entries(band.days).map(([day, d]) => [day, d.dayLabel])
+    ));
+
+    // ── Auto-generate ELO milestone checkpoints ──
+    const gap = tgt - cur;
+    const numMilestones = Math.min(Math.max(Math.floor(gap / 100), 1), 8);
+    const step = Math.round(gap / numMilestones / 50) * 50 || 100;
+    const autoMilestones: PlanMilestone[] = [];
+    for (let i = 1; i <= numMilestones; i++) {
+      const rating = Math.min(Math.round(cur + step * i), tgt);
+      autoMilestones.push({ id: genId(), title: `Reach ${rating} ELO`, order: i });
+      if (rating >= tgt) break;
+    }
+    if (autoMilestones.length === 0 || autoMilestones[autoMilestones.length - 1].title !== `Reach ${tgt} ELO`) {
+      autoMilestones.push({ id: genId(), title: `Reach ${tgt} ELO`, order: autoMilestones.length + 1 });
+    }
+    setPlanMilestones(autoMilestones);
+
     setChessEloMode(false); setChessMode(false); setChessGoalType("");
     setStep(2);
   }
@@ -3195,6 +3292,8 @@ function PlanWizard({
       startDate: startDate || (activateNow ? new Date().toISOString().slice(0, 10) : undefined),
       isActive: activateNow, steps, createdAt: new Date().toISOString(),
       ...(scheduleDays.length > 0 ? { scheduleDays } : {}),
+      ...(Object.keys(planDayLabels).length > 0 ? { dayLabels: planDayLabels } : {}),
+      ...(planMilestones.length > 0 ? { milestones: planMilestones } : {}),
     };
     onSave(selectedHobbyId, plan);
     handleClose();
@@ -4821,6 +4920,34 @@ function PlanWizard({
                       );
                     })}
                   </div>
+                  {/* Weekly schedule preview */}
+                  {(() => {
+                    const band = getChessWeeklyBand(Number(currentElo));
+                    const _DAYS_WK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                    return (
+                      <div className="space-y-2 pt-1 border-t">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                          <span>Auto-generated daily schedule</span>
+                          <span className="text-indigo-500 font-semibold">{band.bandLabel} Band</span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground italic">{band.highLevelFocus}</p>
+                        <div className="space-y-1">
+                          {_DAYS_WK.map(d => {
+                            const entry = band.days[d];
+                            return (
+                              <div key={d} className="flex items-start gap-2 text-[10px]">
+                                <span className="w-7 shrink-0 font-bold text-muted-foreground">{d}</span>
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-semibold">{entry.dayLabel}</span>
+                                  <span className="text-muted-foreground"> — {entry.taskDetail}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <p className="text-[10px] text-muted-foreground border-t pt-2">Recommended: 3–10 hrs/week · daily tactics puzzles + rated game play</p>
                 </div>
               )}
