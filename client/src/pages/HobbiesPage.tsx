@@ -7620,6 +7620,270 @@ function RunningSection({ hobby, onUpdateExtra }: {
   );
 }
 
+// ── Active Plan Section ────────────────────────────────────────────────────────
+
+const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function HobbyActivePlanSection({
+  hobbies,
+  onUpdateHobby,
+  onGoToPlans,
+}: {
+  hobbies: Hobby[];
+  onUpdateHobby: (id: number, extraJson: string) => void;
+  onGoToPlans: () => void;
+}) {
+  // Collect all active plans across hobbies
+  const activePlanEntries = useMemo(() => {
+    const entries: { hobby: Hobby; plan: HobbyPlan }[] = [];
+    for (const h of hobbies) {
+      const plans = parsePlans(h.extraJson ?? "{}");
+      for (const p of plans) {
+        if (p.isActive && !p.completedAt) entries.push({ hobby: h, plan: p });
+      }
+    }
+    return entries;
+  }, [hobbies]);
+
+  if (activePlanEntries.length === 0) return null;
+
+  const today = new Date();
+  const todayDow = today.getDay(); // 0=Sun … 6=Sat
+
+  function toggleStep(hobby: Hobby, plan: HobbyPlan, stepId: string) {
+    const plans = parsePlans(hobby.extraJson ?? "{}").map(p =>
+      p.id === plan.id
+        ? { ...p, steps: p.steps.map(s => s.id === stepId ? { ...s, done: !s.done } : s) }
+        : p
+    );
+    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
+  }
+
+  function markComplete(hobby: Hobby, plan: HobbyPlan) {
+    const plans = parsePlans(hobby.extraJson ?? "{}").map(p =>
+      p.id === plan.id ? { ...p, completedAt: new Date().toISOString(), isActive: false } : p
+    );
+    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <p className="text-sm font-semibold">
+            Active Plan{activePlanEntries.length > 1 ? `s (${activePlanEntries.length})` : ""}
+          </p>
+        </div>
+        <button onClick={onGoToPlans} className="text-xs text-primary hover:underline flex items-center gap-0.5">
+          View all <ChevronRight size={11} />
+        </button>
+      </div>
+
+      {activePlanEntries.map(({ hobby, plan }) => {
+        const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
+        const startDate = plan.startDate ? new Date(plan.startDate) : null;
+        const weeksElapsed = startDate
+          ? Math.max(0, Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+          : 0;
+        const totalWeeks = plan.durationWeeks ?? 1;
+        const currentWeek = Math.min(weeksElapsed + 1, totalWeeks);
+        const progressPct = plan.durationWeeks
+          ? Math.min(100, Math.round((weeksElapsed / plan.durationWeeks) * 100))
+          : 0;
+
+        const totalSteps = plan.steps.length;
+        const doneSteps = plan.steps.filter(s => s.done).length;
+        const stepPct = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
+        const displayPct = plan.durationWeeks ? Math.max(progressPct, stepPct) : stepPct;
+
+        // Distribute steps across weeks (for "this week" callout)
+        // Step i belongs to week: Math.floor(i / totalSteps * totalWeeks) + 1
+        const thisWeekSteps = totalSteps > 0
+          ? plan.steps.filter((_, i) => {
+              const stepWeek = Math.floor((i / totalSteps) * totalWeeks) + 1;
+              return stepWeek === currentWeek;
+            })
+          : [];
+        // Fall back to next 3 uncompleted if no steps map to this week
+        const focusSteps = thisWeekSteps.length > 0
+          ? thisWeekSteps
+          : plan.steps.filter(s => !s.done).slice(0, 3);
+
+        // "Weekly schedule" grid: show 7 days; highlight study/practice days inferred from steps per week
+        // If there are steps, mark days with activity based on step count per week
+        const stepsThisWeek = thisWeekSteps.length || Math.ceil(totalSteps / totalWeeks) || 1;
+        // Spread study days evenly across the week (Mon/Wed/Fri or daily etc.)
+        const SPREAD_PATTERNS: Record<number, number[]> = {
+          1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5],
+          5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6],
+        };
+        const scheduledDays = new Set(SPREAD_PATTERNS[Math.min(stepsThisWeek, 7)] ?? [1, 3, 5]);
+
+        const allDone = totalSteps > 0 && doneSteps === totalSteps;
+
+        return (
+          <div key={`${hobby.id}-${plan.id}`} className="bg-card border rounded-xl overflow-hidden">
+            {/* ── Header */}
+            <div className="px-4 py-3 border-b flex items-center justify-between gap-2"
+              style={{ background: `${typeInfo.color}10`, borderBottomColor: `${typeInfo.color}30` }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base shrink-0">{typeInfo.emoji}</span>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">{hobby.name}</p>
+                  <p className="text-sm font-semibold truncate">{plan.title}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {allDone && (
+                  <button
+                    onClick={() => markComplete(hobby, plan)}
+                    className="text-[10px] px-2.5 py-1 rounded-full font-semibold border transition-colors"
+                    style={{ borderColor: `${typeInfo.color}60`, color: typeInfo.color, background: `${typeInfo.color}15` }}
+                  >
+                    ✓ Mark Complete
+                  </button>
+                )}
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
+                  {plan.durationWeeks ? `Wk ${currentWeek}/${totalWeeks}` : `${stepPct}%`}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* ── Progress bar */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {plan.durationWeeks ? `Week ${currentWeek} of ${totalWeeks}` : "Progress"}
+                    {totalSteps > 0 && ` · ${doneSteps}/${totalSteps} steps`}
+                  </span>
+                  <span>{displayPct}%</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${displayPct}%`, background: typeInfo.color }}
+                  />
+                </div>
+                {startDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Started {format(startDate, "MMM d, yyyy")}
+                    {plan.durationWeeks && startDate && (() => {
+                      const end = new Date(startDate);
+                      end.setDate(end.getDate() + plan.durationWeeks * 7);
+                      return ` · ends ${format(end, "MMM d, yyyy")}`;
+                    })()}
+                  </p>
+                )}
+              </div>
+
+              {/* ── Weekly schedule grid */}
+              <div className="bg-card border rounded-xl overflow-hidden">
+                <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                  <p className="text-xs font-semibold">This Week's Schedule</p>
+                  {plan.durationWeeks && (
+                    <span className="text-[10px] text-muted-foreground">Week {currentWeek} of {totalWeeks}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-7 divide-x">
+                  {DAYS_SHORT.map((label, idx) => {
+                    const isToday = idx === todayDow;
+                    const hasActivity = scheduledDays.has(idx);
+                    return (
+                      <div
+                        key={label}
+                        className={`flex flex-col items-center py-2.5 gap-1 ${
+                          isToday ? "bg-primary/5" : hasActivity ? "" : "opacity-30"
+                        }`}
+                      >
+                        <p className={`text-[10px] font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                          {label}
+                        </p>
+                        {hasActivity ? (
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ background: isToday ? typeInfo.color : `${typeInfo.color}70` }}
+                          />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+                        )}
+                        {isToday && hasActivity && (
+                          <p className="text-[8px] font-bold text-primary uppercase">Today</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Step checklist */}
+              {plan.steps.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {focusSteps.length > 0 && focusSteps.some(s => !s.done)
+                      ? "This Week's Focus"
+                      : allDone
+                      ? "All Steps Complete 🎉"
+                      : "Steps"}
+                  </p>
+                  <div className="space-y-1">
+                    {/* Show last 1 completed step for context */}
+                    {plan.steps.filter(s => s.done).slice(-1).map(step => (
+                      <button
+                        key={step.id}
+                        onClick={() => toggleStep(hobby, plan, step.id)}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-secondary/50 transition-colors text-left group"
+                      >
+                        <CheckCircle2 size={15} className="shrink-0 text-green-500" />
+                        <span className="text-xs text-muted-foreground line-through flex-1 truncate">{step.text}</span>
+                      </button>
+                    ))}
+                    {/* Show this week's / upcoming steps */}
+                    {focusSteps.map(step => (
+                      <button
+                        key={step.id}
+                        onClick={() => toggleStep(hobby, plan, step.id)}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-secondary/50 transition-colors text-left group"
+                      >
+                        {step.done
+                          ? <CheckCircle2 size={15} className="shrink-0 text-green-500" />
+                          : <Circle size={15} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                        }
+                        <span className={`text-sm flex-1 truncate ${step.done ? "line-through text-muted-foreground" : "font-medium"}`}>
+                          {step.text}
+                        </span>
+                        {step.dueDate && !step.done && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {format(parseISO(step.dueDate), "MMM d")}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    {/* "X more steps" hint */}
+                    {plan.steps.filter(s => !s.done).length > focusSteps.filter(s => !s.done).length && (
+                      <button onClick={onGoToPlans} className="w-full text-left text-xs text-muted-foreground px-2.5 py-1 hover:text-primary transition-colors flex items-center gap-1">
+                        <ChevronRight size={11} />
+                        {plan.steps.filter(s => !s.done).length - focusSteps.filter(s => !s.done).length} more step{plan.steps.filter(s => !s.done).length - focusSteps.filter(s => !s.done).length !== 1 ? "s" : ""} remaining
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {plan.description && (
+                <p className="text-xs text-muted-foreground italic border-t pt-3">{plan.description}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function HobbyDetailDialog({
   hobby, open, onClose, onEdit, onUpdateGoals, onUpdatePlans, onUpdateExtra, onCreateSystemGoal,
 }: {
@@ -8697,6 +8961,15 @@ export default function HobbiesPage() {
       {/* ── Hobbies tab ── */}
       {activeTab === "hobbies" && (
         <>
+          {/* Active Plan section */}
+          {activePlanCount > 0 && (
+            <HobbyActivePlanSection
+              hobbies={hobbies}
+              onUpdateHobby={handleUpdateHobbyExtra}
+              onGoToPlans={() => setActiveTab("plans")}
+            />
+          )}
+
           {/* Stats row */}
           {hobbies.length > 0 && (
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
