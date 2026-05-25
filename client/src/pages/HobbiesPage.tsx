@@ -7923,27 +7923,37 @@ const SPREAD_PATTERNS: Record<number, string[]> = {
 // ── Log Session Dialog ─────────────────────────────────────────────────────────
 
 function LogSessionDialog({
-  open, onClose, onSave,
+  open, onClose, onSave, onDelete,
   planTitle, dayLabel, defaultDate,
+  existingSession,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (session: Omit<SessionLog, "id" | "planId">) => void;
+  onDelete?: () => void;
   planTitle: string;
   dayLabel: string;
   defaultDate: string;
+  existingSession?: SessionLog | null;
 }) {
+  const isEditing = !!existingSession;
   const [date, setDate] = useState(defaultDate);
   const [durationMins, setDurationMins] = useState("");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
     if (open) {
-      setDate(defaultDate);
-      setDurationMins("");
-      setNotes("");
+      if (existingSession) {
+        setDate(existingSession.date);
+        setDurationMins(existingSession.durationMins ? String(existingSession.durationMins) : "");
+        setNotes(existingSession.notes ?? "");
+      } else {
+        setDate(defaultDate);
+        setDurationMins("");
+        setNotes("");
+      }
     }
-  }, [open, defaultDate]);
+  }, [open, defaultDate, existingSession]);
 
   function handleSave() {
     onSave({ date, dayOfWeek: dayLabel, durationMins: durationMins ? Number(durationMins) : undefined, notes: notes.trim() || undefined });
@@ -7956,7 +7966,7 @@ function LogSessionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardCheck size={16} className="text-primary" />
-            Log Session
+            {isEditing ? "Edit Session" : "Log Session"}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 mt-1">
@@ -7980,9 +7990,17 @@ function LogSessionDialog({
           </div>
         </div>
         <div className="flex justify-between pt-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            {isEditing && onDelete && (
+              <Button variant="ghost" size="sm" onClick={() => { onDelete(); onClose(); }}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1">
+                <Trash2 size={12} /> Delete
+              </Button>
+            )}
+          </div>
           <Button size="sm" onClick={handleSave} className="gap-1.5" disabled={!date}>
-            <ClipboardCheck size={13} /> Log Session
+            <ClipboardCheck size={13} /> {isEditing ? "Save Changes" : "Log Session"}
           </Button>
         </div>
       </DialogContent>
@@ -8005,6 +8023,9 @@ function HobbyActivePlanSection({
     hobby: Hobby; plan: HobbyPlan; dayLabel: string; defaultDate: string;
   } | null>(null);
   const [editTarget, setEditTarget] = useState<{ hobby: Hobby; plan: HobbyPlan } | null>(null);
+  const [editSessionTarget, setEditSessionTarget] = useState<{
+    hobby: Hobby; plan: HobbyPlan; session: SessionLog; dayLabel: string;
+  } | null>(null);
 
   const today = new Date();
   const todayDowIdx = today.getDay(); // 0=Sun
@@ -8054,6 +8075,22 @@ function HobbyActivePlanSection({
     savePlanUpdate(hobby, { ...plan, completedAt: new Date().toISOString(), isActive: false });
   }
 
+  function updateSession(updatedData: Omit<SessionLog, "id" | "planId">) {
+    if (!editSessionTarget) return;
+    const { hobby, plan, session } = editSessionTarget;
+    const updatedSession: SessionLog = { ...updatedData, id: session.id, planId: plan.id };
+    savePlanUpdate(hobby, {
+      ...plan,
+      sessions: (plan.sessions ?? []).map(s => s.id === session.id ? updatedSession : s),
+    });
+  }
+
+  function deleteEditSession() {
+    if (!editSessionTarget) return;
+    deleteSession(editSessionTarget.hobby, editSessionTarget.plan, editSessionTarget.session.id);
+    setEditSessionTarget(null);
+  }
+
   // ── Determine scheduled days for a plan ──────────────────────────────────────
   function getScheduledDays(plan: HobbyPlan): string[] {
     if (plan.scheduleDays && plan.scheduleDays.length > 0) return plan.scheduleDays;
@@ -8082,7 +8119,7 @@ function HobbyActivePlanSection({
 
   type MergedEntry = {
     hobby: Hobby; plan: HobbyPlan; typeInfo: typeof HOBBY_TYPES[0];
-    color: string; isLoggedToday: boolean;
+    color: string; loggedSession?: SessionLog;
   };
   const mergedByDay = useMemo((): Record<string, MergedEntry[]> => {
     const map: Record<string, MergedEntry[]> = {};
@@ -8096,12 +8133,12 @@ function HobbyActivePlanSection({
       const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
       const sessions = plan.sessions ?? [];
       scheduledDays.forEach(day => {
-        const isLoggedToday = sessions.some(s =>
+        const loggedSession = sessions.find(s =>
           s.dayOfWeek === day &&
           s.date >= weekStart.toISOString().slice(0, 10) &&
           s.date <= weekEnd.toISOString().slice(0, 10)
         );
-        map[day]?.push({ hobby, plan, typeInfo, color, isLoggedToday });
+        map[day]?.push({ hobby, plan, typeInfo, color, loggedSession });
       });
     });
     return map;
@@ -8139,12 +8176,18 @@ function HobbyActivePlanSection({
                 {/* Activities */}
                 {entries.length > 0 ? (
                   <div className="flex-1 min-w-0 space-y-2">
-                    {entries.map(({ hobby, plan, typeInfo, color, isLoggedToday }, i) => (
+                    {entries.map(({ hobby, plan, typeInfo, color, loggedSession }, i) => (
                       <button
                         key={`${plan.id}-${i}`}
                         type="button"
                         className="w-full text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
-                        onClick={() => setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) })}
+                        onClick={() => {
+                          if (loggedSession) {
+                            setEditSessionTarget({ hobby, plan, session: loggedSession, dayLabel });
+                          } else {
+                            setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
+                          }
+                        }}
                       >
                         {/* Plan name tag (like Workouts colored pill) */}
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
@@ -8160,10 +8203,10 @@ function HobbyActivePlanSection({
                         {/* Activity label */}
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{hobby.name}</span>
-                          {isLoggedToday ? (
+                          {loggedSession ? (
                             <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
                               style={{ background: `${color}20`, color }}>
-                              <CheckCircle2 size={9} /> Logged
+                              <CheckCircle2 size={9} /> Logged · tap to edit
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
@@ -8215,6 +8258,13 @@ function HobbyActivePlanSection({
           sessions
             .filter(s => s.date >= thisWeekStart.toISOString().slice(0,10) && s.date <= thisWeekEnd.toISOString().slice(0,10))
             .map(s => s.dayOfWeek)
+        );
+        // Map dayOfWeek → session for editing
+        const thisWeekSessionByDay = new Map<string, SessionLog>(
+          sessions
+            .filter(s => s.date >= thisWeekStart.toISOString().slice(0,10) && s.date <= thisWeekEnd.toISOString().slice(0,10))
+            .filter(s => !!s.dayOfWeek)
+            .map(s => [s.dayOfWeek!, s])
         );
 
         return (
@@ -8288,10 +8338,10 @@ function HobbyActivePlanSection({
                 </div>
                 <div className="divide-y">
                   {DAYS_ORDERED.map(dayLabel => {
-                    const dayIdx = DAY_TO_IDX[dayLabel];
                     const isToday = dayLabel === todayDowLabel;
                     const hasActivity = scheduledDays.has(dayLabel);
-                    const isLogged = thisWeekSessionDays.has(dayLabel);
+                    const existingSession = thisWeekSessionByDay.get(dayLabel);
+                    const isLogged = !!existingSession;
 
                     return (
                       <div
@@ -8309,16 +8359,27 @@ function HobbyActivePlanSection({
                           <button
                             type="button"
                             className="flex-1 flex items-center gap-2 text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
-                            onClick={() => setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) })}
+                            onClick={() => {
+                              if (existingSession) {
+                                setEditSessionTarget({ hobby, plan, session: existingSession, dayLabel });
+                              } else {
+                                setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
+                              }
+                            }}
                           >
                             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: isLogged ? typeInfo.color : `${typeInfo.color}60` }} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{plan.title}</p>
+                              {isLogged && existingSession.notes && (
+                                <p className="text-[10px] text-muted-foreground truncate">{existingSession.notes}</p>
+                              )}
                             </div>
                             {isLogged ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
                                 style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
-                                <CheckCircle2 size={9} /> Logged
+                                <CheckCircle2 size={9} />
+                                {existingSession.durationMins ? `${existingSession.durationMins}m` : "Logged"}
+                                <Pencil size={8} className="ml-0.5 opacity-60" />
                               </span>
                             ) : isToday ? (
                               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground shrink-0">
@@ -8360,12 +8421,22 @@ function HobbyActivePlanSection({
                           </div>
                           {session.notes && <p className="text-[11px] text-muted-foreground truncate">{session.notes}</p>}
                         </div>
-                        <button
-                          onClick={() => deleteSession(hobby, plan, session.id)}
-                          className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                        >
-                          <X size={11} />
-                        </button>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={() => setEditSessionTarget({ hobby, plan, session, dayLabel: session.dayOfWeek ?? todayDowLabel })}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit session"
+                          >
+                            <Pencil size={10} />
+                          </button>
+                          <button
+                            onClick={() => deleteSession(hobby, plan, session.id)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete session"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {sessions.length > 3 && (
@@ -8400,6 +8471,18 @@ function HobbyActivePlanSection({
         planTitle={logTarget?.plan.title ?? ""}
         dayLabel={logTarget?.dayLabel ?? ""}
         defaultDate={logTarget?.defaultDate ?? today.toISOString().slice(0, 10)}
+      />
+
+      {/* Edit Session Dialog */}
+      <LogSessionDialog
+        open={!!editSessionTarget}
+        onClose={() => setEditSessionTarget(null)}
+        onSave={updateSession}
+        onDelete={deleteEditSession}
+        planTitle={editSessionTarget?.plan.title ?? ""}
+        dayLabel={editSessionTarget?.dayLabel ?? ""}
+        defaultDate={editSessionTarget?.session.date ?? today.toISOString().slice(0, 10)}
+        existingSession={editSessionTarget?.session ?? null}
       />
 
       {/* Edit Plan Dialog (reuse PlanEditDialog for schedule days + title/desc/duration) */}
