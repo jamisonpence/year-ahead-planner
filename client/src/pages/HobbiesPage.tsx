@@ -20,7 +20,7 @@ import {
   Layers, X, ImagePlus, Target, CheckCircle2, Circle, Calendar,
   TrendingUp, Flag, ListChecks, ChevronRight, ChevronLeft,
   Trophy, Flame, BarChart3, RefreshCw, Check, Zap, Power, PowerOff, ClipboardList,
-  Play, ClipboardCheck, Timer,
+  Play, ClipboardCheck, Timer, CalendarDays, CalendarCheck2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -411,6 +411,11 @@ interface HobbyPlan {
   dayLabels?: Record<string, string>; // Maps "Mon" → custom session label for that day
   dayNotes?: Record<string, string>;  // Maps "Mon" → detailed task description for that day
   weeklyPlan?: WeekPlanEntry[];       // Week-by-week schedule (overrides dayLabels/dayNotes per week)
+  activities?: Activity[];
+  estimatedTotalHours?: number;
+  commitmentDaysPerWeek?: number;
+  minutesPerSession?: number;
+  taskCompletions?: TaskCompletion[];
 }
 
 interface WeekPlanEntry {
@@ -420,6 +425,67 @@ interface WeekPlanEntry {
   whiteOpenings: string;
   blackOpenings: string;
   tasks: string;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  weight: number;   // 1–10, higher = more session time allocated
+  description: string;
+}
+
+interface TaskCompletion {
+  taskKey: string;
+  completedAt: number; // ms timestamp
+}
+
+interface DailyActivityBlock {
+  taskKey: string;
+  activityId: string;
+  activityName: string;
+  minutes: number;
+  description: string;
+  originalDate: string;    // ISO date it was originally scheduled
+  scheduledDate: string;   // ISO date it will actually appear (may shift)
+  completed: boolean;
+  carriedForward: boolean;
+}
+
+interface ComputedWeekDay {
+  date: string;
+  dayName: string;
+  isToday: boolean;
+  isTrainingDay: boolean;
+  status: "today" | "upcoming" | "rest" | "complete";
+  originalDate: string | null;
+  blocks: DailyActivityBlock[];
+}
+
+interface ComputedHobbyPlan {
+  assumptions: {
+    totalHours: number;
+    weeklyHours: number;
+    weeklyMinutes: number;
+    sessionsPerWeek: number;
+    minutesPerSession: number;
+    weeksToGoal: number;
+    completionDate: string;
+    progressPct: number;
+    hoursCompleted: number;
+    notes: string[];
+  };
+  weeklyAllocation: Array<{
+    activityId: string;
+    activityName: string;
+    description: string;
+    weight: number;
+    weeklyMinutes: number;
+  }>;
+  todayPlan: DailyActivityBlock[];
+  weeklySchedule: ComputedWeekDay[];
+  weeklyFocus: { title: string; detail: string };
+  monthlyFocus: { title: string; detail: string };
+  isRestDay: boolean;
 }
 
 interface PlanTemplate {
@@ -696,6 +762,380 @@ function getPlanDayInfo(
   return {
     label: plan.dayLabels?.[dayLabel] ?? "",
     notes: plan.dayNotes?.[dayLabel] ?? "",
+  };
+}
+
+// ── Activity libraries (from Cadence reference) ─────────────────────────────
+
+// Chess
+const CHESS_RATING_ACTIVITIES: Activity[] = [
+  { id: "tactics", name: "Tactics & Puzzles", weight: 8, description: "Pattern recognition drills on Lichess/Chess.com puzzle rush. Mix mate-in-2 with calculation sets." },
+  { id: "game-review", name: "Game Review", weight: 6, description: "Analyze your last rated game move-by-move. Note one critical mistake and the principle behind it." },
+  { id: "openings", name: "Openings", weight: 4, description: "Study one repertoire line. Focus on ideas and pawn structures, not memorization past move 10." },
+  { id: "endgames", name: "Endgames", weight: 5, description: "King + pawn, rook endgames, opposition drills. Silman or Lichess endgame trainer." },
+  { id: "rated-play", name: "Rated Games", weight: 7, description: "Play 1–2 rated games at 15+10 or longer. No bullet. Take 30 seconds before each candidate move." },
+  { id: "analysis", name: "Deep Analysis", weight: 3, description: "Pick one master game in your opening. Cover the moves and predict before checking." },
+];
+const CHESS_STUDY_HABIT_ACTIVITIES: Activity[] = [
+  { id: "tactics-routine", name: "Tactics Routine", weight: 8, description: "Complete a short tactics set. Review every missed puzzle until the forcing idea is clear." },
+  { id: "mini-review", name: "Mini Game Review", weight: 5, description: "Review one recent game or one critical position. Write down one repeatable lesson." },
+  { id: "study-streak", name: "Habit Streak", weight: 6, description: "Protect the daily routine. Keep the session small enough to finish even on busy days." },
+];
+const CHESS_OPENINGS_ACTIVITIES: Activity[] = [
+  { id: "white-system-e5", name: "White vs 1...e5", weight: 7, description: "Learn your main line, common traps, and the pawn structure plans against 1...e5." },
+  { id: "white-system-c5", name: "White vs 1...c5", weight: 7, description: "Build a practical response to the Sicilian. Focus on typical middlegame plans, not long memorization." },
+  { id: "model-games", name: "Model Games", weight: 5, description: "Study one model game for each opening branch and summarize the plan in plain English." },
+  { id: "repertoire-review", name: "Repertoire Review", weight: 4, description: "Use spaced repetition to review the first 8–10 moves and the purpose behind each move." },
+];
+const CHESS_ENDGAME_ACTIVITIES: Activity[] = [
+  { id: "king-pawn", name: "King & Pawn Basics", weight: 8, description: "Practice opposition, key squares, outside passers, and basic pawn races until they feel automatic." },
+  { id: "conversion-drills", name: "Conversion Drills", weight: 6, description: "Play winning pawn endings against an engine or trainer and convert without hints." },
+  { id: "defensive-holds", name: "Defensive Holds", weight: 5, description: "Practice drawing techniques: opposition, stalemate tricks, and active king defense." },
+];
+const CHESS_TOURNAMENT_ACTIVITIES: Activity[] = [
+  { id: "classical-games", name: "Serious Practice Games", weight: 8, description: "Play longer time-control games that mimic the event. No blitz-only preparation." },
+  { id: "post-game-analysis", name: "Post-game Analysis", weight: 7, description: "Annotate each practice game before using an engine. Identify opening, calculation, and time-use mistakes." },
+  { id: "opening-refresh", name: "Opening Refresh", weight: 5, description: "Review only the lines you are likely to play. Keep a one-page prep sheet." },
+  { id: "event-readiness", name: "Event Readiness", weight: 4, description: "Prepare time controls, notation habits, warmups, sleep, and a between-round reset routine." },
+];
+const CHESS_CUSTOM_ACTIVITIES: Activity[] = [
+  { id: "core-practice", name: "Core Practice", weight: 7, description: "Spend most sessions on the chess sub-skill that creates the biggest bottleneck." },
+  { id: "tactics-custom", name: "Tactics", weight: 6, description: "Daily tactics puzzles to build pattern recognition and calculation." },
+  { id: "review-loop", name: "Review Loop", weight: 5, description: "Review results weekly and adjust activities, weights, or commitment if progress stalls." },
+];
+
+// Language
+const LANG_COMMUNICATION_ACTIVITIES: Activity[] = [
+  { id: "speaking-reps", name: "Speaking Reps", weight: 8, description: "Practice 5–10 minute conversations around daily life. Stay in the language and use simple sentences when stuck." },
+  { id: "conversation-scripts", name: "Conversation Scripts", weight: 6, description: "Prepare reusable phrases for introductions, work, food, travel, fitness, and small talk." },
+  { id: "listening-response", name: "Listen & Respond", weight: 6, description: "Listen to short learner audio, pause, and answer out loud in your own words." },
+  { id: "pronunciation", name: "Pronunciation", weight: 4, description: "Shadow native audio for rhythm, stress, and confidence. Record yourself once per week." },
+];
+const LANG_EXAM_ACTIVITIES: Activity[] = [
+  { id: "exam-speaking", name: "Speaking Tasks", weight: 7, description: "Practice structured exam prompts and timed oral answers with feedback." },
+  { id: "exam-listening", name: "Listening Practice", weight: 7, description: "Work through level-appropriate listening sections and summarize the main idea plus details." },
+  { id: "exam-reading", name: "Reading Practice", weight: 6, description: "Read B1/B2 passages, answer comprehension questions, and extract reusable expressions." },
+  { id: "exam-writing", name: "Writing Practice", weight: 6, description: "Write short essays, emails, and summaries. Track recurring grammar and vocabulary gaps." },
+  { id: "mock-exams", name: "Mock Exams", weight: 5, description: "Take timed practice sections monthly, then convert mistakes into the next study block." },
+];
+const LANG_ROUTINE_ACTIVITIES: Activity[] = [
+  { id: "daily-study", name: "Daily Study Block", weight: 8, description: "Complete a focused 30-minute study session without overcomplicating it." },
+  { id: "weekly-words", name: "Vocabulary Building", weight: 7, description: "Learn useful words or phrases each week, then use them in original sentences." },
+  { id: "srs-review", name: "Spaced Repetition", weight: 5, description: "Review flashcards and retire words you can already use naturally." },
+  { id: "weekly-checkin", name: "Weekly Check-in", weight: 4, description: "Review minutes studied, words retained, and one practical situation you can now handle." },
+];
+const LANG_TRAVEL_ACTIVITIES: Activity[] = [
+  { id: "survival-scenarios", name: "Survival Scenarios", weight: 8, description: "Practice restaurants, directions, stores, transportation, hotels, and basic problem-solving." },
+  { id: "roleplay", name: "Roleplay Sessions", weight: 7, description: "Simulate real interactions with a tutor, exchange partner, or AI voice partner." },
+  { id: "local-listening", name: "Local Listening", weight: 5, description: "Listen to announcements, menus, short videos, and everyday speech from the target country." },
+  { id: "travel-vocabulary", name: "Travel Vocabulary", weight: 5, description: "Build practical phrase banks for money, time, emergencies, plans, food, and transportation." },
+];
+const LANG_CUSTOM_ACTIVITIES: Activity[] = [
+  { id: "input", name: "Input", weight: 6, description: "Get regular listening and reading exposure slightly above your current level." },
+  { id: "output", name: "Output", weight: 7, description: "Speak or write every week and use corrections to decide the next practice focus." },
+  { id: "vocab-custom", name: "Vocabulary", weight: 5, description: "Build vocabulary systematically through spaced repetition and real-use examples." },
+  { id: "review-lang", name: "Review Loop", weight: 4, description: "Track what you can now understand or say, then adjust the plan every two weeks." },
+];
+
+// Instrument
+const INSTR_CORE_ACTIVITIES: Activity[] = [
+  { id: "rhythm", name: "Steady Rhythm", weight: 8, description: "Practice with a metronome or backing track. Keep the pulse steady before increasing speed." },
+  { id: "tone", name: "Tone & Touch", weight: 6, description: "Focus on clean sound, relaxed posture, and consistent dynamics across the whole piece." },
+  { id: "simple-song", name: "Simple Song", weight: 7, description: "Work section-by-section until you can play one simple song from start to finish." },
+  { id: "slow-reps", name: "Slow Reps", weight: 5, description: "Repeat hard transitions slowly, then chain them into the full song without stopping." },
+];
+const INSTR_REPERTOIRE_ACTIVITIES: Activity[] = [
+  { id: "song-learning", name: "Song Learning", weight: 8, description: "Learn one favorite song at a time. Break it into intro, verse, chorus, bridge, and ending." },
+  { id: "memory", name: "Memory Work", weight: 6, description: "Play without looking at notes or tabs. Use small chunks and recall before repeating." },
+  { id: "transitions", name: "Transitions", weight: 6, description: "Practice the parts where songs fall apart: chord changes, fingering shifts, and entrances." },
+  { id: "setlist-run", name: "Setlist Run", weight: 5, description: "Run through all learned songs weekly and mark which ones are performance-ready." },
+];
+const INSTR_TECHNIQUE_ACTIVITIES: Activity[] = [
+  { id: "scales", name: "Scales", weight: 8, description: "Practice major/minor scales slowly with accuracy first, then gradually build speed." },
+  { id: "chords", name: "Chords", weight: 7, description: "Drill common chord shapes, voicings, inversions, or hand positions for your instrument." },
+  { id: "speed-accuracy", name: "Speed & Accuracy", weight: 6, description: "Use a metronome ladder. Only increase tempo when the passage is clean three times in a row." },
+  { id: "basic-theory", name: "Basic Theory", weight: 4, description: "Connect scales, chords, and songs so the instrument starts making musical sense." },
+];
+const INSTR_PERFORMANCE_ACTIVITIES: Activity[] = [
+  { id: "fun-play", name: "Play for Fun", weight: 7, description: "Play at least twice a week purely for enjoyment, without stopping to over-correct." },
+  { id: "performance-run", name: "Performance Run", weight: 7, description: "Play a full song as if someone is listening. Recover from mistakes instead of restarting." },
+  { id: "recording", name: "Record Yourself", weight: 5, description: "Record one take weekly, listen back, and pick one improvement for the next session." },
+  { id: "mini-audience", name: "Mini Audience", weight: 4, description: "Perform for a friend, family member, or camera to build comfort under light pressure." },
+];
+const INSTR_CUSTOM_ACTIVITIES: Activity[] = [
+  { id: "fundamentals-instr", name: "Fundamentals", weight: 6, description: "Practice the core mechanics that make everything else easier: posture, timing, tone, and control." },
+  { id: "repertoire-instr", name: "Repertoire", weight: 6, description: "Apply fundamentals to songs or pieces you actually want to play." },
+  { id: "feedback-instr", name: "Feedback Loop", weight: 4, description: "Record, review, or get feedback weekly so practice stays deliberate." },
+];
+
+// Gardening
+const GARDEN_FOOD_ACTIVITIES: Activity[] = [
+  { id: "crop-plan", name: "Crop Plan", weight: 6, description: "Choose varieties, planting dates, containers or beds, and expected harvest windows." },
+  { id: "soil-feeding", name: "Soil & Feeding", weight: 7, description: "Prepare soil, compost, mulch, and a simple feeding routine so plants have steady nutrition." },
+  { id: "watering", name: "Watering Rhythm", weight: 7, description: "Check moisture, water deeply, and adjust frequency as heat and plant size increase." },
+  { id: "harvest-care", name: "Harvest Care", weight: 5, description: "Prune, support, inspect for pests, and harvest regularly so plants keep producing." },
+];
+const GARDEN_AESTHETICS_ACTIVITIES: Activity[] = [
+  { id: "bed-design", name: "Bed Design", weight: 7, description: "Map the flower bed by height, color, bloom season, sun exposure, and viewing angles." },
+  { id: "succession-blooms", name: "Succession Blooms", weight: 8, description: "Choose plants so something is blooming from early spring through fall." },
+  { id: "planting-maintenance", name: "Planting & Maintenance", weight: 6, description: "Plant, deadhead, mulch, divide, and tidy beds on a recurring schedule." },
+  { id: "seasonal-refresh", name: "Seasonal Refresh", weight: 5, description: "Add seasonal color, replace underperformers, and update the bed as conditions change." },
+];
+const GARDEN_LEARNING_ACTIVITIES: Activity[] = [
+  { id: "seed-starting", name: "Seed Starting", weight: 8, description: "Start varieties indoors with correct depth, moisture, light, labeling, and temperature." },
+  { id: "hardening-off", name: "Hardening Off", weight: 6, description: "Gradually acclimate seedlings outdoors so they survive sun, wind, and temperature swings." },
+  { id: "transplanting", name: "Transplanting", weight: 7, description: "Transplant at the right spacing and depth, then water in and protect young plants." },
+  { id: "garden-journal", name: "Garden Journal", weight: 4, description: "Track germination, failures, transplant dates, weather, pests, and what you would change next season." },
+];
+const GARDEN_RELAXATION_ACTIVITIES: Activity[] = [
+  { id: "tending", name: "Tending", weight: 7, description: "Spend 15–20 minutes watering, pruning, weeding, or checking plants without turning it into a chore." },
+  { id: "relaxation", name: "Relaxation", weight: 7, description: "Use part of each garden session to slow down, observe growth, and enjoy being outside." },
+  { id: "light-maintenance", name: "Light Maintenance", weight: 5, description: "Keep the space peaceful with small cleanup tasks: deadheading, sweeping, and tidying." },
+  { id: "seasonal-notes", name: "Seasonal Notes", weight: 3, description: "Capture what feels good in the garden and what would make it more enjoyable next week." },
+];
+const GARDEN_CUSTOM_ACTIVITIES: Activity[] = [
+  { id: "setup-garden", name: "Setup", weight: 6, description: "Prepare beds, containers, soil, tools, water access, seeds, or starter plants." },
+  { id: "care-routine", name: "Care Routine", weight: 7, description: "Build a recurring care rhythm for watering, feeding, pruning, weeding, and observation." },
+  { id: "review-garden", name: "Review & Adjust", weight: 4, description: "Review progress monthly and adapt plant choices, care routines, or layout." },
+];
+
+// Poker
+const POKER_VOLUME_ACTIVITIES: Activity[] = [
+  { id: "hand-volume", name: "Hand Volume", weight: 8, description: "Play focused online sessions toward the monthly hand target. Stop when quality drops." },
+  { id: "session-planning", name: "Session Planning", weight: 5, description: "Plan table count, session length, breaks, and daily hand targets before playing." },
+  { id: "marked-hands", name: "Marked Hands", weight: 6, description: "Mark uncertain hands in-game for later review instead of trying to solve every spot live." },
+  { id: "tilt-control", name: "Tilt Control", weight: 5, description: "Use stop-loss, cooldown, and focus checks so volume does not turn into autopilot." },
+];
+const POKER_STUDY_ACTIVITIES: Activity[] = [
+  { id: "marked-hand-review", name: "Marked Hand Review", weight: 8, description: "Review marked hands and tag the leak: preflop, c-bet, turn probe, river value, bluff, or call-down." },
+  { id: "solver-review", name: "Solver / Range Review", weight: 6, description: "Study one recurring spot with ranges or a solver, then write the practical takeaway." },
+  { id: "database-review", name: "Database Review", weight: 6, description: "Check stats and filters weekly to find the biggest leak or population exploit." },
+  { id: "concept-notes", name: "Concept Notes", weight: 4, description: "Turn study into short rules, heuristics, and examples you can recall while playing." },
+];
+const POKER_WIN_RATE_ACTIVITIES: Activity[] = [
+  { id: "quality-volume", name: "Quality Volume", weight: 7, description: "Play tracked hands with fewer tables and higher decision quality." },
+  { id: "leak-fixing", name: "Leak Fixing", weight: 8, description: "Pick one major leak each week and measure whether the stat or spot improves." },
+  { id: "line-review", name: "Line Review", weight: 6, description: "Review redline/showdown patterns and identify where value, bluffs, or calls are leaking." },
+  { id: "weekly-scorecard", name: "Weekly Scorecard", weight: 5, description: "Track bb/100, EV bb/100, volume, tilt incidents, and the top lesson from the week." },
+];
+const POKER_BANKROLL_ACTIVITIES: Activity[] = [
+  { id: "bankroll-tracking", name: "Bankroll Tracking", weight: 8, description: "Update bankroll, buy-ins, rakeback, withdrawals, and shot-taking readiness each week." },
+  { id: "game-selection", name: "Game Selection", weight: 7, description: "Prioritize soft tables and formats where your edge is clearest before increasing stakes." },
+  { id: "shot-rules", name: "Shot Rules", weight: 6, description: "Define move-up, move-down, stop-loss, and table-count rules before taking a shot." },
+  { id: "mental-game", name: "Mental Game", weight: 5, description: "Practice discipline around variance so bankroll decisions stay rule-based, not emotional." },
+];
+const POKER_TOURNAMENT_ACTIVITIES: Activity[] = [
+  { id: "tournament-schedule", name: "Tournament Schedule", weight: 6, description: "Choose target events, satellites, bankroll rules, and study blocks leading into the event." },
+  { id: "icm-final-table", name: "ICM & Final Table", weight: 8, description: "Study bubble, pay-jump, and final-table spots with ICM pressure and stack-depth awareness." },
+  { id: "mtt-spots", name: "MTT Spots", weight: 7, description: "Review push/fold, 3-bet jam, blind-vs-blind, and short-stack decisions." },
+  { id: "event-review", name: "Event Review", weight: 5, description: "After each tournament, review bustout hands, key decisions, and preparation gaps." },
+];
+const POKER_CUSTOM_ACTIVITIES: Activity[] = [
+  { id: "play-poker", name: "Play", weight: 7, description: "Schedule focused volume that matches the goal without sacrificing decision quality." },
+  { id: "study-poker", name: "Study", weight: 6, description: "Review hands, ranges, spots, or database leaks that directly affect the target metric." },
+  { id: "track-poker", name: "Track & Adjust", weight: 5, description: "Review results weekly and adjust volume, study focus, bankroll rules, or mental game habits." },
+];
+
+// Hobby groups — generic activity sets
+function makeHobbyActivities(hobby: string, group: string): Activity[] {
+  if (group === "Collecting" || group === "collection") return [
+    { id: "research", name: "Market & Item Research", weight: 7, description: `Study eras, makers, editions, condition signals, pricing, and authenticity markers for ${hobby}.` },
+    { id: "catalog", name: "Catalog & Grading", weight: 7, description: `Document each item with photos, notes, condition, acquisition cost, current value, and source.` },
+    { id: "sourcing", name: "Sourcing", weight: 6, description: `Use a clear wish list and budget before buying, trading, or bidding on ${hobby}.` },
+    { id: "care-display", name: "Care & Display", weight: 5, description: `Protect, store, clean, insure, or display the collection so condition and enjoyment improve over time.` },
+  ];
+  if (group === "Outdoor" || group === "outdoor") return [
+    { id: "sessions", name: "Practice Sessions", weight: 8, description: `Schedule consistent ${hobby} sessions with the right intensity, route, location, or conditions.` },
+    { id: "technique-outdoor", name: "Technique & Safety", weight: 6, description: `Improve form, gear choices, safety checks, and decision-making before pushing harder.` },
+    { id: "planning-outdoor", name: "Planning", weight: 5, description: `Plan routes, weather, logistics, equipment, and recovery so each outing is repeatable.` },
+    { id: "logbook", name: "Logbook", weight: 4, description: `Track distance, time, conditions, sightings, catches, routes, or notes that show progress.` },
+  ];
+  if (group === "Games" || group === "games") return [
+    { id: "focused-play", name: "Focused Play", weight: 8, description: `Play intentional ${hobby} sessions with one skill, strategy, or objective in mind.` },
+    { id: "strategy-games", name: "Strategy Study", weight: 6, description: `Study rules, strategy guides, decision patterns, builds, or scenarios that improve play quality.` },
+    { id: "review-games", name: "Review Loop", weight: 6, description: `Review sessions, wins, losses, or campaign notes and identify one lesson to apply next time.` },
+    { id: "event-prep", name: "Event Prep", weight: 4, description: `Prepare for a tournament, game night, campaign session, or completion milestone.` },
+  ];
+  if (group === "Maker" || group === "learning") return [
+    { id: "fundamentals-maker", name: "Fundamentals", weight: 7, description: `Practice the core concepts, tools, materials, safety, or recipes behind ${hobby}.` },
+    { id: "build-sessions", name: "Build Sessions", weight: 7, description: `Make progress on a concrete ${hobby} project, recipe, batch, prototype, or working build.` },
+    { id: "troubleshoot", name: "Troubleshooting", weight: 6, description: `Debug mistakes, tune settings, adjust ingredients, and document what changed.` },
+    { id: "workflow", name: "Workflow & Notes", weight: 4, description: `Create repeatable checklists, setup notes, or cleanup routines.` },
+  ];
+  if (group === "Performance" || group === "performance") return [
+    { id: "fundamentals-perf", name: "Fundamentals", weight: 7, description: `Practice the core technique, warmups, timing, and body awareness behind ${hobby}.` },
+    { id: "rehearsal", name: "Rehearsal", weight: 8, description: `Run focused ${hobby} reps, scenes, sets, or exercises with a clear standard for improvement.` },
+    { id: "feedback-perf", name: "Feedback", weight: 6, description: `Record, review, coach, or rehearse with others so the next session has one specific correction.` },
+    { id: "showcase-prep", name: "Showcase Prep", weight: 4, description: `Prepare a performance, audition, open mic, recital, or filmed take.` },
+  ];
+  // Creative Arts (default)
+  return [
+    { id: "technique-creative", name: "Technique Practice", weight: 7, description: `Practice the core techniques, tools, references, and creative constraints behind ${hobby}.` },
+    { id: "project-work", name: "Project Work", weight: 7, description: `Advance one concrete ${hobby} piece from idea to finished work.` },
+    { id: "reference", name: "Reference & Inspiration", weight: 5, description: `Collect references, study examples, sketch ideas, or identify design choices worth borrowing.` },
+    { id: "finish-feedback", name: "Finish & Feedback", weight: 5, description: `Finish, photograph, share, critique, or revise the work so progress is visible.` },
+  ];
+}
+
+// ── Computed plan engine (ported from Cadence planner.ts) ─────────────────────
+
+function clampNum(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
+
+function hpStartOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+function hpToIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+function hpParseDate(s: string, fallback: Date): Date {
+  const parts = s.split("-").map(Number);
+  const d = parts.length === 3 ? new Date(parts[0], parts[1]-1, parts[2]) : new Date(s);
+  return isNaN(d.getTime()) ? fallback : d;
+}
+function hpIsoWeek(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+function hpPickTrainingDays(days: number): number[] {
+  const out: number[] = [];
+  const step = 7 / days;
+  for (let i = 0; i < days; i++) out.push(Math.round(i * step) % 7);
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+
+function computeHobbyPlan(plan: HobbyPlan, now: Date = new Date()): ComputedHobbyPlan | null {
+  const activities = plan.activities;
+  if (!activities || activities.length === 0) return null;
+  const estimatedTotalHours = plan.estimatedTotalHours ?? 20;
+  const sessionsPerWeek = clampNum(plan.commitmentDaysPerWeek ?? 3, 1, 7);
+  const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
+  const weeklyMinutes = sessionsPerWeek * minutesPerSession;
+  const weeklyHours = weeklyMinutes / 60;
+  const totalHours = Math.max(estimatedTotalHours, 0.1);
+  const weeksToGoal = Math.max(1, Math.ceil(totalHours / Math.max(weeklyHours, 0.1)));
+  const start = plan.startDate ? hpParseDate(plan.startDate, now) : now;
+  const completionDate = new Date(start.getTime() + weeksToGoal * 7 * 24 * 60 * 60 * 1000);
+
+  const notes: string[] = [
+    `${sessionsPerWeek} day${sessionsPerWeek===1?"":"s"} × ${minutesPerSession} min = ${weeklyMinutes} min/week (${weeklyHours.toFixed(1)} h).`,
+    `Goal needs ~${Math.round(totalHours)} focused training hours.`,
+    `${Math.round(totalHours)} h ÷ ${weeklyHours.toFixed(1)} h/week ≈ ${weeksToGoal} week${weeksToGoal===1?"":"s"}.`,
+  ];
+
+  // Weekly allocation by weight
+  const totalWeight = activities.reduce((acc, a) => acc + a.weight, 0) || 1;
+  const weeklyAllocation = activities.map(a => ({
+    activityId: a.id,
+    activityName: a.name,
+    description: a.description,
+    weight: a.weight,
+    weeklyMinutes: Math.round(weeklyMinutes * (a.weight / totalWeight)),
+  }));
+
+  // Build scheduled sessions
+  const completedTaskKeys = new Set((plan.taskCompletions ?? []).map(c => c.taskKey));
+  const totalMinutes = Math.ceil(totalHours * 60);
+  const totalSessions = Math.max(1, Math.ceil(totalMinutes / minutesPerSession));
+  const horizonSessions = totalSessions + sessionsPerWeek * 3;
+  const trainingDays = hpPickTrainingDays(sessionsPerWeek);
+  const sortedActs = [...activities].sort((a, b) => b.weight - a.weight);
+
+  type ScheduledSession = { sessionIndex: number; originalDate: string; blocks: DailyActivityBlock[] };
+  const sessions: ScheduledSession[] = [];
+  const cursor = hpStartOfDay(start);
+  const today = hpStartOfDay(now);
+  let guardDays = 0;
+  while (sessions.length < horizonSessions && guardDays < horizonSessions * 14 + 30) {
+    const dayIdx = (cursor.getDay() + 6) % 7;
+    if (trainingDays.includes(dayIdx)) {
+      const sessionIndex = sessions.length;
+      const originalDate = hpToIsoDate(cursor);
+      const blockCount = minutesPerSession >= 40 ? 2 : 1;
+      const blocks: DailyActivityBlock[] = [];
+      for (let b = 0; b < blockCount; b++) {
+        const act = sortedActs[(sessionIndex + b) % sortedActs.length];
+        const baseMinutes = Math.floor(minutesPerSession / blockCount);
+        const mins = Math.max(10, baseMinutes + (b < (minutesPerSession % blockCount) ? 1 : 0));
+        const taskKey = `session-${sessionIndex}-block-${b}`;
+        blocks.push({
+          taskKey, activityId: act.id, activityName: act.name, minutes: mins,
+          description: act.description, originalDate, scheduledDate: originalDate,
+          completed: completedTaskKeys.has(taskKey), carriedForward: false,
+        });
+      }
+      sessions.push({ sessionIndex, originalDate, blocks });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    guardDays++;
+    if (cursor.getTime() > today.getTime() + 370 * 24 * 60 * 60 * 1000 && sessions.length >= totalSessions) break;
+  }
+
+  // Compute progress
+  const completedMinutes = sessions.flatMap(s => s.blocks).filter(b => b.completed).reduce((a, b) => a + b.minutes, 0);
+  const hoursCompleted = Math.min(totalHours, completedMinutes / 60);
+  const progressPct = clampNum((hoursCompleted / totalHours) * 100, 0, 100);
+
+  // Build shifted schedule (today's plan + 7-day view)
+  const todayIso = hpToIsoDate(today);
+  const pendingSessions = sessions
+    .map(s => ({ ...s, blocks: s.blocks.filter(b => !b.completed) }))
+    .filter(s => s.blocks.length > 0);
+  const eligiblePending = pendingSessions.filter(s => s.originalDate <= todayIso);
+  const queueCopy = [...pendingSessions];
+  const weeklySchedule: ComputedWeekDay[] = [];
+  let todayPlan: DailyActivityBlock[] = [];
+
+  for (let offset = 0; offset < 7; offset++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + offset);
+    const dateIso = hpToIsoDate(date);
+    const dayIdx = (date.getDay() + 6) % 7;
+    const isToday = offset === 0;
+    const isTrainingDay = trainingDays.includes(dayIdx);
+    let session: ScheduledSession | undefined;
+    if (isToday) {
+      session = eligiblePending.length > 0 ? queueCopy.shift() : undefined;
+    } else if (isTrainingDay && queueCopy.length > 0 && queueCopy[0].originalDate <= dateIso) {
+      session = queueCopy.shift();
+    }
+    const blocks = session ? session.blocks.map(block => ({
+      ...block, scheduledDate: dateIso, carriedForward: block.originalDate < dateIso,
+    })) : [];
+    if (isToday) todayPlan = blocks;
+    const daySession = sessions.find(s => s.originalDate === dateIso);
+    const allBlocksDone = daySession ? daySession.blocks.every(b => b.completed) : false;
+    weeklySchedule.push({
+      date: dateIso,
+      dayName: date.toLocaleDateString(undefined, { weekday: "short" }),
+      isToday, isTrainingDay,
+      status: isToday && blocks.length > 0 ? "today"
+        : blocks.length > 0 ? "upcoming"
+        : isTrainingDay && allBlocksDone ? "complete"
+        : isTrainingDay ? "complete"
+        : "rest",
+      originalDate: session?.originalDate ?? null,
+      blocks,
+    });
+  }
+
+  // Weekly / monthly focus
+  const week = hpIsoWeek(now);
+  const top = sortedActs[0];
+  const weeklyFocus = top
+    ? { title: `${top.name} this week`, detail: `${top.name} carries the highest leverage right now. Dedicate ~${Math.round((top.weight/totalWeight)*weeklyMinutes)} min across your ${sessionsPerWeek} session${sessionsPerWeek===1?"":"s"}.` }
+    : { title: "Plan your week", detail: "Add activities to your plan to see focus." };
+  const monthCycle = sortedActs.slice(0, Math.min(3, sortedActs.length));
+  const monthFocus = monthCycle[(now.getMonth() + week) % Math.max(monthCycle.length, 1)] ?? top;
+  const monthlyFocus = monthFocus
+    ? { title: `Month theme — Master ${monthFocus.name}`, detail: `Spend this month building durability in ${monthFocus.name.toLowerCase()}. Track one measurable signal so progress is visible.` }
+    : { title: "Set a monthly theme", detail: "Pick a focus area for the month." };
+
+  return {
+    assumptions: { totalHours, weeklyHours, weeklyMinutes, sessionsPerWeek, minutesPerSession, weeksToGoal, completionDate: completionDate.toISOString().slice(0,10), progressPct, hoursCompleted, notes },
+    weeklyAllocation, todayPlan, weeklySchedule, weeklyFocus, monthlyFocus, isRestDay: !trainingDays.includes((now.getDay()+6)%7),
   };
 }
 
@@ -2854,6 +3294,11 @@ function PlanWizard({
   const [planDayNotes, setPlanDayNotes] = useState<Record<string, string>>({});
   const [planMilestones, setPlanMilestones] = useState<PlanMilestone[]>([]);
   const [planWeeklyPlan, setPlanWeeklyPlan] = useState<WeekPlanEntry[]>([]);
+  // Activity-based plan metadata (for computeHobbyPlan scheduling)
+  const [planActivities, setPlanActivities] = useState<Activity[]>([]);
+  const [planEstimatedHours, setPlanEstimatedHours] = useState<number | undefined>(undefined);
+  const [planCommitmentDays, setPlanCommitmentDays] = useState<number | undefined>(undefined);
+  const [planMinutesPerSession, setPlanMinutesPerSession] = useState<number | undefined>(undefined);
 
   // Chess wizard state
   const [chessMode, setChessMode] = useState(false);
@@ -3058,6 +3503,7 @@ function PlanWizard({
     setTitle(""); setDescription(""); setDurationWeeks(""); setStartDate("");
     setActivateNow(true); setScheduleDays([]); setSteps([]); setStepInput(""); setStepDate("");
     setPlanDayLabels({}); setPlanDayNotes({}); setPlanMilestones([]); setPlanWeeklyPlan([]);
+    setPlanActivities([]); setPlanEstimatedHours(undefined); setPlanCommitmentDays(undefined); setPlanMinutesPerSession(undefined);
     setChessMode(false); setChessGoalType(""); setChessEloMode(false); setCurrentElo(""); setTargetElo("");
     setStudyMins("30"); setStudyDays("5"); setStudyFocus("Tactics");
     setOpeningColor("White"); setOpeningVsResponse("1...e5"); setOpeningSystem("");
@@ -3166,7 +3612,88 @@ function PlanWizard({
         { id: genId(), title: "Week 4 — Full repertoire ready to play", order: 4 },
       ]);
     }
+    applyHobbyActivities("chess", 8, 5, 45);
     setChessMode(false); setChessGoalType(""); setStep(2);
+  }
+
+  // ── Per-category default activities for activity-based scheduling ─────────────
+  const HOBBY_ACTIVITIES_MAP: Record<string, Activity[]> = {
+    hiking: [
+      { id: "trail-day", name: "Trail Day", weight: 8, description: "Hit the trail! Focus on pacing, foot placement, and enjoying the scenery." },
+      { id: "fitness", name: "Fitness Training", weight: 6, description: "Running, stair climbing, or strength work to build hiking fitness." },
+      { id: "gear-nav", name: "Gear & Navigation", weight: 4, description: "Review gear, study maps, plan upcoming routes." },
+    ],
+    cycling: [
+      { id: "base-ride", name: "Base Ride", weight: 7, description: "Aerobic zone-2 ride to build endurance. Comfortable pace, hold form." },
+      { id: "interval", name: "Interval / Tempo", weight: 6, description: "Threshold or VO2 intervals to build power and speed." },
+      { id: "strength", name: "Strength & Recovery", weight: 4, description: "Core and leg strength work, followed by gentle recovery stretching." },
+      { id: "route-plan", name: "Route Planning", weight: 3, description: "Plan new routes, track milage, review performance data." },
+    ],
+    running: [
+      { id: "easy-run", name: "Easy Run", weight: 7, description: "Conversational-pace run. Build aerobic base and enjoy the run." },
+      { id: "workout", name: "Speed / Tempo Workout", weight: 6, description: "Intervals, tempo run, or fartlek to build speed and lactate threshold." },
+      { id: "long-run", name: "Long Run", weight: 5, description: "Weekly long run — time on feet, building endurance gradually." },
+    ],
+    fishing: [
+      { id: "fishing-trip", name: "Fishing Session", weight: 8, description: "Hit the water. Focus on technique, reading conditions, and patience." },
+      { id: "skills", name: "Skills Practice", weight: 5, description: "Practice casting, knot tying, or lure rigging at home or on the water." },
+      { id: "research", name: "Research & Scouting", weight: 4, description: "Study maps, conditions, species behavior, and new spots to fish." },
+    ],
+    gardening: [
+      { id: "tending", name: "Garden Tending", weight: 8, description: "Water, weed, deadhead, and observe what's growing. Daily mindful care." },
+      { id: "planting", name: "Planting & Propagation", weight: 6, description: "Seed starting, transplanting, or cuttings — growing new plants." },
+      { id: "design", name: "Design & Research", weight: 4, description: "Plan new beds, research plants, review what's working and what isn't." },
+    ],
+    climbing: [
+      { id: "climbing-session", name: "Climbing Session", weight: 8, description: "Climb! Focus on technique, footwork, and reading the route." },
+      { id: "strength-training", name: "Strength Training", weight: 6, description: "Pull-ups, hangboard, core work to build climbing-specific strength." },
+      { id: "technique-study", name: "Technique Study", weight: 4, description: "Watch climbing videos, practice movement drills, work beta on problem areas." },
+    ],
+    surfing: [
+      { id: "surf-session", name: "Surf Session", weight: 9, description: "Get in the water. Focus on wave selection, pop-up timing, and flow." },
+      { id: "fitness-cross", name: "Cross-Training", weight: 5, description: "Swimming, yoga, or core work to build surf fitness and balance." },
+      { id: "ocean-study", name: "Ocean Study", weight: 3, description: "Study wave patterns, tides, and forecasts to surf smarter." },
+    ],
+    birding: [
+      { id: "field-trip", name: "Birding Field Trip", weight: 8, description: "Get outside! Focus on habitat, behavior, and careful observation." },
+      { id: "id-study", name: "ID Study", weight: 6, description: "Review field guides, eBird, or Merlin to sharpen identification skills." },
+      { id: "list-mgmt", name: "List & Log", weight: 3, description: "Update life list, eBird checklists, and note rare or interesting sightings." },
+    ],
+    language: [
+      { id: "speaking", name: "Speaking Practice", weight: 8, description: "Conversation practice — italki session, language exchange, or shadowing." },
+      { id: "vocabulary", name: "Vocabulary", weight: 7, description: "Anki flashcards or Duolingo. Target 20–50 new words per session." },
+      { id: "listening", name: "Listening / Input", weight: 6, description: "Podcast, Netflix, or YouTube in target language. Aim for comprehensible input." },
+      { id: "grammar", name: "Grammar Study", weight: 4, description: "Work through grammar rules with exercises to solidify structure." },
+    ],
+    instrument: [
+      { id: "technique", name: "Technique & Scales", weight: 7, description: "Warm-up with scales, arpeggios, or technical exercises. Build muscle memory." },
+      { id: "repertoire", name: "Repertoire Practice", weight: 8, description: "Work through your current piece or song — section by section." },
+      { id: "ear-training", name: "Ear Training", weight: 4, description: "Interval recognition, chord ID, or sight-reading practice." },
+      { id: "performance", name: "Performance / Play-through", weight: 4, description: "Play the full piece from memory. Record yourself occasionally to hear progress." },
+    ],
+    poker: [
+      { id: "play-sessions", name: "Play Sessions", weight: 7, description: "Focused play with deliberate decision-making. Avoid autopilot — mark hands for review." },
+      { id: "hand-review", name: "Hand Review", weight: 8, description: "Review marked hands with a solver or study group. Extract one principle per session." },
+      { id: "theory", name: "Theory Study", weight: 5, description: "GTO concepts, ranges, bet sizing — one topic per session to go deep." },
+    ],
+    chess: [
+      { id: "tactics", name: "Tactics & Puzzles", weight: 8, description: "Pattern recognition drills — puzzle rush, mate-in-2 combos, and calculation sets." },
+      { id: "rated-play", name: "Rated Games", weight: 7, description: "Play 1–2 rated games at 15+10 or longer. Take 30 seconds before each candidate move." },
+      { id: "game-review", name: "Game Review", weight: 6, description: "Analyze your last rated game. Note one critical mistake and the principle behind it." },
+      { id: "endgames", name: "Endgames", weight: 5, description: "King+pawn, rook endgames, opposition drills. Lichess endgame trainer or Silman." },
+      { id: "openings", name: "Openings", weight: 4, description: "Study one repertoire line. Focus on ideas and pawn structures, not memorization." },
+    ],
+  };
+
+  function applyHobbyActivities(category: string, durationWeeks: number, daysPerWeek = 3, minsPerSession = 45) {
+    const acts = HOBBY_ACTIVITIES_MAP[category] ?? [];
+    if (acts.length === 0) return;
+    // rough estimate: daysPerWeek × minsPerSession × weeks / 60
+    const estimatedHours = Math.round(daysPerWeek * minsPerSession * durationWeeks / 60);
+    setPlanActivities(acts);
+    setPlanEstimatedHours(estimatedHours);
+    setPlanCommitmentDays(daysPerWeek);
+    setPlanMinutesPerSession(minsPerSession);
   }
 
   function applyHikingSettings() {
@@ -3187,7 +3714,7 @@ function PlanWizard({
       case "trails":    title = trailListName ? `Complete: ${trailListName}` : `Trail List (${trailListCount} trails)`; desc = `Work through the "${trailListName || "trail list"}" — ${planTrails.length > 0 ? planTrails.length : trailListCount} trails to complete.`; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setHikingMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("hiking", weeks, 2, 120); setHikingMode(false); setStep(2);
   }
 
   function applyCyclingSettings() {
@@ -3206,7 +3733,7 @@ function PlanWizard({
       case "routes":    title = cyListName ? `Complete: ${cyListName}` : `Route List (${cyListCount} routes)`; desc = `Work through the "${cyListName || "route list"}" — ${planRoutes.length > 0 ? planRoutes.length : cyListCount} routes to complete.`; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setCyclingMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("cycling", weeks, 3, 60); setCyclingMode(false); setStep(2);
   }
 
   function applyFishingSettings() {
@@ -3240,7 +3767,7 @@ function PlanWizard({
         break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setFishingMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("fishing", weeks, 2, 120); setFishingMode(false); setStep(2);
   }
 
   function applyGardeningSettings() {
@@ -3269,7 +3796,7 @@ function PlanWizard({
         weeks = 52; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setGardeningMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("gardening", weeks, 3, 20); setGardeningMode(false); setStep(2);
   }
 
   function applyClimbingSettings() {
@@ -3300,7 +3827,7 @@ function PlanWizard({
         weeks = 26; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setClimbingMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("climbing", weeks, 3, 90); setClimbingMode(false); setStep(2);
   }
 
   function applyRunningSettings() {
@@ -3331,7 +3858,7 @@ function PlanWizard({
         weeks = 52; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setRunningMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("running", weeks, 3, 40); setRunningMode(false); setStep(2);
   }
 
   function applySurfingSettings() {
@@ -3360,7 +3887,7 @@ function PlanWizard({
         weeks = 26; break;
     }
     setTitle(title); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setSurfingMode(false); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("surfing", weeks, 3, 90); setSurfingMode(false); setStep(2);
   }
 
   function applyEloSettings() {
@@ -3398,6 +3925,20 @@ function PlanWizard({
     }
     setPlanMilestones(autoMilestones);
 
+    // ── Activity-based scheduling (computeHobbyPlan) ──
+    setPlanActivities([
+      { id: "tactics", name: "Tactics & Puzzles", weight: 8, description: "Pattern recognition drills — puzzle rush, mate-in-2 combos, and calculation sets." },
+      { id: "rated-play", name: "Rated Games", weight: 7, description: "Play 1–2 rated games at 15+10 or longer. Take 30 seconds before each candidate move." },
+      { id: "game-review", name: "Game Review", weight: 6, description: "Analyze your last rated game. Note one critical mistake and the principle behind it." },
+      { id: "endgames", name: "Endgames", weight: 5, description: "King+pawn, rook endgames, opposition drills. Lichess endgame trainer or Silman." },
+      { id: "openings", name: "Openings", weight: 4, description: "Study one repertoire line. Focus on ideas and pawn structures, not memorization past move 10." },
+    ]);
+    // Estimate total hours from ELO gap (approx 1 hr/point above 1000, 0.5 hr/point below)
+    const hoursEst = Math.round(Math.max(20, gap * (cur >= 1000 ? 1 : 0.5)));
+    setPlanEstimatedHours(hoursEst);
+    setPlanCommitmentDays(5);
+    setPlanMinutesPerSession(45);
+
     setChessEloMode(false); setChessMode(false); setChessGoalType("");
     setStep(2);
   }
@@ -3409,6 +3950,7 @@ function PlanWizard({
     setDescription(`Structured improvement plan to move from ${currentStake} to ${targetStake} over ${pokerDuration.months} months (${pokerJumps} stake level${pokerJumps !== 1 ? "s" : ""}).`);
     setDurationWeeks(String(pokerDuration.weeks));
     setSteps(generatedSteps);
+    applyHobbyActivities("poker", pokerDuration.weeks, 4, 60);
     setPokerMode(false);
     setStep(2);
   }
@@ -3430,7 +3972,7 @@ function PlanWizard({
       case "tournament": planTitle = pkTourneyTarget || `${pkTourneyType} result goal`; desc = `Prepare for and achieve: ${pkTourneyTarget || "major tournament result"}.`; weeks = 16; break;
     }
     setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setPokerGoalMode(false); setPokerGoalType(""); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("poker", weeks, 4, 60); setPokerGoalMode(false); setPokerGoalType(""); setStep(2);
   }
 
   function applyBirdSettings() {
@@ -3450,7 +3992,7 @@ function PlanWizard({
       case "lifestyle": planTitle = `Weekly birding habit — ${bwFreqHours}h/week`; desc = `Go birding ${bwFreqHours}h per week for ${bwLifestyleReason}.`; break;
     }
     setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setBirdMode(false); setBirdGoalType(""); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("birding", weeks, 3, 60); setBirdMode(false); setBirdGoalType(""); setStep(2);
   }
 
   function applyLanguageSettings() {
@@ -3471,7 +4013,7 @@ function PlanWizard({
       case "reallife":      planTitle = `${llLanguage} in real life${llTravelCountry ? ` — ${llTravelCountry}` : ""}`; desc = `Handle real-life interactions in ${llLanguage}.`; weeks = 26; break;
     }
     setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setLangMode(false); setLangGoalType(""); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("language", weeks, 5, 30); setLangMode(false); setLangGoalType(""); setStep(2);
   }
 
   function applyInstrumentSettings() {
@@ -3490,7 +4032,7 @@ function PlanWizard({
       case "performance": planTitle = instrPerfSong ? `Perform "${instrPerfSong}" on ${inst}` : `First performance on ${inst}`; desc = `Perform for friends or family and play ${instrSessions}×/week for fun.`; weeks = 12; break;
     }
     setTitle(planTitle); setDescription(desc); setDurationWeeks(String(weeks));
-    setSteps(generatedSteps); setInstrMode(false); setInstrGoalType(""); setStep(2);
+    setSteps(generatedSteps); applyHobbyActivities("instrument", weeks, 5, 30); setInstrMode(false); setInstrGoalType(""); setStep(2);
   }
 
   function addStep() {
@@ -3511,6 +4053,10 @@ function PlanWizard({
       ...(Object.keys(planDayNotes).length > 0 ? { dayNotes: planDayNotes } : {}),
       ...(planMilestones.length > 0 ? { milestones: planMilestones } : {}),
       ...(planWeeklyPlan.length > 0 ? { weeklyPlan: planWeeklyPlan } : {}),
+      ...(planActivities.length > 0 ? { activities: planActivities } : {}),
+      ...(planEstimatedHours !== undefined ? { estimatedTotalHours: planEstimatedHours } : {}),
+      ...(planCommitmentDays !== undefined ? { commitmentDaysPerWeek: planCommitmentDays } : {}),
+      ...(planMinutesPerSession !== undefined ? { minutesPerSession: planMinutesPerSession } : {}),
     };
     onSave(selectedHobbyId, plan);
     handleClose();
@@ -9068,6 +9614,15 @@ function HobbyActivePlanSection({
     savePlanUpdate(hobby, { ...plan, completedAt: new Date().toISOString(), isActive: false });
   }
 
+  function toggleTaskCompletion(hobby: Hobby, plan: HobbyPlan, taskKey: string) {
+    const completions = plan.taskCompletions ?? [];
+    const isCompleted = completions.some(c => c.taskKey === taskKey);
+    const updated = isCompleted
+      ? completions.filter(c => c.taskKey !== taskKey)
+      : [...completions, { taskKey, completedAt: Date.now() }];
+    savePlanUpdate(hobby, { ...plan, taskCompletions: updated });
+  }
+
   function updateSession(updatedData: Omit<SessionLog, "id" | "planId">) {
     if (!editSessionTarget) return;
     const { hobby, plan, session } = editSessionTarget;
@@ -9133,7 +9688,11 @@ function HobbyActivePlanSection({
     activePlanEntries.forEach(({ hobby, plan }, idx) => {
       const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
       const color = PLAN_COLORS[idx % PLAN_COLORS.length];
-      const scheduledDays = getScheduledDays(plan);
+      // For activity-based plans, use computed weekly schedule days
+      const computedForMerge = (plan.activities && plan.activities.length > 0) ? computeHobbyPlan(plan, today) : null;
+      const scheduledDays = computedForMerge
+        ? computedForMerge.weeklySchedule.filter(d => d.isTrainingDay).map(d => d.dayName)
+        : getScheduledDays(plan);
       // week boundary
       const weekStart = new Date(today); weekStart.setDate(today.getDate() - todayDowIdx);
       const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
@@ -9295,6 +9854,13 @@ function HobbyActivePlanSection({
             .map(s => [s.dayOfWeek!, s])
         );
 
+        // Activity-based computed plan (new flow)
+        const computedPlan = (plan.activities && plan.activities.length > 0)
+          ? computeHobbyPlan(plan, today)
+          : null;
+        const activityBasedProgressPct = computedPlan ? Math.round(computedPlan.assumptions.progressPct) : null;
+        const finalDisplayPct = activityBasedProgressPct !== null ? activityBasedProgressPct : displayPct;
+
         return (
           <div key={`${hobby.id}-${plan.id}`} className="bg-card border rounded-xl overflow-hidden">
             {/* ── Plan Header ── */}
@@ -9328,7 +9894,7 @@ function HobbyActivePlanSection({
                 </Button>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                   style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
-                  {plan.durationWeeks ? `Wk ${currentWeek}/${totalWeeks}` : `${stepPct}%`}
+                  {computedPlan ? `${finalDisplayPct}%` : plan.durationWeeks ? `Wk ${currentWeek}/${totalWeeks}` : `${stepPct}%`}
                 </span>
               </div>
             </div>
@@ -9337,103 +9903,237 @@ function HobbyActivePlanSection({
               {/* ── Progress bar ── */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{plan.durationWeeks ? `Week ${currentWeek} of ${totalWeeks}` : "Progress"}{totalSteps > 0 && ` · ${doneSteps}/${totalSteps} steps`}</span>
-                  <span>{displayPct}%</span>
+                  <span>
+                    {computedPlan
+                      ? `${computedPlan.assumptions.sessionsPerWeek}×/week · ${computedPlan.assumptions.minutesPerSession} min`
+                      : plan.durationWeeks ? `Week ${currentWeek} of ${totalWeeks}` : "Progress"}
+                    {!computedPlan && totalSteps > 0 && ` · ${doneSteps}/${totalSteps} steps`}
+                    {computedPlan && computedPlan.assumptions.hoursCompleted > 0 && ` · ${computedPlan.assumptions.hoursCompleted.toFixed(1)}h completed`}
+                  </span>
+                  <span>{finalDisplayPct}%</span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${displayPct}%`, background: typeInfo.color }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${finalDisplayPct}%`, background: typeInfo.color }} />
                 </div>
                 {startDate && (
                   <p className="text-xs text-muted-foreground">
                     Started {format(startDate, "MMM d, yyyy")}
-                    {plan.durationWeeks && (() => {
-                      const end = new Date(startDate); end.setDate(end.getDate() + plan.durationWeeks * 7);
-                      return ` · ends ${format(end, "MMM d, yyyy")}`;
-                    })()}
+                    {computedPlan
+                      ? ` · ~${computedPlan.assumptions.weeksToGoal} weeks to goal`
+                      : plan.durationWeeks && (() => {
+                          const end = new Date(startDate); end.setDate(end.getDate() + plan.durationWeeks * 7);
+                          return ` · ends ${format(end, "MMM d, yyyy")}`;
+                        })()}
                   </p>
                 )}
               </div>
 
-              {/* ── This Week's Schedule (Workouts-style vertical list) ── */}
-              <div className="bg-card border rounded-xl overflow-hidden">
-                <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between">
-                  <p className="text-xs font-semibold">This Week's Schedule</p>
-                  <span className="text-[10px] text-muted-foreground">
-                    {plan.durationWeeks
-                      ? `Week ${currentWeek} of ${totalWeeks}`
-                      : `${scheduledDays.size}×/week`}
-                  </span>
-                </div>
-                <div className="divide-y">
-                  {DAYS_ORDERED.map(dayLabel => {
-                    const isToday = dayLabel === todayDowLabel;
-                    const hasActivity = scheduledDays.has(dayLabel);
-                    const existingSession = thisWeekSessionByDay.get(dayLabel);
-                    const isLogged = !!existingSession;
-
-                    return (
-                      <div
-                        key={dayLabel}
-                        className={`flex items-center gap-3 px-4 py-3 ${isToday ? "bg-primary/5" : ""} ${!hasActivity ? "opacity-40" : ""}`}
+              {/* ── Activity-based: Today's Plan ── */}
+              {computedPlan && computedPlan.todayPlan.length > 0 && (
+                <div className="bg-card border rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b flex items-center justify-between"
+                    style={{ background: `${typeInfo.color}10` }}>
+                    <div className="flex items-center gap-1.5">
+                      <CalendarDays size={12} style={{ color: typeInfo.color }} />
+                      <p className="text-xs font-semibold" style={{ color: typeInfo.color }}>Today's Plan</p>
+                      {computedPlan.todayPlan.some(b => b.carriedForward) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">
+                          carried forward
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {computedPlan.todayPlan.filter(b => b.completed).length}/{computedPlan.todayPlan.length} done
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {computedPlan.todayPlan.map(block => (
+                      <button
+                        key={block.taskKey}
+                        type="button"
+                        onClick={() => toggleTaskCompletion(hobby, plan, block.taskKey)}
+                        className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors ${block.completed ? "opacity-60" : ""}`}
                       >
-                        {/* Day label */}
-                        <div className="w-10 shrink-0">
-                          <p className={`text-xs font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</p>
-                          {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-0.5" />}
+                        <div className="shrink-0 mt-0.5">
+                          {block.completed
+                            ? <CheckCircle2 size={16} style={{ color: typeInfo.color }} />
+                            : <Circle size={16} className="text-muted-foreground" />
+                          }
                         </div>
-
-                        {/* Activity / Rest */}
-                        {hasActivity ? (
-                          <button
-                            type="button"
-                            className="flex-1 flex items-center gap-2 text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
-                            onClick={() => {
-                              if (existingSession) {
-                                setEditSessionTarget({ hobby, plan, session: existingSession, dayLabel });
-                              } else {
-                                setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
-                              }
-                            }}
-                          >
-                            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: isLogged ? typeInfo.color : `${typeInfo.color}60` }} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {plan.dayLabels?.[dayLabel] || plan.title}
-                              </p>
-                              {isLogged && existingSession.notes ? (
-                                <p className="text-[10px] text-muted-foreground truncate">{existingSession.notes}</p>
-                              ) : plan.dayNotes?.[dayLabel] ? (
-                                <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">{plan.dayNotes[dayLabel]}</p>
-                              ) : null}
-                            </div>
-                            {isLogged ? (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-                                style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
-                                <CheckCircle2 size={9} />
-                                {existingSession.durationMins ? `${existingSession.durationMins}m` : "Logged"}
-                                <Pencil size={8} className="ml-0.5 opacity-60" />
-                              </span>
-                            ) : isToday ? (
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground shrink-0">
-                                Log Today
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
-                                + Log
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-sm font-medium ${block.completed ? "line-through text-muted-foreground" : ""}`}>
+                              {block.activityName}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                              <Timer size={9} />{block.minutes} min
+                            </span>
+                            {block.carriedForward && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                from {block.originalDate}
                               </span>
                             )}
-                          </button>
-                        ) : (
-                          <p className="text-sm text-muted-foreground flex-1 px-2.5">Rest</p>
-                        )}
-                      </div>
-                    );
-                  })}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{block.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* ── Recent Sessions ── */}
-              {sessions.length > 0 && (
+              {/* ── Activity-based: Rest day message ── */}
+              {computedPlan && computedPlan.isRestDay && computedPlan.todayPlan.length === 0 && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl border bg-muted/20">
+                  <span className="text-base">😌</span>
+                  <div>
+                    <p className="text-sm font-medium">Rest day</p>
+                    <p className="text-[11px] text-muted-foreground">{computedPlan.weeklyFocus.title}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Activity-based: Weekly Schedule ── */}
+              {computedPlan && (
+                <div className="bg-card border rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between">
+                    <p className="text-xs font-semibold">This Week</p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {computedPlan.assumptions.sessionsPerWeek}×/week · {computedPlan.assumptions.minutesPerSession} min/session
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {computedPlan.weeklySchedule.map(day => {
+                      const isComplete = day.status === "complete";
+                      const isRest = day.status === "rest";
+                      const allBlocksDoneToday = day.isToday && day.blocks.length > 0 && day.blocks.every(b => b.completed);
+                      return (
+                        <div
+                          key={day.date}
+                          className={`flex items-start gap-3 px-4 py-2.5 ${day.isToday ? "bg-primary/5" : ""} ${isRest ? "opacity-40" : ""}`}
+                        >
+                          <div className="w-10 shrink-0 pt-0.5">
+                            <p className={`text-xs font-bold uppercase ${day.isToday ? "text-primary" : "text-muted-foreground"}`}>
+                              {day.dayName}
+                            </p>
+                            {day.isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-0.5" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {isRest ? (
+                              <p className="text-xs text-muted-foreground pt-0.5">Rest</p>
+                            ) : day.blocks.length > 0 ? (
+                              <div className="space-y-1">
+                                {day.blocks.map(block => (
+                                  <div key={block.taskKey} className="flex items-center gap-1.5">
+                                    {block.completed
+                                      ? <CheckCircle2 size={11} style={{ color: typeInfo.color }} />
+                                      : <Circle size={11} className="text-muted-foreground/50" />
+                                    }
+                                    <span className={`text-xs ${block.completed ? "line-through text-muted-foreground" : ""}`}>
+                                      {block.activityName}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">{block.minutes}m</span>
+                                    {block.carriedForward && (
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">↑</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : isComplete || allBlocksDoneToday ? (
+                              <div className="flex items-center gap-1">
+                                <CheckCircle2 size={11} style={{ color: typeInfo.color }} />
+                                <span className="text-xs font-medium" style={{ color: typeInfo.color }}>Done</span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground pt-0.5">Scheduled</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Session-log based: This Week's Schedule ── */}
+              {!computedPlan && (
+                <div className="bg-card border rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between">
+                    <p className="text-xs font-semibold">This Week's Schedule</p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {plan.durationWeeks
+                        ? `Week ${currentWeek} of ${totalWeeks}`
+                        : `${scheduledDays.size}×/week`}
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {DAYS_ORDERED.map(dayLabel => {
+                      const isToday = dayLabel === todayDowLabel;
+                      const hasActivity = scheduledDays.has(dayLabel);
+                      const existingSession = thisWeekSessionByDay.get(dayLabel);
+                      const isLogged = !!existingSession;
+
+                      return (
+                        <div
+                          key={dayLabel}
+                          className={`flex items-center gap-3 px-4 py-3 ${isToday ? "bg-primary/5" : ""} ${!hasActivity ? "opacity-40" : ""}`}
+                        >
+                          <div className="w-10 shrink-0">
+                            <p className={`text-xs font-bold uppercase ${isToday ? "text-primary" : "text-muted-foreground"}`}>{dayLabel}</p>
+                            {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-0.5" />}
+                          </div>
+                          {hasActivity ? (
+                            <button
+                              type="button"
+                              className="flex-1 flex items-center gap-2 text-left rounded-lg px-2.5 py-2 hover:bg-muted/60 active:bg-muted transition-colors group"
+                              onClick={() => {
+                                if (existingSession) {
+                                  setEditSessionTarget({ hobby, plan, session: existingSession, dayLabel });
+                                } else {
+                                  setLogTarget({ hobby, plan, dayLabel, defaultDate: dateForDayThisWeek(dayLabel) });
+                                }
+                              }}
+                            >
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: isLogged ? typeInfo.color : `${typeInfo.color}60` }} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {plan.dayLabels?.[dayLabel] || plan.title}
+                                </p>
+                                {isLogged && existingSession.notes ? (
+                                  <p className="text-[10px] text-muted-foreground truncate">{existingSession.notes}</p>
+                                ) : plan.dayNotes?.[dayLabel] ? (
+                                  <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">{plan.dayNotes[dayLabel]}</p>
+                                ) : null}
+                              </div>
+                              {isLogged ? (
+                                <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+                                  style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
+                                  <CheckCircle2 size={9} />
+                                  {existingSession.durationMins ? `${existingSession.durationMins}m` : "Logged"}
+                                  <Pencil size={8} className="ml-0.5 opacity-60" />
+                                </span>
+                              ) : isToday ? (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground shrink-0">
+                                  Log Today
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
+                                  + Log
+                                </span>
+                              )}
+                            </button>
+                          ) : (
+                            <p className="text-sm text-muted-foreground flex-1 px-2.5">Rest</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Recent Sessions (session-log plans only) ── */}
+              {!computedPlan && sessions.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Recent Sessions ({sessions.length})
@@ -9478,8 +10178,8 @@ function HobbyActivePlanSection({
                 </div>
               )}
 
-              {/* ── Log button for today (always visible if today is a scheduled day and not logged) ── */}
-              {scheduledDays.has(todayDowLabel) && !thisWeekSessionDays.has(todayDowLabel) && (
+              {/* ── Log button for today (session-log plans only) ── */}
+              {!computedPlan && scheduledDays.has(todayDowLabel) && !thisWeekSessionDays.has(todayDowLabel) && (
                 <button
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed transition-colors hover:border-primary/40 hover:bg-primary/5"
                   style={{ borderColor: `${typeInfo.color}40` }}
@@ -9488,6 +10188,15 @@ function HobbyActivePlanSection({
                   <Play size={13} style={{ color: typeInfo.color }} />
                   <span className="text-sm font-medium" style={{ color: typeInfo.color }}>Log Today's Session</span>
                 </button>
+              )}
+
+              {/* ── Activity-based: Weekly Focus ── */}
+              {computedPlan && (
+                <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">Weekly Focus</p>
+                  <p className="text-xs font-medium">{computedPlan.weeklyFocus.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{computedPlan.weeklyFocus.detail}</p>
+                </div>
               )}
             </div>
           </div>
