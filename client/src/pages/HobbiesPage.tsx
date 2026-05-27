@@ -11590,6 +11590,7 @@ export default function HobbiesPage() {
   const [detailHobby, setDetailHobby] = useState<Hobby | null>(null);
   const [formInitial, setFormInitial] = useState<Partial<InsertHobby>>(EMPTY_FORM);
   const [formKey, setFormKey] = useState(0);
+  const [planWizardOpen, setPlanWizardOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return hobbies.filter(h => {
@@ -11664,6 +11665,21 @@ export default function HobbiesPage() {
     if (detailHobby?.id === hobby.id) setDetailHobby(h => h ? { ...h, extraJson: newExtraJson } : h);
   };
 
+  const handleSavePlan = (hobbyId: number, plan: HobbyPlan) => {
+    const hobby = hobbies.find(h => h.id === hobbyId);
+    if (!hobby) return;
+    const existingPlans = parsePlans(hobby.extraJson ?? "{}");
+    const existingGoals = parseGoals(hobby.extraJson ?? "{}");
+    const autoGoal: HobbyGoal = {
+      id: genId(), title: plan.title, description: plan.description || undefined,
+      goalType: "milestone", durationWeeks: plan.durationWeeks,
+      status: plan.isActive ? "active" : "paused", createdAt: plan.createdAt, linkedPlanId: plan.id,
+    };
+    const newExtra = setPlansAndGoalsInExtra(hobby.extraJson ?? "{}", [...existingPlans, plan], [...existingGoals, autoGoal]);
+    handleUpdateHobbyExtra(hobbyId, newExtra);
+    if (isLanguageLearningHobby(hobby)) createSystemGoalFromPlan(hobby, plan);
+  };
+
   const handleUpdateHobbyExtra = async (hobbyId: number, extraJson: string) => {
     await updateMut.mutateAsync({ id: hobbyId, data: { extraJson } });
     // Keep detailHobby in sync so BirdSection/HikingSection re-render with the new data immediately
@@ -11731,25 +11747,39 @@ export default function HobbiesPage() {
 
       {/* ── Planning tab ── */}
       {activeTab === "plans" && (
-        <div className="space-y-8">
-          {activePlanCount > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                  <Play size={13} className="text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold">Active Plans</h2>
-                  <p className="text-xs text-muted-foreground">Log sessions and track your progress</p>
-                </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ml-1">
-                  {activePlanCount} running
-                </span>
-              </div>
-              <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} />
-            </section>
+        <div className="space-y-4">
+          {/* Add Plan button */}
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => setPlanWizardOpen(true)} disabled={hobbies.length === 0}>
+              <Plus size={15} className="mr-1.5" /> Add Plan
+            </Button>
+          </div>
+
+          {/* Empty state — no hobbies yet */}
+          {hobbies.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium text-sm">No hobbies yet</p>
+              <p className="text-xs mt-1">Add a hobby from the Library tab first</p>
+            </div>
           )}
-          <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onCreateSystemGoal={createSystemGoalFromPlan} />
+
+          {/* Empty state — hobbies exist but no plans */}
+          {hobbies.length > 0 && activePlanCount === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium text-sm">No active plans</p>
+              <p className="text-xs mt-1 mb-4">Create a plan to start tracking your sessions</p>
+              <Button size="sm" variant="outline" onClick={() => setPlanWizardOpen(true)}>
+                <Plus size={14} className="mr-1.5" /> Create your first plan
+              </Button>
+            </div>
+          )}
+
+          {/* Plan execution cards */}
+          {activePlanCount > 0 && (
+            <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} />
+          )}
         </div>
       )}
 
@@ -11847,6 +11877,12 @@ export default function HobbiesPage() {
       )}
 
       {/* Dialogs */}
+      <PlanWizard
+        open={planWizardOpen}
+        onClose={() => setPlanWizardOpen(false)}
+        hobbies={hobbies.filter(h => h.status !== "retired")}
+        onSave={handleSavePlan}
+      />
       <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); }} initial={formInitial} onSave={handleSave} isEdit={!!editHobby} />
 
       <HobbyDetailDialog
