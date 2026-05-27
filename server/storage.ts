@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals, habits } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -62,6 +62,7 @@ import type {
   InsertBodyCompPlan, BodyCompPlan, BodyCompCheckIn, InsertBodyCompCheckIn,
   InsertReadingGoal, ReadingGoal,
   MovieList, MovieListMember,
+  InsertHabit, Habit, HabitWithStats, HabitCompletion,
 } from "@shared/schema";
 import { eq, asc, desc, and, inArray } from "drizzle-orm";
 
@@ -1530,6 +1531,22 @@ export async function initializeStorage() {
       year INTEGER NOT NULL DEFAULT 2026
     )
   `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS habits (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      title TEXT NOT NULL,
+      description TEXT,
+      emoji TEXT NOT NULL DEFAULT '✅',
+      color TEXT NOT NULL DEFAULT '#6366f1',
+      frequency TEXT NOT NULL DEFAULT 'daily',
+      target_days_per_week INTEGER NOT NULL DEFAULT 7,
+      category TEXT NOT NULL DEFAULT 'general',
+      is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TEXT NOT NULL,
+      completions_json TEXT NOT NULL DEFAULT '[]'
+    )
+  `);
   // Migrate reading_goals to add flexible timeframe columns
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS label TEXT`);
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS start_date TEXT`);
@@ -1998,6 +2015,36 @@ export interface IStorage {
   getMyRecentActivity(userId: number, limit?: number): Promise<any[]>;
   toggleReaction(feedItemId: number, userId: number, emoji: string): Promise<void>;
   addComment(feedItemId: number, userId: number, content: string): Promise<any>;
+  // Habits
+  getHabits(userId: number): Promise<HabitWithStats[]>;
+  createHabit(userId: number, data: Partial<InsertHabit>): Promise<Habit>;
+  updateHabit(id: number, userId: number, data: Partial<InsertHabit>): Promise<Habit>;
+  deleteHabit(id: number, userId: number): Promise<void>;
+  toggleHabitCompletion(id: number, userId: number, date: string, note?: string): Promise<Habit>;
+}
+
+// ── Habit streak helpers ─────────────────────────────────────────────────────
+function computeHabitStreak(completions: { date: string }[], _targetDays: number, _frequency: string): number {
+  if (!completions.length) return 0;
+  const dates = new Set(completions.map(c => c.date));
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i <= 365; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    if (dates.has(ds)) { streak++; } else if (i > 0) { break; }
+  }
+  return streak;
+}
+function computeHabitBestStreak(completions: { date: string }[]): number {
+  if (!completions.length) return 0;
+  const sorted = [...completions].sort((a, b) => a.date.localeCompare(b.date));
+  let best = 1, cur = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1].date); prev.setDate(prev.getDate() + 1);
+    if (prev.toISOString().slice(0, 10) === sorted[i].date) { cur++; if (cur > best) best = cur; } else cur = 1;
+  }
+  return best;
 }
 
 export const storage: IStorage = {
@@ -5995,6 +6042,67 @@ export const storage: IStorage = {
       `INSERT INTO conversation_participants (conversation_id, user_id, joined_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
       [conversationId, userId, now]
     );
+  },
+
+  // ── Habits ──────────────────────────────────────────────────────────────────
+  async getHabits(userId: number): Promise<HabitWithStats[]> {
+    const rows = await db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    return rows.map((h) => {
+      let completions: HabitCompletion[] = [];
+      try { completions = JSON.parse(h.completionsJson); } catch {}
+      const today = new Date();
+      const streakCurrent = computeHabitStreak(completions, h.targetDaysPerWeek, h.frequency);
+      const streakBest = computeHabitBestStreak(completions);
+      const last7 = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today); d.setDate(d.getDate() - i);
+        return d.toISOString().slice(0, 10);
+      });
+      const completionRate7d = last7.filter(dt => completions.some(c => c.date === dt)).length / 7;
+      const { completionsJson: _cj, ...rest } = h;
+      return { ...rest, completions, streakCurrent, streakBest, completionRate7d };
+    });
+  },
+
+  async createHabit(userId: number, data: Partial<InsertHabit>): Promise<Habit> {
+    const now = new Date().toISOString();
+    const [row] = await db.insert(habits).values({
+      userId,
+      title: data.title ?? "New Habit",
+      description: data.description ?? null,
+      emoji: data.emoji ?? "✅",
+      color: data.color ?? "#6366f1",
+      frequency: data.frequency ?? "daily",
+      targetDaysPerWeek: data.targetDaysPerWeek ?? 7,
+      category: data.category ?? "general",
+      isArchived: false,
+      createdAt: now,
+      completionsJson: "[]",
+    }).returning();
+    return row;
+  },
+
+  async updateHabit(id: number, userId: number, data: Partial<InsertHabit>): Promise<Habit> {
+    const [row] = await db.update(habits).set(data).where(and(eq(habits.id, id), eq(habits.userId, userId))).returning();
+    return row;
+  },
+
+  async deleteHabit(id: number, userId: number): Promise<void> {
+    await db.delete(habits).where(and(eq(habits.id, id), eq(habits.userId, userId)));
+  },
+
+  async toggleHabitCompletion(id: number, userId: number, date: string, note?: string): Promise<Habit> {
+    const [row] = await db.select().from(habits).where(and(eq(habits.id, id), eq(habits.userId, userId)));
+    if (!row) throw new Error("Habit not found");
+    let completions: HabitCompletion[] = [];
+    try { completions = JSON.parse(row.completionsJson); } catch {}
+    const exists = completions.findIndex(c => c.date === date);
+    if (exists >= 0) {
+      completions.splice(exists, 1);
+    } else {
+      completions.push({ date, ...(note ? { note } : {}) });
+    }
+    const [updated] = await db.update(habits).set({ completionsJson: JSON.stringify(completions) }).where(eq(habits.id, id)).returning();
+    return updated;
   },
 };
 

@@ -26,6 +26,7 @@ import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
 import JournalPage from "@/pages/JournalPage";
 import HobbiesPage from "@/pages/HobbiesPage";
+import HabitsPage from "@/pages/HabitsPage";
 import FaithPage from "@/pages/FaithPage";
 import HealthPage from "@/pages/HealthPage";
 import PoliticsPage from "@/pages/PoliticsPage";
@@ -64,6 +65,7 @@ function AuthenticatedApp() {
         <Route path="/art" component={ArtPage} />
         <Route path="/journal" component={JournalPage} />
         <Route path="/hobbies" component={HobbiesPage} />
+        <Route path="/habits" component={HabitsPage} />
         <Route path="/faith" component={FaithPage} />
         <Route path="/health" component={HealthPage} />
         <Route path="/politics" component={PoliticsPage} />

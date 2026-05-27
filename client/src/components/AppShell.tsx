@@ -11,7 +11,7 @@ import {
   Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, User, Plus, MessageSquare, PenLine,
+  Search, User, Plus, MessageSquare, PenLine, CalendarCheck,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -84,6 +84,7 @@ const ALL_TABS = [
   { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  { path: "/habits",        label: "Habits & Daily Tracker",  icon: CalendarCheck   },
   // ── People & Relationships ──
   { path: "/relationships", label: "Friends",                 icon: Users           },
   { path: "/kids",          label: "Family",                  icon: Baby            },
@@ -114,7 +115,7 @@ const ALL_TABS = [
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
   { key: "core",      label: null,                   paths: ["/discover", "/dashboard", "/messenger"] },
-  { key: "growth",    label: "Growth & Planning",    paths: ["/goals", "/calendar", "/journal"] },
+  { key: "growth",    label: "Growth & Planning",    paths: ["/goals", "/calendar", "/journal", "/habits"] },
   { key: "people",    label: "People & Relationships", paths: ["/relationships", "/kids"] },
   { key: "health",    label: "Health & Wellness",    paths: ["/workouts", "/health"] },
   { key: "culture",   label: "Culture & Interests",  paths: ["/reading", "/movies", "/music", "/art", "/recipes", "/hobbies"] },
@@ -249,6 +250,7 @@ const PATH_DEFAULT_VISIBILITY: Record<string, "friends" | "private"> = {
   "/housekeeping":  "private",
   "/kids":          "private",
   "/journal":       "private",
+  "/habits":        "private",
   "/faith":         "private",
   "/politics":      "private",
 };
@@ -273,6 +275,7 @@ const SECTION_KEY: Record<string, string> = {
   "/housekeeping":  "housekeeping",
   "/kids":          "kids",
   "/journal":       "journal",
+  "/habits":        "habits",
   "/faith":         "faith",
   "/politics":      "politics",
 };
@@ -286,6 +289,7 @@ const COLLECTION_GROUPS = [
       { path: "/goals",     emoji: "🎯", label: "Goals"    },
       { path: "/calendar",  emoji: "📅", label: "Calendar" },
       { path: "/journal",   emoji: "📓", label: "Journal"  },
+      { path: "/habits",    emoji: "✅", label: "Habits"   },
     ],
   },
   {

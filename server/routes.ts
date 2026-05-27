@@ -7831,4 +7831,60 @@ Rules:
       res.json({ imported: count });
     } catch (e) { handleError(res, e); }
   });
+
+  // ── Habits ──────────────────────────────────────────────────────────────────
+  app.get("/api/habits", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const rows = await storage.getHabits(uid);
+      res.json(rows);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/habits", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const habit = await storage.createHabit(uid, req.body);
+      res.json(habit);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/habits/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const id = parseInt(req.params.id);
+      const habit = await storage.updateHabit(id, uid, req.body);
+      res.json(habit);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/habits/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const id = parseInt(req.params.id);
+      await storage.deleteHabit(id, uid);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/habits/:id/complete/:date", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const id = parseInt(req.params.id);
+      const { date } = req.params;
+      const { note } = req.body ?? {};
+      const habit = await storage.toggleHabitCompletion(id, uid, date, note);
+      res.json(habit);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/habits/:id/complete/:date", requireAuth, async (req, res) => {
+    try {
+      const uid = (req as any).userId as number;
+      const id = parseInt(req.params.id);
+      const { date } = req.params;
+      const habit = await storage.toggleHabitCompletion(id, uid, date);
+      res.json(habit);
+    } catch (e) { handleError(res, e); }
+  });
 }

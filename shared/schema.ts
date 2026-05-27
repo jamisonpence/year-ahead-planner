@@ -1848,6 +1848,37 @@ export const insertReadingGoalSchema = createInsertSchema(readingGoals).omit({ i
 export type InsertReadingGoal = z.infer<typeof insertReadingGoalSchema>;
 export type ReadingGoal = typeof readingGoals.$inferSelect;
 
+// ── HABITS ─────────────────────────────────────────────────────────────────────
+
+export const habits = pgTable("habits", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  emoji: text("emoji").notNull().default("✅"),
+  color: text("color").notNull().default("#6366f1"),
+  frequency: text("frequency").notNull().default("daily"), // "daily" | "weekly"
+  targetDaysPerWeek: integer("target_days_per_week").notNull().default(7),
+  category: text("category").notNull().default("general"), // "health" | "mind" | "growth" | "social" | "general"
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  // JSON array: [{ date: "YYYY-MM-DD", note?: string }]
+  completionsJson: text("completions_json").notNull().default("[]"),
+});
+
+export const insertHabitSchema = createInsertSchema(habits).omit({ id: true });
+export type InsertHabit = z.infer<typeof insertHabitSchema>;
+export type Habit = typeof habits.$inferSelect;
+
+// Client-facing type with parsed completions
+export type HabitCompletion = { date: string; note?: string };
+export type HabitWithStats = Omit<Habit, "completionsJson"> & {
+  completions: HabitCompletion[];
+  streakCurrent: number;
+  streakBest: number;
+  completionRate7d: number; // 0..100
+};
+
 // ── MESSENGER ──────────────────────────────────────────────────────────────────
 
 export const conversations = pgTable("conversations", {
