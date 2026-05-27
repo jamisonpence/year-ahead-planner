@@ -7,12 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Plus, Pencil, Trash2, Search, Heart, Star,
   Camera, Palette, Mountain, Gamepad2, Cpu, Mic2,
@@ -21,6 +25,7 @@ import {
   TrendingUp, Flag, ListChecks, ChevronRight, ChevronLeft,
   Trophy, Flame, BarChart3, RefreshCw, Check, Zap, Power, PowerOff, ClipboardList,
   Play, ClipboardCheck, Timer, CalendarDays, CalendarCheck2,
+  MoreHorizontal, CalendarClock,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -6479,49 +6484,120 @@ function HobbyCard({
 }) {
   const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
   const skillInfo = SKILL_MAP[hobby.skillLevel ?? "beginner"];
-  const statusInfo = STATUS_MAP[hobby.status ?? "active"];
   const TypeIcon = typeInfo.icon;
   const goals = parseGoals(hobby.extraJson ?? "{}");
   const plans = parsePlans(hobby.extraJson ?? "{}");
   const activeGoals = goals.filter(g => g.status === "active");
-  const activePlansCount = plans.filter(p => p.isActive && !p.completedAt).length;
+  const activePlans = plans.filter(p => p.isActive && !p.completedAt);
+  const activePlansCount = activePlans.length;
+
+  // Find next scheduled session label from active plans
+  const today = new Date();
+  const todayDowIdx = today.getDay();
+  const DAYS_ORDERED_CARD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const todayShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][todayDowIdx];
+  let nextSessionLabel: string | null = null;
+  for (const plan of activePlans) {
+    const days = plan.scheduleDays ?? [];
+    if (days.length > 0) {
+      const todayIdx = DAYS_ORDERED_CARD.indexOf(todayShort);
+      const nextDay = [...days].sort((a, b) => {
+        const ai = (DAYS_ORDERED_CARD.indexOf(a) - todayIdx + 7) % 7;
+        const bi = (DAYS_ORDERED_CARD.indexOf(b) - todayIdx + 7) % 7;
+        return ai - bi;
+      })[0];
+      if (nextDay) { nextSessionLabel = nextDay === todayShort ? "Today" : nextDay; break; }
+    }
+  }
 
   return (
-    <div className="group relative bg-card border rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200" onClick={onClick}>
-      <div className="h-1.5 w-full" style={{ backgroundColor: typeInfo.color }} />
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm" style={{ backgroundColor: typeInfo.color }}>
-              <TypeIcon size={15} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-sm leading-tight truncate">{hobby.name}</h3>
-              {hobby.category && <p className="text-xs text-muted-foreground truncate">{hobby.category}</p>}
-            </div>
+    <div
+      className="group relative bg-card border rounded-xl overflow-hidden cursor-pointer hover:shadow-md hover:border-primary/30 transition-all duration-200 flex flex-col"
+      onClick={onClick}
+    >
+      {/* Color accent bar */}
+      <div className="h-1 w-full" style={{ backgroundColor: typeInfo.color }} />
+
+      <div className="p-4 flex-1 flex flex-col gap-3">
+        {/* Row 1: Icon + Name + Overflow menu */}
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0" style={{ backgroundColor: typeInfo.color }}>
+            <TypeIcon size={16} />
           </div>
-          <button className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); onToggleFavorite(); }}>
-            <Heart size={14} className={hobby.isFavorite ? "fill-pink-500 text-pink-500" : "text-muted-foreground"} />
-          </button>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm leading-snug truncate">{hobby.name}</h3>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {hobby.category || typeInfo.label}
+            </p>
+          </div>
+          {/* Overflow menu — always visible, no hover gymnastics */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="shrink-0 p-1 rounded-md hover:bg-muted transition-colors -mr-1 -mt-0.5"
+                onClick={e => e.stopPropagation()}
+              >
+                <MoreHorizontal size={15} className="text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => onToggleFavorite()}>
+                <Heart size={13} className={`mr-2 ${hobby.isFavorite ? "fill-pink-500 text-pink-500" : ""}`} />
+                {hobby.isFavorite ? "Unfavorite" : "Favorite"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onEdit()}>
+                <Pencil size={13} className="mr-2" /> Edit hobby
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => onDelete()} className="text-destructive focus:text-destructive">
+                <Trash2 size={13} className="mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        {hobby.description && <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{hobby.description}</p>}
-        <div className="flex flex-wrap gap-1.5 items-center">
-          {skillInfo && <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${skillInfo.color}`}>{skillInfo.label}</span>}
-          {statusInfo && hobby.status !== "active" && <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statusInfo.color}`}>{statusInfo.label}</span>}
-          {hobby.dateStarted && <span className="text-[10px] text-muted-foreground">Since {hobby.dateStarted.slice(0, 4)}</span>}
-          {(activePlansCount > 0 || activeGoals.length > 0) && (
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary flex items-center gap-0.5 ml-auto">
-              <Target size={9} />
-              {activePlansCount > 0 && <>{activePlansCount} plan{activePlansCount !== 1 ? "s" : ""}</>}
-              {activePlansCount > 0 && activeGoals.length > 0 && " · "}
-              {activeGoals.length > 0 && <>{activeGoals.length} goal{activeGoals.length !== 1 ? "s" : ""}</>}
+
+        {/* Row 2: Skill level + status chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {skillInfo && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${skillInfo.color}`}>
+              {skillInfo.label}
+            </span>
+          )}
+          {hobby.status !== "active" && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_MAP[hobby.status ?? "active"]?.color ?? ""}`}>
+              {STATUS_MAP[hobby.status ?? "active"]?.label ?? hobby.status}
+            </span>
+          )}
+          {hobby.isFavorite && (
+            <Heart size={11} className="fill-pink-500 text-pink-500 ml-auto" />
+          )}
+        </div>
+
+        {/* Row 3: Plans · Goals count + next session */}
+        <div className="flex items-center justify-between mt-auto pt-1 border-t border-border/50">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            {activePlansCount > 0 ? (
+              <span className="flex items-center gap-1 text-primary font-medium">
+                <ClipboardList size={10} />
+                {activePlansCount} active plan{activePlansCount !== 1 ? "s" : ""}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">No active plan</span>
+            )}
+            {activeGoals.length > 0 && (
+              <span className="flex items-center gap-1">
+                <Target size={10} />
+                {activeGoals.length} goal{activeGoals.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          {nextSessionLabel && (
+            <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              <CalendarClock size={9} />
+              {nextSessionLabel}
             </span>
           )}
         </div>
-      </div>
-      <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button className="p-1 rounded bg-background/80 border hover:bg-muted transition-colors" onClick={e => { e.stopPropagation(); onEdit(); }}><Pencil size={11} /></button>
-        <button className="p-1 rounded bg-background/80 border hover:bg-destructive/10 text-destructive transition-colors" onClick={e => { e.stopPropagation(); onDelete(); }}><Trash2 size={11} /></button>
       </div>
     </div>
   );
@@ -9544,6 +9620,154 @@ function DayLabelDialog({
   );
 }
 
+// ── ScheduleTab — clean weekly view across all active plans ──────────────────
+
+const DAYS_ORDERED_SCHED = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_TO_IDX_SCHED: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+
+function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
+  const today = new Date();
+  const todayDowIdx = today.getDay(); // 0=Sun
+  const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const todayShort = DOW_LABELS[todayDowIdx];
+
+  // Collect all active plans
+  const activePlanEntries = useMemo(() => {
+    const entries: { hobby: Hobby; plan: HobbyPlan; color: string }[] = [];
+    const PLAN_COLORS = ["#3b82f6","#f97316","#10b981","#8b5cf6","#ec4899","#06b6d4","#f59e0b","#84cc16","#ef4444"];
+    let idx = 0;
+    for (const h of hobbies) {
+      const plans = parsePlans(h.extraJson ?? "{}");
+      for (const p of plans) {
+        if (p.isActive && !p.completedAt) {
+          entries.push({ hobby: h, plan: p, color: PLAN_COLORS[idx % PLAN_COLORS.length] });
+          idx++;
+        }
+      }
+    }
+    return entries;
+  }, [hobbies]);
+
+  // Build merged day map
+  const mergedByDay = useMemo((): Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string }[]> => {
+    const map: Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string }[]> = {};
+    DAYS_ORDERED_SCHED.forEach(d => { map[d] = []; });
+    for (const { hobby, plan, color } of activePlanEntries) {
+      // Activity-based plan: use computed schedule
+      const computed = (plan.activities && plan.activities.length > 0) ? computeHobbyPlan(plan, today) : null;
+      const scheduledDays = computed
+        ? computed.weeklySchedule.filter(d => d.isTrainingDay).map(d => d.dayName)
+        : (plan.scheduleDays && plan.scheduleDays.length > 0)
+          ? plan.scheduleDays
+          : ["Mon", "Wed", "Fri"];
+      for (const day of scheduledDays) {
+        if (!map[day]) continue;
+        const di = getPlanDayInfo(plan, day);
+        map[day].push({ hobby, plan, color, label: di.label || plan.title, notes: di.notes });
+      }
+    }
+    return map;
+  }, [activePlanEntries, today]);
+
+  // Week date labels
+  const weekDates = useMemo(() => {
+    return DAYS_ORDERED_SCHED.map(d => {
+      const targetIdx = DAY_TO_IDX_SCHED[d] ?? 1;
+      const diff = ((targetIdx - todayDowIdx) + 7) % 7;
+      const dt = new Date(today); dt.setDate(today.getDate() + diff);
+      return { day: d, date: dt.toISOString().slice(0, 10), dateLabel: dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+    });
+  }, [today]);
+
+  const hasAnyActivePlans = activePlanEntries.length > 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-sm">This Week</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {hasAnyActivePlans
+              ? `${activePlanEntries.length} active plan${activePlanEntries.length !== 1 ? "s" : ""} merged`
+              : "No active plans yet"}
+          </p>
+        </div>
+        {hasAnyActivePlans && (
+          <div className="flex gap-1.5 flex-wrap justify-end">
+            {activePlanEntries.map(({ hobby, color }) => (
+              <span key={hobby.id} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+                style={{ background: `${color}18`, color, borderColor: `${color}40` }}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+                {hobby.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {!hasAnyActivePlans && (
+        <div className="rounded-xl border border-dashed p-10 text-center">
+          <CalendarDays size={32} className="mx-auto text-muted-foreground mb-3" />
+          <p className="font-semibold">No active plans</p>
+          <p className="text-sm text-muted-foreground mt-1">Activate a plan in the Plans tab to see your weekly schedule here.</p>
+        </div>
+      )}
+
+      {/* Day-by-day schedule */}
+      {hasAnyActivePlans && (
+        <div className="rounded-xl border bg-card overflow-hidden divide-y">
+          {weekDates.map(({ day, date, dateLabel }) => {
+            const entries = mergedByDay[day] ?? [];
+            const isToday = day === todayShort;
+            const isPast = new Date(date + "T23:59:59") < today && !isToday;
+            return (
+              <div key={day} className={`flex items-start gap-4 px-4 py-3 ${isToday ? "bg-primary/5" : ""}`}>
+                {/* Day column */}
+                <div className="w-14 shrink-0 pt-0.5">
+                  <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                    {day}
+                  </p>
+                  <p className={`text-[10px] ${isToday ? "text-primary/70" : "text-muted-foreground/60"}`}>{dateLabel}</p>
+                  {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
+                </div>
+
+                {/* Sessions */}
+                {entries.length > 0 ? (
+                  <div className="flex-1 min-w-0 space-y-2 py-0.5">
+                    {entries.map(({ hobby, plan, color, label, notes }, i) => (
+                      <div key={`${plan.id}-${i}`} className={`rounded-lg border px-3 py-2 ${isPast ? "opacity-50" : ""}`}
+                        style={{ borderColor: `${color}40`, background: `${color}0a` }}>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+                          <span className="text-xs font-semibold truncate" style={{ color }}>{hobby.name}</span>
+                          {plan.minutesPerSession && (
+                            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{plan.minutesPerSession} min</span>
+                          )}
+                        </div>
+                        {label && label !== plan.title && (
+                          <p className="text-sm font-medium text-foreground ml-3.5">{label}</p>
+                        )}
+                        {notes && (
+                          <p className="text-[10px] text-muted-foreground mt-1 ml-3.5 line-clamp-2 leading-relaxed">{notes}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex-1 py-0.5">
+                    <span className="text-xs text-muted-foreground/50 italic">Rest day</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HobbyActivePlanSection ─────────────────────────────────────────────────────
 
 function HobbyActivePlanSection({
@@ -11088,292 +11312,247 @@ const EMPTY_FORM: Partial<InsertHobby> = {
   skillLevel: "beginner", dateStarted: "", status: "active", notes: "", extraJson: "{}", isFavorite: false, coverUrl: "",
 };
 
+// ── Simplified 3-step Add Hobby wizard ───────────────────────────────────────
+
 function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   open: boolean; onClose: () => void; initial: Partial<InsertHobby>; onSave: (data: Partial<InsertHobby>) => void; isEdit?: boolean;
 }) {
+  const [step, setStep] = useState(isEdit ? 3 : 1); // edit mode = jump to full form
   const [form, setForm] = useState<Partial<InsertHobby>>(initial);
   const [extra, setExtra] = useState<Record<string, any>>(() => parseExtra(initial.extraJson ?? "{}"));
   const [showPresets, setShowPresets] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const set = (key: keyof InsertHobby, val: any) => setForm(f => ({ ...f, [key]: val }));
   const setExtraKey = (key: string, val: any) => setExtra(e => ({ ...e, [key]: val }));
 
-  // Plans state
-  const [pendingPlans, setPendingPlans] = useState<HobbyPlan[]>(() => parsePlans(initial.extraJson ?? "{}"));
-  const [showPlanWizard, setShowPlanWizard] = useState(false);
-
-  // Goals state
-  const [pendingGoals, setPendingGoals] = useState<HobbyGoal[]>(() => parseGoals(initial.extraJson ?? "{}"));
-  const [showGoalForm, setShowGoalForm] = useState(false);
-  const [goalTitle, setGoalTitle] = useState("");
-  const [goalType, setGoalFormType] = useState<GoalType>("milestone");
-  const [goalTarget, setGoalTarget] = useState("");
-  const [goalUnit, setGoalUnit] = useState("");
-  const [goalFreqTimes, setGoalFreqTimes] = useState("3");
-  const [goalFreqPeriod, setGoalFreqPeriod] = useState<"week" | "month">("week");
-  const [goalTargetDate, setGoalTargetDate] = useState("");
-  const [goalBuddyUserId, setGoalBuddyUserId] = useState<number | null>(null);
-  const { data: friends = [] } = useFriends();
-
-  function addGoal() {
-    if (!goalTitle.trim()) return;
-    const goal: HobbyGoal = {
-      id: genId(), title: goalTitle.trim(), goalType,
-      targetValue: goalType === "count" && goalTarget ? Number(goalTarget) : undefined,
-      currentValue: goalType === "count" ? 0 : undefined,
-      unit: goalType === "count" ? goalUnit || undefined : undefined,
-      freqTimes: goalType === "frequency" ? Number(goalFreqTimes) : undefined,
-      freqPeriod: goalType === "frequency" ? goalFreqPeriod : undefined,
-      targetDate: goalTargetDate || undefined,
-      status: "active", createdAt: new Date().toISOString(),
-      ...(goalBuddyUserId ? { buddyUserId: goalBuddyUserId } : {}),
-    };
-    setPendingGoals(g => [...g, goal]);
-    setGoalTitle(""); setGoalFormType("milestone"); setGoalTarget(""); setGoalUnit("");
-    setGoalFreqTimes("3"); setGoalFreqPeriod("week"); setGoalTargetDate("");
-    setGoalBuddyUserId(null);
-    setShowGoalForm(false);
-  }
+  // Reset when modal opens
+  useMemo(() => {
+    if (open) {
+      setStep(isEdit ? 3 : 1);
+      setForm(initial);
+      setExtra(parseExtra(initial.extraJson ?? "{}"));
+      setShowPresets(false);
+      setShowAdvanced(false);
+    }
+  }, [open]);
 
   const handleSave = () => {
     if (!form.name?.trim()) return;
-    const newExtra = { ...extra };
-    newExtra.plans = pendingPlans;
-    newExtra.goals = pendingGoals;
-    onSave({ ...form, extraJson: JSON.stringify(newExtra) });
+    onSave({ ...form, extraJson: JSON.stringify({ ...extra, ...parseExtra(initial.extraJson ?? "{}"), ...extra }) });
   };
+
   const typeInfo = HOBBY_TYPE_MAP[(form.hobbyType as HobbyType) ?? "creative"];
   const presets = PRESET_HOBBIES[(form.hobbyType as HobbyType) ?? "creative"] ?? [];
+  const canProceed1 = !!form.name?.trim();
+
+  // Step indicators
+  const StepDots = () => (
+    !isEdit ? (
+      <div className="flex items-center justify-center gap-1.5 pb-1">
+        {[1, 2, 3].map(s => (
+          <div key={s} className={`rounded-full transition-all ${s === step ? "w-5 h-1.5 bg-primary" : s < step ? "w-1.5 h-1.5 bg-primary/50" : "w-1.5 h-1.5 bg-muted-foreground/20"}`} />
+        ))}
+      </div>
+    ) : null
+  );
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{isEdit ? "Edit Hobby" : "Add a Hobby"}</DialogTitle></DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Hobby Type</label>
-            <div className="grid grid-cols-3 gap-2">
-              {HOBBY_TYPES.map(t => {
-                const Icon = t.icon; const selected = form.hobbyType === t.value;
-                return (
-                  <button key={t.value} type="button" onClick={() => { set("hobbyType", t.value); set("category", ""); }}
-                    className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs font-medium transition-all ${selected ? "border-2" : "border hover:border-muted-foreground/50 text-muted-foreground"}`}
-                    style={selected ? { borderColor: t.color, backgroundColor: t.color + "22", color: t.color } : {}}>
-                    <Icon size={16} /><span className="leading-tight text-center">{t.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Hobby Name *</label>
-            <div className="flex gap-2">
-              <Input className="text-sm flex-1" placeholder={`e.g. ${presets[0] ?? "Photography"}`} value={form.name ?? ""} onChange={e => set("name", e.target.value)} />
-              <button type="button" onClick={() => setShowPresets(p => !p)} className="px-3 py-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors flex items-center gap-1">
-                <Layers size={13} />{showPresets ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-            </div>
-            {showPresets && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {presets.map(p => (<button key={p} type="button" onClick={() => { set("name", p); set("category", p); setShowPresets(false); }} className="text-xs px-2.5 py-1 rounded-full border hover:bg-muted transition-colors">{p}</button>))}
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Hobby" : "Add a Hobby"}</DialogTitle>
+          <StepDots />
+        </DialogHeader>
+
+        {/* ── Step 1: Type + Name ── */}
+        {step === 1 && (
+          <div className="space-y-4 mt-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">What kind of hobby?</label>
+              <div className="grid grid-cols-3 gap-2">
+                {HOBBY_TYPES.map(t => {
+                  const Icon = t.icon; const selected = form.hobbyType === t.value;
+                  return (
+                    <button key={t.value} type="button" onClick={() => { set("hobbyType", t.value); set("category", ""); }}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${selected ? "border-2" : "border hover:border-muted-foreground/50 text-muted-foreground"}`}
+                      style={selected ? { borderColor: t.color, backgroundColor: t.color + "18", color: t.color } : {}}>
+                      <span className="text-xl">{t.emoji}</span>
+                      <span className="leading-tight text-center">{t.label.split(" ")[0]}</span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Specific Category / Sub-type</label>
-            <Input className="text-sm" placeholder="e.g. Landscape Photography, Fly Fishing…" value={form.category ?? ""} onChange={e => set("category", e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Skill Level</label>
-              <Select value={form.skillLevel ?? "beginner"} onValueChange={v => set("skillLevel", v)}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>{SKILL_LEVELS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
-              <Select value={form.status ?? "active"} onValueChange={v => set("status", v)}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Date Started</label>
-            <Input type="date" className="text-sm" value={form.dateStarted ?? ""} onChange={e => set("dateStarted", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Cover Photo URL</label>
-            <Input className="text-sm" placeholder="https://…" value={form.coverUrl ?? ""} onChange={e => set("coverUrl", e.target.value)} />
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs font-semibold mb-3 flex items-center gap-1.5" style={{ color: typeInfo?.color }}>
-              {typeInfo && <typeInfo.icon size={13} />}{typeInfo?.label} Details
-            </p>
-            <ExtraFields hobbyType={(form.hobbyType as HobbyType) ?? "creative"} extra={extra} onChange={setExtraKey} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Personal Notes</label>
-            <Textarea className="text-sm min-h-[60px]" placeholder="Goals, reminders, anything else…" value={form.notes ?? ""} onChange={e => set("notes", e.target.value)} />
-          </div>
-          {/* ── Plans ── */}
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-                <ClipboardList size={13} /> Plans
-                {pendingPlans.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 font-bold">{pendingPlans.length}</span>}
-              </p>
-              <button type="button" onClick={() => setShowPlanWizard(true)} className="text-xs text-blue-600 dark:text-blue-400 hover:opacity-80 flex items-center gap-0.5">
-                <Plus size={11} /> Add plan
-              </button>
             </div>
 
-            {pendingPlans.map(p => (
-              <div key={p.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-card text-xs">
-                <ClipboardList size={11} className="text-blue-500 shrink-0" />
-                <span className="flex-1 truncate font-medium">{p.title}</span>
-                {p.durationWeeks && <span className="text-muted-foreground shrink-0">{p.durationWeeks}w</span>}
-                {p.isActive && <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded-full shrink-0">Active</span>}
-                <button type="button" onClick={() => setPendingPlans(pl => pl.filter(x => x.id !== p.id))} className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1">
-                  <X size={12} />
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Hobby name *</label>
+              <div className="flex gap-2">
+                <Input
+                  className="text-sm flex-1"
+                  placeholder={`e.g. ${presets[0] ?? "Photography"}`}
+                  value={form.name ?? ""}
+                  onChange={e => set("name", e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && canProceed1 && setStep(2)}
+                  autoFocus
+                />
+                <button type="button" onClick={() => setShowPresets(p => !p)}
+                  className="px-2.5 py-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors flex items-center gap-1">
+                  <Layers size={13} />
                 </button>
               </div>
-            ))}
-
-            {pendingPlans.length === 0 && (
-              <p className="text-[11px] text-muted-foreground">Add step-by-step plans to work toward your hobby goals.</p>
-            )}
-          </div>
-
-          {/* ── Goals ── */}
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                <Target size={13} /> Goals
-                {pendingGoals.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 font-bold">{pendingGoals.length}</span>}
-              </p>
-              {!showGoalForm && (
-                <button type="button" onClick={() => setShowGoalForm(true)} className="text-xs text-amber-600 dark:text-amber-400 hover:opacity-80 flex items-center gap-0.5">
-                  <Plus size={11} /> Add goal
-                </button>
+              {showPresets && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {presets.map(p => (
+                    <button key={p} type="button"
+                      onClick={() => { set("name", p); set("category", p); setShowPresets(false); }}
+                      className="text-xs px-2.5 py-1 rounded-full border hover:bg-muted transition-colors">{p}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Existing goals list */}
-            {pendingGoals.map(g => {
-              const meta = GOAL_TYPE_META[g.goalType];
-              const MetaIcon = meta.icon;
-              return (
-                <div key={g.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-card text-xs">
-                  <MetaIcon size={11} className={`${meta.color} shrink-0`} />
-                  <span className="flex-1 truncate font-medium">{g.title}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{meta.label}</span>
-                  <button type="button" onClick={() => setPendingGoals(gl => gl.filter(x => x.id !== g.id))} className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1">
-                    <X size={12} />
-                  </button>
-                </div>
-              );
-            })}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button size="sm" onClick={() => setStep(2)} disabled={!canProceed1} className="flex-1">
+                Next <ChevronRight size={13} className="ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
 
-            {/* Inline goal form */}
-            {showGoalForm && (
-              <div className="space-y-2 pt-1">
-                <Input placeholder="Goal title *" value={goalTitle} onChange={e => setGoalTitle(e.target.value)} className="text-sm" autoFocus />
-                <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">Goal type</label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(["milestone", "count", "frequency"] as GoalType[]).map(t => {
-                      const m = GOAL_TYPE_META[t]; const GIcon = m.icon;
-                      return (
-                        <button key={t} type="button" onClick={() => setGoalFormType(t)}
-                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${goalType === t ? "bg-amber-600 text-white border-amber-600" : "bg-card hover:bg-secondary border-border"}`}>
-                          <GIcon size={11} /> {m.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+        {/* ── Step 2: Skill level + Status ── */}
+        {step === 2 && (
+          <div className="space-y-4 mt-1">
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/40">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: typeInfo?.color }}>
+                {typeInfo && <typeInfo.icon size={15} />}
+              </div>
+              <span className="font-semibold text-sm">{form.name}</span>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">Your current skill level</label>
+              <div className="grid grid-cols-2 gap-2">
+                {SKILL_LEVELS.map(s => (
+                  <button key={s.value} type="button" onClick={() => set("skillLevel", s.value)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all text-left ${form.skillLevel === s.value ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted"}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">Status</label>
+              <div className="flex gap-2">
+                {STATUS_OPTIONS.map(s => (
+                  <button key={s.value} type="button" onClick={() => set("status", s.value)}
+                    className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${form.status === s.value ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted text-muted-foreground"}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setStep(1)} className="flex-1">
+                <ChevronLeft size={13} className="mr-1" /> Back
+              </Button>
+              <Button size="sm" onClick={() => setStep(3)} className="flex-1">
+                Next <ChevronRight size={13} className="ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Confirm + Advanced (optional) ── */}
+        {step === 3 && (
+          <div className="space-y-4 mt-1">
+            {/* Identity summary */}
+            {!isEdit && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0" style={{ backgroundColor: typeInfo?.color }}>
+                  {typeInfo && <typeInfo.icon size={18} />}
                 </div>
-                {goalType === "count" && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-0.5">Target number</label>
-                      <Input type="number" min={1} placeholder="e.g. 10" value={goalTarget} onChange={e => setGoalTarget(e.target.value)} className="text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-0.5">Unit (optional)</label>
-                      <Input placeholder="e.g. sessions, books" value={goalUnit} onChange={e => setGoalUnit(e.target.value)} className="text-sm" />
-                    </div>
-                  </div>
-                )}
-                {goalType === "frequency" && (
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={1} max={30} value={goalFreqTimes} onChange={e => setGoalFreqTimes(e.target.value)} className="text-sm w-16" />
-                    <span className="text-xs text-muted-foreground">times per</span>
-                    {(["week", "month"] as const).map(p => (
-                      <button key={p} type="button" onClick={() => setGoalFreqPeriod(p)}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${goalFreqPeriod === p ? "bg-amber-600 text-white border-amber-600" : "bg-card hover:bg-secondary border-border"}`}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-0.5">Target date (optional)</label>
-                  <Input type="date" value={goalTargetDate} onChange={e => setGoalTargetDate(e.target.value)} className="text-sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">👥 Accountabilibuddy (optional)</label>
-                  <BuddyPickerInline value={goalBuddyUserId} onChange={setGoalBuddyUserId} friends={friends} />
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={addGoal} disabled={!goalTitle.trim()} className="flex-1 gap-1 bg-amber-600 hover:bg-amber-700 text-white">
-                    <Check size={12} /> Add Goal
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => { setShowGoalForm(false); setGoalTitle(""); setGoalFormType("milestone"); setGoalBuddyUserId(null); }}>Cancel</Button>
+                  <p className="font-semibold text-sm">{form.name}</p>
+                  <p className="text-xs text-muted-foreground">{typeInfo?.label} · {SKILL_MAP[form.skillLevel ?? "beginner"]?.label}</p>
                 </div>
               </div>
             )}
 
-            {pendingGoals.length === 0 && !showGoalForm && (
-              <p className="text-[11px] text-muted-foreground">Set targets to track your progress — milestones, counts, or habits.</p>
+            {/* Sub-type */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Sub-type or focus area <span className="text-muted-foreground/60">(optional)</span></label>
+              <Input className="text-sm" placeholder="e.g. Landscape Photography, Fly Fishing, Spanish…" value={form.category ?? ""} onChange={e => set("category", e.target.value)} />
+            </div>
+
+            {/* Quick note */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Quick note <span className="text-muted-foreground/60">(optional)</span></label>
+              <Textarea className="text-sm min-h-[60px]" placeholder="Why you love this, what you're working toward…" value={form.notes ?? ""} onChange={e => set("notes", e.target.value)} />
+            </div>
+
+            {/* Advanced options — collapsed by default */}
+            <button type="button" onClick={() => setShowAdvanced(a => !a)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+              {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              Advanced options
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-3 rounded-xl border bg-muted/20 p-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Date started</label>
+                  <Input type="date" className="text-sm" value={form.dateStarted ?? ""} onChange={e => set("dateStarted", e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Cover photo URL</label>
+                  <Input className="text-sm" placeholder="https://…" value={form.coverUrl ?? ""} onChange={e => set("coverUrl", e.target.value)} />
+                </div>
+                {isEdit && (
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs font-semibold mb-3 flex items-center gap-1.5" style={{ color: typeInfo?.color }}>
+                      {typeInfo && <typeInfo.icon size={13} />}{typeInfo?.label} Details
+                    </p>
+                    <ExtraFields hobbyType={(form.hobbyType as HobbyType) ?? "creative"} extra={extra} onChange={setExtraKey} />
+                  </div>
+                )}
+                <button type="button" onClick={() => set("isFavorite", !form.isFavorite)}
+                  className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors w-full ${form.isFavorite ? "bg-pink-50 dark:bg-pink-950/20 border-pink-200 text-pink-600" : "hover:bg-muted"}`}>
+                  <Heart size={14} className={form.isFavorite ? "fill-pink-500 text-pink-500" : ""} />
+                  {form.isFavorite ? "Marked as favorite" : "Add to favorites"}
+                </button>
+              </div>
             )}
-          </div>
 
-          <button type="button" onClick={() => set("isFavorite", !form.isFavorite)} className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors w-full ${form.isFavorite ? "bg-pink-50 dark:bg-pink-950/20 border-pink-200 text-pink-600" : "hover:bg-muted"}`}>
-            <Heart size={14} className={form.isFavorite ? "fill-pink-500 text-pink-500" : ""} />
-            {form.isFavorite ? "Marked as favorite" : "Mark as favorite"}
-          </button>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={!form.name?.trim()}>{isEdit ? "Save Changes" : "Add"}</Button>
+            {/* Plans/Goals callout (non-edit only) */}
+            {!isEdit && (
+              <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5 flex items-start gap-2">
+                <ClipboardList size={13} className="text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Plans and goals</span> can be added from the hobby's detail view after you save.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              {!isEdit && (
+                <Button variant="outline" size="sm" onClick={() => setStep(2)} className="flex-1">
+                  <ChevronLeft size={13} className="mr-1" /> Back
+                </Button>
+              )}
+              {isEdit && (
+                <Button variant="outline" size="sm" onClick={onClose} className="flex-1">Cancel</Button>
+              )}
+              <Button size="sm" onClick={handleSave} disabled={!form.name?.trim()} className="flex-1">
+                {isEdit ? "Save Changes" : "Add Hobby"}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </DialogContent>
-
-      {/* Full PlanWizard — opens on top of this dialog, uses a mock Hobby built from current form state */}
-      {showPlanWizard && (() => {
-        const mockHobby: Hobby = {
-          id: -1, userId: null,
-          name: form.name?.trim() || "New Hobby",
-          hobbyType: (form.hobbyType as string) ?? "creative",
-          category: form.category ?? null, description: null,
-          skillLevel: form.skillLevel ?? null, dateStarted: null,
-          status: "active", notes: null,
-          extraJson: "{}", isFavorite: false, coverUrl: null,
-        };
-        return (
-          <PlanWizard
-            open={showPlanWizard}
-            onClose={() => setShowPlanWizard(false)}
-            hobbies={[mockHobby]}
-            defaultHobbyId={-1}
-            onSave={(_id, plan) => {
-              setPendingPlans(p => [...p, plan]);
-              setShowPlanWizard(false);
-            }}
-          />
-        );
-      })()}
     </Dialog>
   );
 }
@@ -11383,7 +11562,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
 export default function HobbiesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"hobbies" | "active" | "plans">("hobbies");
+  const [activeTab, setActiveTab] = useState<"library" | "plans" | "schedule">("library");
 
   const { data: hobbies = [], isLoading } = useQuery<Hobby[]>({
     queryKey: ["/api/hobbies"],
@@ -11420,13 +11599,6 @@ export default function HobbiesPage() {
       return true;
     });
   }, [hobbies, filterType, filterStatus, search]);
-
-  const grouped = useMemo(() => {
-    if (filterType !== "all") return { [filterType]: filtered };
-    const g: Record<string, Hobby[]> = {};
-    for (const h of filtered) { if (!g[h.hobbyType]) g[h.hobbyType] = []; g[h.hobbyType].push(h); }
-    return g;
-  }, [filtered, filterType]);
 
   const openAdd = (type?: HobbyType) => { setFormInitial({ ...EMPTY_FORM, hobbyType: type ?? "creative" }); setEditHobby(null); setFormKey(k => k + 1); setShowForm(true); };
   const openEdit = (h: Hobby) => {
@@ -11504,12 +11676,6 @@ export default function HobbiesPage() {
   const activeCount = hobbies.filter(h => h.status === "active").length;
   const favCount = hobbies.filter(h => h.isFavorite).length;
 
-  // Auto-navigate to Active Plans tab when plans become active; fall back when none
-  useEffect(() => {
-    if (activePlanCount > 0 && activeTab === "hobbies") setActiveTab("active");
-    if (activePlanCount === 0 && activeTab === "active") setActiveTab("hobbies");
-  }, [activePlanCount]);
-
   // Backfill: ensure every plan has a linked goal (handles data created before auto-goal was added)
   useEffect(() => {
     if (isLoading || hobbies.length === 0) return;
@@ -11535,11 +11701,10 @@ export default function HobbiesPage() {
             {activeCount > 0 && ` · ${activeCount} active`}
             {favCount > 0 && ` · ${favCount} favorited`}
             {activePlanCount > 0 && ` · ${activePlanCount} active plan${activePlanCount !== 1 ? "s" : ""}`}
-          {activeGoalCount > 0 && ` · ${activeGoalCount} active goal${activeGoalCount !== 1 ? "s" : ""}`}
           </p>
         </div>
-        {activeTab === "hobbies" && (
-          <Button size="sm" onClick={openAdd}>
+        {activeTab === "library" && (
+          <Button size="sm" onClick={() => openAdd()}>
             <Plus size={15} className="mr-1.5" /> Add Hobby
           </Button>
         )}
@@ -11547,64 +11712,67 @@ export default function HobbiesPage() {
 
       {/* Tab bar */}
       <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
-        <button onClick={() => setActiveTab("hobbies")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "hobbies" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Heart size={13} /> Hobbies
+        <button onClick={() => setActiveTab("library")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "library" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+          <Heart size={13} /> Library
           {hobbies.length > 0 && <span className="text-xs opacity-60">{hobbies.length}</span>}
         </button>
-        {activePlanCount > 0 && (
-          <button onClick={() => setActiveTab("active")}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "active" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-            <Play size={13} /> Active Plans
-            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${activeTab === "active" ? "bg-primary/15 text-primary" : "opacity-60"}`}>{activePlanCount}</span>
-          </button>
-        )}
         <button onClick={() => setActiveTab("plans")}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "plans" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
           <Target size={13} /> Plans & Goals
           {(activePlanCount + activeGoalCount) > 0 && <span className="text-xs opacity-60">{activePlanCount + activeGoalCount}</span>}
         </button>
+        <button onClick={() => setActiveTab("schedule")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "schedule" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+          <CalendarClock size={13} /> Schedule
+          {activePlanCount > 0 && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${activeTab === "schedule" ? "bg-primary/15 text-primary" : "opacity-60"}`}>{activePlanCount}</span>}
+        </button>
       </div>
-
-      {/* ── Active Plans tab ── */}
-      {activeTab === "active" && (
-        <HobbyActivePlanSection
-          hobbies={hobbies}
-          onUpdateHobby={handleUpdateHobbyExtra}
-          onGoToPlans={() => setActiveTab("plans")}
-        />
-      )}
 
       {/* ── Plans & Goals tab ── */}
       {activeTab === "plans" && (
         <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onCreateSystemGoal={createSystemGoalFromPlan} />
       )}
 
-      {/* ── Hobbies tab ── */}
-      {activeTab === "hobbies" && (
-        <>
+      {/* ── Schedule tab ── */}
+      {activeTab === "schedule" && (
+        <ScheduleTab hobbies={hobbies} />
+      )}
 
-          {/* Stats row */}
+      {/* ── Library tab ── */}
+      {activeTab === "library" && (
+        <>
+          {/* Category filter pills */}
           {hobbies.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setFilterType("all")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${filterType === "all" ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"}`}
+              >
+                All
+                <span className="opacity-70">{hobbies.length}</span>
+              </button>
               {HOBBY_TYPES.map(t => {
                 const cnt = counts[t.value] ?? 0;
-                if (cnt === 0 && filterType !== t.value) return null;
-                const Icon = t.icon;
+                if (cnt === 0) return null;
+                const isActive = filterType === t.value;
                 return (
-                  <button key={t.value} onClick={() => setFilterType(filterType === t.value ? "all" : t.value)}
-                    className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all ${filterType === t.value ? "ring-2 ring-offset-1" : "hover:bg-muted/50"}`}
-                    style={filterType === t.value ? { ringColor: t.color, borderColor: t.color, backgroundColor: t.color + "15" } : {}}>
-                    <Icon size={16} style={{ color: t.color }} />
-                    <span className="text-[10px] font-medium leading-tight" style={{ color: t.color }}>{t.emoji} {t.label.split(" ")[0]}</span>
-                    <span className="text-sm font-bold">{cnt}</span>
+                  <button key={t.value}
+                    onClick={() => setFilterType(isActive ? "all" : t.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all`}
+                    style={isActive
+                      ? { backgroundColor: t.color, borderColor: t.color, color: "#fff" }
+                      : { borderColor: t.color + "44", color: t.color }}>
+                    <span>{t.emoji}</span>
+                    {t.label.split(" ")[0]}
+                    <span className="opacity-70">{cnt}</span>
                   </button>
                 );
               })}
             </div>
           )}
 
-          {/* Search + filters */}
+          {/* Search + status filter */}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -11644,43 +11812,18 @@ export default function HobbiesPage() {
             </div>
           )}
 
-          {/* Grouped grid */}
-          {Object.entries(grouped).map(([type, items]) => {
-            if (items.length === 0) return null;
-            const typeInfo = HOBBY_TYPE_MAP[type as HobbyType];
-            if (!typeInfo) return null;
-            const TypeIcon = typeInfo.icon;
-            return (
-              <div key={type}>
-                {filterType === "all" && (
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: typeInfo.color + "22" }}>
-                      <TypeIcon size={13} style={{ color: typeInfo.color }} />
-                    </div>
-                    <h2 className="text-sm font-semibold" style={{ color: typeInfo.color }}>{typeInfo.label}</h2>
-                    <span className="text-xs text-muted-foreground">({items.length})</span>
-                    <div className="flex-1 h-px bg-border" />
-                    <button onClick={() => openAdd(type as HobbyType)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors">
-                      <Plus size={11} /> Add
-                    </button>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {items.map(h => (
-                    <HobbyCard key={h.id} hobby={h}
-                      onEdit={() => openEdit(h)} onDelete={() => handleDelete(h)}
-                      onToggleFavorite={() => handleToggleFavorite(h)}
-                      onClick={() => setDetailHobby(h)}
-                    />
-                  ))}
-                  <button onClick={() => openAdd(type as HobbyType)}
-                    className="rounded-xl border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors flex flex-col items-center justify-center gap-2 p-6 text-muted-foreground min-h-[100px]">
-                    <Plus size={18} /><span className="text-xs">Add {typeInfo.label} hobby</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {/* Flat grid */}
+          {filtered.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filtered.map(h => (
+                <HobbyCard key={h.id} hobby={h}
+                  onEdit={() => openEdit(h)} onDelete={() => handleDelete(h)}
+                  onToggleFavorite={() => handleToggleFavorite(h)}
+                  onClick={() => setDetailHobby(h)}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
 
