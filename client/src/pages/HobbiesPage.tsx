@@ -11130,7 +11130,7 @@ function PlansGoalsTab({
       {/* Divider */}
       <div className="h-px bg-border" />
 
-      {/* ══════════════════ PLAN OVERVIEW SECTION ══════════════════ */}
+      {/* ══════════════════ PLANS SECTION ══════════════════ */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -11138,8 +11138,8 @@ function PlansGoalsTab({
               <ClipboardList size={14} className="text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-sm font-bold">Plan Overview</h2>
-              <p className="text-xs text-muted-foreground">Structured, step-by-step plans with activate/deactivate</p>
+              <h2 className="text-sm font-bold">Plans</h2>
+              <p className="text-xs text-muted-foreground">Create and organize structured plans for your hobbies</p>
             </div>
             {activePlans.length > 0 && (
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 ml-1">
@@ -11719,7 +11719,7 @@ export default function HobbiesPage() {
         </button>
         <button onClick={() => setActiveTab("plans")}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "plans" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Target size={13} /> Plans & Goals
+          <Target size={13} /> Planning
           {(activePlanCount + activeGoalCount) > 0 && <span className="text-xs opacity-60">{activePlanCount + activeGoalCount}</span>}
         </button>
         <button onClick={() => setActiveTab("schedule")}
@@ -11729,9 +11729,28 @@ export default function HobbiesPage() {
         </button>
       </div>
 
-      {/* ── Plans & Goals tab ── */}
+      {/* ── Planning tab ── */}
       {activeTab === "plans" && (
-        <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onCreateSystemGoal={createSystemGoalFromPlan} />
+        <div className="space-y-8">
+          {activePlanCount > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <Play size={13} className="text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">Active Plans</h2>
+                  <p className="text-xs text-muted-foreground">Log sessions and track your progress</p>
+                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ml-1">
+                  {activePlanCount} running
+                </span>
+              </div>
+              <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} />
+            </section>
+          )}
+          <PlansGoalsTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onCreateSystemGoal={createSystemGoalFromPlan} />
+        </div>
       )}
 
       {/* ── Schedule tab ── */}
