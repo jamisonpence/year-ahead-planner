@@ -97,7 +97,11 @@ function getTodayWorkout(plans: WorkoutPlan[]): string | null {
 }
 
 // Extract today's hobby activity blocks from hobby plans
-type HobbyTask = { hobbyId: number; hobbyName: string; taskKey: string; label: string; completed: boolean; emoji?: string };
+type HobbyTask = {
+  hobbyId: number; hobbyName: string; taskKey: string; label: string;
+  completed: boolean; emoji?: string;
+  planId: string; planType: "activity" | "step";
+};
 
 // Same algorithm as hpPickTrainingDays in HobbiesPage — Monday-first indexing (Mon=0 … Sun=6)
 function hpPickTrainingDays(days: number): number[] {
@@ -197,10 +201,9 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
           if (task) {
             tasks.push({
               hobbyId: hobby.id, hobbyName: hobby.name,
-              taskKey: task.taskKey,
-              label: task.label,
-              completed: task.completed,
-              emoji: hobby.emoji ?? "✨",
+              taskKey: task.taskKey, label: task.label,
+              completed: task.completed, emoji: hobby.emoji ?? "✨",
+              planId: plan.id, planType: "activity",
             });
           }
           continue; // don't fall through to step-based check
@@ -231,6 +234,7 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
         tasks.push({
           hobbyId: hobby.id, hobbyName: hobby.name,
           taskKey: `day-${todayDateStr}-${plan.id}`,
+          planId: plan.id, planType: "step",
           label,
           completed,
           emoji: hobby.emoji ?? "✨",
@@ -615,7 +619,52 @@ export default function HabitsPage() {
   });
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
-  const invHabits = () => queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+  const invHabits  = () => queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+  const invHobbies = () => queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] });
+
+  // Toggle completion of a hobby plan task from the Today tab
+  const toggleHobbyTaskMut = useMutation({
+    mutationFn: async ({ task }: { task: HobbyTask }) => {
+      const hobby = hobbiesRaw.find(h => h.id === task.hobbyId);
+      if (!hobby) throw new Error("Hobby not found");
+      const extra = JSON.parse(hobby.extraJson ?? "{}");
+      const plans: any[] = extra.plans ?? [];
+      const plan = plans.find((p: any) => p.id === task.planId);
+      if (!plan) throw new Error("Plan not found");
+
+      if (task.planType === "activity") {
+        // Toggle taskCompletion entry
+        const completions: any[] = plan.taskCompletions ?? [];
+        const idx = completions.findIndex((c: any) => c.taskKey === task.taskKey);
+        if (idx >= 0) {
+          completions.splice(idx, 1); // un-complete
+        } else {
+          completions.push({ taskKey: task.taskKey, completedAt: Date.now() });
+        }
+        plan.taskCompletions = completions;
+      } else {
+        // Step-based: toggle session log for today
+        const sessions: any[] = plan.sessions ?? [];
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const todayIdx = sessions.findIndex((s: any) => s.date === todayStr && s.planId === task.planId);
+        if (todayIdx >= 0) {
+          sessions.splice(todayIdx, 1); // un-log
+        } else {
+          sessions.push({
+            id: `s-${Date.now()}`,
+            date: todayStr,
+            dayOfWeek: DAY_ABBREVS[new Date().getDay()],
+            planId: task.planId,
+          });
+        }
+        plan.sessions = sessions;
+      }
+
+      extra.plans = plans;
+      return apiRequest("PATCH", `/api/hobbies/${hobby.id}`, { extraJson: JSON.stringify(extra) });
+    },
+    onSuccess: () => invHobbies(),
+  });
 
   const toggleMut = useMutation({
     mutationFn: ({ id, date }: { id: number; date: string }) =>
@@ -638,10 +687,6 @@ export default function HabitsPage() {
   const todayHabitsCompleted = habits.filter(h => h.completions.some(c => c.date === today)).length;
   const totalStreak = habits.reduce((sum, h) => sum + h.streakCurrent, 0);
 
-  // Recent workout logs (last 5)
-  const recentLogs = useMemo(() =>
-    [...workoutLogs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
-    [workoutLogs]);
 
   // ── Today tab ────────────────────────────────────────────────────────────────
 
@@ -744,7 +789,10 @@ export default function HabitsPage() {
               </div>
 
               {todayWorkoutLabel ? (
-                <div className={`rounded-xl border p-3 flex items-center gap-3 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}>
+                <button
+                  className={`w-full rounded-xl border p-3 flex items-center gap-3 text-left transition-colors hover:bg-secondary/60 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}
+                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}
+                >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${todayWorkoutLogged ? "bg-green-500/20" : "bg-primary/10"}`}>
                     {todayWorkoutLogged
                       ? <CheckCircle2 size={18} className="text-green-500" />
@@ -752,29 +800,26 @@ export default function HabitsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{todayWorkoutLabel}</div>
-                    <div className="text-xs text-muted-foreground">{todayWorkoutLogged ? "Logged ✓" : "Scheduled for today"}</div>
+                    <div className="text-xs text-muted-foreground">{todayWorkoutLogged ? "Logged ✓" : "Tap to log"}</div>
                   </div>
                   {!todayWorkoutLogged && (
-                    <Button size="sm" className="h-7 text-xs"
-                      onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
-                      Log it
-                    </Button>
+                    <span className="text-xs text-primary font-medium shrink-0">Log it →</span>
                   )}
-                </div>
+                </button>
               ) : (
-                <div className="rounded-xl border p-3 flex items-center gap-3 bg-card">
+                <button
+                  className="w-full rounded-xl border p-3 flex items-center gap-3 bg-card text-left transition-colors hover:bg-secondary/60"
+                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}
+                >
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-muted/40">
                     <Dumbbell size={18} className="text-muted-foreground" />
                   </div>
                   <div className="flex-1">
                     <div className="font-medium text-sm text-muted-foreground">Rest day</div>
-                    <div className="text-xs text-muted-foreground">No workout scheduled</div>
+                    <div className="text-xs text-muted-foreground">Tap to log anyway</div>
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs"
-                    onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
-                    Log anyway
-                  </Button>
-                </div>
+                  <span className="text-xs text-muted-foreground shrink-0">Log →</span>
+                </button>
               )}
             </div>
 
@@ -787,39 +832,29 @@ export default function HabitsPage() {
                 </h2>
                 {hobbyTasks.map((t) => (
                   <div key={t.taskKey} className={`rounded-xl border p-3 flex items-center gap-3 ${t.completed ? "bg-secondary/40" : "bg-card"}`}>
-                    <div className="text-lg shrink-0">{t.emoji}</div>
+                    <button
+                      className="shrink-0"
+                      onClick={() => toggleHobbyTaskMut.mutate({ task: t })}
+                    >
+                      {t.completed
+                        ? <CheckCircle2 size={22} className="text-green-500" />
+                        : <Circle size={22} className="text-muted-foreground/40 hover:text-primary transition-colors" />}
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className={`text-sm font-medium ${t.completed ? "line-through text-muted-foreground" : ""}`}>{t.label}</div>
                       <div className="text-xs text-muted-foreground">{t.hobbyName}</div>
                     </div>
-                    {t.completed && <CheckCircle2 size={16} className="text-green-500 shrink-0" />}
+                    {!t.completed && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs shrink-0"
+                        onClick={() => toggleHobbyTaskMut.mutate({ task: t })}>
+                        Log
+                      </Button>
+                    )}
                   </div>
                 ))}
-                <p className="text-xs text-muted-foreground px-1">Mark tasks complete in the Hobbies section.</p>
               </div>
             )}
 
-            {/* Recent workout logs */}
-            {recentLogs.length > 0 && (
-              <div className="space-y-2">
-                <h2 className="font-semibold text-sm flex items-center gap-1.5">
-                  <BarChart2 size={14} className="text-primary" />
-                  Recent Workouts
-                </h2>
-                <div className="space-y-1.5">
-                  {recentLogs.map((log) => (
-                    <div key={log.id} className="rounded-lg border bg-card p-2.5 flex items-center gap-2.5">
-                      <Dumbbell size={14} className="text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate">{log.name}</span>
-                        {log.durationMinutes && <span className="text-xs text-muted-foreground ml-1.5">· {log.durationMinutes} min</span>}
-                      </div>
-                      <span className="text-xs text-muted-foreground shrink-0">{format(parseISO(log.date), "MMM d")}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -899,11 +934,15 @@ export default function HabitsPage() {
                 </Button>
               </div>
 
-              {workoutLogs.length === 0 && (
+              {(() => {
+                const ws = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
+                const we = format(addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), 6), "yyyy-MM-dd");
+                return workoutLogs.filter(l => l.date >= ws && l.date <= we).length === 0;
+              })() && (
                 <div className="rounded-xl border border-dashed p-6 text-center">
                   <Dumbbell size={24} className="mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">No workouts logged yet</p>
-                  <p className="text-xs text-muted-foreground mt-1 mb-3">Log your first workout to start tracking progress</p>
+                  <p className="text-sm font-medium">No workouts this week</p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">Log a workout to track this week's activity</p>
                   <Button size="sm" onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
                     <Plus size={13} className="mr-1" /> Log Workout
                   </Button>
@@ -911,10 +950,13 @@ export default function HabitsPage() {
               )}
 
               <div className="space-y-2">
-                {[...workoutLogs]
-                  .sort((a, b) => b.date.localeCompare(a.date))
-                  .slice(0, 20)
-                  .map((log) => {
+                {(() => {
+                  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
+                  const weekEnd   = format(addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), 6), "yyyy-MM-dd");
+                  return [...workoutLogs]
+                    .filter(l => l.date >= weekStart && l.date <= weekEnd)
+                    .sort((a, b) => b.date.localeCompare(a.date));
+                })().map((log) => {
                     let exercises: any[] = [];
                     try { exercises = JSON.parse(log.exercisesJson ?? "[]"); } catch {}
                     return (
