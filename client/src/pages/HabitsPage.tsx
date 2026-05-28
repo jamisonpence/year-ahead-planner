@@ -60,7 +60,7 @@ function streakLabel(n: number) {
 
 // Parse workout schedule JSON to get today's entry — mirrors WorkoutsPage logic exactly.
 // Checks ALL active plans (same as WorkoutsPage's merged view) so a workout is never missed.
-function getTodayWorkout(plans: WorkoutPlan[]): string | null {
+function getTodayWorkout(plans: WorkoutPlan[]): { label: string; templateId: number | null } | null {
   const todayLower = format(new Date(), "EEEE").toLowerCase();
   const nowMs = new Date().getTime();
 
@@ -89,7 +89,10 @@ function getTodayWorkout(plans: WorkoutPlan[]): string | null {
 
       const entry = days.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
       if (entry?.label || entry?.templateName) {
-        return entry.label ?? entry.templateName;
+        return {
+          label: entry.label ?? entry.templateName,
+          templateId: entry.templateId ? Number(entry.templateId) : null,
+        };
       }
     } catch {}
   }
@@ -499,7 +502,7 @@ function HabitManageCard({ habit, onEdit, onDelete }: {
 
 // ── Weekly Grid View ──────────────────────────────────────────────────────────
 
-function WeeklyHabitGrid({ habits }: { habits: HabitWithStats[] }) {
+function WeeklyHabitGrid({ habits, onToggle }: { habits: HabitWithStats[]; onToggle?: (habitId: number, date: string) => void }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const anchorDate = format(addDays(new Date(), weekOffset * 7), "yyyy-MM-dd");
   const weekDays = getWeekDays(anchorDate);
@@ -554,14 +557,26 @@ function WeeklyHabitGrid({ habits }: { habits: HabitWithStats[] }) {
                     {weekDays.map((d) => {
                       const done = h.completions.some(c => c.date === d);
                       const isFuture = d > today;
+                      const canToggle = !isFuture && !!onToggle;
                       return (
                         <td key={d} className="text-center p-1">
-                          {done
-                            ? <div className="w-6 h-6 rounded-full mx-auto flex items-center justify-center" style={{ backgroundColor: h.color + "33", color: h.color }}><CheckCircle2 size={13} /></div>
-                            : isFuture
-                              ? <div className="w-6 h-6 rounded-full mx-auto bg-muted/20" />
-                              : <div className="w-6 h-6 rounded-full mx-auto bg-muted/50 flex items-center justify-center"><X size={10} className="text-muted-foreground/40" /></div>
-                          }
+                          {isFuture ? (
+                            <div className="w-6 h-6 rounded-full mx-auto bg-muted/20" />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => canToggle && onToggle!(h.id, d)}
+                              disabled={!canToggle}
+                              className={`w-6 h-6 rounded-full mx-auto flex items-center justify-center transition-transform ${canToggle ? "hover:scale-110 active:scale-95 cursor-pointer" : "cursor-default"}`}
+                              style={done ? { backgroundColor: h.color + "33", color: h.color } : {}}
+                              title={canToggle ? (done ? "Click to unlog" : "Click to log") : undefined}
+                            >
+                              {done
+                                ? <CheckCircle2 size={13} />
+                                : <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center"><X size={10} className="text-muted-foreground/40" /></div>
+                              }
+                            </button>
+                          )}
                         </td>
                       );
                     })}
@@ -591,6 +606,7 @@ export default function HabitsPage() {
   const [editHabit, setEditHabit] = useState<HabitWithStats | null>(null);
   const [workoutLogOpen, setWorkoutLogOpen] = useState(false);
   const [editWorkoutLog, setEditWorkoutLog] = useState<WorkoutLog | null>(null);
+  const [prefillTemplateId, setPrefillTemplateId] = useState<number | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: habits = [], isLoading: habitsLoading } = useQuery<HabitWithStats[]>({
@@ -678,7 +694,9 @@ export default function HabitsPage() {
   });
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const todayWorkoutLabel = useMemo(() => getTodayWorkout(allWorkoutPlans), [allWorkoutPlans]);
+  const todayWorkout = useMemo(() => getTodayWorkout(allWorkoutPlans), [allWorkoutPlans]);
+  const todayWorkoutLabel = todayWorkout?.label ?? null;
+  const todayWorkoutTemplateId = todayWorkout?.templateId ?? null;
   const todayWorkoutLogged = useMemo(() =>
     workoutLogs.some(l => l.date === today), [workoutLogs, today]);
 
@@ -783,7 +801,7 @@ export default function HabitsPage() {
                   Workout
                 </h2>
                 <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2"
-                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
+                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(null); setWorkoutLogOpen(true); }}>
                   <Plus size={10} /> Log
                 </Button>
               </div>
@@ -791,7 +809,7 @@ export default function HabitsPage() {
               {todayWorkoutLabel ? (
                 <button
                   className={`w-full rounded-xl border p-3 flex items-center gap-3 text-left transition-colors hover:bg-secondary/60 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}
-                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}
+                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(todayWorkoutTemplateId); setWorkoutLogOpen(true); }}
                 >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${todayWorkoutLogged ? "bg-green-500/20" : "bg-primary/10"}`}>
                     {todayWorkoutLogged
@@ -809,7 +827,7 @@ export default function HabitsPage() {
               ) : (
                 <button
                   className="w-full rounded-xl border p-3 flex items-center gap-3 bg-card text-left transition-colors hover:bg-secondary/60"
-                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}
+                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(null); setWorkoutLogOpen(true); }}
                 >
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-muted/40">
                     <Dumbbell size={18} className="text-muted-foreground" />
@@ -918,7 +936,10 @@ export default function HabitsPage() {
                 <TrendingUp size={14} className="text-primary" />
                 Habit Completion Grid
               </h2>
-              <WeeklyHabitGrid habits={habits} />
+              <WeeklyHabitGrid
+                habits={habits}
+                onToggle={(id, date) => toggleMut.mutate({ id, date })}
+              />
             </div>
 
             {/* Workout log section */}
@@ -929,7 +950,7 @@ export default function HabitsPage() {
                   Workout Log
                 </h2>
                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                  onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
+                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(null); setWorkoutLogOpen(true); }}>
                   <Plus size={11} /> Log Workout
                 </Button>
               </div>
@@ -943,7 +964,7 @@ export default function HabitsPage() {
                   <Dumbbell size={24} className="mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm font-medium">No workouts this week</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-3">Log a workout to track this week's activity</p>
-                  <Button size="sm" onClick={() => { setEditWorkoutLog(null); setWorkoutLogOpen(true); }}>
+                  <Button size="sm" onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(null); setWorkoutLogOpen(true); }}>
                     <Plus size={13} className="mr-1" /> Log Workout
                   </Button>
                 </div>
@@ -1012,9 +1033,11 @@ export default function HabitsPage() {
 
       <WorkoutLogModal
         open={workoutLogOpen}
-        onClose={() => { setWorkoutLogOpen(false); setEditWorkoutLog(null); }}
+        onClose={() => { setWorkoutLogOpen(false); setEditWorkoutLog(null); setPrefillTemplateId(null); }}
         templates={workoutTemplates}
         editLog={editWorkoutLog}
+        prefillName={prefillTemplateId && !editWorkoutLog ? (todayWorkoutLabel ?? undefined) : undefined}
+        prefillTemplateId={prefillTemplateId && !editWorkoutLog ? prefillTemplateId : undefined}
       />
     </div>
   );
