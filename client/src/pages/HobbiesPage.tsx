@@ -11405,6 +11405,24 @@ function PlansGoalsTab({
   );
 }
 
+// ── Helper: pick template list based on hobby name + type ─────────────────────
+function getPlanTemplatesForHobby(hobbyType: HobbyType, hobbyName: string): PlanTemplate[] {
+  const n = hobbyName.toLowerCase();
+  if (n.includes("hiking"))                                                                      return HIKING_PLAN_TEMPLATES;
+  if (n.includes("cycling") || n.includes("cycle") || n.includes("bike") || n.includes("mtb")) return CYCLING_PLAN_TEMPLATES;
+  if (n.includes("fishing") || n.includes("angling"))                                           return FISHING_PLAN_TEMPLATES;
+  if (n.includes("garden") || n.includes("gardening"))                                          return GARDENING_PLAN_TEMPLATES;
+  if (n.includes("climb") || n.includes("bouldering"))                                          return CLIMBING_PLAN_TEMPLATES;
+  if (n.includes("running") || n.includes("marathon") || n.includes("5k") || n.includes("10k")) return RUNNING_PLAN_TEMPLATES;
+  if (n.includes("surfing") || n.includes("surf"))                                              return SURFING_PLAN_TEMPLATES;
+  if (n.includes("chess"))                                                                       return CHESS_PLAN_TEMPLATES;
+  if (n.includes("poker"))                                                                       return POKER_PLAN_TEMPLATES;
+  if (n.includes("bird") || n.includes("birding"))                                              return BIRD_PLAN_TEMPLATES;
+  if (isLanguageLearningHobby({ name: hobbyName } as any))                                      return LANGUAGE_PLAN_TEMPLATES;
+  if (hobbyType === "performance")                                                               return INSTRUMENT_PLAN_TEMPLATES;
+  return PLAN_TEMPLATES[hobbyType] ?? [];
+}
+
 // ── Add/Edit Hobby Form Dialog ─────────────────────────────────────────────────
 
 const EMPTY_FORM: Partial<InsertHobby> = {
@@ -11424,6 +11442,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const [showAdvanced, setShowAdvanced] = useState(false);
   // Inline plan state (new hobby only)
   const [showAddPlan, setShowAddPlan] = useState(false);
+  const [selectedPlanTemplate, setSelectedPlanTemplate] = useState<PlanTemplate | null>(null);
   const [planTitle, setPlanTitle] = useState("");
   const [planWeeks, setPlanWeeks] = useState("");
   const [planDaysPerWeek, setPlanDaysPerWeek] = useState(3);
@@ -11440,6 +11459,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
       setShowPresets(false);
       setShowAdvanced(false);
       setShowAddPlan(false);
+      setSelectedPlanTemplate(null);
       setPlanTitle("");
       setPlanWeeks("");
       setPlanDaysPerWeek(3);
@@ -11450,16 +11470,20 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const handleSave = () => {
     if (!form.name?.trim()) return;
     let extraJson = JSON.stringify({ ...extra, ...parseExtra(initial.extraJson ?? "{}"), ...extra });
-    if (!isEdit && showAddPlan && planTitle.trim()) {
-      const weeks = planWeeks ? parseInt(planWeeks) || undefined : undefined;
-      const mins  = planMins  ? parseInt(planMins)  || undefined : undefined;
-      const days  = SPREAD_PATTERNS[Math.min(planDaysPerWeek, 7)] ?? ["Mon", "Wed", "Fri"];
+    if (!isEdit && showAddPlan && (planTitle.trim() || selectedPlanTemplate)) {
+      const tmpl = selectedPlanTemplate;
+      const title = planTitle.trim() || tmpl?.label || form.name!;
+      const weeks  = planWeeks ? parseInt(planWeeks) || undefined : tmpl?.durationWeeks ?? undefined;
+      const mins   = planMins  ? parseInt(planMins)  || undefined : undefined;
+      const days   = SPREAD_PATTERNS[Math.min(planDaysPerWeek, 7)] ?? ["Mon", "Wed", "Fri"];
       const newPlan: HobbyPlan = {
-        id: genId(), title: planTitle.trim(),
+        id: genId(), title,
+        description: tmpl?.description ?? undefined,
         durationWeeks: weeks, minutesPerSession: mins,
         commitmentDaysPerWeek: planDaysPerWeek, scheduleDays: days,
         isActive: true, startDate: new Date().toISOString().slice(0, 10),
-        steps: [], sessions: [], createdAt: new Date().toISOString(),
+        steps: (tmpl?.defaultSteps ?? []).map(text => ({ id: genId(), text, done: false })),
+        sessions: [], createdAt: new Date().toISOString(),
       };
       extraJson = setPlansInExtra(extraJson, [newPlan]);
     }
@@ -11470,11 +11494,12 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const presets = PRESET_HOBBIES[(form.hobbyType as HobbyType) ?? "creative"] ?? [];
   const canProceed1 = !!form.name?.trim();
 
-  // Step indicators
+  // Step indicators (4 dots when on plan step)
+  const totalStepDots = !isEdit && showAddPlan ? 4 : 3;
   const StepDots = () => (
     !isEdit ? (
       <div className="flex items-center justify-center gap-1.5 pb-1">
-        {[1, 2, 3].map(s => (
+        {Array.from({ length: totalStepDots }, (_, i) => i + 1).map(s => (
           <div key={s} className={`rounded-full transition-all ${s === step ? "w-5 h-1.5 bg-primary" : s < step ? "w-1.5 h-1.5 bg-primary/50" : "w-1.5 h-1.5 bg-muted-foreground/20"}`} />
         ))}
       </div>
@@ -11652,86 +11677,20 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
               </div>
             )}
 
-            {/* Inline plan builder (non-edit only) */}
+            {/* Add a plan button (non-edit only) */}
             {!isEdit && (
-              <div className="rounded-xl border overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddPlan(p => !p);
-                    if (!showAddPlan && !planTitle) setPlanTitle(form.name ?? "");
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 transition-colors"
-                >
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <ClipboardList size={14} className="text-primary shrink-0" />
-                    Add a plan
-                    <span className="text-xs font-normal text-muted-foreground">(optional)</span>
-                  </div>
-                  {showAddPlan ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                </button>
-
-                {showAddPlan && (
-                  <div className="px-3 pb-3 pt-1 space-y-3 border-t bg-muted/10">
-                    {/* Plan title */}
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Plan name</label>
-                      <Input
-                        className="text-sm"
-                        placeholder={`e.g. Learn ${form.name || "this hobby"}`}
-                        value={planTitle}
-                        onChange={e => setPlanTitle(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Days/week */}
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
-                      <div className="flex gap-1.5">
-                        {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setPlanDaysPerWeek(n)}
-                            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                          >
-                            {n}×
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {SPREAD_PATTERNS[Math.min(planDaysPerWeek, 7)]?.join(", ")} each week
-                      </p>
-                    </div>
-
-                    {/* Duration + minutes — side by side */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
-                        <Input
-                          type="number"
-                          className="text-sm"
-                          placeholder="e.g. 8"
-                          min={1}
-                          value={planWeeks}
-                          onChange={e => setPlanWeeks(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
-                        <Input
-                          type="number"
-                          className="text-sm"
-                          placeholder="e.g. 30"
-                          min={5}
-                          value={planMins}
-                          onChange={e => setPlanMins(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => { setShowAddPlan(true); setStep(4); }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border hover:bg-muted/40 transition-colors"
+              >
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ClipboardList size={14} className="text-primary shrink-0" />
+                  Add a plan
+                  <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                </div>
+                <ChevronRight size={14} className="text-muted-foreground" />
+              </button>
             )}
 
             <div className="flex gap-2 pt-1">
@@ -11749,6 +11708,130 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
             </div>
           </div>
         )}
+
+        {/* ── Step 4: Plan Template selection ── */}
+        {step === 4 && !isEdit && (() => {
+          const hobbyType = (form.hobbyType as HobbyType) ?? "creative";
+          const typeInfo = HOBBY_TYPE_MAP[hobbyType];
+          const planTemplates = getPlanTemplatesForHobby(hobbyType, form.name ?? "");
+          const isCustomSelected = selectedPlanTemplate?.id === "custom";
+          return (
+            <div className="space-y-4 mt-1">
+              {/* Section header */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Plan Template —{" "}
+                  <span style={{ color: typeInfo?.color }}>
+                    {typeInfo?.emoji} {typeInfo?.label}
+                  </span>
+                </p>
+              </div>
+
+              {/* Template grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {planTemplates.map(t => {
+                  const isSelected = selectedPlanTemplate?.id === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlanTemplate(t);
+                        setPlanTitle(t.label);
+                        setPlanWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
+                      }}
+                      className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-all ${isSelected ? "border-primary/60 bg-primary/8 ring-1 ring-primary/30" : "hover:shadow-sm hover:border-primary/30"}`}
+                    >
+                      <span className="text-xl">{t.emoji}</span>
+                      <span className="text-xs font-semibold leading-tight">{t.label}</span>
+                      <span className="text-[10px] text-muted-foreground leading-tight">{t.description}</span>
+                      {t.durationWeeks && <span className="text-[10px] font-medium" style={{ color: typeInfo?.color }}>{t.durationWeeks}w</span>}
+                    </button>
+                  );
+                })}
+                {/* Custom plan card */}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedPlanTemplate({ id: "custom", emoji: "✏️", label: "Custom plan", description: "Start from scratch", defaultSteps: [] }); setPlanTitle(""); setPlanWeeks(""); }}
+                  className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border border-dashed text-left transition-all ${isCustomSelected ? "border-primary/60 bg-primary/8 ring-1 ring-primary/30" : "hover:border-primary/40"}`}
+                >
+                  <span className="text-xl">✏️</span>
+                  <span className="text-xs font-semibold">Custom plan</span>
+                  <span className="text-[10px] text-muted-foreground">Start from scratch</span>
+                </button>
+              </div>
+
+              {/* Custom plan form */}
+              {isCustomSelected && (
+                <div className="space-y-3 rounded-xl border bg-muted/10 p-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Plan name</label>
+                    <Input className="text-sm" placeholder={`e.g. Learn ${form.name || "this hobby"}`} value={planTitle} onChange={e => setPlanTitle(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
+                    <div className="flex gap-1.5">
+                      {[1,2,3,4,5,6,7].map(n => (
+                        <button key={n} type="button" onClick={() => setPlanDaysPerWeek(n)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}>
+                          {n}×
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">{SPREAD_PATTERNS[Math.min(planDaysPerWeek,7)]?.join(", ")} each week</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+                      <Input type="number" className="text-sm" placeholder="e.g. 8" min={1} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
+                      <Input type="number" className="text-sm" placeholder="e.g. 30" min={5} value={planMins} onChange={e => setPlanMins(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Selected template summary (non-custom) */}
+              {selectedPlanTemplate && !isCustomSelected && (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
+                    <div className="flex gap-1.5">
+                      {[1,2,3,4,5,6,7].map(n => (
+                        <button key={n} type="button" onClick={() => setPlanDaysPerWeek(n)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}>
+                          {n}×
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">{SPREAD_PATTERNS[Math.min(planDaysPerWeek,7)]?.join(", ")} each week</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+                      <Input type="number" className="text-sm" placeholder="e.g. 8" min={1} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
+                      <Input type="number" className="text-sm" placeholder="e.g. 30" min={5} value={planMins} onChange={e => setPlanMins(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={() => { setStep(3); setSelectedPlanTemplate(null); }} className="flex-1">
+                  <ChevronLeft size={13} className="mr-1" /> Back
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={!form.name?.trim() || (!selectedPlanTemplate)} className="flex-1">
+                  Add Hobby
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );
