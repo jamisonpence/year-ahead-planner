@@ -61,17 +61,32 @@ function streakLabel(n: number) {
 // Parse workout schedule JSON to get today's entry
 function getTodayWorkout(plan: WorkoutPlan | null): string | null {
   if (!plan) return null;
-  // scheduleJson stores dayOfWeek as lowercase ("monday"), format() returns "Monday"
+  // scheduleJson stores dayOfWeek as lowercase ("monday")
   const todayLower = format(new Date(), "EEEE").toLowerCase();
   try {
     const raw = JSON.parse(plan.scheduleJson ?? "[]");
     if (!Array.isArray(raw) || raw.length === 0) return null;
-    // New week-based format: [{ week, days: [{ dayOfWeek, label }] }]
+
+    // Week-based V2 format: [{ week: number, days: [{ dayOfWeek, label }] }]
     if ("week" in (raw[0] ?? {})) {
-      const flat = raw.flatMap((w: any) => w.days ?? []);
-      const entry = flat.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
+      // Find which plan week we're currently in using startDate
+      let currentWeek = 1;
+      if (plan.startDate) {
+        const [sy, sm, sd] = plan.startDate.split("-").map(Number);
+        const start = new Date(sy, sm - 1, sd);
+        const today = new Date();
+        const daysDiff = Math.floor((today.getTime() - start.getTime()) / 86400000);
+        currentWeek = Math.max(1, Math.floor(daysDiff / 7) + 1);
+      }
+      // Look up the exact current week; if not defined fall back to the
+      // nearest past week (e.g. after the plan ends, show the last week)
+      const sorted = [...raw].sort((a: any, b: any) => b.week - a.week);
+      const weekData = sorted.find((w: any) => w.week <= currentWeek) ?? sorted[sorted.length - 1];
+      if (!weekData) return null;
+      const entry = (weekData.days ?? []).find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
       return entry?.label ?? null;
     }
+
     // Legacy flat format: [{ dayOfWeek, label, templateName }]
     const entry = raw.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
     return entry?.label ?? entry?.templateName ?? null;
@@ -89,59 +104,101 @@ function hpPickTrainingDays(days: number): number[] {
   return Array.from(new Set(out)).sort((a, b) => a - b);
 }
 
+// Day abbreviations matching HobbiesPage (Sun=0 … Sat=6 using JS getDay())
+const DAY_ABBREVS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Spread presets for step-based plans (same as HobbiesPage calcScheduledDays)
+const STEP_SPREAD: Record<number, string[]> = {
+  1: ["Wed"], 2: ["Tue", "Fri"], 3: ["Mon", "Wed", "Fri"],
+  4: ["Mon", "Tue", "Thu", "Fri"], 5: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  6: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  7: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+};
+
 function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
   const tasks: HobbyTask[] = [];
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayAbbrev = DAY_ABBREVS[today.getDay()]; // e.g. "Thu"
+  const todayDateStr = format(today, "yyyy-MM-dd");
+
   for (const hobby of hobbies) {
     try {
       const extra = JSON.parse(hobby.extraJson ?? "{}");
       const plans: any[] = extra.plans ?? [];
       for (const plan of plans) {
         if (!plan.isActive || plan.isPaused || plan.completedAt) continue;
-        if (!plan.activities || plan.activities.length === 0) continue;
-        if (!plan.startDate) continue;
 
-        const sessionsPerWeek = Math.max(1, Math.min(7, plan.commitmentDaysPerWeek ?? 3));
-        // Use Monday-first indexing to match computeHobbyPlan: (getDay()+6)%7
-        const trainingDays = hpPickTrainingDays(sessionsPerWeek);
+        // ── Activity-based plans (computeHobbyPlan algorithm) ──────────────
+        if (plan.activities && plan.activities.length > 0 && plan.startDate) {
+          const sessionsPerWeek = Math.max(1, Math.min(7, plan.commitmentDaysPerWeek ?? 3));
+          // Monday-first indexing to match computeHobbyPlan: (getDay()+6)%7
+          const trainingDays = hpPickTrainingDays(sessionsPerWeek);
+          const [sy, sm, sd] = plan.startDate.split("-").map(Number);
+          const start = new Date(sy, sm - 1, sd);
+          if (today < start) continue;
 
-        const [sy, sm, sd] = plan.startDate.split("-").map(Number);
-        const start = new Date(sy, sm - 1, sd);
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const todayMonIdx = (today.getDay() + 6) % 7;
+          if (!trainingDays.includes(todayMonIdx)) continue;
 
-        if (today < start) continue;
+          // Walk from start to today (exclusive) counting training days
+          let sessionIndex = 0;
+          const cursor = new Date(start);
+          while (cursor < today) {
+            if (trainingDays.includes((cursor.getDay() + 6) % 7)) sessionIndex++;
+            cursor.setDate(cursor.getDate() + 1);
+          }
 
-        // Check if today is a training day (Monday-first index)
-        const todayMonIdx = (today.getDay() + 6) % 7;
-        if (!trainingDays.includes(todayMonIdx)) continue;
+          const completedKeys = new Set((plan.taskCompletions ?? []).map((c: any) => c.taskKey as string));
+          const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
+          const blockCount = minutesPerSession >= 40 ? 2 : 1;
+          const sortedActs = [...plan.activities].sort((a: any, b: any) => b.weight - a.weight);
 
-        // Walk from start to today counting sessions to get exact sessionIndex
-        let sessionIndex = 0;
-        const cursor = new Date(start);
-        while (cursor < today) {
-          const idx = (cursor.getDay() + 6) % 7;
-          if (trainingDays.includes(idx)) sessionIndex++;
-          cursor.setDate(cursor.getDate() + 1);
+          for (let b = 0; b < blockCount; b++) {
+            const act = sortedActs[(sessionIndex + b) % sortedActs.length];
+            const taskKey = `session-${sessionIndex}-block-${b}`;
+            tasks.push({
+              hobbyId: hobby.id, hobbyName: hobby.name, taskKey,
+              label: act.name ?? "Activity",
+              completed: completedKeys.has(taskKey),
+              emoji: hobby.emoji ?? "✨",
+            });
+          }
+          continue; // don't fall through to step-based check
         }
 
-        // Build blocks matching computeHobbyPlan exactly
-        const completedKeys = new Set((plan.taskCompletions ?? []).map((c: any) => c.taskKey as string));
-        const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
-        const blockCount = minutesPerSession >= 40 ? 2 : 1;
-        const sortedActs = [...plan.activities].sort((a: any, b: any) => b.weight - a.weight);
-
-        for (let b = 0; b < blockCount; b++) {
-          const act = sortedActs[(sessionIndex + b) % sortedActs.length];
-          const taskKey = `session-${sessionIndex}-block-${b}`;
-          tasks.push({
-            hobbyId: hobby.id,
-            hobbyName: hobby.name,
-            taskKey,
-            label: act.name ?? "Activity",
-            completed: completedKeys.has(taskKey),
-            emoji: hobby.emoji ?? "✨",
-          });
+        // ── Step-based plans (scheduleDays + dayLabels) ────────────────────
+        // Determine which days are scheduled
+        let scheduleDays: string[] = plan.scheduleDays ?? [];
+        if (scheduleDays.length === 0) {
+          // Derive from steps count same as HobbiesPage calcScheduledDays
+          const stepsPerWeek = plan.durationWeeks
+            ? Math.ceil((plan.steps?.length ?? 3) / plan.durationWeeks) || 3
+            : 3;
+          scheduleDays = STEP_SPREAD[Math.min(stepsPerWeek, 7)] ?? ["Mon", "Wed", "Fri"];
         }
+
+        if (!scheduleDays.includes(todayAbbrev)) continue;
+
+        // Get today's label — try weeklyPlan first, then dayLabels, then fallback
+        let label = plan.dayLabels?.[todayAbbrev] ?? "Training session";
+        if (plan.weeklyPlan && plan.weeklyPlan.length > 0 && plan.startDate) {
+          const [sy, sm, sd] = plan.startDate.split("-").map(Number);
+          const start = new Date(sy, sm - 1, sd);
+          const weekNum = Math.max(1, Math.floor((today.getTime() - start.getTime()) / (7 * 86400000)) + 1);
+          const wEntry = plan.weeklyPlan.find((e: any) => e.week === weekNum && e.day === todayAbbrev);
+          if (wEntry?.theme) label = wEntry.theme;
+        }
+
+        // Completed if a session was logged today
+        const completed = (plan.sessions ?? []).some((s: any) => s.date === todayDateStr);
+        tasks.push({
+          hobbyId: hobby.id, hobbyName: hobby.name,
+          taskKey: `day-${todayDateStr}-${plan.id}`,
+          label,
+          completed,
+          emoji: hobby.emoji ?? "✨",
+        });
       }
     } catch {}
   }
