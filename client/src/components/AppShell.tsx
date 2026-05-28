@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import QuickAddModal from "@/components/QuickAddModal";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin,
+  Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, User, Plus, MessageSquare, PenLine, CalendarCheck,
@@ -100,6 +100,7 @@ const ALL_TABS = [
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places & Experiences ──
   { path: "/spots",         label: "Places",                  icon: MapPin          },
+  { path: "/travel",        label: "Travel",                  icon: Plane           },
   { path: "/events",        label: "Events",                  icon: Calendar        },
   // ── Home & Money ──
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
@@ -119,7 +120,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "people",    label: "People & Relationships", paths: ["/relationships", "/kids"] },
   { key: "health",    label: "Health & Wellness",    paths: ["/workouts", "/health"] },
   { key: "culture",   label: "Culture & Interests",  paths: ["/reading", "/movies", "/music", "/art", "/recipes", "/hobbies"] },
-  { key: "places",    label: "Places & Experiences", paths: ["/spots", "/events"] },
+  { key: "places",    label: "Places & Experiences", paths: ["/spots", "/travel", "/events"] },
   { key: "home",      label: "Home & Money",         paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society",    paths: ["/faith", "/politics"] },
 ];
@@ -329,6 +330,7 @@ const COLLECTION_GROUPS = [
     subtitle: "Spots, travel, and events",
     tiles: [
       { path: "/spots",   emoji: "📍", label: "Places" },
+      { path: "/travel",  emoji: "✈️", label: "Travel" },
       { path: "/events",  emoji: "🎟️", label: "Events" },
     ],
   },

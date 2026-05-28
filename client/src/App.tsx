@@ -59,6 +59,7 @@ function AuthenticatedApp() {
         <Route path="/plants" component={PlantsPage} />
         <Route path="/housekeeping" component={HousekeepingPage} />
         <Route path="/spots" component={SpotsPage} />
+        <Route path="/travel" component={SpotsPage} />
         <Route path="/events" component={EventsPage} />
         <Route path="/kids" component={KidsPage} />
         <Route path="/quotes" component={QuotesPage} />

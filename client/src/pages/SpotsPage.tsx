@@ -999,7 +999,9 @@ export default function SpotsPage() {
   const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [mainTab, setMainTab] = useState<"places" | "travel">("places");
+  // Default to travel tab when navigated to via /travel route
+  const isTraveRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
+  const [mainTab, setMainTab] = useState<"places" | "travel">(isTraveRoute ? "travel" : "places");
   const [travelSubTab, setTravelSubTab] = useState<"trips" | "cities">("trips");
   const [placesSubTab, setPlacesSubTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
