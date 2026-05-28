@@ -28,6 +28,7 @@ const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/plants":        "Your plant collection is visible to friends",
   "/housekeeping":  "Your housekeeping lists are visible to friends",
   "/spots":         "Your saved spots are visible to friends",
+  "/travel":        "Your trips and travel history are visible to friends",
   "/kids":          "Your kids section is visible to friends",
   "/quotes":        "Your saved quotes are visible to friends",
   "/art":           "Your art collection is visible to friends",
