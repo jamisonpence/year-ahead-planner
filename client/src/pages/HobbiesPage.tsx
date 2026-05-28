@@ -3274,12 +3274,14 @@ function PlanWizard({
   onClose,
   hobbies,
   defaultHobbyId,
+  skipHobbyPicker = false,
   onSave,
 }: {
   open: boolean;
   onClose: () => void;
   hobbies: Hobby[];
   defaultHobbyId?: number;
+  skipHobbyPicker?: boolean;
   onSave: (hobbyId: number, plan: HobbyPlan) => void;
 }) {
   const [step, setStep] = useState(1);
@@ -3547,6 +3549,13 @@ function PlanWizard({
     setSfPopUpTarget("smooth"); setSfNewBreak(""); setSfSwellTarget("overhead");
   }
   function handleClose() { reset(); onClose(); }
+
+  // Sync defaultHobbyId into selectedHobbyId when wizard opens
+  useEffect(() => {
+    if (open && defaultHobbyId != null) {
+      setSelectedHobbyId(defaultHobbyId);
+    }
+  }, [open, defaultHobbyId]);
 
   function pickTemplate(t: PlanTemplate) {
     const hobbyName = selectedHobby?.name?.toLowerCase() ?? "";
@@ -5948,6 +5957,7 @@ function PlanWizard({
           {/* STEP 1 */}
           {step === 1 && !chessEloMode && !chessMode && !pokerMode && !pokerGoalMode && !hikingMode && !cyclingMode && !fishingMode && !gardeningMode && !climbingMode && !birdMode && !langMode && !instrMode && (
             <>
+              {!skipHobbyPicker && (
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which hobby?</label>
                 {hobbies.length === 0 ? (
@@ -5974,6 +5984,7 @@ function PlanWizard({
                   </div>
                 )}
               </div>
+              )}
               {selectedHobby && isLangHobby && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which language? 🌍</label>
@@ -12053,6 +12064,7 @@ export default function HobbiesPage() {
         onClose={() => { setPlanWizardOpen(false); setPlanWizardDefaultHobbyId(undefined); }}
         hobbies={hobbies.filter(h => h.status !== "retired")}
         defaultHobbyId={planWizardDefaultHobbyId}
+        skipHobbyPicker={!!planWizardDefaultHobbyId}
         onSave={handleSavePlan}
       />
       <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); }} initial={formInitial} onSave={handleSave} onSaveAndPlan={handleSaveAndPlan} isEdit={!!editHobby} />
