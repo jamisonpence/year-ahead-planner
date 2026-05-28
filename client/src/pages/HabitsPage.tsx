@@ -118,6 +118,65 @@ const STEP_SPREAD: Record<number, string[]> = {
   7: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
 };
 
+// Mirrors computeHobbyPlan's carry-forward logic for activity-based plans.
+// Returns the primary task for today (first block of the oldest pending session
+// originally due on or before today), or null if nothing is due.
+function getPrimaryTaskForActivityPlan(plan: any, todayIso: string): { label: string; taskKey: string; completed: boolean } | null {
+  const activities = plan.activities;
+  if (!activities || activities.length === 0 || !plan.startDate) return null;
+
+  const sessionsPerWeek = Math.max(1, Math.min(7, plan.commitmentDaysPerWeek ?? 3));
+  const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
+  const blockCount = minutesPerSession >= 40 ? 2 : 1;
+  const estimatedTotalHours = plan.estimatedTotalHours ?? 20;
+  const totalSessions = Math.max(1, Math.ceil(estimatedTotalHours * 60 / minutesPerSession));
+  const horizonSessions = totalSessions + sessionsPerWeek * 3;
+  const trainingDays = hpPickTrainingDays(sessionsPerWeek);
+  const sortedActs = [...activities].sort((a: any, b: any) => b.weight - a.weight);
+  const completedKeys = new Set((plan.taskCompletions ?? []).map((c: any) => c.taskKey as string));
+
+  const [sy, sm, sd] = plan.startDate.split("-").map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const today = new Date(todayIso + "T00:00:00");
+  if (today < start) return null;
+
+  // Build all sessions up to the horizon — same walk as computeHobbyPlan
+  const sessions: { sessionIndex: number; originalDate: string; blocks: { taskKey: string; activityName: string; completed: boolean }[] }[] = [];
+  const cursor = new Date(start);
+  let guardDays = 0;
+  while (sessions.length < horizonSessions && guardDays < horizonSessions * 14 + 30) {
+    const dayIdx = (cursor.getDay() + 6) % 7;
+    if (trainingDays.includes(dayIdx)) {
+      const idx = sessions.length;
+      const cursorIso = format(cursor, "yyyy-MM-dd");
+      const blocks = [];
+      for (let b = 0; b < blockCount; b++) {
+        const act = sortedActs[(idx + b) % sortedActs.length];
+        const taskKey = `session-${idx}-block-${b}`;
+        blocks.push({ taskKey, activityName: act.name ?? "Activity", completed: completedKeys.has(taskKey) });
+      }
+      sessions.push({ sessionIndex: idx, originalDate: cursorIso, blocks });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    guardDays++;
+    // Stop building once we're past today and have enough sessions
+    if (cursor.getTime() > today.getTime() + 86400000 && sessions.length >= totalSessions) break;
+  }
+
+  // Carry-forward: find the oldest pending session due on or before today
+  // (same as computeHobbyPlan: eligiblePending[0] → queueCopy.shift())
+  const eligiblePending = sessions
+    .filter(s => s.originalDate <= todayIso)
+    .map(s => ({ ...s, blocks: s.blocks.filter(b => !b.completed) }))
+    .filter(s => s.blocks.length > 0);
+
+  if (eligiblePending.length === 0) return null;
+
+  // Return just the primary (first) block — one row per plan like Hobbies shows
+  const firstBlock = eligiblePending[0].blocks[0];
+  return { label: firstBlock.activityName, taskKey: firstBlock.taskKey, completed: false };
+}
+
 function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
   const tasks: HobbyTask[] = [];
   const now = new Date();
@@ -132,38 +191,15 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
       for (const plan of plans) {
         if (!plan.isActive || plan.isPaused || plan.completedAt) continue;
 
-        // ── Activity-based plans (computeHobbyPlan algorithm) ──────────────
+        // ── Activity-based plans — use carry-forward logic ──────────────────
         if (plan.activities && plan.activities.length > 0 && plan.startDate) {
-          const sessionsPerWeek = Math.max(1, Math.min(7, plan.commitmentDaysPerWeek ?? 3));
-          // Monday-first indexing to match computeHobbyPlan: (getDay()+6)%7
-          const trainingDays = hpPickTrainingDays(sessionsPerWeek);
-          const [sy, sm, sd] = plan.startDate.split("-").map(Number);
-          const start = new Date(sy, sm - 1, sd);
-          if (today < start) continue;
-
-          const todayMonIdx = (today.getDay() + 6) % 7;
-          if (!trainingDays.includes(todayMonIdx)) continue;
-
-          // Walk from start to today (exclusive) counting training days
-          let sessionIndex = 0;
-          const cursor = new Date(start);
-          while (cursor < today) {
-            if (trainingDays.includes((cursor.getDay() + 6) % 7)) sessionIndex++;
-            cursor.setDate(cursor.getDate() + 1);
-          }
-
-          const completedKeys = new Set((plan.taskCompletions ?? []).map((c: any) => c.taskKey as string));
-          const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
-          const blockCount = minutesPerSession >= 40 ? 2 : 1;
-          const sortedActs = [...plan.activities].sort((a: any, b: any) => b.weight - a.weight);
-
-          for (let b = 0; b < blockCount; b++) {
-            const act = sortedActs[(sessionIndex + b) % sortedActs.length];
-            const taskKey = `session-${sessionIndex}-block-${b}`;
+          const task = getPrimaryTaskForActivityPlan(plan, todayDateStr);
+          if (task) {
             tasks.push({
-              hobbyId: hobby.id, hobbyName: hobby.name, taskKey,
-              label: act.name ?? "Activity",
-              completed: completedKeys.has(taskKey),
+              hobbyId: hobby.id, hobbyName: hobby.name,
+              taskKey: task.taskKey,
+              label: task.label,
+              completed: task.completed,
               emoji: hobby.emoji ?? "✨",
             });
           }
@@ -171,10 +207,8 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
         }
 
         // ── Step-based plans (scheduleDays + dayLabels) ────────────────────
-        // Determine which days are scheduled
         let scheduleDays: string[] = plan.scheduleDays ?? [];
         if (scheduleDays.length === 0) {
-          // Derive from steps count same as HobbiesPage calcScheduledDays
           const stepsPerWeek = plan.durationWeeks
             ? Math.ceil((plan.steps?.length ?? 3) / plan.durationWeeks) || 3
             : 3;
@@ -183,7 +217,7 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
 
         if (!scheduleDays.includes(todayAbbrev)) continue;
 
-        // Get today's label — try weeklyPlan first, then dayLabels, then fallback
+        // Get today's label — weeklyPlan overrides dayLabels
         let label = plan.dayLabels?.[todayAbbrev] ?? "Training session";
         if (plan.weeklyPlan && plan.weeklyPlan.length > 0 && plan.startDate) {
           const [sy, sm, sd] = plan.startDate.split("-").map(Number);
@@ -193,7 +227,6 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
           if (wEntry?.theme) label = wEntry.theme;
         }
 
-        // Completed if a session was logged today
         const completed = (plan.sessions ?? []).some((s: any) => s.date === todayDateStr);
         tasks.push({
           hobbyId: hobby.id, hobbyName: hobby.name,
