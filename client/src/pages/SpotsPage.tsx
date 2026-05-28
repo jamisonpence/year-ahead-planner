@@ -1196,27 +1196,6 @@ export default function SpotsPage() {
   return (
     <div className="flex flex-col h-full">
 
-      {/* ── Top-level section nav: Places | Travel ───────────────────────────── */}
-      <div className="px-3 pt-3 pb-0 shrink-0">
-        <div className="flex gap-1 border-b">
-          {[
-            { value: "places" as const, label: "Places", icon: <MapPin size={14} /> },
-            { value: "travel" as const, label: "Travel", icon: <Plane size={14} /> },
-          ].map(tab => (
-            <button
-              key={tab.value}
-              onClick={() => setMainTab(tab.value)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors -mb-px ${
-                mainTab === tab.value
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ══ PLACES ═══════════════════════════════════════════════════════════ */}
       {mainTab === "places" && (
