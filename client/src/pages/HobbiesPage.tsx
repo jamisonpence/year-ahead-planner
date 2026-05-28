@@ -11432,8 +11432,11 @@ const EMPTY_FORM: Partial<InsertHobby> = {
 
 // ── Simplified 3-step Add Hobby wizard ───────────────────────────────────────
 
-function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
-  open: boolean; onClose: () => void; initial: Partial<InsertHobby>; onSave: (data: Partial<InsertHobby>) => void; isEdit?: boolean;
+function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit = false }: {
+  open: boolean; onClose: () => void; initial: Partial<InsertHobby>;
+  onSave: (data: Partial<InsertHobby>) => void;
+  onSaveAndPlan?: (data: Partial<InsertHobby>) => void;
+  isEdit?: boolean;
 }) {
   const [step, setStep] = useState(isEdit ? 3 : 1); // edit mode = jump to full form
   const [form, setForm] = useState<Partial<InsertHobby>>(initial);
@@ -11494,12 +11497,11 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const presets = PRESET_HOBBIES[(form.hobbyType as HobbyType) ?? "creative"] ?? [];
   const canProceed1 = !!form.name?.trim();
 
-  // Step indicators (4 dots when on plan step)
-  const totalStepDots = !isEdit && showAddPlan ? 4 : 3;
+  // Step indicators
   const StepDots = () => (
     !isEdit ? (
       <div className="flex items-center justify-center gap-1.5 pb-1">
-        {Array.from({ length: totalStepDots }, (_, i) => i + 1).map(s => (
+        {[1, 2, 3].map(s => (
           <div key={s} className={`rounded-full transition-all ${s === step ? "w-5 h-1.5 bg-primary" : s < step ? "w-1.5 h-1.5 bg-primary/50" : "w-1.5 h-1.5 bg-muted-foreground/20"}`} />
         ))}
       </div>
@@ -11678,11 +11680,12 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
             )}
 
             {/* Add a plan button (non-edit only) */}
-            {!isEdit && (
+            {!isEdit && onSaveAndPlan && (
               <button
                 type="button"
-                onClick={() => { setShowAddPlan(true); setStep(4); }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border hover:bg-muted/40 transition-colors"
+                disabled={!form.name?.trim()}
+                onClick={() => onSaveAndPlan({ ...form, extraJson: JSON.stringify({ ...extra, ...parseExtra(initial.extraJson ?? "{}"), ...extra }) })}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border hover:bg-muted/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <ClipboardList size={14} className="text-primary shrink-0" />
@@ -11709,129 +11712,6 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
           </div>
         )}
 
-        {/* ── Step 4: Plan Template selection ── */}
-        {step === 4 && !isEdit && (() => {
-          const hobbyType = (form.hobbyType as HobbyType) ?? "creative";
-          const typeInfo = HOBBY_TYPE_MAP[hobbyType];
-          const planTemplates = getPlanTemplatesForHobby(hobbyType, form.name ?? "");
-          const isCustomSelected = selectedPlanTemplate?.id === "custom";
-          return (
-            <div className="space-y-4 mt-1">
-              {/* Section header */}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Plan Template —{" "}
-                  <span style={{ color: typeInfo?.color }}>
-                    {typeInfo?.emoji} {typeInfo?.label}
-                  </span>
-                </p>
-              </div>
-
-              {/* Template grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {planTemplates.map(t => {
-                  const isSelected = selectedPlanTemplate?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlanTemplate(t);
-                        setPlanTitle(t.label);
-                        setPlanWeeks(t.durationWeeks ? String(t.durationWeeks) : "");
-                      }}
-                      className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-all ${isSelected ? "border-primary/60 bg-primary/8 ring-1 ring-primary/30" : "hover:shadow-sm hover:border-primary/30"}`}
-                    >
-                      <span className="text-xl">{t.emoji}</span>
-                      <span className="text-xs font-semibold leading-tight">{t.label}</span>
-                      <span className="text-[10px] text-muted-foreground leading-tight">{t.description}</span>
-                      {t.durationWeeks && <span className="text-[10px] font-medium" style={{ color: typeInfo?.color }}>{t.durationWeeks}w</span>}
-                    </button>
-                  );
-                })}
-                {/* Custom plan card */}
-                <button
-                  type="button"
-                  onClick={() => { setSelectedPlanTemplate({ id: "custom", emoji: "✏️", label: "Custom plan", description: "Start from scratch", defaultSteps: [] }); setPlanTitle(""); setPlanWeeks(""); }}
-                  className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border border-dashed text-left transition-all ${isCustomSelected ? "border-primary/60 bg-primary/8 ring-1 ring-primary/30" : "hover:border-primary/40"}`}
-                >
-                  <span className="text-xl">✏️</span>
-                  <span className="text-xs font-semibold">Custom plan</span>
-                  <span className="text-[10px] text-muted-foreground">Start from scratch</span>
-                </button>
-              </div>
-
-              {/* Custom plan form */}
-              {isCustomSelected && (
-                <div className="space-y-3 rounded-xl border bg-muted/10 p-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Plan name</label>
-                    <Input className="text-sm" placeholder={`e.g. Learn ${form.name || "this hobby"}`} value={planTitle} onChange={e => setPlanTitle(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
-                    <div className="flex gap-1.5">
-                      {[1,2,3,4,5,6,7].map(n => (
-                        <button key={n} type="button" onClick={() => setPlanDaysPerWeek(n)}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}>
-                          {n}×
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">{SPREAD_PATTERNS[Math.min(planDaysPerWeek,7)]?.join(", ")} each week</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
-                      <Input type="number" className="text-sm" placeholder="e.g. 8" min={1} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
-                      <Input type="number" className="text-sm" placeholder="e.g. 30" min={5} value={planMins} onChange={e => setPlanMins(e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Selected template summary (non-custom) */}
-              {selectedPlanTemplate && !isCustomSelected && (
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
-                    <div className="flex gap-1.5">
-                      {[1,2,3,4,5,6,7].map(n => (
-                        <button key={n} type="button" onClick={() => setPlanDaysPerWeek(n)}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}>
-                          {n}×
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">{SPREAD_PATTERNS[Math.min(planDaysPerWeek,7)]?.join(", ")} each week</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
-                      <Input type="number" className="text-sm" placeholder="e.g. 8" min={1} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
-                      <Input type="number" className="text-sm" placeholder="e.g. 30" min={5} value={planMins} onChange={e => setPlanMins(e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" size="sm" onClick={() => { setStep(3); setSelectedPlanTemplate(null); }} className="flex-1">
-                  <ChevronLeft size={13} className="mr-1" /> Back
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={!form.name?.trim() || (!selectedPlanTemplate)} className="flex-1">
-                  Add Hobby
-                </Button>
-              </div>
-            </div>
-          );
-        })()}
       </DialogContent>
     </Dialog>
   );
@@ -11871,6 +11751,7 @@ export default function HobbiesPage() {
   const [formInitial, setFormInitial] = useState<Partial<InsertHobby>>(EMPTY_FORM);
   const [formKey, setFormKey] = useState(0);
   const [planWizardOpen, setPlanWizardOpen] = useState(false);
+  const [planWizardDefaultHobbyId, setPlanWizardDefaultHobbyId] = useState<number | undefined>(undefined);
 
   const filtered = useMemo(() => {
     return hobbies.filter(h => {
@@ -11892,6 +11773,16 @@ export default function HobbiesPage() {
       if (editHobby) { await updateMut.mutateAsync({ id: editHobby.id, data }); toast({ title: "Hobby updated" }); }
       else { await createMut.mutateAsync(data); toast({ title: "Hobby added!" }); }
       setShowForm(false); setEditHobby(null);
+    } catch { toast({ title: "Something went wrong", variant: "destructive" }); }
+  };
+
+  // Save hobby first, then open PlanWizard pre-seeded with the new hobby
+  const handleSaveAndPlan = async (data: Partial<InsertHobby>) => {
+    try {
+      const created = await createMut.mutateAsync(data);
+      setShowForm(false); setEditHobby(null);
+      setPlanWizardDefaultHobbyId(created.id);
+      setPlanWizardOpen(true);
     } catch { toast({ title: "Something went wrong", variant: "destructive" }); }
   };
 
@@ -12159,11 +12050,12 @@ export default function HobbiesPage() {
       {/* Dialogs */}
       <PlanWizard
         open={planWizardOpen}
-        onClose={() => setPlanWizardOpen(false)}
+        onClose={() => { setPlanWizardOpen(false); setPlanWizardDefaultHobbyId(undefined); }}
         hobbies={hobbies.filter(h => h.status !== "retired")}
+        defaultHobbyId={planWizardDefaultHobbyId}
         onSave={handleSavePlan}
       />
-      <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); }} initial={formInitial} onSave={handleSave} isEdit={!!editHobby} />
+      <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); }} initial={formInitial} onSave={handleSave} onSaveAndPlan={handleSaveAndPlan} isEdit={!!editHobby} />
 
       <HobbyDetailDialog
         hobby={detailHobby}
