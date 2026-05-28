@@ -24,7 +24,7 @@ import {
   Layers, X, ImagePlus, Target, CheckCircle2, Circle, Calendar,
   TrendingUp, Flag, ListChecks, ChevronRight, ChevronLeft,
   Trophy, Flame, BarChart3, RefreshCw, Check, Zap, Power, PowerOff, ClipboardList,
-  Play, ClipboardCheck, Timer, CalendarDays, CalendarCheck2,
+  Play, Pause, ClipboardCheck, Timer, CalendarDays, CalendarCheck2,
   MoreHorizontal, CalendarClock,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -9900,18 +9900,19 @@ function HobbyActivePlanSection({
   const [editDayLabel, setEditDayLabel] = useState<{
     hobby: Hobby; plan: HobbyPlan; dayLabel: string;
   } | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const today = new Date();
   const todayDowIdx = today.getDay(); // 0=Sun
   const todayDowLabel = DAYS_SHORT[todayDowIdx]; // "Mon" etc.
 
-  // Collect all active plans across hobbies
+  // Collect all active + paused plans across hobbies
   const activePlanEntries = useMemo(() => {
     const entries: { hobby: Hobby; plan: HobbyPlan }[] = [];
     for (const h of hobbies) {
       const plans = parsePlans(h.extraJson ?? "{}");
       for (const p of plans) {
-        if (p.isActive && !p.completedAt) entries.push({ hobby: h, plan: p });
+        if (!p.completedAt) entries.push({ hobby: h, plan: p });
       }
     }
     return entries;
@@ -9947,6 +9948,20 @@ function HobbyActivePlanSection({
 
   function markComplete(hobby: Hobby, plan: HobbyPlan) {
     savePlanUpdate(hobby, { ...plan, completedAt: new Date().toISOString(), isActive: false });
+  }
+
+  function pausePlan(hobby: Hobby, plan: HobbyPlan) {
+    savePlanUpdate(hobby, { ...plan, isActive: false, isPaused: true });
+  }
+
+  function resumePlan(hobby: Hobby, plan: HobbyPlan) {
+    savePlanUpdate(hobby, { ...plan, isActive: true, isPaused: false });
+  }
+
+  function deletePlan(hobby: Hobby, planId: string) {
+    const plans = parsePlans(hobby.extraJson ?? "{}").filter(p => p.id !== planId);
+    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
+    setDeleteConfirmId(null);
   }
 
   function toggleTaskCompletion(hobby: Hobby, plan: HobbyPlan, taskKey: string) {
@@ -10017,10 +10032,13 @@ function HobbyActivePlanSection({
     hobby: Hobby; plan: HobbyPlan; typeInfo: typeof HOBBY_TYPES[0];
     color: string; loggedSession?: SessionLog;
   };
+  // Only active (not paused) plans appear in the weekly schedule
+  const activeOnlyEntries = useMemo(() => activePlanEntries.filter(e => e.plan.isActive && !e.plan.isPaused), [activePlanEntries]);
+
   const mergedByDay = useMemo((): Record<string, MergedEntry[]> => {
     const map: Record<string, MergedEntry[]> = {};
     DAYS_ORDERED.forEach(d => { map[d] = []; });
-    activePlanEntries.forEach(({ hobby, plan }, idx) => {
+    activeOnlyEntries.forEach(({ hobby, plan }, idx) => {
       const typeInfo = HOBBY_TYPE_MAP[hobby.hobbyType as HobbyType] ?? HOBBY_TYPES[0];
       const color = PLAN_COLORS[idx % PLAN_COLORS.length];
       // For activity-based plans, use computed weekly schedule days
@@ -10042,7 +10060,7 @@ function HobbyActivePlanSection({
       });
     });
     return map;
-  }, [activePlanEntries, today]);
+  }, [activeOnlyEntries, today]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -10054,7 +10072,7 @@ function HobbyActivePlanSection({
         <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
           <p className="text-sm font-semibold">This Week's Schedule</p>
           <span className="text-xs text-muted-foreground">
-            {activePlanEntries.length > 1 ? `${activePlanEntries.length} plans merged` : activePlanEntries[0]?.plan.title}
+            {activeOnlyEntries.length > 1 ? `${activeOnlyEntries.length} plans merged` : activeOnlyEntries[0]?.plan.title}
           </span>
         </div>
         <div className="divide-y">
@@ -10197,7 +10215,7 @@ function HobbyActivePlanSection({
         const finalDisplayPct = activityBasedProgressPct !== null ? activityBasedProgressPct : displayPct;
 
         return (
-          <div key={`${hobby.id}-${plan.id}`} className="bg-card border rounded-xl overflow-hidden">
+          <div key={`${hobby.id}-${plan.id}`} className={`bg-card border rounded-xl overflow-hidden ${plan.isPaused && !plan.isActive ? "opacity-75" : ""}`}>
             {/* ── Plan Header ── */}
             <div className="px-4 py-3 border-b flex items-center justify-between gap-2"
               style={{ background: `${typeInfo.color}10`, borderBottomColor: `${typeInfo.color}30` }}>
@@ -10209,11 +10227,18 @@ function HobbyActivePlanSection({
                 </div>
                 <div className="min-w-0">
                   <p className="text-[11px] text-muted-foreground truncate">{hobby.name}</p>
-                  <p className="text-sm font-semibold truncate">{plan.title}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-semibold truncate">{plan.title}</p>
+                    {plan.isPaused && !plan.isActive && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 shrink-0">
+                        Paused
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {allDone && (
+              <div className="flex items-center gap-1 shrink-0">
+                {allDone && plan.isActive && (
                   <button
                     onClick={() => markComplete(hobby, plan)}
                     className="text-[10px] px-2.5 py-1 rounded-full font-semibold border transition-colors"
@@ -10222,19 +10247,71 @@ function HobbyActivePlanSection({
                     ✓ Done
                   </button>
                 )}
-                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2"
-                  style={{ color: typeInfo.color }}
-                  onClick={() => setEditTarget({ hobby, plan })}>
-                  <Pencil size={10} /> Edit
-                </Button>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                   style={{ background: `${typeInfo.color}20`, color: typeInfo.color }}>
                   {computedPlan ? `${finalDisplayPct}%` : plan.durationWeeks ? `Wk ${currentWeek}/${totalWeeks}` : `${stepPct}%`}
                 </span>
+                {/* ── 3-dot menu ── */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                      <MoreHorizontal size={14} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => setEditTarget({ hobby, plan })}>
+                      <Pencil size={13} className="mr-2" /> Edit plan
+                    </DropdownMenuItem>
+                    {plan.isActive ? (
+                      <DropdownMenuItem onClick={() => pausePlan(hobby, plan)}>
+                        <Pause size={13} className="mr-2 text-yellow-600" />
+                        <span className="text-yellow-700 dark:text-yellow-400">Pause plan</span>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => resumePlan(hobby, plan)}>
+                        <Play size={13} className="mr-2 text-emerald-600" />
+                        <span className="text-emerald-700 dark:text-emerald-400">Resume plan</span>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    {deleteConfirmId === plan.id ? (
+                      <DropdownMenuItem
+                        onClick={() => deletePlan(hobby, plan.id)}
+                        className="text-destructive focus:text-destructive font-semibold"
+                      >
+                        <Trash2 size={13} className="mr-2" /> Confirm delete
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onClick={() => setDeleteConfirmId(plan.id)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 size={13} className="mr-2" /> Delete plan
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
             <div className="p-4 space-y-4">
+              {/* ── Paused banner ── */}
+              {plan.isPaused && !plan.isActive && (
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/25">
+                  <div className="flex items-center gap-2 text-xs text-yellow-700 dark:text-yellow-400">
+                    <Pause size={12} />
+                    <span className="font-medium">Plan is paused</span>
+                    <span className="opacity-70">— sessions won't appear in your schedule</span>
+                  </div>
+                  <button
+                    onClick={() => resumePlan(hobby, plan)}
+                    className="text-[10px] font-semibold px-2.5 py-1 rounded-full border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors shrink-0"
+                  >
+                    <Play size={9} className="inline mr-1" />Resume
+                  </button>
+                </div>
+              )}
+
               {/* ── Progress bar ── */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
@@ -11871,6 +11948,7 @@ export default function HobbiesPage() {
   const counts = useMemo(() => { const c: Record<string, number> = {}; for (const h of hobbies) c[h.hobbyType] = (c[h.hobbyType] ?? 0) + 1; return c; }, [hobbies]);
   const activeGoalCount = useMemo(() => hobbies.reduce((sum, h) => sum + parseGoals(h.extraJson ?? "{}").filter(g => g.status === "active").length, 0), [hobbies]);
   const activePlanCount = useMemo(() => hobbies.reduce((sum, h) => sum + parsePlans(h.extraJson ?? "{}").filter(p => p.isActive && !p.completedAt).length, 0), [hobbies]);
+  const managedPlanCount = useMemo(() => hobbies.reduce((sum, h) => sum + parsePlans(h.extraJson ?? "{}").filter(p => !p.completedAt).length, 0), [hobbies]);
   const activeCount = hobbies.filter(h => h.status === "active").length;
   const favCount = hobbies.filter(h => h.isFavorite).length;
 
@@ -11947,10 +12025,10 @@ export default function HobbiesPage() {
           )}
 
           {/* Empty state — hobbies exist but no plans */}
-          {hobbies.length > 0 && activePlanCount === 0 && (
+          {hobbies.length > 0 && managedPlanCount === 0 && (
             <div className="text-center py-16 text-muted-foreground">
               <ClipboardList size={36} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium text-sm">No active plans</p>
+              <p className="font-medium text-sm">No plans yet</p>
               <p className="text-xs mt-1 mb-4">Create a plan to start tracking your sessions</p>
               <Button size="sm" variant="outline" onClick={() => setPlanWizardOpen(true)}>
                 <Plus size={14} className="mr-1.5" /> Create your first plan
@@ -11959,7 +12037,7 @@ export default function HobbiesPage() {
           )}
 
           {/* Plan execution cards */}
-          {activePlanCount > 0 && (
+          {managedPlanCount > 0 && (
             <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} hideWeeklySchedule />
           )}
         </div>
