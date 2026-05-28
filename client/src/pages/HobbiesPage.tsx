@@ -9625,11 +9625,51 @@ function DayLabelDialog({
 const DAYS_ORDERED_SCHED = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_TO_IDX_SCHED: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
 
-function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
+function ScheduleTab({ hobbies, onUpdateHobby }: { hobbies: Hobby[]; onUpdateHobby: (id: number, extraJson: string) => void }) {
   const today = new Date();
   const todayDowIdx = today.getDay(); // 0=Sun
   const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const todayShort = DOW_LABELS[todayDowIdx];
+
+  const [logTarget, setLogTarget] = useState<{ hobby: Hobby; plan: HobbyPlan; dayLabel: string; defaultDate: string } | null>(null);
+  const [editSessionTarget, setEditSessionTarget] = useState<{ hobby: Hobby; plan: HobbyPlan; session: SessionLog; dayLabel: string } | null>(null);
+
+  function dateForDay(dayLabel: string): string {
+    const targetIdx = DAY_TO_IDX_SCHED[dayLabel] ?? 1;
+    const diff = ((targetIdx - todayDowIdx) + 7) % 7;
+    const d = new Date(today); d.setDate(today.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function savePlanUpdate(hobby: Hobby, updatedPlan: HobbyPlan) {
+    const plans = parsePlans(hobby.extraJson ?? "{}").map(p => p.id === updatedPlan.id ? updatedPlan : p);
+    onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
+  }
+
+  function logSession(session: Omit<SessionLog, "id" | "planId">) {
+    if (!logTarget) return;
+    const { hobby, plan } = logTarget;
+    const newSession: SessionLog = { ...session, id: genId(), planId: plan.id };
+    savePlanUpdate(hobby, { ...plan, sessions: [...(plan.sessions ?? []), newSession] });
+    setLogTarget(null);
+  }
+
+  function updateSession(updatedData: Omit<SessionLog, "id" | "planId">) {
+    if (!editSessionTarget) return;
+    const { hobby, plan, session } = editSessionTarget;
+    savePlanUpdate(hobby, {
+      ...plan,
+      sessions: (plan.sessions ?? []).map(s => s.id === session.id ? { ...updatedData, id: session.id, planId: plan.id } : s),
+    });
+    setEditSessionTarget(null);
+  }
+
+  function deleteEditSession() {
+    if (!editSessionTarget) return;
+    const { hobby, plan, session } = editSessionTarget;
+    savePlanUpdate(hobby, { ...plan, sessions: (plan.sessions ?? []).filter(s => s.id !== session.id) });
+    setEditSessionTarget(null);
+  }
 
   // Collect all active plans
   const activePlanEntries = useMemo(() => {
@@ -9648,12 +9688,16 @@ function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
     return entries;
   }, [hobbies]);
 
-  // Build merged day map
-  const mergedByDay = useMemo((): Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string }[]> => {
-    const map: Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string }[]> = {};
+  // Build merged day map (including logged sessions this week)
+  const mergedByDay = useMemo((): Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string; loggedSession?: SessionLog }[]> => {
+    const weekStart = new Date(today); weekStart.setDate(today.getDate() - todayDowIdx);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const startStr = weekStart.toISOString().slice(0, 10);
+    const endStr = weekEnd.toISOString().slice(0, 10);
+
+    const map: Record<string, { hobby: Hobby; plan: HobbyPlan; color: string; label: string; notes: string; loggedSession?: SessionLog }[]> = {};
     DAYS_ORDERED_SCHED.forEach(d => { map[d] = []; });
     for (const { hobby, plan, color } of activePlanEntries) {
-      // Activity-based plan: use computed schedule
       const computed = (plan.activities && plan.activities.length > 0) ? computeHobbyPlan(plan, today) : null;
       const scheduledDays = computed
         ? computed.weeklySchedule.filter(d => d.isTrainingDay).map(d => d.dayName)
@@ -9663,7 +9707,10 @@ function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
       for (const day of scheduledDays) {
         if (!map[day]) continue;
         const di = getPlanDayInfo(plan, day);
-        map[day].push({ hobby, plan, color, label: di.label || plan.title, notes: di.notes });
+        const loggedSession = (plan.sessions ?? []).find(s =>
+          s.dayOfWeek === day && s.date >= startStr && s.date <= endStr
+        );
+        map[day].push({ hobby, plan, color, label: di.label || plan.title, notes: di.notes, loggedSession });
       }
     }
     return map;
@@ -9735,23 +9782,52 @@ function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
                 {/* Sessions */}
                 {entries.length > 0 ? (
                   <div className="flex-1 min-w-0 space-y-2 py-0.5">
-                    {entries.map(({ hobby, plan, color, label, notes }, i) => (
-                      <div key={`${plan.id}-${i}`} className={`rounded-lg border px-3 py-2 ${isPast ? "opacity-50" : ""}`}
-                        style={{ borderColor: `${color}40`, background: `${color}0a` }}>
+                    {entries.map(({ hobby, plan, color, label, notes, loggedSession }, i) => (
+                      <button
+                        key={`${plan.id}-${i}`}
+                        type="button"
+                        className={`w-full text-left rounded-lg border px-3 py-2 transition-colors hover:brightness-95 group ${isPast ? "opacity-50" : ""}`}
+                        style={{ borderColor: `${color}40`, background: `${color}0a` }}
+                        onClick={() => {
+                          if (loggedSession) {
+                            setEditSessionTarget({ hobby, plan, session: loggedSession, dayLabel: day });
+                          } else {
+                            setLogTarget({ hobby, plan, dayLabel: day, defaultDate: date });
+                          }
+                        }}
+                      >
                         <div className="flex items-center gap-2 mb-0.5">
                           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
                           <span className="text-xs font-semibold truncate" style={{ color }}>{hobby.name}</span>
-                          {plan.minutesPerSession && (
-                            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{plan.minutesPerSession} min</span>
+                          {loggedSession ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-auto shrink-0"
+                              style={{ background: `${color}20`, color }}>
+                              <CheckCircle2 size={9} />
+                              {loggedSession.durationMins ? `${loggedSession.durationMins}m` : "Logged"}
+                              <Pencil size={8} className="ml-0.5 opacity-60" />
+                            </span>
+                          ) : isToday ? (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground ml-auto shrink-0">
+                              Log today
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              + Log
+                            </span>
+                          )}
+                          {!loggedSession && plan.minutesPerSession && (
+                            <span className="text-[10px] text-muted-foreground shrink-0">{plan.minutesPerSession} min</span>
                           )}
                         </div>
                         {label && label !== plan.title && (
                           <p className="text-sm font-medium text-foreground ml-3.5">{label}</p>
                         )}
-                        {notes && (
+                        {loggedSession?.notes ? (
+                          <p className="text-[10px] text-muted-foreground mt-1 ml-3.5 line-clamp-2 leading-relaxed">{loggedSession.notes}</p>
+                        ) : notes ? (
                           <p className="text-[10px] text-muted-foreground mt-1 ml-3.5 line-clamp-2 leading-relaxed">{notes}</p>
-                        )}
-                      </div>
+                        ) : null}
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -9764,6 +9840,28 @@ function ScheduleTab({ hobbies }: { hobbies: Hobby[] }) {
           })}
         </div>
       )}
+
+      {/* Log Session Dialog */}
+      <LogSessionDialog
+        open={!!logTarget}
+        onClose={() => setLogTarget(null)}
+        onSave={logSession}
+        planTitle={logTarget?.plan.title ?? ""}
+        dayLabel={logTarget?.dayLabel ?? ""}
+        defaultDate={logTarget?.defaultDate ?? today.toISOString().slice(0, 10)}
+      />
+
+      {/* Edit Session Dialog */}
+      <LogSessionDialog
+        open={!!editSessionTarget}
+        onClose={() => setEditSessionTarget(null)}
+        onSave={updateSession}
+        onDelete={deleteEditSession}
+        planTitle={editSessionTarget?.plan.title ?? ""}
+        dayLabel={editSessionTarget?.dayLabel ?? ""}
+        defaultDate={editSessionTarget?.session.date ?? today.toISOString().slice(0, 10)}
+        existingSession={editSessionTarget?.session ?? null}
+      />
     </div>
   );
 }
@@ -9774,10 +9872,12 @@ function HobbyActivePlanSection({
   hobbies,
   onUpdateHobby,
   onGoToPlans,
+  hideWeeklySchedule = false,
 }: {
   hobbies: Hobby[];
   onUpdateHobby: (id: number, extraJson: string) => void;
   onGoToPlans: () => void;
+  hideWeeklySchedule?: boolean;
 }) {
   const [logTarget, setLogTarget] = useState<{
     hobby: Hobby; plan: HobbyPlan; dayLabel: string; defaultDate: string;
@@ -9939,7 +10039,7 @@ function HobbyActivePlanSection({
     <div className="space-y-6">
 
       {/* ── This Week's Schedule (merged) ── */}
-      <div className="bg-card border rounded-xl overflow-hidden">
+      {!hideWeeklySchedule && <div className="bg-card border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
           <p className="text-sm font-semibold">This Week's Schedule</p>
           <span className="text-xs text-muted-foreground">
@@ -10035,7 +10135,7 @@ function HobbyActivePlanSection({
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {/* ── Per-plan progress cards ── */}
       <div className="space-y-4">
@@ -11778,14 +11878,14 @@ export default function HobbiesPage() {
 
           {/* Plan execution cards */}
           {activePlanCount > 0 && (
-            <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} />
+            <HobbyActivePlanSection hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} onGoToPlans={() => {}} hideWeeklySchedule />
           )}
         </div>
       )}
 
       {/* ── Schedule tab ── */}
       {activeTab === "schedule" && (
-        <ScheduleTab hobbies={hobbies} />
+        <ScheduleTab hobbies={hobbies} onUpdateHobby={handleUpdateHobbyExtra} />
       )}
 
       {/* ── Library tab ── */}
