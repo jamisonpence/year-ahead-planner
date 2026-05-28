@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, parseISO } from "date-fns";
@@ -6,7 +6,7 @@ import {
   Plus, Pencil, Trash2, MoreHorizontal, Clock, ChefHat,
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
   RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
-  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle, Search,
+  Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Search,
   Send, Users, Inbox, CornerUpRight, Compass, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1657,9 +1657,7 @@ export default function RecipesPage() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set([...COMPONENT_TYPES.map(ct => ct.value), "unclassified"])
   );
-  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
-  const csvRef = useRef<HTMLInputElement>(null);
-  const [mealDbOpen, setMealDbOpen] = useState(false);
+const [mealDbOpen, setMealDbOpen] = useState(false);
   const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null);
   const [browseSearch, setBrowseSearch] = useState("");
   const [browseCategoryFilter, setBrowseCategoryFilter] = useState<string>("All");
@@ -1714,18 +1712,7 @@ export default function RecipesPage() {
     sauce: "sauce", dessert: "dessert", baking: "baking",
   };
 
-  function downloadCsvTemplate() {
-    const header = "name,category,componentType,prepTime,cookTime,servings,notes,isFavorite";
-    const ex1 = `"Spaghetti Bolognese",Italian,main,"15 min","45 min",4,"Classic comfort food",false`;
-    const ex2 = `"Chocolate Chip Cookies",Baked Goods,baking,"20 min","12 min",24,"Crispy edges, chewy center",true`;
-    const ex3 = `"Caesar Salad",Salads,side,"10 min",,2,,false`;
-    const blob = new Blob([`${header}\n${ex1}\n${ex2}\n${ex3}`], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "recipes_template.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
@@ -1951,16 +1938,6 @@ export default function RecipesPage() {
               </Button>
               <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
                 <Plus size={13} /><ChefHat size={13} /> Add Recipe
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-                <Upload size={13} /> Upload CSV
-              </Button>
-              <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-              <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-                <Download size={13} /> Template
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-                <HelpCircle size={13} /> CSV Format
               </Button>
             </div>
           )}
@@ -2739,34 +2716,6 @@ export default function RecipesPage() {
         recipe={shareRecipe}
       />
 
-      {/* CSV Format Info */}
-      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Recipes CSV Format</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. Only <span className="font-semibold text-foreground">name</span> is required. Ingredients must be added manually after import.</p>
-          <div className="space-y-1 text-sm">
-            {[
-              { col: "name",          req: true,  note: "Recipe name" },
-              { col: "category",      req: false, note: "Tag / bucket label, e.g. Italian, Baked Goods, Salads" },
-              { col: "componentType", req: false, note: "main · vegetable · side · sauce · dessert · baking" },
-              { col: "prepTime",      req: false, note: "e.g. 15 min" },
-              { col: "cookTime",      req: false, note: "e.g. 45 min" },
-              { col: "servings",      req: false, note: "Number, e.g. 4" },
-              { col: "notes",         req: false, note: "Free text" },
-              { col: "isFavorite",    req: false, note: "true · false" },
-            ].map(({ col, req, note }) => (
-              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
-                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
-                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
-                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
