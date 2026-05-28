@@ -7835,7 +7835,7 @@ Rules:
   // ── Habits ──────────────────────────────────────────────────────────────────
   app.get("/api/habits", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const rows = await storage.getHabits(uid);
       res.json(rows);
     } catch (e) { handleError(res, e); }
@@ -7843,7 +7843,7 @@ Rules:
 
   app.post("/api/habits", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const habit = await storage.createHabit(uid, req.body);
       res.json(habit);
     } catch (e) { handleError(res, e); }
@@ -7851,7 +7851,7 @@ Rules:
 
   app.patch("/api/habits/:id", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const id = parseInt(req.params.id);
       const habit = await storage.updateHabit(id, uid, req.body);
       res.json(habit);
@@ -7860,7 +7860,7 @@ Rules:
 
   app.delete("/api/habits/:id", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const id = parseInt(req.params.id);
       await storage.deleteHabit(id, uid);
       res.json({ ok: true });
@@ -7869,7 +7869,7 @@ Rules:
 
   app.post("/api/habits/:id/complete/:date", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const id = parseInt(req.params.id);
       const { date } = req.params;
       const { note } = req.body ?? {};
@@ -7880,7 +7880,7 @@ Rules:
 
   app.delete("/api/habits/:id/complete/:date", requireAuth, async (req, res) => {
     try {
-      const uid = (req as any).userId as number;
+      const uid = (req.user as User).id;
       const id = parseInt(req.params.id);
       const { date } = req.params;
       const habit = await storage.toggleHabitCompletion(id, uid, date);

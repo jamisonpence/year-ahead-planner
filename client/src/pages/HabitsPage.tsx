@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { todayStr } from "@/lib/plannerUtils";
@@ -88,6 +88,7 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
       const extra = JSON.parse(hobby.extraJson ?? "{}");
       const plans = extra.plans ?? [];
       for (const plan of plans) {
+        if (!plan.isActive || plan.isPaused || plan.completedAt) continue;
         if (!plan.activities || plan.activities.length === 0) continue;
         if (!plan.startDate) continue;
         // Simple: check if today falls on a scheduled day
@@ -143,7 +144,7 @@ function HabitModal({ open, onClose, edit }: {
   const [frequency, setFrequency] = useState("daily");
 
   // Reset when modal opens
-  useMemo(() => {
+  useEffect(() => {
     if (open) {
       if (edit) {
         setTitle(edit.title); setDescription(edit.description ?? "");
