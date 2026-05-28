@@ -61,18 +61,19 @@ function streakLabel(n: number) {
 // Parse workout schedule JSON to get today's entry
 function getTodayWorkout(plan: WorkoutPlan | null): string | null {
   if (!plan) return null;
-  const today = format(new Date(), "EEEE"); // e.g. "Monday"
+  // scheduleJson stores dayOfWeek as lowercase ("monday"), format() returns "Monday"
+  const todayLower = format(new Date(), "EEEE").toLowerCase();
   try {
     const raw = JSON.parse(plan.scheduleJson ?? "[]");
     if (!Array.isArray(raw) || raw.length === 0) return null;
-    // New week-based format
+    // New week-based format: [{ week, days: [{ dayOfWeek, label }] }]
     if ("week" in (raw[0] ?? {})) {
       const flat = raw.flatMap((w: any) => w.days ?? []);
-      const entry = flat.find((d: any) => d.dayOfWeek === today);
+      const entry = flat.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
       return entry?.label ?? null;
     }
-    // Legacy flat format
-    const entry = raw.find((d: any) => d.dayOfWeek === today);
+    // Legacy flat format: [{ dayOfWeek, label, templateName }]
+    const entry = raw.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
     return entry?.label ?? entry?.templateName ?? null;
   } catch { return null; }
 }
@@ -80,38 +81,64 @@ function getTodayWorkout(plan: WorkoutPlan | null): string | null {
 // Extract today's hobby activity blocks from hobby plans
 type HobbyTask = { hobbyId: number; hobbyName: string; taskKey: string; label: string; completed: boolean; emoji?: string };
 
+// Same algorithm as hpPickTrainingDays in HobbiesPage — Monday-first indexing (Mon=0 … Sun=6)
+function hpPickTrainingDays(days: number): number[] {
+  const out: number[] = [];
+  const step = 7 / days;
+  for (let i = 0; i < days; i++) out.push(Math.round(i * step) % 7);
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+
 function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
-  const today = todayStr();
   const tasks: HobbyTask[] = [];
   for (const hobby of hobbies) {
     try {
       const extra = JSON.parse(hobby.extraJson ?? "{}");
-      const plans = extra.plans ?? [];
+      const plans: any[] = extra.plans ?? [];
       for (const plan of plans) {
         if (!plan.isActive || plan.isPaused || plan.completedAt) continue;
         if (!plan.activities || plan.activities.length === 0) continue;
         if (!plan.startDate) continue;
-        // Simple: check if today falls on a scheduled day
-        const start = parseISO(plan.startDate);
-        const todayDate = parseISO(today);
-        const daysSinceStart = Math.floor((todayDate.getTime() - start.getTime()) / 86400000);
-        if (daysSinceStart < 0) continue;
-        const daysPerWeek = plan.commitmentDaysPerWeek ?? 3;
-        const scheduledDays = buildScheduledDays(daysPerWeek);
-        const todayDow = todayDate.getDay();
-        if (!scheduledDays.includes(todayDow)) continue;
-        // It's a training day — show the activities
-        const completions: string[] = (plan.taskCompletions ?? []).map((c: any) => c.taskKey);
-        const sessionIdx = Math.floor(daysSinceStart / 7) * daysPerWeek + scheduledDays.indexOf(todayDow);
-        for (let b = 0; b < plan.activities.length; b++) {
-          const act = plan.activities[b];
-          const taskKey = `session-${sessionIdx}-block-${b}`;
+
+        const sessionsPerWeek = Math.max(1, Math.min(7, plan.commitmentDaysPerWeek ?? 3));
+        // Use Monday-first indexing to match computeHobbyPlan: (getDay()+6)%7
+        const trainingDays = hpPickTrainingDays(sessionsPerWeek);
+
+        const [sy, sm, sd] = plan.startDate.split("-").map(Number);
+        const start = new Date(sy, sm - 1, sd);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (today < start) continue;
+
+        // Check if today is a training day (Monday-first index)
+        const todayMonIdx = (today.getDay() + 6) % 7;
+        if (!trainingDays.includes(todayMonIdx)) continue;
+
+        // Walk from start to today counting sessions to get exact sessionIndex
+        let sessionIndex = 0;
+        const cursor = new Date(start);
+        while (cursor < today) {
+          const idx = (cursor.getDay() + 6) % 7;
+          if (trainingDays.includes(idx)) sessionIndex++;
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        // Build blocks matching computeHobbyPlan exactly
+        const completedKeys = new Set((plan.taskCompletions ?? []).map((c: any) => c.taskKey as string));
+        const minutesPerSession = Math.max(plan.minutesPerSession ?? 45, 5);
+        const blockCount = minutesPerSession >= 40 ? 2 : 1;
+        const sortedActs = [...plan.activities].sort((a: any, b: any) => b.weight - a.weight);
+
+        for (let b = 0; b < blockCount; b++) {
+          const act = sortedActs[(sessionIndex + b) % sortedActs.length];
+          const taskKey = `session-${sessionIndex}-block-${b}`;
           tasks.push({
             hobbyId: hobby.id,
             hobbyName: hobby.name,
             taskKey,
-            label: act.label ?? act.name ?? "Activity",
-            completed: completions.includes(taskKey),
+            label: act.name ?? "Activity",
+            completed: completedKeys.has(taskKey),
             emoji: hobby.emoji ?? "✨",
           });
         }
@@ -119,14 +146,6 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
     } catch {}
   }
   return tasks;
-}
-
-function buildScheduledDays(daysPerWeek: number): number[] {
-  const presets: Record<number, number[]> = {
-    1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 6],
-    5: [1, 2, 3, 5, 6], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6],
-  };
-  return presets[daysPerWeek] ?? presets[3];
 }
 
 // ── Habit Modal (add/edit) ────────────────────────────────────────────────────
