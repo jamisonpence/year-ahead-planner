@@ -11422,6 +11422,12 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
   const [extra, setExtra] = useState<Record<string, any>>(() => parseExtra(initial.extraJson ?? "{}"));
   const [showPresets, setShowPresets] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Inline plan state (new hobby only)
+  const [showAddPlan, setShowAddPlan] = useState(false);
+  const [planTitle, setPlanTitle] = useState("");
+  const [planWeeks, setPlanWeeks] = useState("");
+  const [planDaysPerWeek, setPlanDaysPerWeek] = useState(3);
+  const [planMins, setPlanMins] = useState("");
   const set = (key: keyof InsertHobby, val: any) => setForm(f => ({ ...f, [key]: val }));
   const setExtraKey = (key: string, val: any) => setExtra(e => ({ ...e, [key]: val }));
 
@@ -11433,12 +11439,31 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
       setExtra(parseExtra(initial.extraJson ?? "{}"));
       setShowPresets(false);
       setShowAdvanced(false);
+      setShowAddPlan(false);
+      setPlanTitle("");
+      setPlanWeeks("");
+      setPlanDaysPerWeek(3);
+      setPlanMins("");
     }
   }, [open]);
 
   const handleSave = () => {
     if (!form.name?.trim()) return;
-    onSave({ ...form, extraJson: JSON.stringify({ ...extra, ...parseExtra(initial.extraJson ?? "{}"), ...extra }) });
+    let extraJson = JSON.stringify({ ...extra, ...parseExtra(initial.extraJson ?? "{}"), ...extra });
+    if (!isEdit && showAddPlan && planTitle.trim()) {
+      const weeks = planWeeks ? parseInt(planWeeks) || undefined : undefined;
+      const mins  = planMins  ? parseInt(planMins)  || undefined : undefined;
+      const days  = SPREAD_PATTERNS[Math.min(planDaysPerWeek, 7)] ?? ["Mon", "Wed", "Fri"];
+      const newPlan: HobbyPlan = {
+        id: genId(), title: planTitle.trim(),
+        durationWeeks: weeks, minutesPerSession: mins,
+        commitmentDaysPerWeek: planDaysPerWeek, scheduleDays: days,
+        isActive: true, startDate: new Date().toISOString().slice(0, 10),
+        steps: [], sessions: [], createdAt: new Date().toISOString(),
+      };
+      extraJson = setPlansInExtra(extraJson, [newPlan]);
+    }
+    onSave({ ...form, extraJson });
   };
 
   const typeInfo = HOBBY_TYPE_MAP[(form.hobbyType as HobbyType) ?? "creative"];
@@ -11627,13 +11652,85 @@ function HobbyFormDialog({ open, onClose, initial, onSave, isEdit = false }: {
               </div>
             )}
 
-            {/* Plans/Goals callout (non-edit only) */}
+            {/* Inline plan builder (non-edit only) */}
             {!isEdit && (
-              <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5 flex items-start gap-2">
-                <ClipboardList size={13} className="text-primary mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Plans and goals</span> can be added from the hobby's detail view after you save.
-                </p>
+              <div className="rounded-xl border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddPlan(p => !p);
+                    if (!showAddPlan && !planTitle) setPlanTitle(form.name ?? "");
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <ClipboardList size={14} className="text-primary shrink-0" />
+                    Add a plan
+                    <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                  </div>
+                  {showAddPlan ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                </button>
+
+                {showAddPlan && (
+                  <div className="px-3 pb-3 pt-1 space-y-3 border-t bg-muted/10">
+                    {/* Plan title */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Plan name</label>
+                      <Input
+                        className="text-sm"
+                        placeholder={`e.g. Learn ${form.name || "this hobby"}`}
+                        value={planTitle}
+                        onChange={e => setPlanTitle(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Days/week */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">How often?</label>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setPlanDaysPerWeek(n)}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${planDaysPerWeek === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                          >
+                            {n}×
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {SPREAD_PATTERNS[Math.min(planDaysPerWeek, 7)]?.join(", ")} each week
+                      </p>
+                    </div>
+
+                    {/* Duration + minutes — side by side */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Duration (weeks)</label>
+                        <Input
+                          type="number"
+                          className="text-sm"
+                          placeholder="e.g. 8"
+                          min={1}
+                          value={planWeeks}
+                          onChange={e => setPlanWeeks(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Min / session</label>
+                        <Input
+                          type="number"
+                          className="text-sm"
+                          placeholder="e.g. 30"
+                          min={5}
+                          value={planMins}
+                          onChange={e => setPlanMins(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
