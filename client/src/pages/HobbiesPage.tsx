@@ -9900,7 +9900,6 @@ function HobbyActivePlanSection({
   const [editDayLabel, setEditDayLabel] = useState<{
     hobby: Hobby; plan: HobbyPlan; dayLabel: string;
   } | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const today = new Date();
   const todayDowIdx = today.getDay(); // 0=Sun
@@ -10274,21 +10273,12 @@ function HobbyActivePlanSection({
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    {deleteConfirmId === plan.id ? (
-                      <DropdownMenuItem
-                        onClick={() => deletePlan(hobby, plan.id)}
-                        className="text-destructive focus:text-destructive font-semibold"
-                      >
-                        <Trash2 size={13} className="mr-2" /> Confirm delete
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        onClick={() => setDeleteConfirmId(plan.id)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 size={13} className="mr-2" /> Delete plan
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem
+                      onClick={() => deletePlan(hobby, plan.id)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 size={13} className="mr-2" /> Delete plan
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
