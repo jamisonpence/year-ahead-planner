@@ -250,6 +250,9 @@ export const recipes = pgTable("recipes", {
   imageUrl: text("image_url"),
   nutritionData: text("nutrition_data"),
   servings: integer("servings"),
+  tags: text("tags"),            // comma-separated tags
+  description: text("description"),
+  source: text("source"),
 });
 
 // ── Meal Bundles ─────────────────────────────────────────────────────────────

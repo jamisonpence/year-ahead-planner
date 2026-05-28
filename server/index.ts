@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
-import { initializeStorage } from "./storage";
+import { initializeStorage, seedSystemRecipes } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -73,7 +73,9 @@ app.use((req, res, next) => {
   try {
     log("Starting up — initializing storage…");
     await initializeStorage();
-    log("Storage initialized — registering routes…");
+    log("Storage initialized — seeding system recipes…");
+    await seedSystemRecipes();
+    log("System recipes seeded — registering routes…");
     await registerRoutes(httpServer, app);
     log("Routes registered.");
 

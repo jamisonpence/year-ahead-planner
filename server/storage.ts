@@ -64,7 +64,7 @@ import type {
   MovieList, MovieListMember,
   InsertHabit, Habit, HabitWithStats, HabitCompletion,
 } from "@shared/schema";
-import { eq, asc, desc, and, inArray } from "drizzle-orm";
+import { eq, asc, desc, and, inArray, or, isNull } from "drizzle-orm";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || "postgresql://localhost/planner" });
 const db = drizzle(pool);
@@ -222,6 +222,9 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS component_type TEXT`);
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS nutrition_data TEXT`);
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER`);
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS tags TEXT`);
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS description TEXT`);
+  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS source TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS meal_bundles (
@@ -2288,7 +2291,9 @@ export const storage: IStorage = {
 
   // ── Recipes ──────────────────────────────────────────────────────────
   async getAllRecipes(userId: number) {
-    return db.select().from(recipes).where(eq(recipes.userId, userId)).orderBy(asc(recipes.name));
+    return db.select().from(recipes)
+      .where(or(eq(recipes.userId, userId), isNull(recipes.userId)))
+      .orderBy(asc(recipes.name));
   },
   async createRecipe(data: InsertRecipe, userId: number) {
     const result = await db.insert(recipes).values({ ...data, userId }).returning();
@@ -6105,5 +6110,58 @@ export const storage: IStorage = {
     return updated;
   },
 };
+
+// ── System Recipe Seeding ─────────────────────────────────────────────────────
+import { SYSTEM_RECIPES } from "./recipeData";
+
+function getCategoryEmoji(cat: string): string {
+  const map: Record<string, string> = {
+    "Baking": "🥧", "Bread Machine": "🍞", "Breakfast for Dinner": "🍳",
+    "Chicken": "🍗", "Desserts": "🍰", "Vegan": "🥗", "Vegetarian": "🥦",
+    "Seafood": "🐟", "Pasta": "🍝", "Mexican": "🌮", "Asian": "🍜",
+    "Indian": "🍛", "Italian Regional": "🍕", "Mediterranean": "🫒",
+    "Soups & Stews": "🥣", "Slow Cooker": "🍲", "Instant Pot": "⚡",
+    "Sides & Vegetables": "🥕", "Steak": "🥩", "BBQ & Grilling": "🔥",
+    "Keto": "🥑", "Whole30": "🥙", "Healthy Dinner": "🥗",
+    "Healthy Breakfast": "🥞", "Healthy Lunch": "🥙", "Healthy Kids": "🌟",
+    "Kid-Friendly": "🧒", "Game Day": "🏈", "Holiday Feasts": "🎄",
+    "Jewish": "✡️",
+  };
+  return map[cat] || "🍽️";
+}
+
+function mapCategoryToComponentType(cat: string): string | null {
+  if (["Baking", "Bread Machine", "Desserts"].includes(cat)) return "baking";
+  if (["Sides & Vegetables"].includes(cat)) return "side";
+  return "main";
+}
+
+export async function seedSystemRecipes() {
+  const { rows } = await pool.query(`SELECT COUNT(*) FROM recipes WHERE user_id IS NULL`);
+  if (parseInt(rows[0].count) > 0) return; // Already seeded
+
+  // Insert in batches of 50
+  const batch = 50;
+  for (let i = 0; i < SYSTEM_RECIPES.length; i += batch) {
+    const slice = SYSTEM_RECIPES.slice(i, i + batch);
+    await db.insert(recipes).values(slice.map(r => ({
+      userId: null,
+      name: r.name,
+      emoji: getCategoryEmoji(r.category),
+      category: r.category,
+      description: r.description || null,
+      servings: r.servings || null,
+      prepTime: r.prepTime || null,
+      cookTime: r.cookTime || null,
+      ingredientsJson: r.ingredientsJson,
+      instructions: r.instructions || null,
+      tags: r.tags || null,
+      source: r.source || null,
+      nutritionData: r.nutritionData || null,
+      componentType: mapCategoryToComponentType(r.category),
+    })));
+  }
+  console.log(`Seeded ${SYSTEM_RECIPES.length} system recipes`);
+}
 
 export { pool };

@@ -7,7 +7,7 @@ import {
   CalendarDays, ShoppingCart, BookOpen, X, Check, Printer,
   RefreshCw, Flame, ChevronRight, ChevronDown, Layers, UtensilsCrossed,
   Leaf, Wheat, Droplets, Package, CakeSlice, Cookie, Upload, Download, HelpCircle, Search,
-  Send, Users, Inbox, CornerUpRight,
+  Send, Users, Inbox, CornerUpRight, Compass, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1487,8 +1487,149 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
+// ── Browse helpers ────────────────────────────────────────────────────────────
+const BROWSE_CATEGORY_EMOJI: Record<string, string> = {
+  "Baking": "🥧", "Bread Machine": "🍞", "Breakfast for Dinner": "🍳",
+  "Chicken": "🍗", "Desserts": "🍰", "Vegan": "🥗", "Vegetarian": "🥦",
+  "Seafood": "🐟", "Pasta": "🍝", "Mexican": "🌮", "Asian": "🍜",
+  "Indian": "🍛", "Italian Regional": "🍕", "Mediterranean": "🫒",
+  "Soups & Stews": "🥣", "Slow Cooker": "🍲", "Instant Pot": "⚡",
+  "Sides & Vegetables": "🥕", "Steak": "🥩", "BBQ & Grilling": "🔥",
+  "Keto": "🥑", "Whole30": "🥙", "Healthy Dinner": "🥗",
+  "Healthy Breakfast": "🥞", "Healthy Lunch": "🥙", "Healthy Kids": "🌟",
+  "Kid-Friendly": "🧒", "Game Day": "🏈", "Holiday Feasts": "🎄",
+  "Jewish": "✡️",
+};
+
+function parseMacros(nutritionData: string | null) {
+  try { return JSON.parse(nutritionData ?? "{}"); } catch { return {}; }
+}
+
+// ── System Recipe Detail Dialog ───────────────────────────────────────────────
+function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary }: {
+  recipe: Recipe; onClose: () => void; onSaveToLibrary: (r: Recipe) => void;
+}) {
+  const ingredients = parseIngredients(recipe.ingredientsJson);
+  const macros = parseMacros(recipe.nutritionData ?? null);
+  const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
+  const tags = recipe.tags ? recipe.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+  const source = recipe.source ?? null;
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <div className="px-6 pt-5 pb-2">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{recipe.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-xl font-bold leading-tight">{recipe.name}</DialogTitle>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {recipe.category && <span className="text-xs text-muted-foreground font-medium">{recipe.category}</span>}
+                  {(recipe as any).difficulty && (
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full border ${
+                      (recipe as any).difficulty === "Easy" ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" :
+                      (recipe as any).difficulty === "Hard" ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800" :
+                      "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
+                    }`}>{(recipe as any).difficulty}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
+        <div className="space-y-4 px-6 pb-6">
+          {recipe.description && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{recipe.description}</p>
+          )}
+
+          {/* Times */}
+          {(recipe.prepTime != null || recipe.cookTime != null) && (
+            <div className="flex flex-wrap gap-3 p-3 bg-secondary/40 rounded-xl justify-around">
+              {recipe.prepTime != null && <div><p className="text-lg font-bold">{recipe.prepTime}m</p><p className="text-xs text-muted-foreground">Prep</p></div>}
+              {recipe.cookTime != null && <div><p className="text-lg font-bold">{recipe.cookTime}m</p><p className="text-xs text-muted-foreground">Cook</p></div>}
+              {totalTime > 0 && <div><p className="text-lg font-bold">{totalTime}m</p><p className="text-xs text-muted-foreground">Total</p></div>}
+              {recipe.servings && <div><p className="text-lg font-bold">{recipe.servings}</p><p className="text-xs text-muted-foreground">Servings</p></div>}
+            </div>
+          )}
+
+          {/* Macros */}
+          {macros.calories && (
+            <div className="rounded-xl border bg-card p-3 space-y-2">
+              <p className="text-xs font-semibold">Nutrition per serving</p>
+              <div className="grid grid-cols-4 gap-1 text-center">
+                {[
+                  { label: "Calories", val: macros.calories, unit: "kcal", color: "text-orange-500" },
+                  { label: "Protein",  val: macros.protein != null ? `${macros.protein}g` : "—", color: "text-blue-500" },
+                  { label: "Carbs",    val: macros.carbs != null ? `${macros.carbs}g` : "—", color: "text-amber-500" },
+                  { label: "Fat",      val: macros.fat != null ? `${macros.fat}g` : "—", color: "text-rose-500" },
+                ].map(m => (
+                  <div key={m.label} className="rounded-lg bg-secondary/40 p-1.5">
+                    <p className={`text-sm font-bold ${m.color}`}>{m.val}</p>
+                    <p className="text-[9px] text-muted-foreground">{m.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ingredients */}
+          {ingredients.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Ingredients</p>
+              <div className="space-y-1.5">
+                {ingredients.map((ing, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-3 bg-secondary/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      <span className="text-sm">{ing.name}</span>
+                    </div>
+                    {ing.qty && <span className="text-xs text-muted-foreground">{ing.qty}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Instructions */}
+          {recipe.instructions && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Instructions</p>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{recipe.instructions}</p>
+            </div>
+          )}
+
+          {/* Tags */}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map(t => (
+                <span key={t} className="text-xs px-2 py-0.5 bg-secondary rounded-full text-muted-foreground">{t}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Source */}
+          {source && source.startsWith("http") && (
+            <a href={source} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+              <ExternalLink size={11} /> View original recipe
+            </a>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button onClick={() => { onSaveToLibrary(recipe); onClose(); }} className="flex-1 gap-1.5">
+              <Plus size={14} /> Save to My Recipes
+            </Button>
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
-type SubView = "library" | "bundles" | "week" | "grocery" | "shared";
+type SubView = "library" | "bundles" | "week" | "grocery" | "shared" | "browse";
 type LibFilter = ComponentType | "all" | "unclassified";
 
 export default function RecipesPage() {
@@ -1520,6 +1661,12 @@ export default function RecipesPage() {
   const csvRef = useRef<HTMLInputElement>(null);
   const [mealDbOpen, setMealDbOpen] = useState(false);
   const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null);
+  const [browseSearch, setBrowseSearch] = useState("");
+  const [browseCategoryFilter, setBrowseCategoryFilter] = useState<string>("All");
+  const [browseTagFilter, setBrowseTagFilter] = useState<string | null>(null);
+  const [browseDifficultyFilter, setBrowseDifficultyFilter] = useState<string>("all");
+  const [browseTimeFilter, setBrowseTimeFilter] = useState<string>("all");
+  const [browseDetailRecipe, setBrowseDetailRecipe] = useState<Recipe | null>(null);
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
@@ -1626,7 +1773,9 @@ export default function RecipesPage() {
     toast({ title: "CSV imported", description: desc });
   }
 
-  const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ["/api/recipes"] });
+  const { data: allRecipes = [] } = useQuery<Recipe[]>({ queryKey: ["/api/recipes"] });
+  const recipes = allRecipes.filter(r => r.userId != null);
+  const systemRecipes = allRecipes.filter(r => r.userId == null);
   const { data: bundles = [] } = useQuery<MealBundle[]>({ queryKey: ["/api/meal-bundles"] });
   const { data: weekPlan = [] } = useQuery<WeekPlan[]>({
     queryKey: ["/api/week-plan", weekStart],
@@ -1679,12 +1828,67 @@ export default function RecipesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/custom-grocery-items", weekStart] }),
   });
 
-  // Filtered recipes for library view
+  // Filtered recipes for library view (user recipes only)
   const filteredRecipes = useMemo(() => {
     if (libFilter === "all") return recipes;
     if (libFilter === "unclassified") return recipes.filter(r => !r.componentType);
     return recipes.filter(r => r.componentType === libFilter);
   }, [recipes, libFilter]);
+
+  // Browse tab: filtered system recipes
+  const browseCategories = useMemo(() => {
+    const cats = Array.from(new Set(systemRecipes.map(r => r.category).filter(Boolean) as string[])).sort();
+    return cats;
+  }, [systemRecipes]);
+
+  const saveToLibraryMut = useMutation({
+    mutationFn: (r: Recipe) => apiRequest("POST", "/api/recipes", {
+      name: r.name,
+      emoji: r.emoji,
+      category: r.category,
+      componentType: r.componentType,
+      prepTime: r.prepTime,
+      cookTime: r.cookTime,
+      servings: r.servings,
+      ingredientsJson: r.ingredientsJson,
+      instructions: r.instructions,
+      tags: r.tags,
+      description: r.description,
+      source: r.source,
+      nutritionData: r.nutritionData,
+    }),
+    onSuccess: (_, r) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: `"${r.name}" saved to your library` });
+    },
+    onError: () => toast({ title: "Failed to save recipe", variant: "destructive" }),
+  });
+
+  const filteredBrowse = useMemo(() => {
+    let list = systemRecipes;
+    if (browseCategoryFilter !== "All") list = list.filter(r => r.category === browseCategoryFilter);
+    if (browseTagFilter) list = list.filter(r => r.tags?.toLowerCase().includes(browseTagFilter.toLowerCase()));
+    if (browseDifficultyFilter !== "all") list = list.filter(r => (r as any).difficulty === browseDifficultyFilter);
+    if (browseTimeFilter !== "all") {
+      list = list.filter(r => {
+        const total = (r.prepTime ?? 0) + (r.cookTime ?? 0);
+        if (browseTimeFilter === "under30") return total < 30;
+        if (browseTimeFilter === "30to60") return total >= 30 && total <= 60;
+        if (browseTimeFilter === "over60") return total > 60;
+        return true;
+      });
+    }
+    if (browseSearch.trim()) {
+      const q = browseSearch.toLowerCase();
+      list = list.filter(r =>
+        r.name.toLowerCase().includes(q) ||
+        (r.description ?? "").toLowerCase().includes(q) ||
+        (r.tags ?? "").toLowerCase().includes(q) ||
+        (r.category ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [systemRecipes, browseCategoryFilter, browseTagFilter, browseSearch, browseDifficultyFilter, browseTimeFilter]);
 
   // Build grocery list from week's recipe assignments + bundle expansions
   const weekRecipes = useMemo(() => {
@@ -1715,7 +1919,7 @@ export default function RecipesPage() {
     sum + items.filter(item => checkedKeys.has(item.name.toLowerCase())).length, 0) +
     customItems.filter(i => i.checked).length;
 
-  // Group recipes by component type for the library section view
+  // Group user recipes by component type for the library section view
   const recipesByType = useMemo(() => {
     const result: Record<string, Recipe[]> = {};
     COMPONENT_TYPES.forEach(ct => {
@@ -1727,6 +1931,7 @@ export default function RecipesPage() {
 
   const subNavItems = [
     { id: "library" as SubView, label: "Library", icon: <BookOpen size={14} />, count: recipes.length },
+    { id: "browse" as SubView, label: "Browse", icon: <Compass size={14} />, count: systemRecipes.length },
     { id: "bundles" as SubView, label: "Bundles", icon: <Package size={14} />, count: bundles.length },
     { id: "week" as SubView, label: "This Week", icon: <CalendarDays size={14} />, count: weekPlan.length },
     { id: "grocery" as SubView, label: "Grocery", icon: <ShoppingCart size={14} />, count: totalGrocery },
@@ -1802,7 +2007,7 @@ export default function RecipesPage() {
             <button key={item.id} onClick={() => setSubView(item.id)}
               className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${subView === item.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
               {item.icon} {item.label}
-              {item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
+              {item.count != null && item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
             </button>
           ))}
         </div>
@@ -1947,7 +2152,7 @@ export default function RecipesPage() {
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
                   <p className="font-medium">No recipes yet</p>
-                  <p className="text-sm mt-1">Add your first recipe to get started</p>
+                  <p className="text-sm mt-1">Add your first recipe or browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Browse</button> tab</p>
                 </div>
               )}
             </div>
@@ -2332,6 +2537,175 @@ export default function RecipesPage() {
         </div>
       )}
 
+      {/* ── BROWSE ── */}
+      {subView === "browse" && (
+        <div className="space-y-4">
+          {/* Search bar */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={browseSearch}
+              onChange={e => setBrowseSearch(e.target.value)}
+              placeholder="Search recipes, tags, categories…"
+              className="w-full pl-9 pr-3 py-2 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          {/* Category pills */}
+          <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+            <div className="flex gap-1.5 w-max sm:flex-wrap sm:w-auto pb-1">
+              {["All", ...browseCategories].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => { setBrowseCategoryFilter(cat); setBrowseTagFilter(null); }}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
+                    browseCategoryFilter === cat && !browseTagFilter
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                  }`}
+                >
+                  {cat !== "All" && <span>{BROWSE_CATEGORY_EMOJI[cat] || "🍽️"}</span>}
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tag + difficulty + time filters */}
+          <div className="flex gap-2 flex-wrap">
+            {browseTagFilter && (
+              <button
+                onClick={() => setBrowseTagFilter(null)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/30"
+              >
+                #{browseTagFilter} <X size={10} />
+              </button>
+            )}
+            <select
+              value={browseDifficultyFilter}
+              onChange={e => setBrowseDifficultyFilter(e.target.value)}
+              className="text-xs px-2.5 py-1 border rounded-full bg-background text-muted-foreground focus:outline-none"
+            >
+              <option value="all">Any difficulty</option>
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+            <select
+              value={browseTimeFilter}
+              onChange={e => setBrowseTimeFilter(e.target.value)}
+              className="text-xs px-2.5 py-1 border rounded-full bg-background text-muted-foreground focus:outline-none"
+            >
+              <option value="all">Any time</option>
+              <option value="under30">Under 30 min</option>
+              <option value="30to60">30–60 min</option>
+              <option value="over60">Over 1 hour</option>
+            </select>
+            <span className="text-xs text-muted-foreground self-center ml-auto">{filteredBrowse.length} recipes</span>
+          </div>
+
+          {/* Recipe grid */}
+          {filteredBrowse.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Compass size={40} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium">No recipes match your filters</p>
+              <p className="text-sm mt-1">Try adjusting your search or filters</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredBrowse.map(recipe => {
+                const macros = parseMacros(recipe.nutritionData ?? null);
+                const tags = recipe.tags ? recipe.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+                const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
+                const diff = (recipe as any).difficulty as string | undefined;
+                return (
+                  <div
+                    key={recipe.id}
+                    className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer"
+                    onClick={() => setBrowseDetailRecipe(recipe)}
+                  >
+                    {/* Card header */}
+                    <div className="px-3 pt-3 pb-2 flex items-start gap-2">
+                      <span className="text-2xl shrink-0">{recipe.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm leading-tight line-clamp-2">{recipe.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{recipe.category}</p>
+                      </div>
+                      {diff && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 ${
+                          diff === "Easy" ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" :
+                          diff === "Hard" ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800" :
+                          "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
+                        }`}>{diff}</span>
+                      )}
+                    </div>
+
+                    {/* Macros bar */}
+                    {macros.calories && (
+                      <div className="px-3 pb-1.5">
+                        <div className="flex gap-2 text-[10px] text-muted-foreground">
+                          <span className="font-medium text-foreground">{macros.calories} cal</span>
+                          {macros.protein != null && <span>P {macros.protein}g</span>}
+                          {macros.carbs != null && <span>C {macros.carbs}g</span>}
+                          {macros.fat != null && <span>F {macros.fat}g</span>}
+                        </div>
+                        {macros.protein != null && macros.carbs != null && macros.fat != null && (() => {
+                          const tot = macros.protein + macros.carbs + macros.fat;
+                          const pp = tot > 0 ? (macros.protein / tot) * 100 : 33;
+                          const cp = tot > 0 ? (macros.carbs / tot) * 100 : 34;
+                          const fp = tot > 0 ? (macros.fat / tot) * 100 : 33;
+                          return (
+                            <div className="h-1 mt-1 rounded-full overflow-hidden flex">
+                              <div className="bg-blue-500 h-full" style={{ width: `${pp}%` }} />
+                              <div className="bg-amber-500 h-full" style={{ width: `${cp}%` }} />
+                              <div className="bg-rose-500 h-full" style={{ width: `${fp}%` }} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Time + tags */}
+                    <div className="px-3 pb-3 space-y-1.5">
+                      {totalTime > 0 && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock size={10} /> {totalTime} min
+                        </span>
+                      )}
+                      {tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {tags.slice(0, 4).map(t => (
+                            <button
+                              key={t}
+                              onClick={e => { e.stopPropagation(); setBrowseTagFilter(t); setBrowseCategoryFilter("All"); }}
+                              className="text-[10px] px-1.5 py-0.5 bg-secondary rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t px-3 py-2">
+                      <button
+                        className="text-xs font-medium text-primary flex items-center gap-1 hover:underline"
+                        onClick={e => { e.stopPropagation(); saveToLibraryMut.mutate(recipe); }}
+                        disabled={saveToLibraryMut.isPending}
+                      >
+                        <Plus size={11} /> Save to My Recipes
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Shared recipes subView */}
       {subView === "shared" && (
         <div className="mt-2">
@@ -2340,6 +2714,13 @@ export default function RecipesPage() {
       )}
 
       {/* Modals */}
+      {browseDetailRecipe && (
+        <SystemRecipeDetail
+          recipe={browseDetailRecipe}
+          onClose={() => setBrowseDetailRecipe(null)}
+          onSaveToLibrary={(r) => saveToLibraryMut.mutate(r)}
+        />
+      )}
       <MealDBSearchModal open={mealDbOpen} onClose={() => setMealDbOpen(false)} />
       <RecipeFormModal open={recipeModal} onClose={() => { setRecipeModal(false); setEditRecipe(null); }} editRecipe={editRecipe} />
       <BundleFormModal open={bundleModal} onClose={() => { setBundleModal(false); setEditBundle(null); }} editBundle={editBundle} recipes={recipes} />
