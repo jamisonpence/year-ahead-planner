@@ -58,39 +58,42 @@ function streakLabel(n: number) {
   return `${n} days`;
 }
 
-// Parse workout schedule JSON to get today's entry
-function getTodayWorkout(plan: WorkoutPlan | null): string | null {
-  if (!plan) return null;
-  // scheduleJson stores dayOfWeek as lowercase ("monday")
+// Parse workout schedule JSON to get today's entry — mirrors WorkoutsPage logic exactly.
+// Checks ALL active plans (same as WorkoutsPage's merged view) so a workout is never missed.
+function getTodayWorkout(plans: WorkoutPlan[]): string | null {
   const todayLower = format(new Date(), "EEEE").toLowerCase();
-  try {
-    const raw = JSON.parse(plan.scheduleJson ?? "[]");
-    if (!Array.isArray(raw) || raw.length === 0) return null;
+  const nowMs = new Date().getTime();
 
-    // Week-based V2 format: [{ week: number, days: [{ dayOfWeek, label }] }]
-    if ("week" in (raw[0] ?? {})) {
-      // Find which plan week we're currently in using startDate
-      let currentWeek = 1;
-      if (plan.startDate) {
-        const [sy, sm, sd] = plan.startDate.split("-").map(Number);
-        const start = new Date(sy, sm - 1, sd);
-        const today = new Date();
-        const daysDiff = Math.floor((today.getTime() - start.getTime()) / 86400000);
-        currentWeek = Math.max(1, Math.floor(daysDiff / 7) + 1);
+  for (const plan of plans) {
+    if (!plan.isActive) continue;
+    try {
+      const raw = JSON.parse(plan.scheduleJson ?? "[]");
+      if (!Array.isArray(raw) || raw.length === 0) continue;
+
+      let days: any[] = [];
+
+      if ("week" in (raw[0] ?? {})) {
+        // V2 week-by-week format — use same week calculation as WorkoutsPage
+        const startDate = plan.startDate ? new Date(plan.startDate) : null;
+        const weeksElapsed = startDate
+          ? Math.max(0, Math.floor((nowMs - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+          : 0;
+        const currentWeek = Math.min(weeksElapsed + 1, plan.durationWeeks ?? weeksElapsed + 1);
+        // Exact match first, fall back to week 1 (same as WorkoutsPage)
+        const weekEntry = raw.find((w: any) => w.week === currentWeek) ?? raw[0];
+        days = weekEntry?.days ?? [];
+      } else {
+        // Legacy flat format
+        days = raw;
       }
-      // Look up the exact current week; if not defined fall back to the
-      // nearest past week (e.g. after the plan ends, show the last week)
-      const sorted = [...raw].sort((a: any, b: any) => b.week - a.week);
-      const weekData = sorted.find((w: any) => w.week <= currentWeek) ?? sorted[sorted.length - 1];
-      if (!weekData) return null;
-      const entry = (weekData.days ?? []).find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
-      return entry?.label ?? null;
-    }
 
-    // Legacy flat format: [{ dayOfWeek, label, templateName }]
-    const entry = raw.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
-    return entry?.label ?? entry?.templateName ?? null;
-  } catch { return null; }
+      const entry = days.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
+      if (entry?.label || entry?.templateName) {
+        return entry.label ?? entry.templateName;
+      }
+    } catch {}
+  }
+  return null;
 }
 
 // Extract today's hobby activity blocks from hobby plans
@@ -568,13 +571,9 @@ export default function HabitsPage() {
     queryFn: async () => { const r = await apiRequest("GET", "/api/workout-templates"); return r.json(); },
   });
 
-  const { data: activePlan = null } = useQuery<WorkoutPlan | null>({
-    queryKey: ["/api/workout-plans/active"],
-    queryFn: async () => {
-      const r = await apiRequest("GET", "/api/workout-plans");
-      const plans: WorkoutPlan[] = await r.json();
-      return plans.find(p => p.isActive) ?? null;
-    },
+  const { data: allWorkoutPlans = [] } = useQuery<WorkoutPlan[]>({
+    queryKey: ["/api/workout-plans"],
+    queryFn: async () => { const r = await apiRequest("GET", "/api/workout-plans"); return r.json(); },
   });
 
   const { data: hobbiesRaw = [] } = useQuery<Hobby[]>({
@@ -597,7 +596,7 @@ export default function HabitsPage() {
   });
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const todayWorkoutLabel = useMemo(() => getTodayWorkout(activePlan), [activePlan]);
+  const todayWorkoutLabel = useMemo(() => getTodayWorkout(allWorkoutPlans), [allWorkoutPlans]);
   const todayWorkoutLogged = useMemo(() =>
     workoutLogs.some(l => l.date === today), [workoutLogs, today]);
 
