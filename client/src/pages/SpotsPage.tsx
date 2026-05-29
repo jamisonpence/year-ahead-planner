@@ -618,8 +618,10 @@ function MapView({ spots }: { spots: Spot[] }) {
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    let unmounted = false;
 
     function initMap() {
+      if (unmounted) return;
       const L = (window as any).L;
       if (!L || !mapContainerRef.current) return;
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
@@ -679,6 +681,7 @@ function MapView({ spots }: { spots: Spot[] }) {
     }
 
     return () => {
+      unmounted = true;
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
     };
   }, [JSON.stringify(mappable.map(s => s.id + s.lat + s.lon))]);
@@ -3196,8 +3199,10 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    let unmounted = false;
 
     function initMap() {
+      if (unmounted) return;
       const L = (window as any).L;
       if (!L || !mapContainerRef.current) return;
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
@@ -3260,6 +3265,7 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
     }
 
     return () => {
+      unmounted = true;
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
     };
   }, [JSON.stringify(mappable.map(c => c.id))]);
