@@ -11,14 +11,15 @@ import {
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, User, Plus, MessageSquare, PenLine, CalendarCheck,
+  Search, User, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
 const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/":              "Your dashboard summary is visible to friends",
   "/calendar":      "Your calendar events are visible to friends",
-  "/goals":         "Your goals and tasks are visible to friends",
+  "/goals":         "Your goals are visible to friends",
+  "/tasks":         "Your projects and tasks are visible to friends",
   "/reading":       "Your reading list and progress are visible to friends",
   "/workouts":      "Your workouts and fitness logs are visible to friends",
   "/recipes":       "Your saved recipes are visible to friends",
@@ -84,6 +85,7 @@ const ALL_TABS = [
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   // ── Plan ──
   { path: "/goals",         label: "Goals",                   icon: Target          },
+  { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits & Daily Tracker",  icon: CalendarCheck   },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
   // ── People ──
@@ -118,7 +120,7 @@ const ALL_TABS = [
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
   { key: "core",      label: null,                paths: ["/discover", "/dashboard", "/messenger", "/calendar"] },
-  { key: "plan",      label: "Plan",              paths: ["/goals", "/habits", "/journal"] },
+  { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal"] },
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health"] },
   { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies", "/meal-planner"] },
@@ -247,6 +249,7 @@ const PATH_DEFAULT_VISIBILITY: Record<string, "friends" | "private"> = {
   "/plants":        "friends",
   "/health":        "private",
   "/goals":         "private",
+  "/tasks":         "private",
   "/calendar":      "private",
   "/budget":        "private",
   "/relationships": "private",
@@ -272,6 +275,7 @@ const SECTION_KEY: Record<string, string> = {
   "/plants":        "plants",
   "/health":        "health",
   "/goals":         "goals",
+  "/tasks":         "goals",
   "/calendar":      "calendar",
   "/budget":        "budget",
   "/relationships": "relationships",
@@ -290,6 +294,7 @@ const COLLECTION_GROUPS = [
     subtitle: "Goals, habits, and reflection",
     tiles: [
       { path: "/goals",    emoji: "🎯", label: "Goals"   },
+      { path: "/tasks",    emoji: "📋", label: "Projects & Tasks" },
       { path: "/habits",   emoji: "✅", label: "Habits"  },
       { path: "/journal",  emoji: "📓", label: "Journal" },
     ],
