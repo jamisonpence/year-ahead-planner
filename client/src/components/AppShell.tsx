@@ -94,6 +94,7 @@ const ALL_TABS = [
   // ── Wellness ──
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/health",        label: "Health",                  icon: Activity        },
+  { path: "/nutrition",     label: "Nutrition",               icon: UtensilsCrossed },
   // ── Culture ──
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
@@ -122,7 +123,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "core",      label: null,                paths: ["/discover", "/dashboard", "/messenger", "/calendar"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal"] },
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
-  { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health"] },
+  { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
   { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies", "/meal-planner"] },
   { key: "places",    label: "Places",            paths: ["/spots", "/travel", "/events"] },
   { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
@@ -248,6 +249,7 @@ const PATH_DEFAULT_VISIBILITY: Record<string, "friends" | "private"> = {
   "/workouts":      "friends",
   "/plants":        "friends",
   "/health":        "private",
+  "/nutrition":     "private",
   "/goals":         "private",
   "/tasks":         "private",
   "/calendar":      "private",
@@ -274,6 +276,7 @@ const SECTION_KEY: Record<string, string> = {
   "/workouts":      "workouts",
   "/plants":        "plants",
   "/health":        "health",
+  "/nutrition":     "nutrition",
   "/goals":         "goals",
   "/tasks":         "goals",
   "/calendar":      "calendar",
@@ -313,8 +316,9 @@ const COLLECTION_GROUPS = [
     label: "Wellness",
     subtitle: "Fitness and wellbeing",
     tiles: [
-      { path: "/workouts", emoji: "💪", label: "Workouts" },
-      { path: "/health",   emoji: "❤️", label: "Health"   },
+      { path: "/workouts",   emoji: "💪", label: "Workouts"   },
+      { path: "/health",     emoji: "❤️", label: "Health"     },
+      { path: "/nutrition",  emoji: "🥗", label: "Nutrition"  },
     ],
   },
   {

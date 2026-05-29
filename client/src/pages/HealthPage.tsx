@@ -2019,12 +2019,22 @@ function EmbeddedPlannerPlan({ onSave }: { onSave: () => void }) {
 }
 
 // ── NutritionTab ─────────────────────────────────────────────────────────────
-function NutritionTab() {
+// Exported so NutritionPage can use it directly.
+// Pass `section` + `onSection` to control from outside (hides internal nav).
+export function NutritionTab({
+  section: externalSection,
+  onSection: externalSetSection,
+}: {
+  section?: "meal-planner" | "log" | "goals" | "plans" | "weekly";
+  onSection?: (s: "meal-planner" | "log" | "goals" | "plans" | "weekly") => void;
+} = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [activeSection, setActiveSection] = useState<"meal-planner" | "log" | "goals" | "plans" | "weekly">("log");
+  const [internalSection, setInternalSection] = useState<"meal-planner" | "log" | "goals" | "plans" | "weekly">("log");
+  const activeSection = externalSection ?? internalSection;
+  const setActiveSection = externalSetSection ?? setInternalSection;
 
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
@@ -2197,22 +2207,24 @@ function NutritionTab() {
 
   return (
     <div className="space-y-5">
-      {/* Section nav */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex gap-2 flex-wrap">
-          {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
-            <button key={s} onClick={() => setActiveSection(s)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}>
-              {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
-            </button>
-          ))}
+      {/* Section nav — only shown when not controlled from a parent page */}
+      {!externalSection && (
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
+            {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
+              <button key={s} onClick={() => setActiveSection(s)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}>
+                {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
+              </button>
+            ))}
+          </div>
+          <a href="#/recipes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors">
+            <BookOpen size={11} /> Recipes <ArrowRight size={10} />
+          </a>
         </div>
-        <a href="#/recipes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors">
-          <BookOpen size={11} /> Recipes <ArrowRight size={10} />
-        </a>
-      </div>
+      )}
 
       {activeSection === "meal-planner" && <MealPlannerEmbed />}
 
@@ -2628,7 +2640,6 @@ const TABS = [
   { id: "metrics",     label: "Health Metrics", icon: TrendingUp  },
   { id: "sleep",       label: "Sleep",          icon: Moon        },
   { id: "care_team",   label: "Care Team",      icon: Stethoscope },
-  { id: "nutrition",   label: "Nutrition",      icon: UtensilsCrossed },
 ];
 
 export default function HealthPage() {
@@ -2644,7 +2655,7 @@ export default function HealthPage() {
     <PageShell
       size="sm"
       title="Health"
-      subtitle="Track medications, metrics, sleep, and your care team"
+      subtitle="Medications, metrics, sleep, and your care team"
       controls={
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(tab => {
@@ -2690,7 +2701,6 @@ export default function HealthPage() {
       {activeTab === "metrics"     && <MetricsTab />}
       {activeTab === "sleep"       && <SleepTab />}
       {activeTab === "care_team"   && <CareTeamTab />}
-      {activeTab === "nutrition"   && <NutritionTab />}
       </div>
     </PageShell>
   );

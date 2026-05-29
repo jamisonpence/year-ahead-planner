@@ -32,6 +32,7 @@ import HobbyPlanDetailPage from "@/pages/HobbyPlanDetailPage";
 import HabitsPage from "@/pages/HabitsPage";
 import FaithPage from "@/pages/FaithPage";
 import HealthPage from "@/pages/HealthPage";
+import NutritionPage from "@/pages/NutritionPage";
 import PoliticsPage from "@/pages/PoliticsPage";
 import LoginPage from "@/pages/LoginPage";
 import SettingsPage from "@/pages/SettingsPage";
@@ -84,6 +85,7 @@ function AuthenticatedApp() {
         <Route path="/habits" component={HabitsPage} />
         <Route path="/faith" component={FaithPage} />
         <Route path="/health" component={HealthPage} />
+        <Route path="/nutrition" component={NutritionPage} />
         <Route path="/politics" component={PoliticsPage} />
         <Route path="/messenger" component={MessengerPage} />
         <Route path="/settings" component={SettingsPage} />
