@@ -530,7 +530,7 @@ export default function DashboardPage() {
                   <p className="text-xs mt-1">Nothing urgent on the schedule today.</p>
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                   {todayItems.map((item) => (
                     <Link key={item.key} href={item.href}>
                       <a className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-secondary/60 ${item.urgent ? "bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/50" : "bg-secondary/30"}`}>
