@@ -1287,6 +1287,39 @@ export default function SpotsPage() {
   return (
     <div className="flex flex-col h-full">
 
+      {/* ══ Page header ══════════════════════════════════════════════════════ */}
+      {!isTravelRoute ? (
+        <div className="px-5 py-4 border-b flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div>
+            <h1 className="text-xl font-bold">Places</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Spots you've saved, visited, or want to explore</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setNominatimOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+            >
+              <Search size={13} /> Find &amp; Add
+            </button>
+            <button
+              onClick={openNew}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
+            >
+              <Plus size={13} /> Manual
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 py-4 border-b flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div>
+            <h1 className="text-xl font-bold">Trips</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Travel planning, itineraries, and history</p>
+          </div>
+          <a href="#/spots" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+            <MapPin size={11} /> Places →
+          </a>
+        </div>
+      )}
 
       {/* ══ PLACES ═══════════════════════════════════════════════════════════ */}
       {!isTravelRoute && (
@@ -1337,20 +1370,6 @@ export default function SpotsPage() {
                 >
                   <Sparkles size={13} /> Plan My Day
                 </button>
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <button
-                    onClick={() => setNominatimOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
-                  >
-                    <Search size={13} /> Find &amp; Add
-                  </button>
-                  <button
-                    onClick={openNew}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-full border border-border hover:bg-secondary transition-colors"
-                  >
-                    <Plus size={13} /> Manual
-                  </button>
-                </div>
               </div>
             </div>
           )}
@@ -1378,13 +1397,6 @@ export default function SpotsPage() {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Cross-nav to Trips */}
-          <div className="px-3 pb-1 shrink-0">
-            <a href="#/travel" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
-              <Plane size={11} /> See your Trips →
-            </a>
           </div>
 
           {/* Places content */}
@@ -1547,12 +1559,6 @@ export default function SpotsPage() {
       {/* ══ TRAVEL ═══════════════════════════════════════════════════════════ */}
       {isTravelRoute && (
         <>
-          {/* Cross-nav to Places */}
-          <div className="px-3 pt-2 pb-0 shrink-0">
-            <a href="#/spots" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
-              <MapPin size={11} /> See your Places →
-            </a>
-          </div>
           {/* Travel sub-tabs */}
           <div className="overflow-x-auto scrollbar-hide px-3 pt-2 pb-0 shrink-0">
             <div className="flex gap-1 w-max">
