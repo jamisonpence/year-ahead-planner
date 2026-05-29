@@ -1,4 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+} from "recharts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageShell from "@/components/PageShell";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
@@ -417,6 +424,7 @@ export default function BudgetPage() {
             Subscriptions {renewingSoon.length > 0 && <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center">{renewingSoon.length}</span>}
           </TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="calculator" className="gap-1.5">Calculator</TabsTrigger>
           <TabsTrigger value="receipts" className="gap-1.5">
             <ReceiptIcon size={14} /> Receipts
             {receiptList.length > 0 && <span className="ml-1 text-xs opacity-60">{receiptList.length}</span>}
@@ -907,6 +915,323 @@ export default function BudgetPage() {
           </div>
         </DialogContent>
       </Dialog>
+        <TabsContent value="calculator">
+          <CompoundInterestCalculator />
+        </TabsContent>
     </PageShell>
+  );
+}
+
+// ── Compound Interest Calculator ──────────────────────────────────────────────
+
+interface CIRowData {
+  period: number; year: number; opening: number; interest: number;
+  dividend: number; contribution: number; closing: number;
+  totalDeposited: number; totalInterest: number; totalDividends: number; growthMultiple: number;
+}
+interface CIAnnualRow {
+  year: number; opening: number; interestEarned: number; dividendsEarned: number;
+  contributions: number; closing: number; totalDeposited: number;
+  totalInterest: number; totalDividends: number; growthMultiple: number;
+}
+
+const ciFmt = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+const ciFmtShort = (n: number) => {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return ciFmt(n);
+};
+
+function ciComputeTable(
+  principal: number, rate: number, years: number, periodsPerYear: number,
+  contribution: number, dividendYield: number, reinvestDividends: boolean, divFreq: number
+): CIRowData[] {
+  const rows: CIRowData[] = [];
+  const totalPeriods = years * periodsPerYear;
+  const periodRate = rate / periodsPerYear;
+  const periodsPerDivPayment = periodsPerYear / divFreq;
+  let balance = principal;
+  let cumDividends = 0;
+  for (let p = 1; p <= totalPeriods; p++) {
+    const opening = balance;
+    const interest = opening * periodRate;
+    const isDivPeriod = reinvestDividends &&
+      Math.abs(Math.round(p / periodsPerDivPayment) * periodsPerDivPayment - p) < 0.001;
+    const dividend = isDivPeriod ? opening * (dividendYield / divFreq) : 0;
+    const closing = opening + interest + dividend + contribution;
+    cumDividends += dividend;
+    const totalDeposited = principal + p * contribution;
+    const totalInterest = closing - totalDeposited - cumDividends;
+    rows.push({ period: p, year: Math.ceil(p / periodsPerYear), opening, interest, dividend, contribution, closing, totalDeposited, totalInterest, totalDividends: cumDividends, growthMultiple: closing / principal });
+    balance = closing;
+  }
+  return rows;
+}
+
+function ciBuildAnnualRows(rows: CIRowData[]): CIAnnualRow[] {
+  const byYear: Record<number, CIRowData[]> = {};
+  rows.forEach((r) => { if (!byYear[r.year]) byYear[r.year] = []; byYear[r.year].push(r); });
+  return Object.values(byYear).map((pr) => {
+    const first = pr[0]; const last = pr[pr.length - 1];
+    return {
+      year: first.year, opening: first.opening,
+      interestEarned: pr.reduce((s, r) => s + r.interest, 0),
+      dividendsEarned: pr.reduce((s, r) => s + r.dividend, 0),
+      contributions: pr.reduce((s, r) => s + r.contribution, 0),
+      closing: last.closing, totalDeposited: last.totalDeposited,
+      totalInterest: last.totalInterest, totalDividends: last.totalDividends,
+      growthMultiple: last.growthMultiple,
+    };
+  });
+}
+
+function CIStatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-xl border p-4 flex flex-col gap-1 ${accent ? "bg-primary/5 border-primary/20" : "bg-card"}`}>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${accent ? "text-primary" : "text-foreground"}`}>{value}</p>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
+function CISliderInput({ label, value, onChange, min, max, step, format, inputSuffix }: {
+  label: string; value: number; onChange: (v: number) => void;
+  min: number; max: number; step: number; format: (v: number) => string; inputSuffix?: string;
+}) {
+  const [raw, setRaw] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">{label}</Label>
+        <div className="flex items-center gap-1">
+          <input
+            className="w-28 h-7 text-sm text-right tabular-nums font-semibold text-primary px-2 border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            value={raw !== null ? raw : value}
+            onChange={(e) => {
+              setRaw(e.target.value);
+              const p = parseFloat(e.target.value.replace(/[^0-9.]/g, ""));
+              if (!isNaN(p)) onChange(Math.min(max, Math.max(min, p)));
+            }}
+            onBlur={() => setRaw(null)}
+          />
+          {inputSuffix && <span className="text-sm text-muted-foreground">{inputSuffix}</span>}
+        </div>
+      </div>
+      <Slider min={min} max={max} step={step} value={[value]}
+        onValueChange={([v]) => { onChange(v); setRaw(null); }} className="w-full" />
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{format(min)}</span><span>{format(max)}</span>
+      </div>
+    </div>
+  );
+}
+
+const CITooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border bg-card shadow-md p-3 text-xs space-y-1 min-w-[190px]">
+      <p className="font-semibold text-foreground mb-2">Year {label}</p>
+      {payload.map((p: any) => (
+        <div key={p.name} className="flex justify-between gap-4">
+          <span style={{ color: p.color }} className="font-medium">{p.name}</span>
+          <span className="tabular-nums font-semibold">{ciFmtShort(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+function CompoundInterestCalculator() {
+  const [principal, setPrincipal] = useState(10000);
+  const [rate, setRate] = useState(10);
+  const [years, setYears] = useState(30);
+  const [periodsPerYear, setPeriodsPerYear] = useState(12);
+  const [contribution, setContribution] = useState(0);
+  const [divYield, setDivYield] = useState(2);
+  const [reinvest, setReinvest] = useState(false);
+  const [divFreq, setDivFreq] = useState(12);
+  const [tableView, setTableView] = useState<"annual" | "all">("annual");
+
+  const rows = useMemo(
+    () => ciComputeTable(principal, rate / 100, years, periodsPerYear, contribution, divYield / 100, reinvest, divFreq),
+    [principal, rate, years, periodsPerYear, contribution, divYield, reinvest, divFreq]
+  );
+  const annualRows = useMemo(() => ciBuildAnnualRows(rows), [rows]);
+  const lastRow = rows[rows.length - 1];
+
+  const chartData = useMemo(() =>
+    annualRows.map((r) => {
+      const d: Record<string, number> = { year: r.year, "Balance": Math.round(r.closing), "Total Deposited": Math.round(r.totalDeposited) };
+      if (reinvest) d["Reinvested Dividends"] = Math.round(r.totalDividends);
+      return d;
+    }), [annualRows, reinvest]);
+
+  const periodLabel = periodsPerYear === 1 ? "year" : periodsPerYear === 12 ? "month" : periodsPerYear === 4 ? "quarter" : "period";
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+      {/* Inputs */}
+      <aside className="flex flex-col gap-5">
+        <div className="rounded-xl border bg-card p-5 flex flex-col gap-5">
+          <CISliderInput label="Starting Principal" value={principal} onChange={setPrincipal} min={100} max={1000000} step={100} format={ciFmtShort} />
+          <CISliderInput label="Annual Interest Rate" value={rate} onChange={setRate} min={0.1} max={30} step={0.1} format={(v) => `${v}%`} inputSuffix="%" />
+          <CISliderInput label="Years" value={years} onChange={setYears} min={1} max={50} step={1} format={(v) => `${v}yr`} />
+          <div className="flex flex-col gap-2">
+            <Label className="text-sm font-medium">Compounding Frequency</Label>
+            <Select value={String(periodsPerYear)} onValueChange={(v) => setPeriodsPerYear(Number(v))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Annually (1×/yr)</SelectItem>
+                <SelectItem value="4">Quarterly (4×/yr)</SelectItem>
+                <SelectItem value="12">Monthly (12×/yr)</SelectItem>
+                <SelectItem value="365">Daily (365×/yr)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <CISliderInput label={`Contribution per ${periodLabel}`} value={contribution} onChange={setContribution} min={0} max={10000} step={10} format={ciFmtShort} />
+          <div className="border-t pt-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Reinvest Dividends</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Dividends compounded back into balance</p>
+              </div>
+              <Switch checked={reinvest} onCheckedChange={setReinvest} />
+            </div>
+            {reinvest && (
+              <>
+                <CISliderInput label="Annual Dividend Yield" value={divYield} onChange={setDivYield} min={0.1} max={15} step={0.1} format={(v) => `${v}%`} inputSuffix="%" />
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm font-medium">Dividend Payment Frequency</Label>
+                  <Select value={String(divFreq)} onValueChange={(v) => setDivFreq(Number(v))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Annually (1×/yr)</SelectItem>
+                      <SelectItem value="2">Semi-Annually (2×/yr)</SelectItem>
+                      <SelectItem value="4">Quarterly (4×/yr)</SelectItem>
+                      <SelectItem value="12">Monthly (12×/yr)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Each payment: <span className="font-semibold text-purple-600">{(divYield / divFreq).toFixed(3)}%</span> of balance</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {lastRow && (
+          <div className="grid grid-cols-2 gap-3">
+            <CIStatCard label="Final Balance" value={ciFmtShort(lastRow.closing)} sub={`after ${years} year${years !== 1 ? "s" : ""}`} accent />
+            <CIStatCard label="Growth Multiple" value={`${lastRow.growthMultiple.toFixed(2)}×`} sub="on principal" />
+            <CIStatCard label="Total Interest" value={ciFmtShort(Math.max(0, lastRow.totalInterest))} sub="from compounding" />
+            {reinvest
+              ? <CIStatCard label="Total Dividends" value={ciFmtShort(lastRow.totalDividends)} sub="reinvested" accent />
+              : <CIStatCard label="Total Deposited" value={ciFmtShort(lastRow.totalDeposited)} sub={contribution > 0 ? "incl. contributions" : "principal only"} />
+            }
+          </div>
+        )}
+      </aside>
+
+      {/* Chart + Table */}
+      <div className="flex flex-col gap-5">
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-sm font-semibold mb-4">Balance Over Time</p>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="ciBalGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(176,98%,22%)" stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor="hsl(176,98%,22%)" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="ciDepGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(30,80%,55%)" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="hsl(30,80%,55%)" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(40,15%,88%)" />
+              <XAxis dataKey="year" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} label={{ value: "Year", position: "insideBottom", offset: -2, fontSize: 11 }} />
+              <YAxis tickFormatter={ciFmtShort} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={70} />
+              <RechartsTooltip content={<CITooltip />} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+              <Area type="monotone" dataKey="Balance" stroke="hsl(176,98%,22%)" strokeWidth={2.5} fill="url(#ciBalGrad)" dot={false} activeDot={{ r: 4 }} />
+              <Area type="monotone" dataKey="Total Deposited" stroke="hsl(30,80%,55%)" strokeWidth={1.5} strokeDasharray="4 3" fill="url(#ciDepGrad)" dot={false} />
+              {reinvest && <Area type="monotone" dataKey="Reinvested Dividends" stroke="hsl(270,60%,55%)" strokeWidth={1.5} strokeDasharray="2 3" dot={false} />}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b">
+            <p className="text-sm font-semibold">Period Breakdown</p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setTableView("annual")} className={`text-xs px-3 py-1 rounded-full border transition-colors ${tableView === "annual" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>Annual</button>
+              <button onClick={() => setTableView("all")} className={`text-xs px-3 py-1 rounded-full border transition-colors ${tableView === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>All Periods</button>
+            </div>
+          </div>
+          <div className="overflow-auto max-h-[420px]">
+            {tableView === "annual" ? (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Year</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Opening</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Interest</th>
+                    {reinvest && <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Dividends</th>}
+                    {contribution > 0 && <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Contributions</th>}
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Closing</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Growth</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {annualRows.map((row, i) => (
+                    <tr key={row.year} className={`border-b last:border-0 hover:bg-accent/30 transition-colors ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
+                      <td className="px-4 py-2 font-semibold tabular-nums">{row.year}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{ciFmt(row.opening)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-emerald-700 font-medium">{ciFmt(row.interestEarned)}</td>
+                      {reinvest && <td className="px-4 py-2 text-right tabular-nums text-purple-600 font-medium">{ciFmt(row.dividendsEarned)}</td>}
+                      {contribution > 0 && <td className="px-4 py-2 text-right tabular-nums text-sky-700">{ciFmt(row.contributions)}</td>}
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold">{ciFmt(row.closing)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        <Badge variant="secondary" className="text-[11px] font-semibold tabular-nums">{row.growthMultiple.toFixed(2)}×</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Period</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Opening</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Interest</th>
+                    {reinvest && <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Dividend</th>}
+                    {contribution > 0 && <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Contribution</th>}
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Closing</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Growth</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={row.period} className={`border-b last:border-0 hover:bg-accent/30 transition-colors ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
+                      <td className="px-4 py-2 font-semibold tabular-nums">{row.period}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{ciFmt(row.opening)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-emerald-700 font-medium">{ciFmt(row.interest)}</td>
+                      {reinvest && <td className="px-4 py-2 text-right tabular-nums text-purple-600 font-medium">{ciFmt(row.dividend)}</td>}
+                      {contribution > 0 && <td className="px-4 py-2 text-right tabular-nums text-sky-700">{ciFmt(row.contribution)}</td>}
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold">{ciFmt(row.closing)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        <Badge variant="secondary" className="text-[11px] font-semibold tabular-nums">{row.growthMultiple.toFixed(2)}×</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
