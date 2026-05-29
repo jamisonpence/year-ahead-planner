@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import QuotesPage from "@/pages/QuotesPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   BookOpen, Plus, Heart, Search, Pencil, Trash2,
   ChevronDown, ChevronRight, Star, Calendar, Tag, Quote,
+  Folder, FolderOpen, FileText, MoreHorizontal, X, FolderPlus, FilePlus, ChevronUp,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -169,13 +170,309 @@ function EntryCard({
   );
 }
 
+// ── Notes Section ─────────────────────────────────────────────────────────────
+
+type NoteItem = { id: string; title: string; content: string; updatedAt: string };
+type SubFolder = { id: string; name: string; color: string; notes: NoteItem[] };
+type NoteFolder = { id: string; name: string; color: string; notes: NoteItem[]; subfolders: SubFolder[] };
+
+const FOLDER_COLORS = [
+  { value: "bg-blue-500",   label: "Blue"   },
+  { value: "bg-violet-500", label: "Purple" },
+  { value: "bg-emerald-500",label: "Green"  },
+  { value: "bg-amber-500",  label: "Amber"  },
+  { value: "bg-rose-500",   label: "Red"    },
+  { value: "bg-slate-500",  label: "Gray"   },
+];
+
+const NOTES_KEY = "mylifos_notes_v1";
+
+function loadNotes(): NoteFolder[] {
+  try { const r = localStorage.getItem(NOTES_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function saveNotes(folders: NoteFolder[]) {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(folders)); } catch {}
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function NotesSection() {
+  const [folders, setFolders] = useState<NoteFolder[]>(loadNotes);
+  const persist = (next: NoteFolder[]) => { setFolders(next); saveNotes(next); };
+
+  // UI state
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedSubfolders, setExpandedSubfolders] = useState<Set<string>>(new Set());
+  const [selectedNote, setSelectedNote] = useState<{ folderId: string; subfolderId?: string; note: NoteItem } | null>(null);
+  const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
+
+  // Folder modal
+  const [folderModal, setFolderModal] = useState<{ mode: "add" | "edit"; folderId?: string; parentFolderId?: string } | null>(null);
+  const [folderName, setFolderName] = useState("");
+  const [folderColor, setFolderColor] = useState("bg-blue-500");
+
+  // Note modal
+  const [noteModal, setNoteModal] = useState<{ folderId: string; subfolderId?: string; note?: NoteItem } | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+
+  const toggleFolder = (id: string) => setExpandedFolders(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSubfolder = (id: string) => setExpandedSubfolders(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // ── Folder CRUD ──
+  function openAddFolder(parentFolderId?: string) {
+    setFolderName(""); setFolderColor("bg-blue-500");
+    setFolderModal({ mode: "add", parentFolderId });
+  }
+  function openEditFolder(folderId: string, parentFolderId?: string) {
+    const folder = parentFolderId
+      ? folders.find(f => f.id === parentFolderId)?.subfolders.find(s => s.id === folderId)
+      : folders.find(f => f.id === folderId);
+    if (!folder) return;
+    setFolderName(folder.name); setFolderColor(folder.color);
+    setFolderModal({ mode: "edit", folderId, parentFolderId });
+  }
+  function saveFolder() {
+    if (!folderName.trim()) return;
+    const { mode, folderId, parentFolderId } = folderModal!;
+    if (parentFolderId) {
+      // subfolder
+      persist(folders.map(f => f.id !== parentFolderId ? f : {
+        ...f, subfolders: mode === "add"
+          ? [...f.subfolders, { id: uid(), name: folderName.trim(), color: folderColor, notes: [] }]
+          : f.subfolders.map(s => s.id !== folderId ? s : { ...s, name: folderName.trim(), color: folderColor }),
+      }));
+    } else {
+      if (mode === "add") {
+        persist([...folders, { id: uid(), name: folderName.trim(), color: folderColor, notes: [], subfolders: [] }]);
+      } else {
+        persist(folders.map(f => f.id !== folderId ? f : { ...f, name: folderName.trim(), color: folderColor }));
+      }
+    }
+    setFolderModal(null);
+  }
+  function deleteFolder(folderId: string, parentFolderId?: string) {
+    if (!confirm("Delete this folder and all its notes?")) return;
+    if (parentFolderId) {
+      persist(folders.map(f => f.id !== parentFolderId ? f : { ...f, subfolders: f.subfolders.filter(s => s.id !== folderId) }));
+    } else {
+      persist(folders.filter(f => f.id !== folderId));
+    }
+    if (selectedNote?.folderId === folderId || selectedNote?.subfolderId === folderId) setSelectedNote(null);
+  }
+
+  // ── Note CRUD ──
+  function openAddNote(folderId: string, subfolderId?: string) {
+    setNoteTitle(""); setNoteContent("");
+    setNoteModal({ folderId, subfolderId });
+  }
+  function openEditNote(folderId: string, subfolderId: string | undefined, note: NoteItem) {
+    setNoteTitle(note.title); setNoteContent(note.content);
+    setNoteModal({ folderId, subfolderId, note });
+  }
+  function saveNote() {
+    if (!noteTitle.trim()) return;
+    const { folderId, subfolderId, note } = noteModal!;
+    const now = new Date().toISOString();
+    const updated: NoteItem = note
+      ? { ...note, title: noteTitle.trim(), content: noteContent, updatedAt: now }
+      : { id: uid(), title: noteTitle.trim(), content: noteContent, updatedAt: now };
+    persist(folders.map(f => {
+      if (f.id !== folderId) return f;
+      if (subfolderId) {
+        return { ...f, subfolders: f.subfolders.map(s => s.id !== subfolderId ? s : {
+          ...s, notes: note ? s.notes.map(n => n.id === note.id ? updated : n) : [...s.notes, updated],
+        })};
+      }
+      return { ...f, notes: note ? f.notes.map(n => n.id === note.id ? updated : n) : [...f.notes, updated] };
+    }));
+    if (selectedNote?.note.id === note?.id) setSelectedNote({ folderId, subfolderId, note: updated });
+    setNoteModal(null);
+  }
+  function deleteNote(folderId: string, subfolderId: string | undefined, noteId: string) {
+    if (!confirm("Delete this note?")) return;
+    persist(folders.map(f => {
+      if (f.id !== folderId) return f;
+      if (subfolderId) return { ...f, subfolders: f.subfolders.map(s => s.id !== subfolderId ? s : { ...s, notes: s.notes.filter(n => n.id !== noteId) }) };
+      return { ...f, notes: f.notes.filter(n => n.id !== noteId) };
+    }));
+    if (selectedNote?.note.id === noteId) setSelectedNote(null);
+  }
+
+  const noteCount = (f: NoteFolder) => f.notes.length + f.subfolders.reduce((s, sf) => s + sf.notes.length, 0);
+
+  return (
+    <div className="flex gap-4 min-h-[500px]">
+      {/* ── Sidebar: Folders ──────────────────────────────────── */}
+      <div className="w-64 shrink-0 flex flex-col gap-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Folders</span>
+          <button onClick={() => openAddFolder()} className="p-1 rounded hover:bg-secondary transition-colors" title="New folder">
+            <FolderPlus size={14} className="text-muted-foreground" />
+          </button>
+        </div>
+
+        {folders.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground">
+            <Folder size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-xs">No folders yet</p>
+            <button onClick={() => openAddFolder()} className="text-xs text-primary hover:underline mt-1">Create one</button>
+          </div>
+        )}
+
+        {folders.map(folder => (
+          <div key={folder.id}>
+            {/* Folder row */}
+            <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-secondary/60 cursor-pointer"
+              onClick={() => toggleFolder(folder.id)}>
+              <div className={`w-3 h-3 rounded-sm shrink-0 ${folder.color}`} />
+              {expandedFolders.has(folder.id)
+                ? <FolderOpen size={14} className="text-muted-foreground shrink-0" />
+                : <Folder size={14} className="text-muted-foreground shrink-0" />}
+              <span className="text-sm flex-1 truncate font-medium">{folder.name}</span>
+              <span className="text-[10px] text-muted-foreground">{noteCount(folder)}</span>
+              <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                <button onClick={() => openAddNote(folder.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={12} /></button>
+                <button onClick={() => openAddFolder(folder.id)} title="Add subfolder" className="p-0.5 hover:text-primary"><FolderPlus size={12} /></button>
+                <button onClick={() => openEditFolder(folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={12} /></button>
+                <button onClick={() => deleteFolder(folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={12} /></button>
+              </div>
+            </div>
+
+            {/* Expanded folder contents */}
+            {expandedFolders.has(folder.id) && (
+              <div className="ml-4 border-l pl-2 mt-0.5 space-y-0.5">
+                {/* Subfolders */}
+                {folder.subfolders.map(sub => (
+                  <div key={sub.id}>
+                    <div className="group flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-secondary/60 cursor-pointer"
+                      onClick={() => toggleSubfolder(sub.id)}>
+                      <div className={`w-2.5 h-2.5 rounded-sm shrink-0 ${sub.color}`} />
+                      <Folder size={12} className="text-muted-foreground shrink-0" />
+                      <span className="text-xs flex-1 truncate font-medium">{sub.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{sub.notes.length}</span>
+                      <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => openAddNote(folder.id, sub.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={11} /></button>
+                        <button onClick={() => openEditFolder(sub.id, folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={11} /></button>
+                        <button onClick={() => deleteFolder(sub.id, folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={11} /></button>
+                      </div>
+                    </div>
+                    {/* Subfolder notes */}
+                    {expandedSubfolders.has(sub.id) && sub.notes.map(note => (
+                      <div key={note.id}
+                        className={`ml-4 flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
+                        onClick={() => setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note })}>
+                        <FileText size={11} className="shrink-0" />
+                        <span className="flex-1 truncate">{note.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {/* Folder notes */}
+                {folder.notes.map(note => (
+                  <div key={note.id}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
+                    onClick={() => setSelectedNote({ folderId: folder.id, note })}>
+                    <FileText size={11} className="shrink-0" />
+                    <span className="flex-1 truncate">{note.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main: Note viewer / empty state ────────────────────── */}
+      <div className="flex-1 min-w-0 bg-card border rounded-xl p-5">
+        {!selectedNote ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
+            <FileText size={36} className="mb-3 opacity-20" />
+            <p className="text-sm font-medium">Select a note to read it</p>
+            <p className="text-xs mt-1">or pick a folder and create one</p>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">{selectedNote.note.title}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Updated {new Date(selectedNote.note.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                  onClick={() => openEditNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note)}>
+                  <Pencil size={11} /> Edit
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive"
+                  onClick={() => deleteNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note.id)}>
+                  <Trash2 size={11} />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap overflow-y-auto">
+              {selectedNote.note.content || <span className="text-muted-foreground italic">No content.</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Folder modal ────────────────────────────────────────── */}
+      {folderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setFolderModal(null)}>
+          <div className="bg-card border rounded-2xl p-5 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{folderModal.mode === "add" ? (folderModal.parentFolderId ? "New Subfolder" : "New Folder") : "Edit Folder"}</h3>
+              <button onClick={() => setFolderModal(null)}><X size={16} className="text-muted-foreground" /></button>
+            </div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Folder name" value={folderName} onChange={e => setFolderName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && saveFolder()} autoFocus />
+            <div className="flex gap-2 flex-wrap">
+              {FOLDER_COLORS.map(c => (
+                <button key={c.value} onClick={() => setFolderColor(c.value)}
+                  className={`w-7 h-7 rounded-full ${c.value} border-2 transition-all ${folderColor === c.value ? "border-foreground scale-110" : "border-transparent"}`}
+                  title={c.label} />
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={saveFolder} disabled={!folderName.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => setFolderModal(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Note modal ──────────────────────────────────────────── */}
+      {noteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setNoteModal(null)}>
+          <div className="bg-card border rounded-2xl p-5 w-full max-w-lg space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{noteModal.note ? "Edit Note" : "New Note"}</h3>
+              <button onClick={() => setNoteModal(null)}><X size={16} className="text-muted-foreground" /></button>
+            </div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+              placeholder="Note title" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} autoFocus />
+            <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              placeholder="Write your note…" rows={8} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={saveNote} disabled={!noteTitle.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => setNoteModal(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function JournalPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [section, setSection] = useState<"journal" | "quotes" | "mantras">("journal");
+  const [section, setSection] = useState<"journal" | "quotes" | "mantras" | "notes">("journal");
 
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("all");
@@ -347,11 +644,20 @@ export default function JournalPage() {
         >
           🔥 Mantras
         </button>
+        <button
+          onClick={() => setSection("notes")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+            section === "notes" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <FileText size={14} /> Notes
+        </button>
       </div>
 
       {/* Quotes / Mantras sections */}
       {section === "quotes" && <QuotesPage embedded embeddedTab="quotes" />}
       {section === "mantras" && <QuotesPage embedded embeddedTab="mantras" />}
+      {section === "notes" && <NotesSection />}
 
       {/* Journal content */}
       {section === "journal" && <>
@@ -556,6 +862,302 @@ export default function JournalPage() {
         </DialogContent>
       </Dialog>
       </>}
+    </div>
+  );
+}
+
+// ── Notes Section ─────────────────────────────────────────────────────────────
+
+type NoteItem = { id: string; title: string; content: string; updatedAt: string };
+type SubFolder = { id: string; name: string; color: string; notes: NoteItem[] };
+type NoteFolder = { id: string; name: string; color: string; notes: NoteItem[]; subfolders: SubFolder[] };
+
+const FOLDER_COLORS = [
+  { value: "bg-blue-500",   label: "Blue"   },
+  { value: "bg-violet-500", label: "Purple" },
+  { value: "bg-emerald-500",label: "Green"  },
+  { value: "bg-amber-500",  label: "Amber"  },
+  { value: "bg-rose-500",   label: "Red"    },
+  { value: "bg-slate-500",  label: "Gray"   },
+];
+
+const NOTES_KEY = "mylifos_notes_v1";
+
+function loadNotes(): NoteFolder[] {
+  try { const r = localStorage.getItem(NOTES_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function saveNotes(folders: NoteFolder[]) {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(folders)); } catch {}
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function NotesSection() {
+  const [folders, setFolders] = useState<NoteFolder[]>(loadNotes);
+  const persist = (next: NoteFolder[]) => { setFolders(next); saveNotes(next); };
+
+  // UI state
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedSubfolders, setExpandedSubfolders] = useState<Set<string>>(new Set());
+  const [selectedNote, setSelectedNote] = useState<{ folderId: string; subfolderId?: string; note: NoteItem } | null>(null);
+  const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
+
+  // Folder modal
+  const [folderModal, setFolderModal] = useState<{ mode: "add" | "edit"; folderId?: string; parentFolderId?: string } | null>(null);
+  const [folderName, setFolderName] = useState("");
+  const [folderColor, setFolderColor] = useState("bg-blue-500");
+
+  // Note modal
+  const [noteModal, setNoteModal] = useState<{ folderId: string; subfolderId?: string; note?: NoteItem } | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+
+  const toggleFolder = (id: string) => setExpandedFolders(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSubfolder = (id: string) => setExpandedSubfolders(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // ── Folder CRUD ──
+  function openAddFolder(parentFolderId?: string) {
+    setFolderName(""); setFolderColor("bg-blue-500");
+    setFolderModal({ mode: "add", parentFolderId });
+  }
+  function openEditFolder(folderId: string, parentFolderId?: string) {
+    const folder = parentFolderId
+      ? folders.find(f => f.id === parentFolderId)?.subfolders.find(s => s.id === folderId)
+      : folders.find(f => f.id === folderId);
+    if (!folder) return;
+    setFolderName(folder.name); setFolderColor(folder.color);
+    setFolderModal({ mode: "edit", folderId, parentFolderId });
+  }
+  function saveFolder() {
+    if (!folderName.trim()) return;
+    const { mode, folderId, parentFolderId } = folderModal!;
+    if (parentFolderId) {
+      // subfolder
+      persist(folders.map(f => f.id !== parentFolderId ? f : {
+        ...f, subfolders: mode === "add"
+          ? [...f.subfolders, { id: uid(), name: folderName.trim(), color: folderColor, notes: [] }]
+          : f.subfolders.map(s => s.id !== folderId ? s : { ...s, name: folderName.trim(), color: folderColor }),
+      }));
+    } else {
+      if (mode === "add") {
+        persist([...folders, { id: uid(), name: folderName.trim(), color: folderColor, notes: [], subfolders: [] }]);
+      } else {
+        persist(folders.map(f => f.id !== folderId ? f : { ...f, name: folderName.trim(), color: folderColor }));
+      }
+    }
+    setFolderModal(null);
+  }
+  function deleteFolder(folderId: string, parentFolderId?: string) {
+    if (!confirm("Delete this folder and all its notes?")) return;
+    if (parentFolderId) {
+      persist(folders.map(f => f.id !== parentFolderId ? f : { ...f, subfolders: f.subfolders.filter(s => s.id !== folderId) }));
+    } else {
+      persist(folders.filter(f => f.id !== folderId));
+    }
+    if (selectedNote?.folderId === folderId || selectedNote?.subfolderId === folderId) setSelectedNote(null);
+  }
+
+  // ── Note CRUD ──
+  function openAddNote(folderId: string, subfolderId?: string) {
+    setNoteTitle(""); setNoteContent("");
+    setNoteModal({ folderId, subfolderId });
+  }
+  function openEditNote(folderId: string, subfolderId: string | undefined, note: NoteItem) {
+    setNoteTitle(note.title); setNoteContent(note.content);
+    setNoteModal({ folderId, subfolderId, note });
+  }
+  function saveNote() {
+    if (!noteTitle.trim()) return;
+    const { folderId, subfolderId, note } = noteModal!;
+    const now = new Date().toISOString();
+    const updated: NoteItem = note
+      ? { ...note, title: noteTitle.trim(), content: noteContent, updatedAt: now }
+      : { id: uid(), title: noteTitle.trim(), content: noteContent, updatedAt: now };
+    persist(folders.map(f => {
+      if (f.id !== folderId) return f;
+      if (subfolderId) {
+        return { ...f, subfolders: f.subfolders.map(s => s.id !== subfolderId ? s : {
+          ...s, notes: note ? s.notes.map(n => n.id === note.id ? updated : n) : [...s.notes, updated],
+        })};
+      }
+      return { ...f, notes: note ? f.notes.map(n => n.id === note.id ? updated : n) : [...f.notes, updated] };
+    }));
+    if (selectedNote?.note.id === note?.id) setSelectedNote({ folderId, subfolderId, note: updated });
+    setNoteModal(null);
+  }
+  function deleteNote(folderId: string, subfolderId: string | undefined, noteId: string) {
+    if (!confirm("Delete this note?")) return;
+    persist(folders.map(f => {
+      if (f.id !== folderId) return f;
+      if (subfolderId) return { ...f, subfolders: f.subfolders.map(s => s.id !== subfolderId ? s : { ...s, notes: s.notes.filter(n => n.id !== noteId) }) };
+      return { ...f, notes: f.notes.filter(n => n.id !== noteId) };
+    }));
+    if (selectedNote?.note.id === noteId) setSelectedNote(null);
+  }
+
+  const noteCount = (f: NoteFolder) => f.notes.length + f.subfolders.reduce((s, sf) => s + sf.notes.length, 0);
+
+  return (
+    <div className="flex gap-4 min-h-[500px]">
+      {/* ── Sidebar: Folders ──────────────────────────────────── */}
+      <div className="w-64 shrink-0 flex flex-col gap-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Folders</span>
+          <button onClick={() => openAddFolder()} className="p-1 rounded hover:bg-secondary transition-colors" title="New folder">
+            <FolderPlus size={14} className="text-muted-foreground" />
+          </button>
+        </div>
+
+        {folders.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground">
+            <Folder size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-xs">No folders yet</p>
+            <button onClick={() => openAddFolder()} className="text-xs text-primary hover:underline mt-1">Create one</button>
+          </div>
+        )}
+
+        {folders.map(folder => (
+          <div key={folder.id}>
+            {/* Folder row */}
+            <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-secondary/60 cursor-pointer"
+              onClick={() => toggleFolder(folder.id)}>
+              <div className={`w-3 h-3 rounded-sm shrink-0 ${folder.color}`} />
+              {expandedFolders.has(folder.id)
+                ? <FolderOpen size={14} className="text-muted-foreground shrink-0" />
+                : <Folder size={14} className="text-muted-foreground shrink-0" />}
+              <span className="text-sm flex-1 truncate font-medium">{folder.name}</span>
+              <span className="text-[10px] text-muted-foreground">{noteCount(folder)}</span>
+              <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                <button onClick={() => openAddNote(folder.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={12} /></button>
+                <button onClick={() => openAddFolder(folder.id)} title="Add subfolder" className="p-0.5 hover:text-primary"><FolderPlus size={12} /></button>
+                <button onClick={() => openEditFolder(folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={12} /></button>
+                <button onClick={() => deleteFolder(folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={12} /></button>
+              </div>
+            </div>
+
+            {/* Expanded folder contents */}
+            {expandedFolders.has(folder.id) && (
+              <div className="ml-4 border-l pl-2 mt-0.5 space-y-0.5">
+                {/* Subfolders */}
+                {folder.subfolders.map(sub => (
+                  <div key={sub.id}>
+                    <div className="group flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-secondary/60 cursor-pointer"
+                      onClick={() => toggleSubfolder(sub.id)}>
+                      <div className={`w-2.5 h-2.5 rounded-sm shrink-0 ${sub.color}`} />
+                      <Folder size={12} className="text-muted-foreground shrink-0" />
+                      <span className="text-xs flex-1 truncate font-medium">{sub.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{sub.notes.length}</span>
+                      <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => openAddNote(folder.id, sub.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={11} /></button>
+                        <button onClick={() => openEditFolder(sub.id, folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={11} /></button>
+                        <button onClick={() => deleteFolder(sub.id, folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={11} /></button>
+                      </div>
+                    </div>
+                    {/* Subfolder notes */}
+                    {expandedSubfolders.has(sub.id) && sub.notes.map(note => (
+                      <div key={note.id}
+                        className={`ml-4 flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
+                        onClick={() => setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note })}>
+                        <FileText size={11} className="shrink-0" />
+                        <span className="flex-1 truncate">{note.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {/* Folder notes */}
+                {folder.notes.map(note => (
+                  <div key={note.id}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
+                    onClick={() => setSelectedNote({ folderId: folder.id, note })}>
+                    <FileText size={11} className="shrink-0" />
+                    <span className="flex-1 truncate">{note.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main: Note viewer / empty state ────────────────────── */}
+      <div className="flex-1 min-w-0 bg-card border rounded-xl p-5">
+        {!selectedNote ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
+            <FileText size={36} className="mb-3 opacity-20" />
+            <p className="text-sm font-medium">Select a note to read it</p>
+            <p className="text-xs mt-1">or pick a folder and create one</p>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">{selectedNote.note.title}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Updated {new Date(selectedNote.note.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                  onClick={() => openEditNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note)}>
+                  <Pencil size={11} /> Edit
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive"
+                  onClick={() => deleteNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note.id)}>
+                  <Trash2 size={11} />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap overflow-y-auto">
+              {selectedNote.note.content || <span className="text-muted-foreground italic">No content.</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Folder modal ────────────────────────────────────────── */}
+      {folderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setFolderModal(null)}>
+          <div className="bg-card border rounded-2xl p-5 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{folderModal.mode === "add" ? (folderModal.parentFolderId ? "New Subfolder" : "New Folder") : "Edit Folder"}</h3>
+              <button onClick={() => setFolderModal(null)}><X size={16} className="text-muted-foreground" /></button>
+            </div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Folder name" value={folderName} onChange={e => setFolderName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && saveFolder()} autoFocus />
+            <div className="flex gap-2 flex-wrap">
+              {FOLDER_COLORS.map(c => (
+                <button key={c.value} onClick={() => setFolderColor(c.value)}
+                  className={`w-7 h-7 rounded-full ${c.value} border-2 transition-all ${folderColor === c.value ? "border-foreground scale-110" : "border-transparent"}`}
+                  title={c.label} />
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={saveFolder} disabled={!folderName.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => setFolderModal(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Note modal ──────────────────────────────────────────── */}
+      {noteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setNoteModal(null)}>
+          <div className="bg-card border rounded-2xl p-5 w-full max-w-lg space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{noteModal.note ? "Edit Note" : "New Note"}</h3>
+              <button onClick={() => setNoteModal(null)}><X size={16} className="text-muted-foreground" /></button>
+            </div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+              placeholder="Note title" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} autoFocus />
+            <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              placeholder="Write your note…" rows={8} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={saveNote} disabled={!noteTitle.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => setNoteModal(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
