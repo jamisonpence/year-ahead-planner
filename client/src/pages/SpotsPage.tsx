@@ -3257,7 +3257,15 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
     return () => {
       unmounted = true;
       if (script) { script.onload = null; }
-      if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch (_) {}
+        mapInstanceRef.current = null;
+      }
+      // Immediately wipe the container so no lingering tiles can paint
+      if (mapContainerRef.current) {
+        mapContainerRef.current.style.display = "none";
+        mapContainerRef.current.innerHTML = "";
+      }
     };
   }, [JSON.stringify(mappable.map(c => c.id))]);
 
