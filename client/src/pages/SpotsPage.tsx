@@ -1082,7 +1082,7 @@ export default function SpotsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   // Route-locked: /spots = Places only, /travel = Trips only
   const isTravelRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
-  const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "itineraries" | "logistics">("upcoming");
+  const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "itineraries" | "visited">("upcoming");
   const [placesSubTab, setPlacesSubTab] = useState("saved");
   const [createTripSpot, setCreateTripSpot] = useState<Spot | null>(null);
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
@@ -1569,7 +1569,7 @@ export default function SpotsPage() {
                 { value: "upcoming"    as const, label: "Upcoming",    icon: <Plane size={13} /> },
                 { value: "past"        as const, label: "Past",         icon: <Globe size={13} /> },
                 { value: "itineraries" as const, label: "Itineraries",  icon: <MapPin size={13} /> },
-                { value: "logistics"   as const, label: "Logistics",    icon: <Globe size={13} /> },
+                { value: "visited"   as const, label: "Visited",    icon: <Globe size={13} /> },
               ]).map(tab => (
                 <button
                   key={tab.value}
@@ -1586,7 +1586,7 @@ export default function SpotsPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
-            {travelSubTab === "logistics" ? (
+            {travelSubTab === "visited" ? (
               <VisitedCitiesTab />
             ) : (
               <TripsTab
