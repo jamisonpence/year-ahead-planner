@@ -1068,6 +1068,17 @@ export default function TasksPage() {
     onSuccess: () => { invChores(); toast({ title: "Chore marked complete ✓" }); },
   });
 
+  const waterPlant = useMutation({
+    mutationFn: (id: number) => {
+      const today = new Date().toISOString().slice(0, 10);
+      return apiRequest("PATCH", `/api/plants/${id}`, { lastWatered: today });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plants"] });
+      toast({ title: "Plant watered 💧" });
+    },
+  });
+
   // ── Derived / merged data ─────────────────────────────────────────────────
 
   const allDisplayProjects = useMemo((): DisplayProject[] => {
@@ -1470,7 +1481,12 @@ export default function TasksPage() {
                             <p className="text-sm font-medium truncate">{p.name}</p>
                             <p className={`text-xs ${ws.color}`}>{ws.label}</p>
                           </div>
-                          <span className="text-lg">💧</span>
+                          <button
+                            onClick={() => waterPlant.mutate(p.id)}
+                            disabled={waterPlant.isPending}
+                            title="Log watering"
+                            className="text-lg hover:scale-125 transition-transform active:scale-95 disabled:opacity-50"
+                          >💧</button>
                         </div>
                       );
                     })}
