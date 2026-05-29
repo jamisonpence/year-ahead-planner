@@ -56,7 +56,7 @@ function AuthenticatedApp() {
     <PlannerProvider>
     <AppShell>
       <Switch>
-        <Route path="/" component={FeedPage} />
+        <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/discover" component={DiscoverPage} />
         <Route path="/calendar" component={CalendarPage} />
