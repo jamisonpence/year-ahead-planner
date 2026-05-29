@@ -608,6 +608,7 @@ export default function HabitsPage() {
   const [workoutLogOpen, setWorkoutLogOpen] = useState(false);
   const [editWorkoutLog, setEditWorkoutLog] = useState<WorkoutLog | null>(null);
   const [prefillTemplateId, setPrefillTemplateId] = useState<number | null>(null);
+  const [prefillWorkoutLabel, setPrefillWorkoutLabel] = useState<string | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: habits = [], isLoading: habitsLoading } = useQuery<HabitWithStats[]>({
@@ -801,7 +802,7 @@ export default function HabitsPage() {
                   <button
                     key={`${w.label}-${i}`}
                     className={`w-full rounded-xl border p-3 flex items-center gap-3 text-left transition-colors hover:bg-secondary/60 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}
-                    onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(w.templateId); setWorkoutLogOpen(true); }}
+                    onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(w.templateId); setPrefillWorkoutLabel(w.label); setWorkoutLogOpen(true); }}
                   >
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${todayWorkoutLogged ? "bg-green-500/20" : "bg-primary/10"}`}>
                       {todayWorkoutLogged
@@ -1026,11 +1027,11 @@ export default function HabitsPage() {
 
       <WorkoutLogModal
         open={workoutLogOpen}
-        onClose={() => { setWorkoutLogOpen(false); setEditWorkoutLog(null); setPrefillTemplateId(null); }}
+        onClose={() => { setWorkoutLogOpen(false); setEditWorkoutLog(null); setPrefillTemplateId(null); setPrefillWorkoutLabel(null); }}
         templates={workoutTemplates}
         editLog={editWorkoutLog}
-        prefillName={prefillTemplateId && !editWorkoutLog ? (todayWorkoutLabel ?? undefined) : undefined}
-        prefillTemplateId={prefillTemplateId && !editWorkoutLog ? prefillTemplateId : undefined}
+        prefillName={!editWorkoutLog ? (prefillWorkoutLabel ?? undefined) : undefined}
+        prefillTemplateId={!editWorkoutLog ? (prefillTemplateId ?? undefined) : undefined}
       />
     </div>
   );
