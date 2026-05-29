@@ -6564,12 +6564,11 @@ function HobbyCard({
                 <Pencil size={13} className="mr-2" /> Edit hobby
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onDelete()} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem onSelect={(e) => { e.stopPropagation(); onDelete(); }} className="text-destructive focus:text-destructive">
                 <Trash2 size={13} className="mr-2" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          </div>
         </div>
 
         {/* Row 2: Skill level + status chips */}
