@@ -397,7 +397,7 @@ function MyLifosSheet({
   const handle = user?.email ? "@" + user.email.split("@")[0] : "";
 
   return (
-    <div className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="lg:hidden fixed inset-0 z-[60] bg-background/90 backdrop-blur-sm" onClick={onClose}>
       <div
         className="absolute bottom-0 left-0 right-0 bg-card rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}

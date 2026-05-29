@@ -3270,7 +3270,7 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
   }, [JSON.stringify(mappable.map(c => c.id))]);
 
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ height: 220 }}>
+    <div className="rounded-xl overflow-hidden border" style={{ height: 220, isolation: "isolate", position: "relative", zIndex: 0 }}>
       <div ref={mapContainerRef} style={{ height: "100%", width: "100%" }} />
     </div>
   );
