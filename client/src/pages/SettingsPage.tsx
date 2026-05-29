@@ -7,11 +7,12 @@ import { useToast } from "@/hooks/use-toast";
 import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette, Plane,
+  ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette, Plane, Globe,
   Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
   Smartphone, Download,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -427,6 +428,123 @@ function CollaborationSection() {
   );
 }
 
+// ── Timezone Section ─────────────────────────────────────────────────────────────
+
+const TIMEZONE_KEY = "mylifos_timezone";
+const DEFAULT_TZ = "America/New_York";
+
+const COMMON_TIMEZONES = [
+  { value: "America/New_York",    label: "Eastern (EST/EDT)"         },
+  { value: "America/Chicago",     label: "Central (CST/CDT)"         },
+  { value: "America/Denver",      label: "Mountain (MST/MDT)"        },
+  { value: "America/Los_Angeles", label: "Pacific (PST/PDT)"         },
+  { value: "America/Anchorage",   label: "Alaska (AKST/AKDT)"        },
+  { value: "Pacific/Honolulu",    label: "Hawaii (HST)"              },
+  { value: "America/Phoenix",     label: "Arizona (MST, no DST)"     },
+  { value: "America/Puerto_Rico", label: "Atlantic (AST)"            },
+  { value: "Europe/London",       label: "London (GMT/BST)"          },
+  { value: "Europe/Paris",        label: "Central Europe (CET/CEST)" },
+  { value: "Europe/Athens",       label: "Eastern Europe (EET/EEST)" },
+  { value: "Asia/Dubai",          label: "Gulf (GST)"                },
+  { value: "Asia/Kolkata",        label: "India (IST)"               },
+  { value: "Asia/Bangkok",        label: "Indochina (ICT)"           },
+  { value: "Asia/Shanghai",       label: "China (CST)"               },
+  { value: "Asia/Tokyo",          label: "Japan (JST)"               },
+  { value: "Australia/Sydney",    label: "Sydney (AEST/AEDT)"        },
+  { value: "Pacific/Auckland",    label: "New Zealand (NZST/NZDT)"   },
+  { value: "UTC",                 label: "UTC"                       },
+];
+
+function detectBrowserTimezone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && COMMON_TIMEZONES.some(t => t.value === tz)) return tz;
+    // Try to match a close one by offset
+    const offset = -new Date().getTimezoneOffset();
+    const byOffset: Record<number, string> = {
+      "-300": "America/New_York",
+      "-360": "America/Chicago",
+      "-420": "America/Denver",
+      "-480": "America/Los_Angeles",
+      "0":    "UTC",
+      "60":   "Europe/London",
+      "120":  "Europe/Paris",
+      "330":  "Asia/Kolkata",
+      "540":  "Asia/Tokyo",
+      "600":  "Australia/Sydney",
+    };
+    return byOffset[String(offset)] ?? DEFAULT_TZ;
+  } catch {
+    return DEFAULT_TZ;
+  }
+}
+
+function loadTimezone(): string {
+  try {
+    return localStorage.getItem(TIMEZONE_KEY) || detectBrowserTimezone();
+  } catch {
+    return DEFAULT_TZ;
+  }
+}
+
+function TimezoneSection() {
+  const { toast } = useToast();
+  const [tz, setTz] = useState(loadTimezone);
+  const [saved, setSaved] = useState(true);
+
+  function handleChange(value: string) {
+    setTz(value);
+    setSaved(false);
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(TIMEZONE_KEY, tz);
+      setSaved(true);
+      toast({ title: "Timezone saved" });
+    } catch {
+      toast({ title: "Failed to save timezone", variant: "destructive" });
+    }
+  }
+
+  const now = new Date().toLocaleTimeString("en-US", {
+    timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+  });
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <Globe size={18} className="text-blue-500" />
+        <h2 className="font-semibold text-base">Timezone</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Used for scheduling, reminders, and date display across the app.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+        <div className="flex-1 w-full space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your Timezone</label>
+          <Select value={tz} onValueChange={handleChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COMMON_TIMEZONES.map(t => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-muted-foreground shrink-0 pb-2">
+          Current time: <span className="font-semibold text-foreground">{now}</span>
+        </div>
+      </div>
+      {!saved && (
+        <Button size="sm" onClick={save} className="gap-1.5">Save Timezone</Button>
+      )}
+    </section>
+  );
+}
+
 // ── Delete Account Section ────────────────────────────────────────────────────
 
 function DeleteAccountSection() {
@@ -684,6 +802,9 @@ export default function SettingsPage() {
 
       {/* Install App */}
       <InstallAppSection />
+
+      {/* Timezone */}
+      <TimezoneSection />
 
       {/* Tab Privacy */}
       <TabPrivacySection />
