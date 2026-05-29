@@ -10,7 +10,8 @@ import {
   Plus, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, Folder, ClipboardList, Flag, X,
   ChevronDown, ChevronUp, Home, Target, RefreshCw,
-  AlertTriangle, CheckSquare, Layers,
+  AlertTriangle, CheckSquare, Layers, ArrowRight, PlayCircle,
+  Ban, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -183,6 +184,45 @@ function TaskRow({
   );
 }
 
+// ── Status config ─────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<string, {
+  label: string;
+  icon: React.ReactNode;
+  pill: string;
+  cardBorder: string;
+  cardBg: string;
+}> = {
+  in_progress: {
+    label: "In Progress",
+    icon: <PlayCircle size={11} />,
+    pill: "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+    cardBorder: "border-l-4 border-l-blue-500",
+    cardBg: "bg-blue-50/40 dark:bg-blue-950/15",
+  },
+  blocked: {
+    label: "Blocked",
+    icon: <Ban size={11} />,
+    pill: "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800",
+    cardBorder: "border-l-4 border-l-red-500",
+    cardBg: "bg-red-50/30 dark:bg-red-950/15",
+  },
+  not_started: {
+    label: "Not Started",
+    icon: <Circle size={11} />,
+    pill: "bg-secondary text-muted-foreground border-border",
+    cardBorder: "border-l-4 border-l-border/50",
+    cardBg: "",
+  },
+  done: {
+    label: "Done",
+    icon: <CheckCircle2 size={11} />,
+    pill: "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+    cardBorder: "border-l-4 border-l-emerald-500",
+    cardBg: "bg-emerald-50/20 dark:bg-emerald-950/10",
+  },
+};
+
 // ── Project Card (expandable) ─────────────────────────────────────────────────
 
 function ProjectCard({
@@ -212,9 +252,13 @@ function ProjectCard({
   const activeTasks = project.tasks.filter(t => !t.completed);
   const doneTasks   = project.tasks.filter(t => t.completed);
   const pct = tasksPct(project.tasks);
+  const nextTask = activeTasks[0] ?? null;
+
   const d = project.dueDate ? daysUntil(project.dueDate) : null;
   const overdue = d !== null && d < 0;
   const soon    = d !== null && d >= 0 && d <= 14;
+
+  const sc = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.not_started;
 
   const submitTask = () => {
     if (!newTask.trim()) return;
@@ -224,75 +268,73 @@ function ProjectCard({
   };
 
   return (
-    <div className={`rounded-xl border bg-card overflow-hidden transition-shadow ${expanded ? "shadow-sm" : "hover:shadow-sm"}`}>
-      {/* Status-color top bar */}
-      <div className={`h-0.5 w-full ${
-        project.status === "in_progress" ? "bg-blue-500" :
-        project.status === "done"        ? "bg-emerald-500" :
-        project.status === "blocked"     ? "bg-red-500" :
-        "bg-border"
-      }`} />
-
-      {/* Header row */}
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          {/* Icon */}
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-secondary/60">
-            {project.source === "house" ? <Home size={16} className="text-orange-500" /> : <Folder size={16} className="text-muted-foreground" />}
-          </div>
-
-          {/* Main content */}
+    <div className={`rounded-xl border bg-card overflow-hidden ${sc.cardBorder} ${sc.cardBg} ${expanded ? "" : "hover:shadow-sm"} transition-shadow`}>
+      <div className="p-3">
+        {/* Title + status + menu */}
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-semibold text-sm leading-snug">{project.title}</p>
-                {/* Linked goal badge */}
-                {project.goalTitle && (
-                  <Link href="/goals">
-                    <a className="inline-flex items-center gap-1 text-[10px] text-primary/80 bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded-full mt-0.5 hover:bg-primary/15 transition-colors">
-                      <Target size={9} /> {project.goalTitle}
-                    </a>
-                  </Link>
-                )}
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${STATUS_PILL[project.status] ?? STATUS_PILL.not_started}`}>
-                  {PROJECT_STATUSES.find(s => s.value === project.status)?.label ?? project.status}
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal size={12} /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-                      <Trash2 size={13} className="mr-2" />Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+            <div className="flex items-center gap-1.5">
+              {project.source === "house"
+                ? <Home size={12} className="text-orange-400 shrink-0" />
+                : <Folder size={12} className="text-muted-foreground/40 shrink-0" />}
+              <p className="font-semibold text-sm leading-snug truncate">{project.title}</p>
             </div>
-
-            {/* Metadata row */}
-            <div className="flex items-center gap-3 mt-2 flex-wrap">
-              {project.tasks.length > 0 && (
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <Progress value={pct} className="h-1.5 flex-1 max-w-24" />
-                  <span className="text-xs text-muted-foreground shrink-0">{doneTasks.length}/{project.tasks.length}</span>
-                </div>
-              )}
-              {project.dueDate && (
-                <span className={`text-xs ${overdue ? "text-destructive font-medium" : soon ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
-                  {overdue ? `Overdue · ${format(parseISO(project.dueDate), "MMM d")}` : `Due ${format(parseISO(project.dueDate), "MMM d")}`}
-                </span>
-              )}
-            </div>
-
-            {project.description && !expanded && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{project.description}</p>
+            {project.goalTitle && (
+              <Link href="/goals">
+                <a className="inline-flex items-center gap-1 text-[10px] text-primary/80 bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded-full mt-1 hover:bg-primary/15 transition-colors">
+                  <Target size={9} /> {project.goalTitle}
+                </a>
+              </Link>
             )}
           </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${sc.pill}`}>
+              {sc.icon} {sc.label}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal size={12} /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onEdit}><Pencil size={13} className="mr-2" />Edit</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+                  <Trash2 size={13} className="mr-2" />Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+
+        {/* Progress + open count + due date */}
+        {(project.tasks.length > 0 || project.dueDate) && (
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {project.tasks.length > 0 && (
+              <>
+                <Progress value={pct} className="h-1 flex-1 max-w-[5rem]" />
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {activeTasks.length} open · {doneTasks.length}/{project.tasks.length}
+                </span>
+              </>
+            )}
+            {project.dueDate && (
+              <span className={`text-xs shrink-0 ml-auto ${overdue ? "text-destructive font-medium" : soon ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
+                {overdue
+                  ? `Overdue · ${format(parseISO(project.dueDate), "MMM d")}`
+                  : d === 0 ? "Due today"
+                  : `Due ${format(parseISO(project.dueDate), "MMM d")}`}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Next task preview — visible only when collapsed */}
+        {!expanded && nextTask && (
+          <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 rounded-lg bg-background/70 border border-border/50">
+            <ArrowRight size={11} className="text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground truncate">{nextTask.title}</span>
+            {nextTask.priority === "high" && <Flag size={9} className="text-red-500 shrink-0 ml-auto" />}
+          </div>
+        )}
 
         {/* Expand toggle */}
         <button
@@ -300,22 +342,25 @@ function ProjectCard({
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-2 transition-colors"
         >
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {expanded ? "Hide tasks" : `${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""}${activeTasks.length > 0 ? " open" : ""}`}
+          {expanded
+            ? "Hide tasks"
+            : project.tasks.length === 0
+              ? "Add tasks"
+              : `${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""} open`}
         </button>
       </div>
 
       {/* Expanded task list */}
       {expanded && (
-        <div className="border-t px-4 pb-3 pt-3 space-y-0.5">
+        <div className="border-t px-3 pb-3 pt-2.5 space-y-0.5 bg-background/50">
           {project.description && (
-            <p className="text-xs text-muted-foreground mb-3">{project.description}</p>
+            <p className="text-xs text-muted-foreground mb-2.5">{project.description}</p>
           )}
 
           {project.tasks.length === 0 && !addingTask && (
             <p className="text-xs text-muted-foreground py-2 text-center">No tasks yet</p>
           )}
 
-          {/* Active tasks */}
           {activeTasks.map(t => (
             <TaskRow
               key={t.id}
@@ -326,7 +371,6 @@ function ProjectCard({
             />
           ))}
 
-          {/* Completed tasks (collapsed) */}
           {doneTasks.length > 0 && (
             <details className="mt-1">
               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground py-1 list-none flex items-center gap-1">
@@ -346,7 +390,6 @@ function ProjectCard({
             </details>
           )}
 
-          {/* Add task inline */}
           {addingTask ? (
             <div className="flex gap-1.5 mt-2">
               <Input
@@ -1082,8 +1125,8 @@ export default function TasksPage() {
     return openTasks;
   }, [openTasks, taskFilter, today]);
 
-  // Status sort order for projects view
-  const statusOrder: Record<string, number> = { blocked: 0, in_progress: 1, not_started: 2, done: 3 };
+  // Status sort order: active work first, stalled next, untouched after
+  const statusOrder: Record<string, number> = { in_progress: 0, blocked: 1, not_started: 2, done: 3 };
   const sortedActiveProjects = useMemo(() =>
     [...activeProjects].sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4)),
     [activeProjects]
@@ -1322,55 +1365,49 @@ export default function TasksPage() {
                   <Plus size={13} /> New Chore
                 </Button>
               </div>
-            ) : (
-              <>
-                {/* Due / overdue section */}
-                {choresDueSoon.length > 0 && (
-                  <div className="mb-5">
-                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
-                      <AlertTriangle size={14} className="text-amber-500" /> Due Now
-                      <span className="text-xs text-muted-foreground font-normal">{choresDueSoon.length}</span>
-                    </h3>
-                    <div className="space-y-2">
-                      {choresDueSoon.map(c => (
-                        <ChoreCard
-                          key={c.id}
-                          chore={c}
-                          onComplete={() => completeChore.mutate(c)}
-                          onEdit={() => { setEditingChore(c); setChoreEditModal(true); }}
-                          onDelete={() => { if (confirm(`Delete "${c.title}"?`)) deleteChore.mutate(c.id); }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+            ) : (() => {
+              const soon7 = new Date(); soon7.setDate(soon7.getDate() + 7);
+              const soon7str = soon7.toISOString().slice(0, 10);
 
-                {/* Upcoming section */}
-                {activeChores.filter(c => !c.nextDue || c.nextDue > today).length > 0 && (
-                  <div>
-                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
-                      <RefreshCw size={14} className="text-primary" /> Upcoming
-                      <span className="text-xs text-muted-foreground font-normal">
-                        {activeChores.filter(c => !c.nextDue || c.nextDue > today).length}
-                      </span>
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {activeChores
-                        .filter(c => !c.nextDue || c.nextDue > today)
-                        .map(c => (
-                          <ChoreCard
-                            key={c.id}
-                            chore={c}
-                            onComplete={() => completeChore.mutate(c)}
-                            onEdit={() => { setEditingChore(c); setChoreEditModal(true); }}
-                            onDelete={() => { if (confirm(`Delete "${c.title}"?`)) deleteChore.mutate(c.id); }}
-                          />
-                        ))}
-                    </div>
+              const dueNow     = activeChores.filter(c => c.frequency !== "as_needed" && c.nextDue && c.nextDue <= today);
+              const comingUp   = activeChores.filter(c => c.frequency !== "as_needed" && c.nextDue && c.nextDue > today && c.nextDue <= soon7str);
+              const later      = activeChores.filter(c => c.frequency !== "as_needed" && (!c.nextDue || c.nextDue > soon7str));
+              const asNeeded   = activeChores.filter(c => c.frequency === "as_needed");
+
+              const choreSection = (
+                title: string,
+                icon: React.ReactNode,
+                items: Chore[],
+                grid = false
+              ) => items.length === 0 ? null : (
+                <div className="mb-5">
+                  <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
+                    {icon} {title}
+                    <span className="text-xs text-muted-foreground font-normal">{items.length}</span>
+                  </h3>
+                  <div className={grid ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2" : "space-y-2"}>
+                    {items.map(c => (
+                      <ChoreCard
+                        key={c.id}
+                        chore={c}
+                        onComplete={() => completeChore.mutate(c)}
+                        onEdit={() => { setEditingChore(c); setChoreEditModal(true); }}
+                        onDelete={() => { if (confirm(`Delete "${c.title}"?`)) deleteChore.mutate(c.id); }}
+                      />
+                    ))}
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              );
+
+              return (
+                <>
+                  {choreSection("Due Now",     <AlertTriangle size={14} className="text-amber-500" />, dueNow)}
+                  {choreSection("Coming Up",   <Clock size={14} className="text-primary" />,           comingUp, true)}
+                  {choreSection("Later",       <RefreshCw size={14} className="text-muted-foreground" />, later, true)}
+                  {choreSection("As Needed",   <RefreshCw size={14} className="text-muted-foreground/60" />, asNeeded, true)}
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -1388,18 +1425,28 @@ export default function TasksPage() {
                   {completedProjects.map(p => {
                     const key = projKey(p);
                     return (
-                      <ProjectCard
-                        key={key}
-                        project={p}
-                        expanded={expandedProjectId === key}
-                        onToggleExpand={() => setExpandedProjectId(expandedProjectId === key ? null : key)}
-                        onToggleTask={(taskId, done) => handleToggleProjectTask(p, taskId, done)}
-                        onDeleteTask={(taskId) => handleDeleteProjectTask(p, taskId)}
-                        onUpdateTask={(taskId, data) => handleUpdateProjectTask(p, taskId, data)}
-                        onAddTask={(title) => handleAddProjectTask(p, title)}
-                        onEdit={() => { setEditingDisplayProject(p); setProjectEditModal(true); }}
-                        onDelete={() => handleDeleteProject(p)}
-                      />
+                      <div key={key}>
+                        <ProjectCard
+                          project={p}
+                          expanded={expandedProjectId === key}
+                          onToggleExpand={() => setExpandedProjectId(expandedProjectId === key ? null : key)}
+                          onToggleTask={(taskId, done) => handleToggleProjectTask(p, taskId, done)}
+                          onDeleteTask={(taskId) => handleDeleteProjectTask(p, taskId)}
+                          onUpdateTask={(taskId, data) => handleUpdateProjectTask(p, taskId, data)}
+                          onAddTask={(title) => handleAddProjectTask(p, title)}
+                          onEdit={() => { setEditingDisplayProject(p); setProjectEditModal(true); }}
+                          onDelete={() => handleDeleteProject(p)}
+                        />
+                        <div className="flex items-center gap-2 px-2 pt-1 pb-1 flex-wrap">
+                          <span className="text-[10px] text-muted-foreground/60 bg-secondary px-1.5 py-0.5 rounded">Project</span>
+                          {p.source === "house" && <span className="text-[10px] text-muted-foreground/60 bg-secondary px-1.5 py-0.5 rounded">Home</span>}
+                          {p.goalTitle && (
+                            <span className="text-[10px] text-primary/60 bg-primary/8 border border-primary/15 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                              <Target size={8} /> {p.goalTitle}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -1415,13 +1462,23 @@ export default function TasksPage() {
                 </h3>
                 <div className="space-y-0.5">
                   {completedTasks.map(t => (
-                    <TaskRow
-                      key={t.id}
-                      task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
-                      onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
-                      onDelete={(id) => deleteGeneralTask.mutate(id)}
-                      onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
-                    />
+                    <div key={t.id}>
+                      <TaskRow
+                        task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
+                        onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
+                        onDelete={(id) => deleteGeneralTask.mutate(id)}
+                        onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
+                      />
+                      {/* Context row */}
+                      <div className="flex items-center gap-2 pl-7 pb-1 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground/60 bg-secondary px-1.5 py-0.5 rounded">Task</span>
+                        {(t as any).completedAt && (
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {format(parseISO((t as any).completedAt), "MMM d")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
