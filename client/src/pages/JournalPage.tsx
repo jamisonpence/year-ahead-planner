@@ -434,7 +434,7 @@ function NotesSection() {
             <p className="text-xs mt-1 text-center max-w-xs">
               {folders.length === 0
                 ? "Create a folder on the left, then add a note inside it."
-                : "Open a folder on the left, then click a note or use "Add Note" to create one."}
+                : "Open a folder on the left, then click a note or use Add Note to create one."}
             </p>
           </div>
         ) : (
