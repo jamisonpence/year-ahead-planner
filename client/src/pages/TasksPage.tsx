@@ -11,7 +11,7 @@ import {
   Circle, CheckCircle2, Folder, ClipboardList, Flag, X,
   ChevronDown, ChevronUp, Home, Target, RefreshCw,
   AlertTriangle, CheckSquare, Layers, ArrowRight, PlayCircle,
-  Ban, Clock,
+  Ban, Clock, Leaf,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -926,6 +926,7 @@ export default function TasksPage() {
   const { data: standaloneProjects = [] } = useQuery<ProjectWithTasks[]>({ queryKey: ["/api/projects/standalone"] });
   const { data: generalTasksData = [] }   = useQuery<GeneralTask[]>({ queryKey: ["/api/general-tasks"] });
   const { data: chores = [] }             = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
+  const { data: plants = [] }             = useQuery<any[]>({ queryKey: ["/api/plants"] });
   const { data: houseProjects = [] }      = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
 
   const inv     = () => { queryClient.invalidateQueries({ queryKey: ["/api/goals"] }); queryClient.invalidateQueries({ queryKey: ["/api/projects/standalone"] }); queryClient.invalidateQueries({ queryKey: ["/api/general-tasks"] }); };
@@ -1126,7 +1127,7 @@ export default function TasksPage() {
   }, [openTasks, taskFilter, today]);
 
   // Status sort order: active work first, stalled next, untouched after
-  const statusOrder: Record<string, number> = { in_progress: 0, blocked: 1, not_started: 2, done: 3 };
+  const statusOrder: Record<string, number> = { in_progress: 0, not_started: 1, blocked: 2, done: 3 };
   const sortedActiveProjects = useMemo(() =>
     [...activeProjects].sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4)),
     [activeProjects]
@@ -1429,12 +1430,71 @@ export default function TasksPage() {
                 </div>
               );
 
+              // Plant watering helpers
+              const plantWateringStatus = (plant: any): { label: string; daysUntil: number | null; color: string } => {
+                if (!plant.lastWatered) return { label: "Never watered", daysUntil: null, color: "text-muted-foreground" };
+                const last = new Date(plant.lastWatered);
+                const next = new Date(last.getTime() + plant.waterFrequencyDays * 86400000);
+                const now = new Date(); now.setHours(0,0,0,0);
+                const d = Math.round((next.getTime() - now.getTime()) / 86400000);
+                if (d < 0) return { label: `Overdue by ${Math.abs(d)}d`, daysUntil: d, color: "text-red-600" };
+                if (d === 0) return { label: "Water today!", daysUntil: d, color: "text-amber-600" };
+                if (d <= 2) return { label: `In ${d}d`, daysUntil: d, color: "text-amber-500" };
+                return { label: `In ${d}d`, daysUntil: d, color: "text-green-600" };
+              };
+
+              const activePlants = plants.filter((p: any) => !p.archived);
+              const plantsDueNow   = activePlants.filter((p: any) => { const s = plantWateringStatus(p); return s.daysUntil !== null && s.daysUntil <= 0; });
+              const plantsComingUp = activePlants.filter((p: any) => { const s = plantWateringStatus(p); return s.daysUntil !== null && s.daysUntil > 0 && s.daysUntil <= 7; });
+              const plantsLater    = activePlants.filter((p: any) => { const s = plantWateringStatus(p); return s.daysUntil === null || s.daysUntil > 7; });
+
+              const plantSection = (title: string, icon: React.ReactNode, items: any[]) => items.length === 0 ? null : (
+                <div className="mb-5">
+                  <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
+                    {icon} {title}
+                    <span className="text-xs text-muted-foreground font-normal">{items.length}</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {items.map((p: any) => {
+                      const ws = plantWateringStatus(p);
+                      return (
+                        <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                              <Leaf size={16} className="text-green-600" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{p.name}</p>
+                            <p className={`text-xs ${ws.color}`}>{ws.label}</p>
+                          </div>
+                          <span className="text-lg">💧</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+
               return (
                 <>
                   {choreSection("Due Now",     <AlertTriangle size={14} className="text-amber-500" />, dueNow)}
                   {choreSection("Coming Up",   <Clock size={14} className="text-primary" />,           comingUp, true)}
                   {choreSection("Later",       <RefreshCw size={14} className="text-muted-foreground" />, later, true)}
                   {choreSection("As Needed",   <RefreshCw size={14} className="text-muted-foreground/60" />, asNeeded, true)}
+                  {activePlants.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="font-semibold text-sm flex items-center gap-2 mb-3 border-t pt-4">
+                        <Leaf size={14} className="text-green-500" /> Plant Watering
+                        <span className="text-xs text-muted-foreground font-normal">{activePlants.length} plants</span>
+                      </h3>
+                      {plantSection("Needs Water", <AlertTriangle size={14} className="text-amber-500" />, plantsDueNow)}
+                      {plantSection("Coming Up",   <Clock size={14} className="text-primary" />,           plantsComingUp)}
+                      {plantSection("Later",       <RefreshCw size={14} className="text-muted-foreground" />, plantsLater)}
+                    </div>
+                  )}
                 </>
               );
             })()}
