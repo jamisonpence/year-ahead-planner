@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import type { Movie, MovieShareWithUser, PublicUser, MovieList } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -704,50 +705,37 @@ export default function MoviesPage() {
   const videoCount = allItems.filter((m) => m.mediaType === "video").length;
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Film size={22} /> Movies & Shows
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {movieCount} movie{movieCount !== 1 ? "s" : ""} · {showCount} show{showCount !== 1 ? "s" : ""} · {videoCount} clip{videoCount !== 1 ? "s" : ""}
-          </p>
-        </div>
+    <PageShell
+      size="wide"
+      title="Movies & Shows"
+      subtitle={`${movieCount} movie${movieCount !== 1 ? "s" : ""} · ${showCount} show${showCount !== 1 ? "s" : ""} · ${videoCount} clip${videoCount !== 1 ? "s" : ""}`}
+      action={
         <div className="flex gap-2">
           <Button onClick={open_add} size="sm" className="gap-1.5">
             <Plus size={15} /> Add {isVideoView ? "Clip" : isShowView ? "Show" : "Movie"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-            <Upload size={13} /> Upload CSV
-          </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-            <Download size={13} /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-            <HelpCircle size={13} /> CSV Format
-          </Button>
         </div>
-      </div>
-
-      {/* Top-level nav: Movies | Shows | Clips */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 mb-4">
-        {([
-          { v: "movie" as const, icon: <Film size={14} />, label: "Movies" },
-          { v: "show"  as const, icon: <Tv2 size={14} />,  label: "Shows" },
-          { v: "video" as const, icon: <Video size={14} />, label: "Clips" },
-        ]).map(({ v, icon, label }) => (
-          <button key={v} onClick={() => switchView(v)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-              mediaTypeView === v ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {icon} {label}
-          </button>
-        ))}
-      </div>
+      }
+      controls={
+        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+          {([
+            { v: "movie" as const, icon: <Film size={14} />, label: "Movies" },
+            { v: "show"  as const, icon: <Tv2 size={14} />,  label: "Shows" },
+            { v: "video" as const, icon: <Video size={14} />, label: "Clips" },
+          ]).map(({ v, icon, label }) => (
+            <button key={v} onClick={() => switchView(v)}
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                mediaTypeView === v ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <div className="space-y-4">
 
       {/* Clips view */}
       {isVideoView && (
@@ -1647,7 +1635,8 @@ export default function MoviesPage() {
           open={collabListOpen}
         />
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

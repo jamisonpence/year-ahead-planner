@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
 import type { BudgetCategory, Transaction, Subscription, Receipt } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -357,18 +358,17 @@ export default function BudgetPage() {
   const monthLabel = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet size={22} /> Budget</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{monthLabel}</p>
-        </div>
+    <PageShell
+      size="wide"
+      title="Budget"
+      subtitle={monthLabel}
+      action={
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={openAddSub}><CreditCard size={14} /> + Subscription</Button>
           <Button size="sm" className="gap-1.5" onClick={openAddTx}><Plus size={15} /> + Transaction</Button>
         </div>
-      </div>
+      }
+    >
 
       {/* Renewal alert */}
       {renewingSoon.length > 0 && (
@@ -907,6 +907,6 @@ export default function BudgetPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

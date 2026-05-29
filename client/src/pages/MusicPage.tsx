@@ -6,6 +6,7 @@ import type { MusicArtistWithSongs, MusicSong, MusicRecommendationWithUser, Publ
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import PageShell from "@/components/PageShell";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -2524,101 +2525,88 @@ export default function MusicPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-            <Music2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+    <Tabs value={tab} onValueChange={setTab}>
+      <PageShell
+        title="Music"
+        subtitle={`${artists.length} ${artists.length === 1 ? "artist" : "artists"} · ${allSongs.length} songs`}
+        action={
+          <div className="flex gap-2 items-center">
+            <Button size="sm" variant="outline" onClick={() => setLastfmOpen(true)} className="gap-1.5">
+              <Search className="h-3.5 w-3.5" /> Find Music
+            </Button>
+            <Button size="sm" onClick={openAddArtist} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> Add Artist
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1 px-2.5">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => csvRef.current?.click()}>
+                  <Upload size={13} className="mr-2" /> Import CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={downloadCsvTemplate}>
+                  <Download size={13} className="mr-2" /> Download CSV Template
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCsvInfoOpen(true)}>
+                  <HelpCircle size={13} className="mr-2" /> CSV Format Guide
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           </div>
-          <div>
-            <h1 className="text-xl font-semibold">Music</h1>
-            <p className="text-xs text-muted-foreground">
-              {artists.length} {artists.length === 1 ? "artist" : "artists"} · {allSongs.length} songs
-            </p>
+        }
+        controls={
+          <div className="overflow-x-auto -mx-1 px-1">
+            <TabsList className="h-9 text-xs w-max flex-nowrap gap-0.5">
+              <TabsTrigger value="artists" className="text-xs flex items-center gap-1.5 px-3">
+                <Music2 size={11} />
+                <span>Library</span>
+                {filteredArtists.length > 0 && <span className="text-[10px] opacity-60">({filteredArtists.length})</span>}
+              </TabsTrigger>
+              <TabsTrigger value="recommendations" className="text-xs flex items-center gap-1.5 px-3">
+                <Inbox size={11} />
+                <span>Shared</span>
+              </TabsTrigger>
+              <TabsTrigger value="spotify" className="text-xs flex items-center gap-1.5 px-3">
+                <Radio size={11} />
+                <span>Discover</span>
+              </TabsTrigger>
+              <TabsTrigger value="collections" className="text-xs flex items-center gap-1.5 px-3">
+                <ListMusic size={11} />
+                Playlists
+              </TabsTrigger>
+            </TabsList>
           </div>
-        </div>
-        <div className="flex gap-2 items-center">
-          {/* Last.fm search to add music */}
-          <Button size="sm" variant="outline" onClick={() => setLastfmOpen(true)} className="gap-1.5">
-            <Search className="h-3.5 w-3.5" /> Find Music
-          </Button>
-          {/* Primary: add artist */}
-          <Button size="sm" onClick={openAddArtist} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> Add Artist
-          </Button>
-          {/* Import/Export dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-1 px-2.5">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => csvRef.current?.click()}>
-                <Upload size={13} className="mr-2" /> Import CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={downloadCsvTemplate}>
-                <Download size={13} className="mr-2" /> Download CSV Template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCsvInfoOpen(true)}>
-                <HelpCircle size={13} className="mr-2" /> CSV Format Guide
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-        </div>
-      </div>
-
-      {/* Search + Genre filter — shown on library tabs */}
-      {tab === "artists" && (
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search artists or songs…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-sm"
-            />
+        }
+      >
+        {/* Search + Genre filter — shown on library tab */}
+        {tab === "artists" && (
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search artists or songs…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            {allGenres.length > 0 && (
+              <Select value={genreFilter ?? "__all__"} onValueChange={(v) => setGenreFilter(v === "__all__" ? null : v)}>
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="All genres" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All genres</SelectItem>
+                  {allGenres.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
-          {allGenres.length > 0 && (
-            <Select value={genreFilter ?? "__all__"} onValueChange={(v) => setGenreFilter(v === "__all__" ? null : v)}>
-              <SelectTrigger className="h-8 w-[130px] text-xs">
-                <SelectValue placeholder="All genres" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All genres</SelectItem>
-                {allGenres.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      )}
-
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 mb-1">
-          <TabsList className="mb-3 h-9 text-xs w-max flex-nowrap gap-0.5">
-            <TabsTrigger value="artists" className="text-xs flex items-center gap-1.5 px-3">
-              <Music2 size={11} />
-              <span>Library</span>
-              {filteredArtists.length > 0 && <span className="text-[10px] opacity-60">({filteredArtists.length})</span>}
-            </TabsTrigger>
-            <TabsTrigger value="recommendations" className="text-xs flex items-center gap-1.5 px-3">
-              <Inbox size={11} />
-              <span className="hidden sm:inline">Shared</span><span className="sm:hidden">Shared</span>
-            </TabsTrigger>
-            <TabsTrigger value="spotify" className="text-xs flex items-center gap-1.5 px-3">
-              <Radio size={11} />
-              <span>Discover</span>
-            </TabsTrigger>
-            <TabsTrigger value="collections" className="text-xs flex items-center gap-1.5 px-3">
-              <ListMusic size={11} />
-              Playlists
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        )}
 
         {/* Artists tab */}
         <TabsContent value="artists">
@@ -2718,7 +2706,6 @@ export default function MusicPage() {
         <TabsContent value="collections">
           <CollectionsTab artists={artists} />
         </TabsContent>
-      </Tabs>
 
       {/* ── Artist Modal ────────────────────────────────────────────────────────── */}
       <Dialog open={artistModal} onOpenChange={(o) => { if (!o) closeArtistModal(); }}>
@@ -2949,6 +2936,7 @@ export default function MusicPage() {
           <p className="text-xs text-muted-foreground mt-3">Songs with the same <code className="font-mono bg-secondary px-1 rounded">artistName</code> are grouped under one artist automatically. Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
-    </div>
+      </PageShell>
+    </Tabs>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, parseISO } from "date-fns";
 import {
@@ -1926,21 +1927,20 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
   ];
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Recipes</h1>
-        <div className="flex gap-2">
-          {subView === "library" && (
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setMealDbOpen(true)} className="gap-1.5">
-                <Search size={13} /> Find Recipes
-              </Button>
-              <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
-                <Plus size={13} /><ChefHat size={13} /> Add Recipe
-              </Button>
-            </div>
-          )}
+    <PageShell
+      size="wide"
+      title="Recipes"
+      subtitle={`${recipes.length} recipe${recipes.length !== 1 ? "s" : ""} · plan meals, build bundles, and manage your grocery list`}
+      action={
+        <div className="flex gap-2 flex-wrap">
+          {subView === "library" && (<>
+            <Button size="sm" variant="outline" onClick={() => setMealDbOpen(true)} className="gap-1.5">
+              <Search size={13} /> Find Recipes
+            </Button>
+            <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
+              <Plus size={13} /><ChefHat size={13} /> Add Recipe
+            </Button>
+          </>)}
           {subView === "bundles" && (
             <Button size="sm" onClick={() => { setEditBundle(null); setBundleModal(true); }} className="gap-1.5">
               <Plus size={13} /><Package size={13} /> Create Bundle
@@ -1975,21 +1975,21 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Sub-navigation */}
-      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-max sm:w-fit min-w-full sm:min-w-0">
-          {subNavItems.map(item => (
-            <button key={item.id} onClick={() => setSubView(item.id)}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${subView === item.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-              {item.icon} {item.label}
-              {item.count != null && item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
-            </button>
-          ))}
+      }
+      controls={
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-max sm:w-fit">
+            {subNavItems.map(item => (
+              <button key={item.id} onClick={() => setSubView(item.id)}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${subView === item.id ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+                {item.icon} {item.label}
+                {item.count != null && item.count > 0 && <span className="text-xs opacity-60">{item.count}</span>}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
+      }
+    >
       {/* ── LIBRARY ── */}
       {subView === "library" && (
         <div className="space-y-6">
@@ -2716,6 +2716,6 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
         recipe={shareRecipe}
       />
 
-    </div>
+    </PageShell>
   );
 }

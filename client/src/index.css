@@ -171,3 +171,11 @@
 .priority-high   { @apply text-red-600 dark:text-red-400; }
 .priority-medium { @apply text-amber-600 dark:text-amber-400; }
 .priority-low    { @apply text-muted-foreground; }
+
+/* ── Meal Planner utilities ── */
+.hover-elevate { @apply transition-shadow hover:shadow-md; }
+.font-display  { font-family: var(--font-sans, inherit); }
+@media print {
+  .no-print    { display: none !important; }
+  .print-block { display: block !important; }
+}

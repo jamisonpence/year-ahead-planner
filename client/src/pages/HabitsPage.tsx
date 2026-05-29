@@ -9,6 +9,7 @@ import {
   CalendarCheck, TrendingUp, Zap, Clock, BarChart2, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageShell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -713,13 +714,10 @@ export default function HabitsPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 pt-5 pb-3 border-b flex-shrink-0">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <CalendarCheck size={20} className="text-primary" />
-          Habits & Daily Tracker
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Build consistency, log workouts, track your day</p>
-      </div>
+      <PageHeader
+        title="Habits & Daily Tracker"
+        subtitle="Build consistency, log workouts, track your day"
+      />
 
       {/* Tabs */}
       <div className="flex border-b flex-shrink-0">

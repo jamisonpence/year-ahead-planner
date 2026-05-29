@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import type { Hobby, InsertHobby, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -11957,54 +11958,48 @@ export default function HobbiesPage() {
   }, [isLoading]); // runs once after data loads
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Hobbies</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {hobbies.length} {hobbies.length === 1 ? "hobby" : "hobbies"}
-            {activeCount > 0 && ` · ${activeCount} active`}
-            {favCount > 0 && ` · ${favCount} favorited`}
-            {activePlanCount > 0 && ` · ${activePlanCount} active plan${activePlanCount !== 1 ? "s" : ""}`}
-          </p>
-        </div>
-        {activeTab === "library" && (
+    <PageShell
+      title="Hobbies"
+      subtitle={[
+        `${hobbies.length} ${hobbies.length === 1 ? "hobby" : "hobbies"}`,
+        activeCount > 0 && `${activeCount} active`,
+        activePlanCount > 0 && `${activePlanCount} active plan${activePlanCount !== 1 ? "s" : ""}`,
+      ].filter(Boolean).join(" · ")}
+      action={
+        activeTab === "library" ? (
           <Button size="sm" onClick={() => openAdd()}>
             <Plus size={15} className="mr-1.5" /> Add Hobby
           </Button>
-        )}
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
-        <button onClick={() => setActiveTab("library")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "library" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Heart size={13} /> Library
-          {hobbies.length > 0 && <span className="text-xs opacity-60">{hobbies.length}</span>}
-        </button>
-        <button onClick={() => setActiveTab("plans")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "plans" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Target size={13} /> Planning
-          {(activePlanCount + activeGoalCount) > 0 && <span className="text-xs opacity-60">{activePlanCount + activeGoalCount}</span>}
-        </button>
-        <button onClick={() => setActiveTab("schedule")}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "schedule" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <CalendarClock size={13} /> Schedule
-          {activePlanCount > 0 && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${activeTab === "schedule" ? "bg-primary/15 text-primary" : "opacity-60"}`}>{activePlanCount}</span>}
-        </button>
-      </div>
+        ) : activeTab === "plans" ? (
+          <Button size="sm" onClick={() => setPlanWizardOpen(true)} disabled={hobbies.length === 0}>
+            <Plus size={15} className="mr-1.5" /> Add Plan
+          </Button>
+        ) : undefined
+      }
+      controls={
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
+          <button onClick={() => setActiveTab("library")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "library" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            <Heart size={13} /> Library
+            {hobbies.length > 0 && <span className="text-xs opacity-60">{hobbies.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab("plans")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "plans" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            <Target size={13} /> Planning
+            {(activePlanCount + activeGoalCount) > 0 && <span className="text-xs opacity-60">{activePlanCount + activeGoalCount}</span>}
+          </button>
+          <button onClick={() => setActiveTab("schedule")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === "schedule" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            <CalendarClock size={13} /> Schedule
+            {activePlanCount > 0 && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${activeTab === "schedule" ? "bg-primary/15 text-primary" : "opacity-60"}`}>{activePlanCount}</span>}
+          </button>
+        </div>
+      }
+    >
 
       {/* ── Planning tab ── */}
       {activeTab === "plans" && (
         <div className="space-y-4">
-          {/* Add Plan button */}
-          <div className="flex justify-end">
-            <Button size="sm" onClick={() => setPlanWizardOpen(true)} disabled={hobbies.length === 0}>
-              <Plus size={15} className="mr-1.5" /> Add Plan
-            </Button>
-          </div>
-
           {/* Empty state — no hobbies yet */}
           {hobbies.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">
@@ -12147,6 +12142,6 @@ export default function HobbiesPage() {
         onUpdateExtra={(newJson) => { if (detailHobby) handleUpdateHobbyExtra(detailHobby.id, newJson); }}
         onCreateSystemGoal={createSystemGoalFromPlan}
       />
-    </div>
+    </PageShell>
   );
 }

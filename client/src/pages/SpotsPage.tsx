@@ -999,9 +999,8 @@ export default function SpotsPage() {
   const [nominatimOpen, setNominatimOpen] = useState(false);
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  // Default to travel tab when navigated to via /travel route
-  const isTraveRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
-  const [mainTab, setMainTab] = useState<"places" | "travel">(isTraveRoute ? "travel" : "places");
+  // Route-locked: /spots = Places only, /travel = Trips only
+  const isTravelRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
   const [travelSubTab, setTravelSubTab] = useState<"trips" | "cities">("trips");
   const [placesSubTab, setPlacesSubTab] = useState("all");
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
@@ -1014,15 +1013,14 @@ export default function SpotsPage() {
   );
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") {
-      setMainTab("places");
       setPlacesSubTab("shared");
     }
   }, []);
   useEffect(() => {
-    if (mainTab !== "places" || placesSubTab !== "shared") return;
+    if (isTravelRoute || placesSubTab !== "shared") return;
     apiRequest("POST", "/api/shares/mark-read", { type: "spots" })
       .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
-  }, [mainTab, placesSubTab]);
+  }, [isTravelRoute, placesSubTab]);
 
   const { data: spots = [] } = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
 
@@ -1198,7 +1196,7 @@ export default function SpotsPage() {
 
 
       {/* ══ PLACES ═══════════════════════════════════════════════════════════ */}
-      {mainTab === "places" && (
+      {!isTravelRoute && (
         <>
           {/* Search + Filters + Map toggle */}
           {placesSubTab !== "shared" && (
@@ -1289,6 +1287,13 @@ export default function SpotsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Cross-nav to Trips */}
+          <div className="px-3 pb-1 shrink-0">
+            <a href="#/travel" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+              <Plane size={11} /> See your Trips →
+            </a>
           </div>
 
           {/* Places content */}
@@ -1396,8 +1401,14 @@ export default function SpotsPage() {
       )}
 
       {/* ══ TRAVEL ═══════════════════════════════════════════════════════════ */}
-      {mainTab === "travel" && (
+      {isTravelRoute && (
         <>
+          {/* Cross-nav to Places */}
+          <div className="px-3 pt-2 pb-0 shrink-0">
+            <a href="#/spots" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+              <MapPin size={11} /> See your Places →
+            </a>
+          </div>
           {/* Travel sub-tabs */}
           <div className="px-3 pt-2 pb-0 shrink-0">
             <div className="flex gap-1">

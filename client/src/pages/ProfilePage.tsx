@@ -37,7 +37,7 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType; key: st
   "/movies":     { label: "Movies",        icon: Film,      key: "movies"   },
   "/music":      { label: "Music",         icon: Music2,    key: "music"    },
   "/recipes":    { label: "Recipes",       icon: ChefHat,   key: "recipes"  },
-  "/spots":      { label: "Spots",         icon: MapPin,    key: "spots"    },
+  "/spots":      { label: "Places",        icon: MapPin,    key: "spots"    },
   "/art":        { label: "Art",           icon: Palette,   key: "art"      },
   "/goals":      { label: "Goals",         icon: Target,    key: "goals"    },
   "/workouts":   { label: "Workouts",      icon: Dumbbell,  key: "workouts" },

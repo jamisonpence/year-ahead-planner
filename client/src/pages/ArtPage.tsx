@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import type { ArtPiece, ArtShareWithUser, PublicUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -625,52 +626,39 @@ export default function ArtPage() {
   }), [allPieces]);
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Palette size={22} /> Art
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {allPieces.length} artwork{allPieces.length !== 1 ? "s" : ""}
-          </p>
-        </div>
+    <PageShell
+      size="wide"
+      title="Art"
+      subtitle={`${allPieces.length} artwork${allPieces.length !== 1 ? "s" : ""}`}
+      action={
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => setMuseumOpen(true)} className="gap-1.5">
             <Landmark size={13} /> Search Art
-          </Button>
-          <Button size="sm" variant="outline" onClick={downloadCsvTemplate} className="hidden sm:inline-flex gap-1.5">
-            <Download size={13} /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setCsvInfoOpen(true)} className="hidden sm:inline-flex gap-1.5">
-            <HelpCircle size={13} /> CSV Format
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} className="hidden sm:inline-flex gap-1.5">
-            <Upload size={13} /> Upload CSV
           </Button>
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           <Button onClick={openAdd} size="sm" className="gap-1.5">
             <Plus size={15} /> Add Artwork
           </Button>
         </div>
-      </div>
-
-      {/* Filter tabs */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit mb-3">
-        {FILTER_TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => { setFilterTab(t.value); setStatusFilter(null); setFavOnly(false); }}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-              filterTab === t.value ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-            <span className="text-xs opacity-60 ml-0.5">{counts[t.value as keyof typeof counts]}</span>
-          </button>
-        ))}
-      </div>
+      }
+      controls={
+        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+          {FILTER_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => { setFilterTab(t.value); setStatusFilter(null); setFavOnly(false); }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                filterTab === t.value ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+              <span className="text-xs opacity-60 ml-0.5">{counts[t.value as keyof typeof counts]}</span>
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <div className="space-y-4">
 
       {/* Status filter pills + fav toggle — shown on Favourites tab */}
       {filterTab === "favourites" && (
@@ -949,7 +937,8 @@ export default function ArtPage() {
           <p className="text-xs text-muted-foreground mt-3">Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

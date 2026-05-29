@@ -38,10 +38,19 @@ import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 import OnboardingModal from "@/components/OnboardingModal";
 import InstallPrompt from "@/components/InstallPrompt";
+import { PlannerProvider } from "@/state/PlannerContext";
+import PlannerHome from "@/pages/planner/Home";
+import PlannerSetup from "@/pages/planner/Setup";
+import PlannerPreferences from "@/pages/planner/Preferences";
+import PlannerPlan from "@/pages/planner/Plan";
+import PlannerLibrary from "@/pages/planner/Library";
+import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
+import PlannerShopping from "@/pages/planner/Shopping";
 
 function AuthenticatedApp() {
   const { user } = useAuth();
   return (
+    <PlannerProvider>
     <AppShell>
       <Switch>
         <Route path="/" component={FeedPage} />
@@ -73,11 +82,19 @@ function AuthenticatedApp() {
         <Route path="/messenger" component={MessengerPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/profile/:userId" component={ProfilePage} />
+        <Route path="/meal-planner/setup" component={PlannerSetup} />
+        <Route path="/meal-planner/preferences" component={PlannerPreferences} />
+        <Route path="/meal-planner/plan" component={PlannerPlan} />
+        <Route path="/meal-planner/library" component={PlannerLibrary} />
+        <Route path="/meal-planner/recipe/:id" component={PlannerRecipeDetail} />
+        <Route path="/meal-planner/shopping" component={PlannerShopping} />
+        <Route path="/meal-planner" component={PlannerHome} />
         <Route component={NotFound} />
       </Switch>
       {user && !user.onboarded && <OnboardingModal userName={user.name} />}
       <InstallPrompt />
     </AppShell>
+    </PlannerProvider>
   );
 }
 

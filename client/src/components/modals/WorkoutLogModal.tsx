@@ -34,6 +34,25 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog, pre
   const [notes, setNotes] = useState("");
   const [exercises, setExercises] = useState<LoggedExercise[]>([]);
 
+  // Helper: load exercises (and name/type) from a template object
+  const applyTemplate = (t: WorkoutTemplate) => {
+    setName(t.name); setWType(t.workoutType);
+    try {
+      const tex = JSON.parse(t.exercisesJson) as any[];
+      setExercises(tex.map((ex: any) => ({
+        name: ex.name,
+        type: ex.type ?? "",
+        isPR: false,
+        notes: ex.notes || "",
+        distance: ex.distance ?? "",
+        duration: ex.duration ?? "",
+        sets: Array.isArray(ex.sets)
+          ? ex.sets.map((s: any) => ({ reps: s.reps ?? 8, weight: s.weight ?? 0 }))
+          : Array.from({ length: ex.sets || 3 }, () => ({ reps: ex.reps || 8, weight: ex.weight || 0 })),
+      })));
+    } catch { setExercises([]); }
+  };
+
   useEffect(() => {
     if (open) {
       if (editLog) {
@@ -46,9 +65,17 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog, pre
         const tid = prefillTemplateId ? String(prefillTemplateId) : "__none__";
         setTemplateId(tid); setName(prefillName ?? ""); setWType("custom"); setDate(todayStr());
         setDuration(""); setNotes(""); setExercises([]);
+        // Load template exercises directly here — can't rely on the templateId-change
+        // effect because templateId may already hold the same value from a prior open,
+        // which means React would skip the state update and the second effect wouldn't fire.
+        if (prefillTemplateId) {
+          const t = templates.find((tmpl) => tmpl.id === prefillTemplateId);
+          if (t) applyTemplate(t);
+        }
       }
     }
-  }, [open, editLog]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editLog, prefillTemplateId]);
 
   // When template is selected, prefill from template
   useEffect(() => {

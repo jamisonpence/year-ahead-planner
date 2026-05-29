@@ -6,6 +6,7 @@ import type { Chore, HouseProjectWithTasks, HouseProjectTask, Appliance, TabColl
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import PageShell from "@/components/PageShell";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -977,43 +978,41 @@ export default function HousekeepingPage() {
   }).length;
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Home size={22} className="text-primary" />
-        <div>
-          <h1 className="text-xl font-bold">Housekeeping</h1>
-          <p className="text-sm text-muted-foreground">Chores, projects & appliances</p>
-        </div>
-        {(overdueCount > 0 || dueTodayCount > 0) && (
-          <div className="ml-auto flex gap-2">
+    <Tabs defaultValue="chores">
+      <PageShell
+        size="sm"
+        title={
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xl font-semibold tracking-tight">Housekeeping</span>
             {overdueCount > 0 && <Badge className="bg-red-100 text-red-700">{overdueCount} overdue</Badge>}
             {dueTodayCount > 0 && <Badge className="bg-orange-100 text-orange-700">{dueTodayCount} due today</Badge>}
           </div>
+        }
+        subtitle="Chores, projects & appliances"
+        controls={
+          <TabsList className="h-9 text-xs gap-0.5">
+            <TabsTrigger value="chores">Chores</TabsTrigger>
+            <TabsTrigger value="projects">Projects</TabsTrigger>
+            <TabsTrigger value="appliances">Appliances</TabsTrigger>
+            <TabsTrigger value="plants" className="gap-1.5"><Leaf size={13} />Plants</TabsTrigger>
+          </TabsList>
+        }
+      >
+        {housekeepingCollab && (
+          <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
+            <Users size={14} className="shrink-0" />
+            <span>
+              Collaborating with <strong>{housekeepingCollab.otherUser.name}</strong>
+              {housekeepingCollab.role === "collaborator" ? " — viewing their data" : " — they can see your data"}
+            </span>
+          </div>
         )}
-      </div>
 
-      {housekeepingCollab && (
-        <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
-          <Users size={14} className="shrink-0" />
-          <span>
-            Collaborating with <strong>{housekeepingCollab.otherUser.name}</strong>
-            {housekeepingCollab.role === "collaborator" ? " — viewing their data" : " — they can see your data"}
-          </span>
-        </div>
-      )}
-
-      <Tabs defaultValue="chores">
-        <TabsList className="mb-4">
-          <TabsTrigger value="chores">Chores</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
-          <TabsTrigger value="appliances">Appliances</TabsTrigger>
-          <TabsTrigger value="plants" className="gap-1.5"><Leaf size={13} />Plants</TabsTrigger>
-        </TabsList>
         <TabsContent value="chores"><ChoresTab /></TabsContent>
         <TabsContent value="projects"><ProjectsTab /></TabsContent>
         <TabsContent value="appliances"><AppliancesTab /></TabsContent>
         <TabsContent value="plants"><PlantsPage embedded /></TabsContent>
-      </Tabs>
-    </div>
+      </PageShell>
+    </Tabs>
   );
 }

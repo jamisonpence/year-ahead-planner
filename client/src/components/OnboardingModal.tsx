@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin,
+  Users, ChefHat, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Baby, Quote, Palette, Sparkles, Flame, Activity, Landmark,
   Search, Check, Clock, UserPlus, ArrowRight, X,
 } from "lucide-react";
@@ -16,25 +16,27 @@ import {
 const ALL_TABS = [
   { path: "/",              label: "Dashboard",               icon: LayoutDashboard, emoji: "🏠" },
   { path: "/calendar",      label: "Calendar",                icon: Calendar,        emoji: "📅" },
-  { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target,          emoji: "🎯" },
-  { path: "/reading",       label: "Reading",                 icon: BookOpen,        emoji: "📚" },
-  { path: "/workouts",      label: "Workouts",                icon: Dumbbell,        emoji: "🏋️" },
+  { path: "/goals",         label: "Goals",                   icon: Target,          emoji: "🎯" },
+  { path: "/habits",        label: "Habits",                  icon: Check,           emoji: "✅" },
+  { path: "/journal",       label: "Journal",                 icon: BookOpen,        emoji: "📖" },
   { path: "/relationships", label: "Friends",                 icon: Users,           emoji: "👥" },
+  { path: "/kids",          label: "Family",                  icon: Baby,            emoji: "👨‍👩‍👧" },
+  { path: "/workouts",      label: "Workouts",                icon: Dumbbell,        emoji: "🏋️" },
+  { path: "/health",        label: "Health",                  icon: Activity,        emoji: "❤️" },
+  { path: "/reading",       label: "Reading",                 icon: BookOpen,        emoji: "📚" },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat,         emoji: "🍽️" },
   { path: "/movies",        label: "Movies & Shows",          icon: Film,            emoji: "🎬" },
   { path: "/music",         label: "Music",                   icon: Music2,          emoji: "🎵" },
-  { path: "/budget",        label: "Budget",                  icon: Wallet,          emoji: "💰" },
-  { path: "/plants",        label: "Plants",                  icon: Leaf,            emoji: "🌱" },
-  { path: "/housekeeping",  label: "Housekeeping",            icon: Home,            emoji: "🏡" },
-  { path: "/spots",         label: "Spots",                   icon: MapPin,          emoji: "📍" },
-  { path: "/kids",          label: "Kids",                    icon: Baby,            emoji: "👶" },
-  { path: "/quotes",        label: "Quotes",                  icon: Quote,           emoji: "💬" },
   { path: "/art",           label: "Art",                     icon: Palette,         emoji: "🎨" },
-  { path: "/journal",       label: "Journal",                 icon: BookOpen,        emoji: "📖" },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles,        emoji: "✨" },
+  { path: "/spots",         label: "Places",                  icon: MapPin,          emoji: "📍" },
+  { path: "/travel",        label: "Trips",                   icon: Plane,           emoji: "✈️" },
+  { path: "/budget",        label: "Budget",                  icon: Wallet,          emoji: "💰" },
+  { path: "/housekeeping",  label: "Housekeeping",            icon: Home,            emoji: "🏡" },
   { path: "/faith",         label: "Faith & Spirituality",    icon: Flame,           emoji: "🕊️" },
-  { path: "/health",        label: "Health",                  icon: Activity,        emoji: "❤️" },
-  { path: "/politics",      label: "Politics",                icon: Landmark,        emoji: "🏛️" },
+  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,        emoji: "🏛️" },
+  { path: "/plants",        label: "Plants",                  icon: Leaf,            emoji: "🌱" },
+  { path: "/quotes",        label: "Quotes",                  icon: Quote,           emoji: "💬" },
 ];
 
 interface SearchResult {

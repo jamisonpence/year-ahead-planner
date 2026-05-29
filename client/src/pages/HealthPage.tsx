@@ -1,5 +1,15 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useContext, createContext, useRef, useCallback } from "react";
+import PageShell from "@/components/PageShell";
+import { useLocation, Router, Switch, Route } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePlanner } from "@/state/PlannerContext";
+import PlannerHome from "@/pages/planner/Home";
+import PlannerSetup from "@/pages/planner/Setup";
+import PlannerPreferences from "@/pages/planner/Preferences";
+import PlannerPlan from "@/pages/planner/Plan";
+import PlannerLibrary from "@/pages/planner/Library";
+import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
+import PlannerShopping from "@/pages/planner/Shopping";
 import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
@@ -1897,13 +1907,119 @@ function BodyCompGoalCard({
   );
 }
 
+// ── Embedded planner router (keeps everything inside the Health tab) ──────────
+// We use a wouter Router with a custom location hook backed by React state,
+// so Link/navigate calls inside planner pages update local state instead of the
+// browser hash URL — the user never leaves the Health page.
+
+type EmbedNav = [string, (to: string) => void];
+const EmbedNavCtx = createContext<EmbedNav>(["/meal-planner", () => {}]);
+
+/** Called by wouter inside the embedded Router — reads from our context. */
+function useEmbedLocation(): EmbedNav {
+  return useContext(EmbedNavCtx);
+}
+
+const PLANNER_SUB_NAV = [
+  { path: "/meal-planner",             label: "Home"        },
+  { path: "/meal-planner/setup",       label: "Setup"       },
+  { path: "/meal-planner/plan",        label: "My Plan"     },
+  { path: "/meal-planner/library",     label: "Library"     },
+  { path: "/meal-planner/shopping",    label: "Shopping"    },
+  { path: "/meal-planner/preferences", label: "Preferences" },
+];
+
+function MealPlannerEmbed() {
+  const [embedPath, setEmbedPath] = useState("/meal-planner");
+  const { plan } = usePlanner();
+  const { toast } = useToast();
+
+  // Keep a history stack so Back works correctly
+  const historyRef = useRef<string[]>(["/meal-planner"]);
+
+  const navigate = useCallback((to: string) => {
+    historyRef.current.push(to);
+    setEmbedPath(to);
+  }, []);
+
+  const goBack = useCallback(() => {
+    historyRef.current.pop(); // remove current
+    const prev = historyRef.current[historyRef.current.length - 1] ?? "/meal-planner";
+    setEmbedPath(prev);
+  }, []);
+
+  const topLevelPath = PLANNER_SUB_NAV.some(n => n.path === embedPath)
+    ? embedPath
+    : PLANNER_SUB_NAV.find(n => embedPath.startsWith(n.path + "/"))?.path ?? "/meal-planner";
+
+  function saveActivePlan() {
+    if (!plan) return;
+    // Plan is already persisted to localStorage by PlannerContext.
+    // This just gives the user a confirmation.
+    toast({ title: "Plan saved!", description: `${plan.days.length}-day plan locked in as your active plan.` });
+  }
+
+  return (
+    <EmbedNavCtx.Provider value={[embedPath, navigate]}>
+      {/* Sub-nav */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b pb-3 mb-4">
+        {PLANNER_SUB_NAV.map(item => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              topLevelPath === item.path
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+
+      </div>
+
+      {/* Embedded wouter Router — intercepts all Link/navigate calls.
+          IMPORTANT: use the JSX children API (not `component` prop) so that
+          React sees stable element types across re-renders and never unmounts
+          pages mid-interaction (which would reset step state in Setup, etc.) */}
+      <Router hook={useEmbedLocation}>
+        <Switch>
+          <Route path="/meal-planner/setup">       <PlannerSetup />         </Route>
+          <Route path="/meal-planner/preferences"> <PlannerPreferences />   </Route>
+          <Route path="/meal-planner/plan">        <EmbeddedPlannerPlan onSave={saveActivePlan} /> </Route>
+          <Route path="/meal-planner/library">     <PlannerLibrary />       </Route>
+          <Route path="/meal-planner/recipe/:id">  <PlannerRecipeDetail />  </Route>
+          <Route path="/meal-planner/shopping">    <PlannerShopping />      </Route>
+          <Route>                                  <PlannerHome />          </Route>
+        </Switch>
+      </Router>
+    </EmbedNavCtx.Provider>
+  );
+}
+
+/** Wraps PlannerPlan and injects a "Save as Active Plan" button into the header area */
+function EmbeddedPlannerPlan({ onSave }: { onSave: () => void }) {
+  const { plan } = usePlanner();
+  return (
+    <div className="space-y-4">
+      {plan && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={onSave}>Save as Active Plan</Button>
+        </div>
+      )}
+      <PlannerPlan />
+    </div>
+  );
+}
+
 // ── NutritionTab ─────────────────────────────────────────────────────────────
 function NutritionTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [activeSection, setActiveSection] = useState<"log" | "goals" | "plans" | "weekly">("log");
+  const [activeSection, setActiveSection] = useState<"meal-planner" | "log" | "goals" | "plans" | "weekly">("log");
 
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
@@ -2078,15 +2194,17 @@ function NutritionTab() {
     <div className="space-y-5">
       {/* Section nav */}
       <div className="flex gap-2 flex-wrap">
-        {(["log", "goals", "plans", "weekly"] as const).map(s => (
+        {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
           <button key={s} onClick={() => setActiveSection(s)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
             }`}>
-            {s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
+            {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
           </button>
         ))}
       </div>
+
+      {activeSection === "meal-planner" && <MealPlannerEmbed />}
 
       {activeSection === "log" && (
         <div className="space-y-4">
@@ -2513,21 +2631,37 @@ export default function HealthPage() {
   const healthCollab = collabs.find(c => c.tabName === "health" && c.status === "accepted");
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center shrink-0">
-          <Activity size={20} className="text-rose-500" />
+    <PageShell
+      size="sm"
+      title="Health"
+      subtitle="Track medications, metrics, sleep, and your care team"
+      controls={
+        <div className="flex gap-1.5 flex-wrap">
+          {TABS.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+              >
+                <Icon size={13} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">Health</h1>
-          <p className="text-sm text-muted-foreground">Track medications, metrics, sleep, and your care team</p>
-        </div>
-      </div>
-
+      }
+    >
+      <div className="space-y-5">
       {/* Collaboration banner */}
       {healthCollab ? (
-        <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-300">
           <Users size={14} className="shrink-0" />
           <span>
             Collaborating with <strong>{healthCollab.otherUser.name}</strong>
@@ -2535,33 +2669,11 @@ export default function HealthPage() {
           </span>
         </div>
       ) : (
-        <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-lg bg-secondary/50 border text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 border text-xs text-muted-foreground">
           <Activity size={12} className="shrink-0" />
           <span>Private — only you can see this tab. Share it with a friend via Settings → Collaboration.</span>
         </div>
       )}
-
-      {/* Sub-tabs */}
-      <div className="flex gap-1.5 flex-wrap border-b pb-3 mb-6">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              <Icon size={13} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
 
       {/* Tab content */}
       {activeTab === "medications" && <MedicationsTab />}
@@ -2569,6 +2681,7 @@ export default function HealthPage() {
       {activeTab === "sleep"       && <SleepTab />}
       {activeTab === "care_team"   && <CareTeamTab />}
       {activeTab === "nutrition"   && <NutritionTab />}
-    </div>
+      </div>
+    </PageShell>
   );
 }

@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import QuickAddModal from "@/components/QuickAddModal";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  Users, ChefHat, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
+  Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, User, Plus, MessageSquare, PenLine, CalendarCheck,
@@ -18,7 +18,7 @@ import {
 const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/":              "Your dashboard summary is visible to friends",
   "/calendar":      "Your calendar events are visible to friends",
-  "/goals":         "Your goals, projects, and tasks are visible to friends",
+  "/goals":         "Your goals and tasks are visible to friends",
   "/reading":       "Your reading list and progress are visible to friends",
   "/workouts":      "Your workouts and fitness logs are visible to friends",
   "/recipes":       "Your saved recipes are visible to friends",
@@ -28,7 +28,7 @@ const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/plants":        "Your plant collection is visible to friends",
   "/housekeeping":  "Your housekeeping lists are visible to friends",
   "/spots":         "Your saved spots are visible to friends",
-  "/travel":        "Your trips and travel history are visible to friends",
+  "/travel":        "Your trips and travel plans are visible to friends",
   "/kids":          "Your kids section is visible to friends",
   "/quotes":        "Your saved quotes are visible to friends",
   "/art":           "Your art collection is visible to friends",
@@ -81,34 +81,35 @@ const ALL_TABS = [
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
   { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
-  // ── Growth & Planning ──
-  { path: "/goals",         label: "Goals, Projects & Tasks", icon: Target          },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
-  { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  // ── Plan ──
+  { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/habits",        label: "Habits & Daily Tracker",  icon: CalendarCheck   },
-  // ── People & Relationships ──
+  { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  // ── People ──
   { path: "/relationships", label: "Friends",                 icon: Users           },
   { path: "/kids",          label: "Family",                  icon: Baby            },
-  // ── Health & Wellness ──
+  // ── Wellness ──
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/health",        label: "Health",                  icon: Activity        },
-  // ── Culture & Interests ──
+  // ── Culture ──
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
+  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/movies",        label: "Movies & Shows",          icon: Film            },
   { path: "/music",         label: "Music",                   icon: Music2          },
   { path: "/art",           label: "Art",                     icon: Palette         },
-  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
-  // ── Places & Experiences ──
+  { path: "/meal-planner",  label: "Meal Planner",            icon: UtensilsCrossed },
+  // ── Places ──
   { path: "/spots",         label: "Places",                  icon: MapPin          },
-  { path: "/travel",        label: "Travel",                  icon: Plane           },
+  { path: "/travel",        label: "Trips",                   icon: Plane           },
   { path: "/events",        label: "Events",                  icon: Calendar        },
-  // ── Home & Money ──
+  // ── Home ──
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
   // ── Beliefs & Society ──
   { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
-  { path: "/politics",      label: "Politics",                icon: Landmark        },
+  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark        },
   // ── Hidden / legacy ──
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
   { path: "/quotes",        label: "Quotes",                  icon: Quote           },
@@ -116,14 +117,14 @@ const ALL_TABS = [
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",      label: null,                   paths: ["/discover", "/dashboard", "/messenger"] },
-  { key: "growth",    label: "Growth & Planning",    paths: ["/goals", "/calendar", "/journal", "/habits"] },
-  { key: "people",    label: "People & Relationships", paths: ["/relationships", "/kids"] },
-  { key: "health",    label: "Health & Wellness",    paths: ["/workouts", "/health"] },
-  { key: "culture",   label: "Culture & Interests",  paths: ["/reading", "/movies", "/music", "/art", "/recipes", "/hobbies"] },
-  { key: "places",    label: "Places & Experiences", paths: ["/spots", "/travel", "/events"] },
-  { key: "home",      label: "Home & Money",         paths: ["/budget", "/housekeeping"] },
-  { key: "beliefs",   label: "Beliefs & Society",    paths: ["/faith", "/politics"] },
+  { key: "core",      label: null,                paths: ["/discover", "/dashboard", "/messenger", "/calendar"] },
+  { key: "plan",      label: "Plan",              paths: ["/goals", "/habits", "/journal"] },
+  { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
+  { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health"] },
+  { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies", "/meal-planner"] },
+  { key: "places",    label: "Places",            paths: ["/spots", "/travel", "/events"] },
+  { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
+  { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
 ];
 
 function useNavPrefs() {
@@ -284,19 +285,18 @@ const SECTION_KEY: Record<string, string> = {
 
 const COLLECTION_GROUPS = [
   {
-    key: "growth",
-    label: "Growth & Planning",
-    subtitle: "Goals, schedule, and reflection",
+    key: "plan",
+    label: "Plan",
+    subtitle: "Goals, habits, and reflection",
     tiles: [
-      { path: "/goals",     emoji: "🎯", label: "Goals"    },
-      { path: "/calendar",  emoji: "📅", label: "Calendar" },
-      { path: "/journal",   emoji: "📓", label: "Journal"  },
-      { path: "/habits",    emoji: "✅", label: "Habits"   },
+      { path: "/goals",    emoji: "🎯", label: "Goals"   },
+      { path: "/habits",   emoji: "✅", label: "Habits"  },
+      { path: "/journal",  emoji: "📓", label: "Journal" },
     ],
   },
   {
     key: "people",
-    label: "People & Relationships",
+    label: "People",
     subtitle: "Friends and family",
     tiles: [
       { path: "/relationships", emoji: "👥", label: "Friends" },
@@ -304,8 +304,8 @@ const COLLECTION_GROUPS = [
     ],
   },
   {
-    key: "health",
-    label: "Health & Wellness",
+    key: "wellness",
+    label: "Wellness",
     subtitle: "Fitness and wellbeing",
     tiles: [
       { path: "/workouts", emoji: "💪", label: "Workouts" },
@@ -314,30 +314,30 @@ const COLLECTION_GROUPS = [
   },
   {
     key: "culture",
-    label: "Culture & Interests",
+    label: "Culture",
     subtitle: "Entertainment and creative pursuits",
     tiles: [
       { path: "/reading",  emoji: "📚", label: "Reading"        },
+      { path: "/recipes",  emoji: "🍽️", label: "Recipes"       },
       { path: "/movies",   emoji: "🎬", label: "Movies & Shows" },
       { path: "/music",    emoji: "🎵", label: "Music"          },
       { path: "/art",      emoji: "🎨", label: "Art"            },
-      { path: "/recipes",  emoji: "🍽️", label: "Recipes"       },
       { path: "/hobbies",  emoji: "✨", label: "Hobbies"        },
     ],
   },
   {
     key: "places",
-    label: "Places & Experiences",
-    subtitle: "Spots, travel, and events",
+    label: "Places",
+    subtitle: "Spots, trips, and events",
     tiles: [
       { path: "/spots",   emoji: "📍", label: "Places" },
-      { path: "/travel",  emoji: "✈️", label: "Travel" },
+      { path: "/travel",  emoji: "✈️", label: "Trips"  },
       { path: "/events",  emoji: "🎟️", label: "Events" },
     ],
   },
   {
     key: "home",
-    label: "Home & Money",
+    label: "Home",
     subtitle: "Budget and household",
     tiles: [
       { path: "/budget",       emoji: "💰", label: "Budget"       },
@@ -349,8 +349,8 @@ const COLLECTION_GROUPS = [
     label: "Beliefs & Society",
     subtitle: "Faith, values, and civic life",
     tiles: [
-      { path: "/faith",    emoji: "🕊️", label: "Faith"    },
-      { path: "/politics", emoji: "🏛️", label: "Politics" },
+      { path: "/faith",    emoji: "🕊️", label: "Faith"          },
+      { path: "/politics", emoji: "🏛️", label: "Politics & Civic" },
     ],
   },
 ];
@@ -714,6 +714,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-3 border-t space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider px-2 pb-1">System</p>
           {/* Notifications bell */}
           <div className="relative" ref={notifRef}>
             <button
@@ -819,7 +820,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className={`sidebar-item w-full ${manageMode ? "active" : ""}`}
           >
             <Settings size={15} />
-            <span>{manageMode ? "Done" : "Manage tabs"}</span>
+            <span>{manageMode ? "Done" : "Manage Tabs"}</span>
           </button>
           <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} />
           <button onClick={toggle} className="sidebar-item w-full">

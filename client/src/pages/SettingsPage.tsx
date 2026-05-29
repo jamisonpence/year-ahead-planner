@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   KeyRound, Eye, EyeOff, Trash2, CheckCircle2, Loader2, Sparkles,
   Lock, Users, LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
-  ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette,
+  ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette, Plane,
   Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
   Smartphone, Download,
 } from "lucide-react";
@@ -19,22 +19,23 @@ import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@s
 type ApiKeyStatus = { hasKey: boolean; encryptionConfigured: boolean };
 
 const PRIVACY_TABS = [
-  { path: "/",              label: "Dashboard",          icon: LayoutDashboard },
-  { path: "/calendar",      label: "Calendar",           icon: Calendar        },
-  { path: "/goals",         label: "Goals & Projects",   icon: Target          },
-  { path: "/reading",       label: "Reading",            icon: BookOpen        },
-  { path: "/workouts",      label: "Workouts",           icon: Dumbbell        },
-  { path: "/recipes",       label: "Recipes",            icon: ChefHat         },
-  { path: "/movies",        label: "Movies & Shows",     icon: Film            },
-  { path: "/music",         label: "Music",              icon: Music2          },
-  { path: "/budget",        label: "Budget",             icon: Wallet          },
-  { path: "/housekeeping",  label: "Housekeeping",       icon: Home            },
-  { path: "/spots",         label: "Spots",              icon: MapPin          },
-  { path: "/kids",          label: "Kids",               icon: Baby            },
-  { path: "/art",           label: "Art",                icon: Palette         },
-  { path: "/hobbies",       label: "Hobbies",            icon: Sparkles        },
-  { path: "/faith",         label: "Faith & Spirituality", icon: Flame         },
-  { path: "/politics",      label: "Politics",           icon: Landmark        },
+  { path: "/",              label: "Dashboard",               icon: LayoutDashboard },
+  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  { path: "/goals",         label: "Goals",                   icon: Target          },
+  { path: "/reading",       label: "Reading",                 icon: BookOpen        },
+  { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
+  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
+  { path: "/movies",        label: "Movies & Shows",          icon: Film            },
+  { path: "/music",         label: "Music",                   icon: Music2          },
+  { path: "/budget",        label: "Budget",                  icon: Wallet          },
+  { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
+  { path: "/spots",         label: "Places",                  icon: MapPin          },
+  { path: "/travel",        label: "Trips",                   icon: Plane           },
+  { path: "/kids",          label: "Family",                  icon: Baby            },
+  { path: "/art",           label: "Art",                     icon: Palette         },
+  { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
+  { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
+  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark        },
 ];
 
 // ── Tab Privacy Section ───────────────────────────────────────────────────────

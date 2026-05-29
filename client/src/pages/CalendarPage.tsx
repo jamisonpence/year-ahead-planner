@@ -384,6 +384,12 @@ export default function CalendarPage() {
           <Button size="sm" onClick={handleAdd} className="gap-1.5"><Plus size={13} />Event</Button>
         </div>
       </div>
+      {/* Ownership link */}
+      <div className="px-4 pb-2 -mt-1">
+        <a href="#/events" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+          Discover events →
+        </a>
+      </div>
 
       {/* Google Calendar connection banner */}
       {gcalStatus && !gcalStatus.connected && (

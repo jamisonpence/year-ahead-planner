@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
@@ -694,32 +695,43 @@ export default function ReadingPage() {
   const isRecsTab = tab === "recommendations";
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5 overflow-x-hidden w-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-2xl font-bold">Reading</h1>
+    <PageShell
+      title={
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-semibold tracking-tight">Reading</h1>
           {streak > 0 && (
             <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800 shrink-0">
               <Flame size={13} />{streak}d streak
             </span>
           )}
         </div>
+      }
+      subtitle={`${books.length} book${books.length !== 1 ? "s" : ""} · track your reading progress and goals`}
+      action={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={openNewGoalModal} className="gap-1.5">
-            <Target size={13} /> Add Goal
+            <Target size={13} /> Set Goal
           </Button>
           <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
             <Search size={13} /> Find Books
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { setEditSession(null); setSessionBookId(undefined); setSessionModal(true); }} className="gap-1.5">
-            <Plus size={13} /><BookMarked size={13} />Log Session
-          </Button>
           <Button size="sm" onClick={() => { setEditBook(null); setBookModal(true); }} className="gap-1.5">
-            <Plus size={13} /><BookOpen size={13} />Add Book
+            <Plus size={13} /> Add Book
           </Button>
         </div>
-      </div>
+      }
+      controls={
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
+          {STATUS_TABS.map((t) => (
+            <button key={t.value} onClick={() => setTab(t.value)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === t.value ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+              {t.label}
+              {tabCounts[t.value] ? <span className="text-xs opacity-60">{tabCounts[t.value]}</span> : null}
+            </button>
+          ))}
+        </div>
+      }
+    >
 
       {/* Reading Goal Banners */}
       {readingGoals.length > 0 && (
@@ -786,17 +798,6 @@ export default function ReadingPage() {
           })}
         </div>
       )}
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit overflow-x-auto max-w-full">
-        {STATUS_TABS.map((t) => (
-          <button key={t.value} onClick={() => setTab(t.value)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${tab === t.value ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-            {t.label}
-            {tabCounts[t.value] ? <span className="text-xs opacity-60">{tabCounts[t.value]}</span> : null}
-          </button>
-        ))}
-      </div>
 
       {/* Genre filter — hidden on Recommendations tab */}
       {!isRecsTab && (
@@ -1180,6 +1181,6 @@ export default function ReadingPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

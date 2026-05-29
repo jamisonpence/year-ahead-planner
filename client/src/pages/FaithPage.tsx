@@ -9,6 +9,7 @@ import {
   Tag, Calendar, User2, Moon, ScrollText, Star, Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import PageShell from "@/components/PageShell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -2822,37 +2823,29 @@ export default function FaithPage() {
   ];
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-          <Flame className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+    <PageShell
+      size="sm"
+      title="Faith & Spirituality"
+      subtitle="Personal curation of your spiritual life"
+      controls={
+        <div className="flex gap-1.5 flex-wrap">
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setSubView(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                ${subView === tab.id
+                  ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+                  : "text-muted-foreground hover:text-foreground hover:bg-stone-100 dark:hover:bg-stone-800"
+                }`}>
+              {tab.icon} {tab.label}
+            </button>
+          ))}
         </div>
-        <div>
-          <h1 className="text-xl font-semibold">Faith & Spirituality</h1>
-          <p className="text-xs text-muted-foreground">Personal curation of your spiritual life</p>
-        </div>
-      </div>
-
-      {/* Sub-navigation */}
-      <div className="flex gap-1.5 flex-wrap border-b pb-3">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setSubView(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${subView === tab.id
-                ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-                : "text-muted-foreground hover:text-foreground hover:bg-stone-100 dark:hover:bg-stone-800"
-              }`}>
-            {tab.icon} {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
+      }
+    >
       {subView === "texts"     && <SacredTextsSection />}
       {subView === "practices" && <PracticesTab />}
       {subView === "teachings" && <TeachingsTab />}
       {subView === "prayer"    && <PrayerTab />}
-    </div>
+    </PageShell>
   );
 }

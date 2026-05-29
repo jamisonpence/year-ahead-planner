@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import PageShell from "@/components/PageShell";
 import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
@@ -2400,21 +2401,59 @@ export default function WorkoutsPage() {
   }, [equipmentList]);
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Workouts</h1>
+    <PageShell
+      title={
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-semibold tracking-tight">Workouts</h1>
           {streak > 0 && (
             <span className="inline-flex items-center gap-1 text-sm font-semibold text-[hsl(210_80%_48%)] bg-[hsl(210_80%_48%/0.1)] px-2.5 py-1 rounded-full border border-[hsl(210_80%_48%/0.3)]">
               <Flame size={13} />{streak}d streak
             </span>
           )}
         </div>
+      }
+      subtitle="Log workouts, build plans, and track your progress"
+      action={
         <Button onClick={() => { setEditLog(null); setLogModal(true); }} className="gap-2">
           <Plus size={15} /> Log Workout
         </Button>
-      </div>
+      }
+      controls={
+        <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+          <div className="flex gap-1 w-max pb-0.5">
+            {[
+              ...(activePlansCount > 0 ? [{ value: "active", label: "Active Plan", icon: Play, count: activePlansCount }] : []),
+              { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
+              { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
+              { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
+              { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
+              { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
+            ].map(t => (
+              <button
+                key={t.value}
+                onClick={() => setTab(t.value as any)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                  tab === t.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+              >
+                <t.icon size={13} />
+                {t.label}
+                {t.count > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                    tab === t.value ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground"
+                  }`}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-5">
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -2453,40 +2492,6 @@ export default function WorkoutsPage() {
           </div>
         </div>
       )}
-
-      {/* Tabs */}
-      <div className="overflow-x-auto scrollbar-hide -mx-3 px-3">
-        <div className="flex gap-1 w-max pb-1">
-          {[
-            ...(activePlansCount > 0 ? [{ value: "active", label: "Active Plan", icon: Play, count: activePlansCount }] : []),
-            { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
-            { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
-            { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
-            { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
-            { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
-          ].map(t => (
-            <button
-              key={t.value}
-              onClick={() => setTab(t.value as any)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                tab === t.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              }`}
-            >
-              <t.icon size={13} />
-              {t.label}
-              {t.count > 0 && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  tab === t.value ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground"
-                }`}>
-                  {t.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ── Active Plans ───────────────────────────────────────────────── */}
       {tab === "active" && (() => {
@@ -3474,6 +3479,7 @@ export default function WorkoutsPage() {
           shareType={sharePayload.type} contentJson={sharePayload.contentJson} itemName={sharePayload.name}
         />
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
