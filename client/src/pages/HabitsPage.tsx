@@ -642,6 +642,16 @@ export default function HabitsPage() {
 
   // Toggle completion of a hobby plan task from the Today tab
   const toggleHobbyTaskMut = useMutation({
+    onMutate: async ({ task }: { task: HobbyTask }) => {
+      // Optimistically flip the completed flag so the circle responds instantly
+      await queryClient.cancelQueries({ queryKey: ["/api/hobbies"] });
+      const prev = queryClient.getQueryData<Hobby[]>(["/api/hobbies"]);
+      // We can't easily mutate extraJson here, so we snapshot for rollback only
+      return { prev };
+    },
+    onError: (_err, _vars, context: any) => {
+      if (context?.prev) queryClient.setQueryData(["/api/hobbies"], context.prev);
+    },
     mutationFn: async ({ task }: { task: HobbyTask }) => {
       const hobby = hobbiesRaw.find(h => h.id === task.hobbyId);
       if (!hobby) throw new Error("Hobby not found");
@@ -681,13 +691,34 @@ export default function HabitsPage() {
       extra.plans = plans;
       return apiRequest("PATCH", `/api/hobbies/${hobby.id}`, { extraJson: JSON.stringify(extra) });
     },
-    onSuccess: () => invHobbies(),
+    onSettled: () => invHobbies(),
   });
 
   const toggleMut = useMutation({
     mutationFn: ({ id, date }: { id: number; date: string }) =>
       apiRequest("POST", `/api/habits/${id}/complete/${date}`, {}),
-    onSuccess: () => invHabits(),
+    // Optimistic update — flip the circle instantly, roll back on error
+    onMutate: async ({ id, date }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/habits"] });
+      const prev = queryClient.getQueryData<HabitWithStats[]>(["/api/habits"]);
+      queryClient.setQueryData<HabitWithStats[]>(["/api/habits"], (old = []) =>
+        old.map(h => {
+          if (h.id !== id) return h;
+          const already = h.completions.some(c => c.date === date);
+          return {
+            ...h,
+            completions: already
+              ? h.completions.filter(c => c.date !== date)
+              : [...h.completions, { date }],
+          };
+        })
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, context: any) => {
+      if (context?.prev) queryClient.setQueryData(["/api/habits"], context.prev);
+    },
+    onSettled: () => invHabits(),
   });
 
   const deleteMut = useMutation({
