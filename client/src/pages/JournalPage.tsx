@@ -300,98 +300,145 @@ function NotesSection() {
 
   const noteCount = (f: NoteFolder) => f.notes.length + f.subfolders.reduce((s, sf) => s + sf.notes.length, 0);
 
+  // Track which folder/subfolder is "active" for contextual actions
+  const [activeFolder, setActiveFolder] = useState<{ folderId: string; subfolderId?: string } | null>(null);
+
   return (
     <div className="flex gap-4 min-h-[500px]">
       {/* ── Sidebar: Folders ──────────────────────────────────── */}
-      <div className="w-64 shrink-0 flex flex-col gap-2">
-        <div className="flex items-center justify-between mb-1">
+      <div className="w-72 shrink-0 flex flex-col gap-1.5">
+
+        {/* Header + New Folder button */}
+        <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Folders</span>
-          <button onClick={() => openAddFolder()} className="p-1 rounded hover:bg-secondary transition-colors" title="New folder">
-            <FolderPlus size={14} className="text-muted-foreground" />
+          <button
+            onClick={() => openAddFolder()}
+            className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+          >
+            <FolderPlus size={13} /> New Folder
           </button>
         </div>
 
         {folders.length === 0 && (
-          <div className="text-center py-10 text-muted-foreground">
-            <Folder size={28} className="mx-auto mb-2 opacity-20" />
-            <p className="text-xs">No folders yet</p>
-            <button onClick={() => openAddFolder()} className="text-xs text-primary hover:underline mt-1">Create one</button>
+          <div className="rounded-xl border-2 border-dashed border-border p-6 text-center text-muted-foreground">
+            <Folder size={28} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-medium mb-1">No folders yet</p>
+            <p className="text-xs mb-3">Create a folder to start organizing your notes</p>
+            <button
+              onClick={() => openAddFolder()}
+              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+            >
+              + Create First Folder
+            </button>
           </div>
         )}
 
-        {folders.map(folder => (
-          <div key={folder.id}>
-            {/* Folder row */}
-            <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-secondary/60 cursor-pointer"
-              onClick={() => toggleFolder(folder.id)}>
-              <div className={`w-3 h-3 rounded-sm shrink-0 ${folder.color}`} />
-              {expandedFolders.has(folder.id)
-                ? <FolderOpen size={14} className="text-muted-foreground shrink-0" />
-                : <Folder size={14} className="text-muted-foreground shrink-0" />}
-              <span className="text-sm flex-1 truncate font-medium">{folder.name}</span>
-              <span className="text-[10px] text-muted-foreground">{noteCount(folder)}</span>
-              <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                <button onClick={() => openAddNote(folder.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={12} /></button>
-                <button onClick={() => openAddFolder(folder.id)} title="Add subfolder" className="p-0.5 hover:text-primary"><FolderPlus size={12} /></button>
-                <button onClick={() => openEditFolder(folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={12} /></button>
-                <button onClick={() => deleteFolder(folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={12} /></button>
+        {folders.map(folder => {
+          const isExpanded = expandedFolders.has(folder.id);
+          return (
+            <div key={folder.id} className="rounded-lg border bg-card overflow-hidden">
+              {/* Folder header */}
+              <div
+                className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-secondary/40 transition-colors"
+                onClick={() => { toggleFolder(folder.id); setActiveFolder({ folderId: folder.id }); }}
+              >
+                <div className={`w-3 h-3 rounded-sm shrink-0 ${folder.color}`} />
+                {isExpanded ? <FolderOpen size={15} className="text-muted-foreground shrink-0" /> : <Folder size={15} className="text-muted-foreground shrink-0" />}
+                <span className="text-sm flex-1 font-medium truncate">{folder.name}</span>
+                <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{noteCount(folder)}</span>
+                <div className="flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => openEditFolder(folder.id)} title="Rename" className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Pencil size={11} /></button>
+                  <button onClick={() => deleteFolder(folder.id)} title="Delete folder" className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={11} /></button>
+                </div>
               </div>
-            </div>
 
-            {/* Expanded folder contents */}
-            {expandedFolders.has(folder.id) && (
-              <div className="ml-4 border-l pl-2 mt-0.5 space-y-0.5">
-                {/* Subfolders */}
-                {folder.subfolders.map(sub => (
-                  <div key={sub.id}>
-                    <div className="group flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-secondary/60 cursor-pointer"
-                      onClick={() => toggleSubfolder(sub.id)}>
-                      <div className={`w-2.5 h-2.5 rounded-sm shrink-0 ${sub.color}`} />
-                      <Folder size={12} className="text-muted-foreground shrink-0" />
-                      <span className="text-xs flex-1 truncate font-medium">{sub.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{sub.notes.length}</span>
-                      <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => openAddNote(folder.id, sub.id)} title="Add note" className="p-0.5 hover:text-primary"><FilePlus size={11} /></button>
-                        <button onClick={() => openEditFolder(sub.id, folder.id)} title="Edit" className="p-0.5 hover:text-primary"><Pencil size={11} /></button>
-                        <button onClick={() => deleteFolder(sub.id, folder.id)} title="Delete" className="p-0.5 hover:text-destructive"><Trash2 size={11} /></button>
+              {/* Expanded contents */}
+              {isExpanded && (
+                <div className="border-t bg-secondary/20 px-2 py-2 space-y-1">
+                  {/* Quick-add row for folder */}
+                  <div className="flex gap-1.5 mb-2">
+                    <button
+                      onClick={() => openAddNote(folder.id)}
+                      className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 font-medium transition-colors"
+                    >
+                      <FilePlus size={12} /> Add Note
+                    </button>
+                    <button
+                      onClick={() => openAddFolder(folder.id)}
+                      className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-md bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground font-medium transition-colors"
+                    >
+                      <FolderPlus size={12} /> Add Subfolder
+                    </button>
+                  </div>
+
+                  {/* Subfolders */}
+                  {folder.subfolders.map(sub => (
+                    <div key={sub.id} className="rounded-md border bg-card/60 overflow-hidden">
+                      <div
+                        className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-secondary/40 transition-colors"
+                        onClick={() => { toggleSubfolder(sub.id); setActiveFolder({ folderId: folder.id, subfolderId: sub.id }); }}
+                      >
+                        <div className={`w-2.5 h-2.5 rounded-sm shrink-0 ${sub.color}`} />
+                        <Folder size={12} className="text-muted-foreground shrink-0" />
+                        <span className="text-xs flex-1 font-medium truncate">{sub.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{sub.notes.length}</span>
+                        <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => openAddNote(folder.id, sub.id)} title="Add note" className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-primary transition-colors"><FilePlus size={11} /></button>
+                          <button onClick={() => openEditFolder(sub.id, folder.id)} title="Rename" className="p-1 rounded hover:bg-secondary text-muted-foreground transition-colors"><Pencil size={11} /></button>
+                          <button onClick={() => deleteFolder(sub.id, folder.id)} title="Delete" className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={11} /></button>
+                        </div>
                       </div>
+                      {expandedSubfolders.has(sub.id) && (
+                        <div className="border-t bg-secondary/10 px-2 py-1 space-y-0.5">
+                          {sub.notes.length === 0 && (
+                            <p className="text-[11px] text-muted-foreground text-center py-2">No notes — click <FilePlus size={10} className="inline" /> above to add one</p>
+                          )}
+                          {sub.notes.map(note => (
+                            <div key={note.id}
+                              className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors ${selectedNote?.note.id === note.id ? "bg-primary/15 text-primary font-medium" : "hover:bg-secondary text-muted-foreground"}`}
+                              onClick={() => setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note })}>
+                              <FileText size={11} className="shrink-0" />
+                              <span className="flex-1 truncate">{note.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {/* Subfolder notes */}
-                    {expandedSubfolders.has(sub.id) && sub.notes.map(note => (
-                      <div key={note.id}
-                        className={`ml-4 flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
-                        onClick={() => setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note })}>
-                        <FileText size={11} className="shrink-0" />
-                        <span className="flex-1 truncate">{note.title}</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                {/* Folder notes */}
-                {folder.notes.map(note => (
-                  <div key={note.id}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs hover:bg-secondary/60 ${selectedNote?.note.id === note.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground"}`}
-                    onClick={() => setSelectedNote({ folderId: folder.id, note })}>
-                    <FileText size={11} className="shrink-0" />
-                    <span className="flex-1 truncate">{note.title}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                  ))}
+
+                  {/* Folder-level notes */}
+                  {folder.notes.length === 0 && folder.subfolders.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground text-center py-1">Use the buttons above to add a note or subfolder</p>
+                  )}
+                  {folder.notes.map(note => (
+                    <div key={note.id}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors ${selectedNote?.note.id === note.id ? "bg-primary/15 text-primary font-medium" : "hover:bg-secondary text-muted-foreground"}`}
+                      onClick={() => setSelectedNote({ folderId: folder.id, note })}>
+                      <FileText size={11} className="shrink-0" />
+                      <span className="flex-1 truncate">{note.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Main: Note viewer / empty state ────────────────────── */}
-      <div className="flex-1 min-w-0 bg-card border rounded-xl p-5">
+      <div className="flex-1 min-w-0 bg-card border rounded-xl p-5 flex flex-col">
         {!selectedNote ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
+          <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground py-16">
             <FileText size={36} className="mb-3 opacity-20" />
-            <p className="text-sm font-medium">Select a note to read it</p>
-            <p className="text-xs mt-1">or pick a folder and create one</p>
+            <p className="text-sm font-medium text-foreground">No note selected</p>
+            <p className="text-xs mt-1 text-center max-w-xs">
+              {folders.length === 0
+                ? "Create a folder on the left, then add a note inside it."
+                : "Open a folder on the left, then click a note or use "Add Note" to create one."}
+            </p>
           </div>
         ) : (
-          <div className="h-full flex flex-col gap-4">
+          <div className="flex flex-col gap-4 h-full">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold">{selectedNote.note.title}</h2>
@@ -400,11 +447,11 @@ function NotesSection() {
                 </p>
               </div>
               <div className="flex gap-1.5 shrink-0">
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
                   onClick={() => openEditNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note)}>
                   <Pencil size={11} /> Edit
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive"
+                <Button size="sm" variant="ghost" className="h-8 text-xs text-destructive hover:bg-destructive/10"
                   onClick={() => deleteNote(selectedNote.folderId, selectedNote.subfolderId, selectedNote.note.id)}>
                   <Trash2 size={11} />
                 </Button>
