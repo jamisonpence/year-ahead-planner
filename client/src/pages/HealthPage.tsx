@@ -1646,18 +1646,23 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
         <div className="space-y-2">
           {!selectedRecipe ? (
             <>
-              <UIInput
-                value={recipeSearch}
-                onChange={e => setRecipeSearch(e.target.value)}
-                placeholder="Search your recipes…"
-                className="h-8 text-sm"
-              />
+              <div className="flex items-center gap-2">
+                <UIInput
+                  value={recipeSearch}
+                  onChange={e => setRecipeSearch(e.target.value)}
+                  placeholder="Search your recipes…"
+                  className="h-8 text-sm flex-1"
+                />
+                <a href="#/recipes" className="shrink-0 text-xs text-primary flex items-center gap-1 hover:underline whitespace-nowrap">
+                  Browse <ArrowRight size={11} />
+                </a>
+              </div>
               {filteredRecipes.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <BookOpen size={24} className="mx-auto mb-2 opacity-20" />
                   <p className="text-xs">
                     {recipes.length === 0
-                      ? "No recipes yet. Add some in the Recipes tab."
+                      ? <>No recipes yet. <a href="#/recipes" className="text-primary hover:underline">Add some in Recipes →</a></>
                       : "No recipes match your search."}
                   </p>
                 </div>
@@ -2193,15 +2198,20 @@ function NutritionTab() {
   return (
     <div className="space-y-5">
       {/* Section nav */}
-      <div className="flex gap-2 flex-wrap">
-        {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
-          <button key={s} onClick={() => setActiveSection(s)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}>
-            {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
+            <button key={s} onClick={() => setActiveSection(s)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}>
+              {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
+            </button>
+          ))}
+        </div>
+        <a href="#/recipes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors">
+          <BookOpen size={11} /> Recipes <ArrowRight size={10} />
+        </a>
       </div>
 
       {activeSection === "meal-planner" && <MealPlannerEmbed />}

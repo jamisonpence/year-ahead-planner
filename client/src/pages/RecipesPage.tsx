@@ -985,6 +985,38 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
   const ingredients = parseIngredients(recipe.ingredientsJson);
   const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
   const info = getComponentInfo(recipe.componentType);
+  const { toast } = useToast();
+  const qcInner = useQueryClient();
+  const [logOpen, setLogOpen] = useState(false);
+  const [logMeal, setLogMeal] = useState("lunch");
+  const [logQty, setLogQty] = useState(1);
+  const logMut = useMutation({
+    mutationFn: async () => {
+      let nutrition: NutritionSummary | null = null;
+      try { nutrition = recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch {}
+      return apiRequest("POST", "/api/nutrition/food-log", {
+        foodName: recipe.name,
+        servingSize: 1,
+        servingUnit: "serving",
+        quantity: logQty,
+        mealType: logMeal,
+        date: new Date().toISOString().slice(0, 10),
+        calories: nutrition?.calories ?? 0,
+        protein:  nutrition?.protein  ?? 0,
+        carbs:    nutrition?.carbs    ?? 0,
+        fat:      nutrition?.fat      ?? 0,
+        fiber:    nutrition?.fiber    ?? 0,
+        sugar:    nutrition?.sugar    ?? 0,
+        sodium:   nutrition?.sodium   ?? 0,
+      });
+    },
+    onSuccess: () => {
+      qcInner.invalidateQueries({ queryKey: ["/api/nutrition/food-log"] });
+      toast({ title: `${recipe.name} logged to nutrition diary` });
+      setLogOpen(false);
+    },
+    onError: () => toast({ title: "Failed to log recipe", variant: "destructive" }),
+  });
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
@@ -1039,11 +1071,45 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
             </div>
           )}
           <RecipeNutritionCard recipe={recipe} onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/recipes"] })} />
-          <div className="flex gap-2">
-            <Button onClick={() => { onAddToWeek(recipe); onClose(); }} variant="outline" className="flex-1 gap-1.5">
-              <CalendarDays size={14} /> Add to Week
+
+          {/* Log to Nutrition — inline panel */}
+          {logOpen ? (
+            <div className="rounded-xl border bg-secondary/30 p-3 space-y-2.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Log to Nutrition Diary</p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-xs text-muted-foreground mb-1 block">Meal</label>
+                  <Select value={logMeal} onValueChange={setLogMeal}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["breakfast","lunch","dinner","snack"].map(m => (
+                        <SelectItem key={m} value={m} className="text-xs capitalize">{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-20">
+                  <label className="text-xs text-muted-foreground mb-1 block">Servings</label>
+                  <Input type="number" min={0.5} step={0.5} value={logQty} onChange={e => setLogQty(Number(e.target.value) || 1)} className="h-8 text-xs" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1" onClick={() => logMut.mutate()} disabled={logMut.isPending}>
+                  {logMut.isPending ? "Logging…" : "Log Now"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setLogOpen(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => { onAddToWeek(recipe); onClose(); }} variant="outline" className="flex-1 gap-1.5 min-w-[120px]">
+              <CalendarDays size={14} /> Add to Meal Plan
             </Button>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button onClick={() => setLogOpen(o => !o)} variant="outline" className="flex-1 gap-1.5 min-w-[120px]">
+              <UtensilsCrossed size={14} /> Log to Nutrition
+            </Button>
+            <Button variant="ghost" onClick={onClose} className="w-full">Close</Button>
           </div>
         </div>
       </DialogContent>
@@ -1507,8 +1573,9 @@ function parseMacros(nutritionData: string | null) {
 }
 
 // ── System Recipe Detail Dialog ───────────────────────────────────────────────
-function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary }: {
+function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }: {
   recipe: Recipe; onClose: () => void; onSaveToLibrary: (r: Recipe) => void;
+  onSaveAndPlan?: (r: Recipe) => void;
 }) {
   const ingredients = parseIngredients(recipe.ingredientsJson);
   const macros = parseMacros(recipe.nutritionData ?? null);
@@ -1617,11 +1684,16 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary }: {
             </a>
           )}
 
-          <div className="flex gap-2 pt-2">
-            <Button onClick={() => { onSaveToLibrary(recipe); onClose(); }} className="flex-1 gap-1.5">
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button onClick={() => { onSaveToLibrary(recipe); onClose(); }} className="flex-1 gap-1.5 min-w-[140px]">
               <Plus size={14} /> Save to My Recipes
             </Button>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            {onSaveAndPlan && (
+              <Button onClick={() => { onSaveAndPlan(recipe); onClose(); }} variant="outline" className="flex-1 gap-1.5 min-w-[140px]">
+                <CalendarDays size={14} /> Save & Add to Meal Plan
+              </Button>
+            )}
+            <Button variant="ghost" onClick={onClose} className="w-full">Close</Button>
           </div>
         </div>
       </DialogContent>
@@ -2696,6 +2768,14 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
           recipe={browseDetailRecipe}
           onClose={() => setBrowseDetailRecipe(null)}
           onSaveToLibrary={(r) => saveToLibraryMut.mutate(r)}
+          onSaveAndPlan={(r) => {
+            saveToLibraryMut.mutate(r, {
+              onSuccess: () => {
+                setBrowseDetailRecipe(null);
+                setAssignRecipe(r);
+              },
+            });
+          }}
         />
       )}
       <MealDBSearchModal open={mealDbOpen} onClose={() => setMealDbOpen(false)} />

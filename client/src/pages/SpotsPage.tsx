@@ -1,3 +1,4 @@
+// Places domain: Saved / Visited / Collections / Map | Travel: Upcoming / Past / Itineraries / Logistics
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -481,13 +482,14 @@ const STATUS_ACCENT_BAR: Record<string, string> = {
 
 // ── Spot Card ─────────────────────────────────────────────────────────────────
 
-function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, onRate }: {
+function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, onCreateTrip, onRate }: {
   spot: Spot;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFav: () => void;
   onShare: () => void;
   onAddToTrip: () => void;
+  onCreateTrip: () => void;
   onRate: (rating: number) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -576,7 +578,8 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, o
           <p className="text-xs text-muted-foreground font-medium px-2 pb-2">{spot.name}</p>
           {[
             { icon: <Pencil size={17} />, label: "Edit place", action: () => { setMenuOpen(false); onEdit(); } },
-            { icon: <Plane size={17} />, label: "Add to Trip", action: () => { setMenuOpen(false); onAddToTrip(); } },
+            { icon: <Plane size={17} />, label: "Add to Existing Trip", action: () => { setMenuOpen(false); onAddToTrip(); } },
+            { icon: <Plus size={17} />, label: "Create Trip from Here", action: () => { setMenuOpen(false); onCreateTrip(); } },
             { icon: <Send size={17} />, label: "Share with friend", action: () => { setMenuOpen(false); onShare(); } },
             { icon: <Navigation size={17} />, label: "Get directions", href: mapsUrl },
             ...(spot.website ? [{ icon: <Globe size={17} />, label: "Open website", href: spot.website.startsWith("http") ? spot.website : `https://${spot.website}` }] : []),
@@ -805,6 +808,81 @@ function AddToTripModal({ spot, onClose }: { spot: Spot; onClose: () => void }) 
   );
 }
 
+// ── Create Trip from Place Modal ──────────────────────────────────────────────
+
+function CreateTripFromPlaceModal({ spot, onClose }: { spot: Spot; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [name, setName] = useState(`Trip to ${spot.city || spot.name}`);
+  const [destination, setDestination] = useState(spot.city || spot.name);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const createTrip = useMutation({
+    mutationFn: async (data: any) => {
+      const r = await apiRequest("POST", "/api/trips", data);
+      return r.json();
+    },
+    onSuccess: async (trip: any) => {
+      // Auto-link the spot as the first item
+      await apiRequest("POST", `/api/trips/${trip.id}/items`, {
+        name: spot.name, type: spot.type,
+        address: spot.address ?? null,
+        date: null, time: null, duration: null,
+        notes: spot.notes ?? null, spotId: spot.id,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/trips"] });
+      toast({ title: `Trip created! ${spot.name} added as first stop.` });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to create trip", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plane size={16} className="text-primary" /> Create Trip from Place
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground -mt-1">Starting from <strong>{spot.name}</strong></p>
+        <div className="space-y-3 pt-1">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Trip Name</label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Weekend in Nashville" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Destination</label>
+            <Input value={destination} onChange={e => setDestination(e.target.value)} placeholder="City or region" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Start Date</label>
+              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">End Date</label>
+              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+          </div>
+          <Button
+            className="w-full gap-2"
+            disabled={!name.trim() || createTrip.isPending}
+            onClick={() => createTrip.mutate({
+              name: name.trim(), destination: destination || null,
+              startDate: startDate || null, endDate: endDate || null,
+              emoji: "✈️", notes: null, coverColor: "#6366f1",
+            })}
+          >
+            <Plus size={14} /> Create Trip
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Trip Planner Modal ────────────────────────────────────────────────────────
 
 function TripPlannerModal({ open, onClose, spots }: { open: boolean; onClose: () => void; spots: Spot[] }) {
@@ -1001,8 +1079,9 @@ export default function SpotsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   // Route-locked: /spots = Places only, /travel = Trips only
   const isTravelRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
-  const [travelSubTab, setTravelSubTab] = useState<"trips" | "cities">("trips");
-  const [placesSubTab, setPlacesSubTab] = useState("all");
+  const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "itineraries" | "logistics">("upcoming");
+  const [placesSubTab, setPlacesSubTab] = useState("saved");
+  const [createTripSpot, setCreateTripSpot] = useState<Spot | null>(null);
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -1184,12 +1263,26 @@ export default function SpotsPage() {
 
   const tabSpots: Record<string, Spot[]> = {
     all:           applyFilters(spots),
-    want_to_visit: applyFilters(spots.filter((s) => s.status === "want_to_visit")),
-    visited:       applyFilters(spots.filter((s) => s.status === "visited")),
+    saved:         applyFilters(spots.filter((s) => s.status === "want_to_visit")),
+    visited:       applyFilters(spots.filter((s) => s.status === "visited" || s.isFavorite)),
     favorites:     applyFilters(spots.filter((s) => s.isFavorite)),
+    want_to_visit: applyFilters(spots.filter((s) => s.status === "want_to_visit")),
   };
 
-  const displaySpots = tabSpots[placesSubTab] ?? tabSpots.all;
+  // For "collections" tab: group spots by their tags
+  const allTagGroups = useMemo(() => {
+    const groups: Record<string, Spot[]> = {};
+    spots.forEach(s => {
+      const tags = (s.tags ?? "").split(",").map(t => t.trim()).filter(Boolean);
+      tags.forEach(tag => {
+        if (!groups[tag]) groups[tag] = [];
+        groups[tag].push(s);
+      });
+    });
+    return groups;
+  }, [spots]);
+
+  const displaySpots = tabSpots[placesSubTab] ?? tabSpots.saved;
 
   return (
     <div className="flex flex-col h-full">
@@ -1199,7 +1292,7 @@ export default function SpotsPage() {
       {!isTravelRoute && (
         <>
           {/* Search + Filters + Map toggle */}
-          {placesSubTab !== "shared" && (
+          {placesSubTab !== "shared" && placesSubTab !== "map" && placesSubTab !== "collections" && (
             <div className="px-3 pt-3 pb-2 space-y-2">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -1230,16 +1323,12 @@ export default function SpotsPage() {
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
                   )}
                 </button>
-                <div className="flex items-center rounded-xl border overflow-hidden h-10 shrink-0">
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                  ><List size={14} /> List</button>
-                  <button
-                    onClick={() => setViewMode("map")}
-                    className={`h-full px-2.5 flex items-center gap-1 text-xs font-medium transition-colors ${viewMode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                  ><MapIcon size={14} /> Map</button>
-                </div>
+                <button
+                  onClick={() => setPlacesSubTab("map")}
+                  className="h-10 px-3 flex items-center gap-1.5 rounded-xl border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
+                >
+                  <MapIcon size={14} /> Map
+                </button>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1266,13 +1355,15 @@ export default function SpotsPage() {
             </div>
           )}
 
-          {/* Places sub-tabs: All | Want to Visit | Visited | Favorites | Shared */}
+          {/* Places sub-tabs: Saved | Visited | Collections | Map | Shared */}
           <div className="overflow-x-auto scrollbar-hide px-3 pb-2 shrink-0">
             <div className="flex gap-1 w-max">
               {[
-                { value: "all",       label: `All (${spots.length})` },
-                { value: "favorites", label: `❤ Favorites (${spots.filter(s => s.isFavorite).length})` },
-                { value: "shared",    label: "Shared" },
+                { value: "saved",       label: `Saved (${tabSpots.saved.length})` },
+                { value: "visited",     label: `Visited (${tabSpots.visited.length})` },
+                { value: "collections", label: `Collections (${Object.keys(allTagGroups).length})` },
+                { value: "map",         label: "🗺 Map" },
+                { value: "shared",      label: "Shared" },
               ].map(tab => (
                 <button
                   key={tab.value}
@@ -1300,6 +1391,60 @@ export default function SpotsPage() {
           <div className="flex-1 overflow-y-auto px-3 pb-6">
             {placesSubTab === "shared" ? (
               <SharedSpotsTab />
+            ) : placesSubTab === "map" ? (
+              <MapView spots={applyFilters(spots)} />
+            ) : placesSubTab === "collections" ? (
+              // ── Collections: tag-based grouping ──────────────────────────────
+              Object.keys(allTagGroups).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">🏷️</div>
+                  <div className="text-center">
+                    <p className="font-semibold text-foreground mb-1">No collections yet</p>
+                    <p className="text-sm">Add tags to your places to organize them into collections.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 pt-1">
+                  {Object.entries(allTagGroups).sort(([a], [b]) => a.localeCompare(b)).map(([tag, tagSpots]) => {
+                    const isCollapsed = collapsedTypes.has(`tag:${tag}`);
+                    return (
+                      <div key={tag} className="rounded-xl border overflow-hidden">
+                        <button
+                          onClick={() => setCollapsedTypes(prev => {
+                            const next = new Set(prev);
+                            if (isCollapsed) next.delete(`tag:${tag}`); else next.add(`tag:${tag}`);
+                            return next;
+                          })}
+                          className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/50 transition-colors"
+                        >
+                          <span className="text-lg shrink-0">🏷️</span>
+                          <span className="font-semibold text-sm flex-1 text-left capitalize">{tag}</span>
+                          <span className="text-xs text-muted-foreground mr-1">{tagSpots.length}</span>
+                          {isCollapsed ? <ChevronDown size={15} className="text-muted-foreground shrink-0" /> : <ChevronUp size={15} className="text-muted-foreground shrink-0" />}
+                        </button>
+                        {!isCollapsed && (
+                          <div className="divide-y border-t">
+                            {tagSpots.map(spot => (
+                              <div key={spot.id} className="px-3 py-2">
+                                <SpotCard
+                                  spot={spot}
+                                  onEdit={() => openEdit(spot)}
+                                  onDelete={() => deleteMut.mutate(spot.id)}
+                                  onShare={() => setShareSpot(spot)}
+                                  onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                                  onAddToTrip={() => setAddToTripSpot(spot)}
+                                  onCreateTrip={() => setCreateTripSpot(spot)}
+                                  onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
                 ) : spots.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>
@@ -1328,12 +1473,9 @@ export default function SpotsPage() {
                   Clear filters
                 </button>
               </div>
-            ) : viewMode === "map" ? (
-              <MapView spots={displaySpots} />
             ) : !search && filterType === "all" ? (
               // ── Grouped by type, all collapsed by default ──────────────────
               (() => {
-                // Build groups in SPOT_TYPES order, only include types that have spots
                 const typeGroups = SPOT_TYPES
                   .map(t => ({ type: t, spots: displaySpots.filter(s => s.type === t.value) }))
                   .filter(g => g.spots.length > 0);
@@ -1367,6 +1509,7 @@ export default function SpotsPage() {
                                     onShare={() => setShareSpot(spot)}
                                     onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
                                     onAddToTrip={() => setAddToTripSpot(spot)}
+                                    onCreateTrip={() => setCreateTripSpot(spot)}
                                     onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
                                   />
                                 </div>
@@ -1391,6 +1534,7 @@ export default function SpotsPage() {
                     onShare={() => setShareSpot(spot)}
                     onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
                     onAddToTrip={() => setAddToTripSpot(spot)}
+                    onCreateTrip={() => setCreateTripSpot(spot)}
                     onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
                   />
                 ))}
@@ -1410,16 +1554,18 @@ export default function SpotsPage() {
             </a>
           </div>
           {/* Travel sub-tabs */}
-          <div className="px-3 pt-2 pb-0 shrink-0">
-            <div className="flex gap-1">
+          <div className="overflow-x-auto scrollbar-hide px-3 pt-2 pb-0 shrink-0">
+            <div className="flex gap-1 w-max">
               {([
-                { value: "trips"  as const, label: "Trips",               icon: <Plane size={13} /> },
-                { value: "cities" as const, label: "Cities & Countries",  icon: <Globe size={13} /> },
+                { value: "upcoming"    as const, label: "Upcoming",    icon: <Plane size={13} /> },
+                { value: "past"        as const, label: "Past",         icon: <Globe size={13} /> },
+                { value: "itineraries" as const, label: "Itineraries",  icon: <MapPin size={13} /> },
+                { value: "logistics"   as const, label: "Logistics",    icon: <Globe size={13} /> },
               ]).map(tab => (
                 <button
                   key={tab.value}
                   onClick={() => setTravelSubTab(tab.value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
                     travelSubTab === tab.value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -1431,7 +1577,17 @@ export default function SpotsPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto px-3 pb-6 pt-3">
-            {travelSubTab === "trips"  ? <TripsTab spots={spots} /> : <VisitedCitiesTab />}
+            {travelSubTab === "logistics" ? (
+              <VisitedCitiesTab />
+            ) : (
+              <TripsTab
+                spots={spots}
+                initialFilter={
+                  travelSubTab === "upcoming" ? "upcoming" :
+                  travelSubTab === "past" ? "past" : "all"
+                }
+              />
+            )}
           </div>
         </>
       )}
@@ -1625,6 +1781,7 @@ export default function SpotsPage() {
 
       {/* ── Add to Trip ───────────────────────────────────────────────────────── */}
       {addToTripSpot && <AddToTripModal spot={addToTripSpot} onClose={() => setAddToTripSpot(null)} />}
+      {createTripSpot && <CreateTripFromPlaceModal spot={createTripSpot} onClose={() => setCreateTripSpot(null)} />}
 
       {/* ── Trip Planner ──────────────────────────────────────────────────────── */}
       <TripPlannerModal open={plannerOpen} onClose={() => setPlannerOpen(false)} spots={spots} />
@@ -2433,12 +2590,12 @@ const COVER_COLORS = [
 const EMPTY_TRIP = { name: "", destination: "", startDate: "", endDate: "", emoji: "✈️", notes: "", coverColor: "#6366f1" };
 const EMPTY_ITEM = { name: "", address: "", date: "", time: "", duration: "", notes: "", type: "other", confirmed: false, spotId: null as number | null };
 
-function TripsTab({ spots }: { spots: Spot[] }) {
+function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initialFilter?: "upcoming" | "past" | "all" }) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  // Trips state
-  const [tripsSubTab, setTripsSubTab] = useState<"upcoming" | "past">("upcoming");
+  // Trips state — when showing all (itineraries), no internal sub-tab needed
+  const [tripsSubTab, setTripsSubTab] = useState<"upcoming" | "past">(initialFilter === "past" ? "past" : "upcoming");
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripModal, setTripModal] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
@@ -2830,29 +2987,38 @@ function TripsTab({ spots }: { spots: Spot[] }) {
   const today = new Date().toISOString().split("T")[0];
   const upcomingTrips = trips.filter(t => !t.endDate || t.endDate >= today);
   const pastTrips     = trips.filter(t => t.endDate && t.endDate < today);
-  const displayedTrips = tripsSubTab === "upcoming" ? upcomingTrips : pastTrips;
+  // When initialFilter is "all" (itineraries view), show all trips without sub-tabs
+  const displayedTrips = initialFilter === "all" ? trips :
+    tripsSubTab === "upcoming" ? upcomingTrips : pastTrips;
+
+  const emptyLabel = initialFilter === "all" ? "No trips yet" :
+    tripsSubTab === "upcoming" ? "No upcoming trips" : "No past trips";
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <div className="flex gap-1 border-b flex-1 mr-3">
-          {([
-            { value: "upcoming" as const, label: `Upcoming (${upcomingTrips.length})` },
-            { value: "past"     as const, label: `Past (${pastTrips.length})` },
-          ] as const).map(tab => (
-            <button
-              key={tab.value}
-              onClick={() => setTripsSubTab(tab.value)}
-              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px ${
-                tripsSubTab === tab.value
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {initialFilter !== "all" ? (
+          <div className="flex gap-1 border-b flex-1 mr-3">
+            {([
+              { value: "upcoming" as const, label: `Upcoming (${upcomingTrips.length})` },
+              { value: "past"     as const, label: `Past (${pastTrips.length})` },
+            ] as const).map(tab => (
+              <button
+                key={tab.value}
+                onClick={() => setTripsSubTab(tab.value)}
+                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px ${
+                  tripsSubTab === tab.value
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm font-semibold text-foreground flex-1">All Trips ({trips.length})</p>
+        )}
         <Button size="sm" onClick={openNewTrip} className="gap-1.5 shrink-0">
           <Plus size={13} /> New Trip
         </Button>
@@ -2861,9 +3027,13 @@ function TripsTab({ spots }: { spots: Spot[] }) {
       {displayedTrips.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <Plane size={40} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-medium">{tripsSubTab === "upcoming" ? "No upcoming trips" : "No past trips"}</p>
-          {tripsSubTab === "upcoming" && <p className="text-xs mt-1">Create a trip to start planning your itinerary.</p>}
-          {tripsSubTab === "upcoming" && <Button size="sm" className="mt-4 gap-1.5" onClick={openNewTrip}><Plus size={13} /> Create Trip</Button>}
+          <p className="text-sm font-medium">{emptyLabel}</p>
+          {(initialFilter === "upcoming" || (initialFilter !== "all" && tripsSubTab === "upcoming")) && (
+            <>
+              <p className="text-xs mt-1">Create a trip to start planning your itinerary.</p>
+              <Button size="sm" className="mt-4 gap-1.5" onClick={openNewTrip}><Plus size={13} /> Create Trip</Button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageShell from "@/components/PageShell";
 import { apiRequest } from "@/lib/queryClient";
@@ -85,7 +86,7 @@ const DIFF_COLOR: Record<string, string> = {
 
 export type HobbyType = "creative" | "collection" | "outdoor" | "games" | "learning" | "performance";
 
-const HOBBY_TYPES: { value: HobbyType; label: string; icon: React.ElementType; color: string; bg: string; emoji: string }[] = [
+export const HOBBY_TYPES: { value: HobbyType; label: string; icon: React.ElementType; color: string; bg: string; emoji: string }[] = [
   { value: "creative",    label: "Creative",          icon: Palette,   color: "#ec4899", bg: "bg-pink-50 dark:bg-pink-950/20",    emoji: "🎨" },
   { value: "collection",  label: "Collection",        icon: Archive,   color: "#f97316", bg: "bg-orange-50 dark:bg-orange-950/20", emoji: "🪙" },
   { value: "outdoor",     label: "Outdoor & Active",  icon: Mountain,  color: "#10b981", bg: "bg-emerald-50 dark:bg-emerald-950/20", emoji: "🏔️" },
@@ -94,7 +95,7 @@ const HOBBY_TYPES: { value: HobbyType; label: string; icon: React.ElementType; c
   { value: "performance", label: "Performance",       icon: Mic2,      color: "#8b5cf6", bg: "bg-violet-50 dark:bg-violet-950/20", emoji: "🎭" },
 ];
 
-const HOBBY_TYPE_MAP = Object.fromEntries(HOBBY_TYPES.map(t => [t.value, t]));
+export const HOBBY_TYPE_MAP = Object.fromEntries(HOBBY_TYPES.map(t => [t.value, t]));
 
 const PRESET_HOBBIES: Record<HobbyType, string[]> = {
   creative:    ["Photography", "Painting", "Drawing", "Pottery", "Knitting/Crochet", "Woodworking", "Jewelry Making", "Sculpting"],
@@ -105,34 +106,34 @@ const PRESET_HOBBIES: Record<HobbyType, string[]> = {
   performance: ["Playing an Instrument", "Singing", "Acting", "Dancing", "Comedy"],
 };
 
-const SKILL_LEVELS = [
+export const SKILL_LEVELS = [
   { value: "beginner",     label: "Beginner",     color: "bg-green-500/15 text-green-700 dark:text-green-400" },
   { value: "intermediate", label: "Intermediate", color: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
   { value: "advanced",     label: "Advanced",     color: "bg-purple-500/15 text-purple-700 dark:text-purple-400" },
   { value: "expert",       label: "Expert",       color: "bg-orange-500/15 text-orange-700 dark:text-orange-400" },
 ];
 
-const STATUS_OPTIONS = [
+export const STATUS_OPTIONS = [
   { value: "active",    label: "Active",    color: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
   { value: "on_pause",  label: "On Pause",  color: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400" },
   { value: "retired",   label: "Retired",   color: "bg-slate-500/15 text-slate-500" },
 ];
 
-const SKILL_MAP = Object.fromEntries(SKILL_LEVELS.map(s => [s.value, s]));
-const STATUS_MAP = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
+export const SKILL_MAP = Object.fromEntries(SKILL_LEVELS.map(s => [s.value, s]));
+export const STATUS_MAP = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
 
 // ── Goal / Plan types ──────────────────────────────────────────────────────────
 
-type GoalType = "count" | "milestone" | "frequency" | "plan";
+export type GoalType = "count" | "milestone" | "frequency" | "plan";
 
-interface GoalStep {
+export interface GoalStep {
   id: string;
   text: string;
   done: boolean;
   dueDate?: string;
 }
 
-interface HobbyGoal {
+export interface HobbyGoal {
   id: string;
   title: string;
   description?: string;
@@ -155,6 +156,8 @@ interface HobbyGoal {
   buddyUserId?: number;
   // link back to the plan that auto-created this goal
   linkedPlanId?: string;
+  // link to a system goal from /api/goals
+  linkedSystemGoalId?: number;
 }
 
 interface GoalTemplate {
@@ -322,22 +325,22 @@ const CUSTOM_TEMPLATE: GoalTemplate = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function genId(): string {
+export function genId(): string {
   return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 }
 
-function parseExtra(json: string): Record<string, any> {
+export function parseExtra(json: string): Record<string, any> {
   try { return JSON.parse(json || "{}"); } catch { return {}; }
 }
 
-function parseGoals(extraJson: string): HobbyGoal[] {
+export function parseGoals(extraJson: string): HobbyGoal[] {
   try {
     const obj = JSON.parse(extraJson || "{}");
     return Array.isArray(obj.goals) ? obj.goals : [];
   } catch { return []; }
 }
 
-function setGoalsInExtra(extraJson: string, goals: HobbyGoal[]): string {
+export function setGoalsInExtra(extraJson: string, goals: HobbyGoal[]): string {
   try {
     const obj = JSON.parse(extraJson || "{}");
     return JSON.stringify({ ...obj, goals });
@@ -400,7 +403,7 @@ interface PlanMilestone {
   order: number;
 }
 
-interface HobbyPlan {
+export interface HobbyPlan {
   id: string;
   title: string;
   description?: string;
@@ -2469,7 +2472,7 @@ function generateSurfingSteps(
 
 // ── Plan helpers ───────────────────────────────────────────────────────────────
 
-function parsePlans(extraJson: string): HobbyPlan[] {
+export function parsePlans(extraJson: string): HobbyPlan[] {
   try {
     const obj = JSON.parse(extraJson || "{}");
     return Array.isArray(obj.plans) ? obj.plans : [];
@@ -2503,14 +2506,14 @@ function backfillGoalsForPlans(extraJson: string): string | null {
   return setGoalsInExtra(extraJson, [...goals, ...newGoals]);
 }
 
-function setPlansInExtra(extraJson: string, plans: HobbyPlan[]): string {
+export function setPlansInExtra(extraJson: string, plans: HobbyPlan[]): string {
   try {
     const obj = JSON.parse(extraJson || "{}");
     return JSON.stringify({ ...obj, plans });
   } catch { return JSON.stringify({ plans }); }
 }
 
-function setPlansAndGoalsInExtra(extraJson: string, plans: HobbyPlan[], goals: HobbyGoal[]): string {
+export function setPlansAndGoalsInExtra(extraJson: string, plans: HobbyPlan[], goals: HobbyGoal[]): string {
   try {
     const obj = JSON.parse(extraJson || "{}");
     return JSON.stringify({ ...obj, plans, goals });
@@ -2948,7 +2951,7 @@ function PlanCard({
 
 // ── Hobby Plan Rich Card (Workouts-style) ─────────────────────────────────────
 
-function HobbyPlanRichCard({
+export function HobbyPlanRichCard({
   plan, hobbyColor, hobbyTypeLabel,
   onToggleStep, onToggleMilestone,
   onToggleActive, onPause, onResume, onComplete, onDelete, onEdit,
@@ -3270,7 +3273,7 @@ function HobbyPlanRichCard({
 
 // ── Plan Wizard (2-step) ───────────────────────────────────────────────────────
 
-function PlanWizard({
+export function PlanWizard({
   open,
   onClose,
   hobbies,
@@ -6179,7 +6182,7 @@ function PlanWizard({
 
 // ── Goal Wizard (2-step) ───────────────────────────────────────────────────────
 
-function GoalWizard({
+export function GoalWizard({
   open,
   onClose,
   hobbies,
@@ -9637,7 +9640,7 @@ function DayLabelDialog({
 const DAYS_ORDERED_SCHED = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_TO_IDX_SCHED: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
 
-function ScheduleTab({ hobbies, onUpdateHobby }: { hobbies: Hobby[]; onUpdateHobby: (id: number, extraJson: string) => void }) {
+export function ScheduleTab({ hobbies, onUpdateHobby }: { hobbies: Hobby[]; onUpdateHobby: (id: number, extraJson: string) => void }) {
   const today = new Date();
   const todayDowIdx = today.getDay(); // 0=Sun
   const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -11801,6 +11804,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit
 export default function HobbiesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<"library" | "plans" | "schedule">("library");
 
   const { data: hobbies = [], isLoading } = useQuery<Hobby[]>({
@@ -12113,7 +12117,7 @@ export default function HobbiesPage() {
                 <HobbyCard key={h.id} hobby={h}
                   onEdit={() => openEdit(h)} onDelete={() => handleDelete(h)}
                   onToggleFavorite={() => handleToggleFavorite(h)}
-                  onClick={() => setDetailHobby(h)}
+                  onClick={() => navigate(`/hobbies/${h.id}`)}
                 />
               ))}
             </div>

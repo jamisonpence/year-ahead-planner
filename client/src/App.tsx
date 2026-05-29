@@ -10,6 +10,7 @@ import FeedPage from "@/pages/FeedPage";
 import DiscoverPage from "@/pages/DiscoverPage";
 import CalendarPage from "@/pages/CalendarPage";
 import GoalsPage from "@/pages/GoalsPage";
+import TasksPage from "@/pages/TasksPage";
 import ReadingPage from "@/pages/ReadingPage";
 import WorkoutsPage from "@/pages/WorkoutsPage";
 import RelationshipsPage from "@/pages/RelationshipsPage";
@@ -26,6 +27,8 @@ import QuotesPage from "@/pages/QuotesPage";
 import ArtPage from "@/pages/ArtPage";
 import JournalPage from "@/pages/JournalPage";
 import HobbiesPage from "@/pages/HobbiesPage";
+import HobbyDetailPage from "@/pages/HobbyDetailPage";
+import HobbyPlanDetailPage from "@/pages/HobbyPlanDetailPage";
 import HabitsPage from "@/pages/HabitsPage";
 import FaithPage from "@/pages/FaithPage";
 import HealthPage from "@/pages/HealthPage";
@@ -58,6 +61,7 @@ function AuthenticatedApp() {
         <Route path="/discover" component={DiscoverPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/goals" component={GoalsPage} />
+        <Route path="/tasks" component={TasksPage} />
         <Route path="/reading" component={ReadingPage} />
         <Route path="/workouts" component={WorkoutsPage} />
         <Route path="/relationships" component={RelationshipsPage} />
@@ -75,6 +79,8 @@ function AuthenticatedApp() {
         <Route path="/art" component={ArtPage} />
         <Route path="/journal" component={JournalPage} />
         <Route path="/hobbies" component={HobbiesPage} />
+        <Route path="/hobbies/:id/plans/:planId" component={HobbyPlanDetailPage} />
+        <Route path="/hobbies/:id" component={HobbyDetailPage} />
         <Route path="/habits" component={HabitsPage} />
         <Route path="/faith" component={FaithPage} />
         <Route path="/health" component={HealthPage} />
