@@ -367,7 +367,7 @@ export default function BudgetPage() {
   return (
     <PageShell
       size="wide"
-      title="Budget"
+      title="Finance"
       subtitle={monthLabel}
       action={
         <div className="flex gap-2 flex-wrap">

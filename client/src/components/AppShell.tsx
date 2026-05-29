@@ -107,7 +107,7 @@ const ALL_TABS = [
   { path: "/travel",        label: "Trips",                   icon: Plane           },
   { path: "/events",        label: "Events",                  icon: Calendar        },
   // ── Home ──
-  { path: "/budget",        label: "Budget",                  icon: Wallet          },
+  { path: "/budget",        label: "Finance",                  icon: Wallet          },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
   // ── Beliefs & Society ──
   { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
@@ -348,7 +348,7 @@ const COLLECTION_GROUPS = [
     label: "Home",
     subtitle: "Budget and household",
     tiles: [
-      { path: "/budget",       emoji: "💰", label: "Budget"       },
+      { path: "/budget",       emoji: "💰", label: "Finance"       },
       { path: "/housekeeping", emoji: "🏠", label: "Housekeeping" },
     ],
   },
