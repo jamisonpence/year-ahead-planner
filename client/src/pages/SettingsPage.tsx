@@ -229,7 +229,7 @@ function CollaborationSection() {
   }
 
   return (
-    <section className="rounded-xl border bg-card p-6 space-y-5">
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-4 sm:space-y-5">
       <div className="flex items-center gap-2">
         <Link2 size={18} className="text-emerald-500" />
         <h2 className="font-semibold text-base">Tab Collaboration</h2>
@@ -352,7 +352,7 @@ function CollaborationSection() {
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Invite a Friend</p>
 
         {/* Tab picker */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {COLLAB_TABS.map(t => {
             const Icon = t.icon;
             return (
@@ -454,7 +454,7 @@ function DeleteAccountSection() {
 
   return (
     <>
-      <section className="rounded-xl border border-destructive/30 bg-card p-6 space-y-3">
+      <section className="rounded-xl border border-destructive/30 bg-card p-4 sm:p-6 space-y-3">
         <div className="flex items-center gap-2">
           <AlertTriangle size={18} className="text-destructive" />
           <h2 className="font-semibold text-base text-destructive">Danger Zone</h2>
@@ -676,7 +676,7 @@ export default function SettingsPage() {
   const busy = saveMut.isPending || removeMut.isPending;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-5 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your account preferences and integrations.</p>

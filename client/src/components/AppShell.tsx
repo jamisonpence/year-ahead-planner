@@ -860,7 +860,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b h-14 flex items-center justify-between px-4">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-[70] bg-card border-b h-14 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <svg aria-label="Planner" viewBox="0 0 32 32" width="22" height="22" fill="none">
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
@@ -889,7 +889,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-card border-t">
         <div className="flex items-end justify-around px-1 pt-2 pb-3">
 
           {/* MyLifos (profile sheet) */}
