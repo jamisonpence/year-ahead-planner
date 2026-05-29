@@ -745,7 +745,7 @@ export default function HabitsPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <PageHeader
-        title="Habits & Daily Tracker"
+        title="Habits"
         subtitle="Build consistency, log workouts, track your day"
       />
 
