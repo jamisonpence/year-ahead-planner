@@ -562,9 +562,6 @@ export default function HobbyDetailPage() {
             </div>
           </div>
           {hobby.description && <p className="text-sm text-muted-foreground">{hobby.description}</p>}
-          {hobby.notes && (
-            <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">{hobby.notes}</p>
-          )}
           {hobby.dateStarted && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarDays size={12} />
@@ -694,6 +691,18 @@ export default function HobbyDetailPage() {
           </div>
         )}
       </section>
+
+      {/* ── Notes & reflection ── */}
+      {hobby.notes && (
+        <section className="mb-6">
+          <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
+            <BookOpen size={15} className="text-primary" /> Notes
+          </h3>
+          <div className="rounded-xl bg-muted/40 border px-4 py-3">
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{hobby.notes}</p>
+          </div>
+        </section>
+      )}
 
       {/* ── Dialogs & Wizards ── */}
       <GoalWizard

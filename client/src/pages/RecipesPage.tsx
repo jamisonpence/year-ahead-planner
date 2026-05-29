@@ -1039,6 +1039,15 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
               </div>
             </div>
           </DialogHeader>
+          {/* 2. Primary actions — right after title */}
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button onClick={() => { onAddToWeek(recipe); onClose(); }} variant="outline" size="sm" className="gap-1.5">
+              <CalendarDays size={13} /> Add to Meal Plan
+            </Button>
+            <Button onClick={() => setLogOpen(o => !o)} variant="outline" size="sm" className="gap-1.5">
+              <UtensilsCrossed size={13} /> Log to Nutrition
+            </Button>
+          </div>
         </div>
         <div className="space-y-4 px-6 pb-6">
           {(recipe.prepTime != null || recipe.cookTime != null) && (
@@ -1102,15 +1111,7 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => { onAddToWeek(recipe); onClose(); }} variant="outline" className="flex-1 gap-1.5 min-w-[120px]">
-              <CalendarDays size={14} /> Add to Meal Plan
-            </Button>
-            <Button onClick={() => setLogOpen(o => !o)} variant="outline" className="flex-1 gap-1.5 min-w-[120px]">
-              <UtensilsCrossed size={14} /> Log to Nutrition
-            </Button>
-            <Button variant="ghost" onClick={onClose} className="w-full">Close</Button>
-          </div>
+          <Button variant="ghost" onClick={onClose} className="w-full">Close</Button>
         </div>
       </DialogContent>
     </Dialog>

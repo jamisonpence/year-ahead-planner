@@ -2756,7 +2756,6 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
                 {tripItems.length > 0 && <span className="ml-2">· {confirmedCount}/{tripItems.length} confirmed</span>}
               </p>
             )}
-            {tripData.notes && <p className="text-xs text-muted-foreground mt-1 italic">{tripData.notes}</p>}
           </div>
           <div className="flex gap-1.5 shrink-0">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => openEditTrip(tripData)}>
@@ -2828,6 +2827,14 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
 
         {/* AI Trip Planner */}
         <AITripPlanner trip={tripData} />
+
+        {/* Notes & reflection */}
+        {tripData.notes && (
+          <div className="mt-6 p-3 rounded-xl bg-muted/40 border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Notes</p>
+            <p className="text-sm text-muted-foreground italic leading-relaxed">{tripData.notes}</p>
+          </div>
+        )}
 
         {/* Delete trip button */}
         <div className="mt-8 pt-4 border-t">

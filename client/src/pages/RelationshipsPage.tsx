@@ -1007,13 +1007,7 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
         </div>
         {expanded && (
           <div className="mt-3 pt-3 border-t space-y-3">
-            {person.notes && (
-              <div className="flex items-start gap-1.5">
-                <StickyNote size={12} className="text-muted-foreground mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed">{person.notes}</p>
-              </div>
-            )}
-            {/* Spouse section (only show for non-connected people) */}
+            {/* 4. Linked objects — spouse and children */}
             {!friend && (
               <div>
                 {children.length > 0 && (
@@ -1051,6 +1045,13 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {/* 6. Notes & reflection — always last */}
+            {person.notes && (
+              <div className="flex items-start gap-1.5 pt-1 border-t">
+                <StickyNote size={12} className="text-muted-foreground mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground leading-relaxed">{person.notes}</p>
               </div>
             )}
           </div>

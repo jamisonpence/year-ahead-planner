@@ -195,20 +195,7 @@ function SavedEventCard({
           </span>
         </div>
 
-        {event.startDatetime && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Calendar size={11} />
-            <span>{formatEventDate(event.startDatetime)}</span>
-          </div>
-        )}
-
-        {event.venueName && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPin size={11} />
-            <span className="line-clamp-1">{event.venueName}</span>
-          </div>
-        )}
-
+        {/* 2. Primary actions — status, tickets, contextual */}
         <div className="flex gap-1.5 flex-wrap mt-auto pt-1">
           {EVENT_STATUS_OPTIONS.map(opt => (
             <button
@@ -230,7 +217,18 @@ function SavedEventCard({
           </button>
         </div>
 
-        <div className="flex gap-1.5 flex-wrap pt-1">
+        {event.url && (
+          <a
+            href={event.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-secondary transition-colors"
+          >
+            <Globe size={11} /> View / Get Tickets
+          </a>
+        )}
+
+        <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={() => onCreateJournalEntry(event)}
             className="flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[10px] font-medium text-muted-foreground hover:bg-secondary transition-colors"
@@ -245,15 +243,19 @@ function SavedEventCard({
           </button>
         </div>
 
-        {event.url && (
-          <a
-            href={event.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-secondary transition-colors"
-          >
-            <Globe size={11} /> View / Get Tickets
-          </a>
+        {/* 3. Key metadata — date, venue */}
+        {event.startDatetime && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground border-t pt-2 mt-1">
+            <Calendar size={11} />
+            <span>{formatEventDate(event.startDatetime)}</span>
+          </div>
+        )}
+
+        {event.venueName && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MapPin size={11} />
+            <span className="line-clamp-1">{event.venueName}</span>
+          </div>
         )}
       </div>
     </div>
