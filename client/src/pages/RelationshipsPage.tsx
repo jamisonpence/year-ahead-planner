@@ -3136,14 +3136,15 @@ export default function RelationshipsPage() {
   });
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
+    <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-3xl mx-auto space-y-5 w-full min-w-0 overflow-x-hidden">
 
       {/* ── Tab switcher ─────────────────────────────────────────────────────── */}
-      <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit overflow-x-auto">
+      <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 px-4 sm:px-6">
+        <div className="flex gap-0.5 p-1 bg-secondary rounded-xl w-fit min-w-full sm:min-w-0">
         {(["friends", "contacts", "keepintouch", "timeline", "assistant"] as const).map(tab => (
           <button key={tab}
             onClick={() => setSocialTab(tab)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${socialTab === tab ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${socialTab === tab ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {tab === "friends" && "Overview"}
             {tab === "contacts" && "Contacts"}
@@ -3152,6 +3153,7 @@ export default function RelationshipsPage() {
             {tab === "assistant" && <span className="flex items-center gap-1.5"><Bot size={13} /> Assistant</span>}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
