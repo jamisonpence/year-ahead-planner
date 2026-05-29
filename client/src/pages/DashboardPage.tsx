@@ -353,6 +353,24 @@ export default function DashboardPage() {
   const allTasksDueToday   = [...tasksDueToday, ...goalTasksDueToday];
   const allTasksOverdue    = [...tasksOverdue, ...goalTasksOverdue];
 
+  // Tasks with no due date
+  const generalTasksNoDueDate = openGeneralTasks.filter((t: any) => !(t as any).dueDate);
+
+  // Open project tasks (from goals + standalone projects)
+  const openProjectTasks: any[] = [];
+  goals.forEach((g) => {
+    (g.projects ?? []).forEach((p: any) => {
+      (p.tasks ?? []).filter((t: any) => !t.completed).forEach((t: any) => {
+        openProjectTasks.push({ ...t, source: p.title ?? g.title });
+      });
+    });
+  });
+  standaloneProjects.forEach((p: any) => {
+    (p.tasks ?? []).filter((t: any) => !t.completed).forEach((t: any) => {
+      openProjectTasks.push({ ...t, source: p.title });
+    });
+  });
+
   // ── Habits ─────────────────────────────────────────────────────────────────
   const todayHabitLogIds = new Set(
     habitLogs.filter((l: any) => l.date === today && l.completed).map((l: any) => l.habitId)
@@ -416,6 +434,14 @@ export default function DashboardPage() {
     key: "workout", icon: <Dumbbell size={13} className="text-blue-400" />,
     label: "Log today's workout", sub: `${wCompleted}/${wPlanned} this week`, href: "/workouts",
   });
+  openProjectTasks.forEach((t) => todayItems.push({
+    key: `proj-task-${t.id}`, icon: <CheckCircle2 size={13} className="text-indigo-500" />,
+    label: t.title, sub: t.source ? `Project: ${t.source}` : "Project task", href: "/tasks",
+  }));
+  generalTasksNoDueDate.forEach((t: any) => todayItems.push({
+    key: `no-date-task-${t.id}`, icon: <CheckCircle2 size={13} className="text-slate-400" />,
+    label: t.title, sub: "No due date", href: "/tasks",
+  }));
 
   // ── UP NEXT items ──────────────────────────────────────────────────────────
   const upNextEvents = upcomingEvents.filter((e) => e.displayDate > today).slice(0, 4);
