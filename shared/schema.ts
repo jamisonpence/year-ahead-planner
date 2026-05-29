@@ -593,6 +593,7 @@ export const chores = pgTable("chores", {
   assignee: text("assignee"),              // optional household member name
   tags: text("tags"),                      // comma-separated custom tags
   sortOrder: integer("sort_order").notNull().default(0),
+  applianceId: integer("appliance_id"),     // optional link to an appliance
 });
 
 // ── HOUSE PROJECTS ────────────────────────────────────────────────────────────

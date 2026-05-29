@@ -1613,6 +1613,9 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_type TEXT`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_data TEXT`);
+
+  // Link chores to appliances
+  await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────

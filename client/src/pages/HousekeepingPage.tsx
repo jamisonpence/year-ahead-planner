@@ -720,6 +720,165 @@ function ProjectsTab() {
 // ── APPLIANCES TAB ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ── Add Chore to Appliance Modal ──────────────────────────────────────────────
+function AddApplianceChoreModal({
+  appliance,
+  existingChores,
+  onClose,
+}: {
+  appliance: Appliance;
+  existingChores: Chore[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [mode, setMode] = useState<"new" | "link">("new");
+
+  // New chore fields
+  const [title, setTitle] = useState(`${appliance.name} maintenance`);
+  const [frequency, setFrequency] = useState("monthly");
+  const [category, setCategory] = useState("maintenance");
+  const [nextDue, setNextDue] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Link existing
+  const [selectedChoreId, setSelectedChoreId] = useState<string>("_none");
+
+  const unlinkedChores = existingChores.filter(c => !(c as any).applianceId);
+
+  const createMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/chores", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/chores"] });
+      toast({ title: `Chore added to ${appliance.name}` });
+      onClose();
+    },
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) =>
+      apiRequest("PATCH", `/api/chores/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/chores"] });
+      toast({ title: `Chore linked to ${appliance.name}` });
+      onClose();
+    },
+  });
+
+  function handleSave() {
+    if (mode === "new") {
+      if (!title.trim()) return;
+      createMut.mutate({
+        title: title.trim(),
+        category,
+        frequency,
+        nextDue: nextDue || null,
+        notes: notes.trim() || null,
+        isActive: true,
+        priority: "medium",
+        sortOrder: 0,
+        applianceId: appliance.id,
+      });
+    } else {
+      if (selectedChoreId === "_none") return;
+      updateMut.mutate({ id: Number(selectedChoreId), data: { applianceId: appliance.id } });
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <RefreshCw size={15} className="text-primary" />
+            Add Chore to {appliance.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Mode toggle */}
+        <div className="flex gap-1 bg-secondary rounded-lg p-1">
+          {(["new", "link"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${mode === m ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {m === "new" ? "New Chore" : "Link Existing"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "new" ? (
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Chore name *</label>
+              <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Clean dishwasher filter" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Frequency</label>
+                <Select value={frequency} onValueChange={setFrequency}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{FREQUENCIES.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Category</label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{CHORE_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Next due date (optional)</label>
+              <Input type="date" value={nextDue} onChange={e => setNextDue(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Notes (optional)</label>
+              <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Use vinegar cycle" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={handleSave} disabled={!title.trim() || createMut.isPending}>
+                Add Chore
+              </Button>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            {unlinkedChores.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <RefreshCw size={24} className="mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No unlinked chores available.</p>
+                <p className="text-xs mt-1">Switch to "New Chore" to create one.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Select a chore to link</label>
+                  <Select value={selectedChoreId} onValueChange={setSelectedChoreId}>
+                    <SelectTrigger><SelectValue placeholder="Choose a chore…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Choose…</SelectItem>
+                      {unlinkedChores.map(c => (
+                        <SelectItem key={c.id} value={String(c.id)}>{c.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button className="flex-1" onClick={handleSave} disabled={selectedChoreId === "_none" || updateMut.isPending}>
+                    Link Chore
+                  </Button>
+                  <Button variant="outline" onClick={onClose}>Cancel</Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AppliancesTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -729,8 +888,10 @@ function AppliancesTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Appliance | null>(null);
   const [form, setForm] = useState({ ...EMPTY_APPLIANCE });
+  const [choreModalAppliance, setChoreModalAppliance] = useState<Appliance | null>(null);
 
   const { data: appliances = [] } = useQuery<Appliance[]>({ queryKey: ["/api/appliances"] });
+  const { data: allChores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -845,33 +1006,79 @@ function AppliancesTab() {
             const svc = serviceStatus(appl);
             const warr = warrantyStatus(appl);
             const tags = (appl.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+            const linkedChores = allChores.filter(c => (c as any).applianceId === appl.id);
             return (
-              <div key={appl.id} className="p-4 rounded-lg border bg-card space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-sm">{appl.name}</p>
-                    {(appl.brand || appl.model) && (
-                      <p className="text-xs text-muted-foreground">{[appl.brand, appl.model].filter(Boolean).join(" · ")}</p>
-                    )}
+                  <div key={appl.id} className="p-4 rounded-lg border bg-card space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-sm">{appl.name}</p>
+                        {(appl.brand || appl.model) && (
+                          <p className="text-xs text-muted-foreground">{[appl.brand, appl.model].filter(Boolean).join(" · ")}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => openEdit(appl)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
+                        <button onClick={() => deleteMut.mutate(appl.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {appl.location && <Badge variant="outline" className="text-xs">{APPLIANCE_LOCATIONS.find((l) => l.value === appl.location)?.label ?? appl.location}</Badge>}
+                      {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
+                    </div>
+                    <div className="text-xs space-y-0.5">
+                      {appl.purchaseDate && <p className="text-muted-foreground">Purchased: {formatDate(appl.purchaseDate)}</p>}
+                      {warr.label && <p className={warr.color}>{warr.label}</p>}
+                      {appl.lastServiced && <p className="text-muted-foreground">Last serviced: {formatDate(appl.lastServiced)}</p>}
+                      {svc.label !== "No service scheduled" && <p className={svc.color}>{svc.label}</p>}
+                      {appl.serialNumber && <p className="text-muted-foreground font-mono text-[10px]">S/N: {appl.serialNumber}</p>}
+                    </div>
+                    {appl.notes && <p className="text-xs text-muted-foreground border-t pt-1">{appl.notes}</p>}
+
+                    {/* ── Linked chores ── */}
+                    <div className="border-t pt-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                          <RefreshCw size={11} /> Chores
+                        </p>
+                        <button
+                          onClick={() => setChoreModalAppliance(appl)}
+                          className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                        >
+                          <Plus size={11} /> Add
+                        </button>
+                      </div>
+                      {linkedChores.length === 0 ? (
+                        <p className="text-xs text-muted-foreground/60 italic">No chores attached yet.</p>
+                      ) : (
+                        linkedChores.map(c => {
+                          const cs = choreStatus(c);
+                          const Icon = cs.icon;
+                          const freqLabel = FREQUENCIES.find(f => f.value === c.frequency)?.label ?? c.frequency;
+                          return (
+                            <div key={c.id} className="flex items-center gap-2 rounded-lg bg-secondary/40 px-2.5 py-2">
+                              <Icon size={13} className={cs.color} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{c.title}</p>
+                                <p className="text-[10px] text-muted-foreground">{freqLabel}{c.nextDue ? ` · ${cs.label}` : ""}</p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Unlink "${c.title}" from ${appl.name}?`)) {
+                                    qc.invalidateQueries({ queryKey: ["/api/chores"] });
+                                    apiRequest("PATCH", `/api/chores/${c.id}`, { applianceId: null })
+                                      .then(() => qc.invalidateQueries({ queryKey: ["/api/chores"] }));
+                                  }
+                                }}
+                                className="p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/50 transition-colors shrink-0"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openEdit(appl)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
-                    <button onClick={() => deleteMut.mutate(appl.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {appl.location && <Badge variant="outline" className="text-xs">{APPLIANCE_LOCATIONS.find((l) => l.value === appl.location)?.label ?? appl.location}</Badge>}
-                  {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
-                </div>
-                <div className="text-xs space-y-0.5">
-                  {appl.purchaseDate && <p className="text-muted-foreground">Purchased: {formatDate(appl.purchaseDate)}</p>}
-                  {warr.label && <p className={warr.color}>{warr.label}</p>}
-                  {appl.lastServiced && <p className="text-muted-foreground">Last serviced: {formatDate(appl.lastServiced)}</p>}
-                  {svc.label !== "No service scheduled" && <p className={svc.color}>{svc.label}</p>}
-                  {appl.serialNumber && <p className="text-muted-foreground font-mono text-[10px]">S/N: {appl.serialNumber}</p>}
-                </div>
-                {appl.notes && <p className="text-xs text-muted-foreground border-t pt-1">{appl.notes}</p>}
-              </div>
             );
           })}
         </div>
@@ -950,6 +1157,14 @@ function AppliancesTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {choreModalAppliance && (
+        <AddApplianceChoreModal
+          appliance={choreModalAppliance}
+          existingChores={allChores}
+          onClose={() => setChoreModalAppliance(null)}
+        />
+      )}
     </div>
   );
 }
