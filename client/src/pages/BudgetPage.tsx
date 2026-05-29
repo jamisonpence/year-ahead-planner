@@ -735,6 +735,9 @@ export default function BudgetPage() {
             </div>
           )}
         </TabsContent>
+        <TabsContent value="calculator">
+          <CompoundInterestCalculator />
+        </TabsContent>
       </Tabs>
 
       {/* Lightbox */}
@@ -915,9 +918,6 @@ export default function BudgetPage() {
           </div>
         </DialogContent>
       </Dialog>
-        <TabsContent value="calculator">
-          <CompoundInterestCalculator />
-        </TabsContent>
     </PageShell>
   );
 }
