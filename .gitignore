@@ -8,3 +8,7 @@ vite.config.ts.*
 *.db-shm
 *.db-wal
 .env
+
+# Git backup dirs
+.git_backup/
+.git2/
