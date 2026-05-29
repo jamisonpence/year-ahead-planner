@@ -773,11 +773,11 @@ export default function HabitsPage() {
 
               {!habitsLoading && habits.length === 0 && (
                 <div className="rounded-xl border border-dashed p-6 text-center">
-                  <Sparkles size={24} className="mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">No habits yet</p>
+                  <Sparkles size={28} className="mx-auto opacity-20 mb-2" />
+                  <p className="text-sm font-semibold">No habits yet</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-3">Start building consistency with daily habits</p>
                   <Button size="sm" onClick={() => { setEditHabit(null); setHabitModalOpen(true); }}>
-                    <Plus size={13} className="mr-1" /> Create your first habit
+                    <Plus size={13} className="mr-1" /> New Habit
                   </Button>
                 </div>
               )}
@@ -903,8 +903,8 @@ export default function HabitsPage() {
             {habitsLoading && <div className="text-sm text-muted-foreground py-4 text-center">Loading habits…</div>}
 
             {!habitsLoading && habits.length === 0 && (
-              <div className="rounded-xl border border-dashed p-10 text-center">
-                <Sparkles size={32} className="mx-auto text-muted-foreground mb-3" />
+              <div className="rounded-xl border border-dashed p-6 text-center">
+                <Sparkles size={32} className="mx-auto opacity-20 mb-3" />
                 <p className="font-semibold">Build your habit stack</p>
                 <p className="text-sm text-muted-foreground mt-1">Track anything — water intake, meditation, reading, exercise…</p>
               </div>

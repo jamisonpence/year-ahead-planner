@@ -322,7 +322,7 @@ export default function JournalPage() {
       </div>
 
       {/* Section tab switcher */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 mb-5">
+      <div className="flex gap-1 bg-secondary rounded-lg p-1 mb-5">
         <button
           onClick={() => setSection("journal")}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -420,12 +420,15 @@ export default function JournalPage() {
 
       {/* Entry list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <BookOpen size={52} className="mx-auto mb-4 opacity-20" />
-          <p className="text-sm">
+        <div className="text-center py-16 text-muted-foreground">
+          <BookOpen size={36} className="mx-auto mb-3 opacity-20" />
+          <p className="font-semibold text-foreground">
+            {allEntries.length === 0 ? "No entries yet" : "No entries match your filters"}
+          </p>
+          <p className="text-sm mt-1">
             {allEntries.length === 0
-              ? "No entries yet. Start writing your first entry."
-              : "No entries match your filters."}
+              ? "Start writing your first entry."
+              : "Try adjusting your filters."}
           </p>
           {allEntries.length === 0 && (
             <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => openAdd()}>

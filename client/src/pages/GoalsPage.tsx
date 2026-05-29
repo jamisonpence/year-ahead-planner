@@ -987,7 +987,7 @@ export default function GoalsPage() {
         {/* ── Column 2: Goal Detail ──────────────────────────────────────── */}
         <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${mobileView !== "detail" ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{detailLabel}</span>
+            <span className="text-sm font-semibold text-foreground">{detailLabel}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
 
@@ -1003,7 +1003,7 @@ export default function GoalsPage() {
                 {/* Linked projects — read-only context */}
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-2 px-1">
-                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Linked Projects</span>
+                    <span className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Folder size={14} className="text-primary" /> Linked Projects</span>
                     {selectedGoal.projects.length > 0 && (
                       <span className="text-xs text-muted-foreground">{selectedGoal.projects.length}</span>
                     )}
