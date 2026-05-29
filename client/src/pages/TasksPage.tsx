@@ -1299,57 +1299,87 @@ export default function TasksPage() {
 
         {/* ── Tasks view ────────────────────────────────────────────── */}
         {activeView === "tasks" && (
-          <div>
-            {/* Filter chips */}
-            <div className="flex gap-2 mb-4 flex-wrap">
-              {([
-                { value: "all",            label: `All (${openTasks.length})` },
-                { value: "due_today",      label: "Due Today" },
-                { value: "overdue",        label: "Overdue" },
-                { value: "high_priority",  label: "High Priority" },
-              ] as { value: typeof taskFilter; label: string }[]).map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => setTaskFilter(f.value)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    taskFilter === f.value
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+          <div className="space-y-6">
+            {/* Project task groups */}
+            {sortedActiveProjects.filter(p => (p.tasks ?? []).some((t: any) => !t.completed)).map(p => {
+              const openProjectTasks = (p.tasks ?? []).filter((t: any) => !t.completed);
+              return (
+                <div key={p.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">{p.emoji ?? "📁"}</span>
+                    <span className="text-sm font-semibold text-foreground">{p.title}</span>
+                    <span className="text-xs text-muted-foreground">({openProjectTasks.length})</span>
+                  </div>
+                  <div className="space-y-0.5 pl-2 border-l-2 border-border">
+                    {openProjectTasks.map((t: any) => (
+                      <TaskRow
+                        key={t.id}
+                        task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: t.dueDate, notes: t.notes }}
+                        onToggle={(id, v) => handleToggleProjectTask(p, id, v)}
+                        onDelete={(id) => handleDeleteProjectTask(p, id)}
+                        onUpdate={(id, data) => handleUpdateProjectTask(p, id, data)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
 
-            {filteredTasks.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <ClipboardList size={36} className="mx-auto mb-3 opacity-20" />
-                <p className="font-semibold text-foreground">
-                  {taskFilter === "all" ? "No open tasks" : "No tasks match this filter"}
-                </p>
-                <p className="text-sm mt-1">
-                  {taskFilter === "all" ? "One-off tasks like errands, to-dos, and action items live here." : "Try another filter."}
-                </p>
-                {taskFilter === "all" && (
+            {/* Standalone tasks */}
+            <div>
+              {openTasks.length > 0 && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">📋</span>
+                  <span className="text-sm font-semibold text-foreground">Standalone Tasks</span>
+                  <span className="text-xs text-muted-foreground">({openTasks.length})</span>
+                </div>
+              )}
+              {/* Filter chips */}
+              {openTasks.length > 0 && (
+                <div className="flex gap-2 mb-3 flex-wrap pl-2">
+                  {([
+                    { value: "all",            label: `All (${openTasks.length})` },
+                    { value: "due_today",      label: "Due Today" },
+                    { value: "overdue",        label: "Overdue" },
+                    { value: "high_priority",  label: "High Priority" },
+                  ] as { value: typeof taskFilter; label: string }[]).map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setTaskFilter(f.value)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        taskFilter === f.value
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {filteredTasks.length === 0 && openTasks.length === 0 && sortedActiveProjects.filter(p => (p.tasks ?? []).some((t: any) => !t.completed)).length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <ClipboardList size={36} className="mx-auto mb-3 opacity-20" />
+                  <p className="font-semibold text-foreground">No open tasks</p>
+                  <p className="text-sm mt-1">One-off tasks like errands, to-dos, and action items live here.</p>
                   <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={() => setNewTaskModal(true)}>
                     <Plus size={13} /> New Task
                   </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                {filteredTasks.map(t => (
-                  <TaskRow
-                    key={t.id}
-                    task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
-                    onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
-                    onDelete={(id) => deleteGeneralTask.mutate(id)}
-                    onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
-                  />
-                ))}
-              </div>
-            )}
+                </div>
+              ) : filteredTasks.length > 0 ? (
+                <div className="space-y-0.5 border-l-2 border-border pl-2">
+                  {filteredTasks.map(t => (
+                    <TaskRow
+                      key={t.id}
+                      task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
+                      onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
+                      onDelete={(id) => deleteGeneralTask.mutate(id)}
+                      onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 
