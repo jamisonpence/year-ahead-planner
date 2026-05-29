@@ -6569,6 +6569,7 @@ function HobbyCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
 
         {/* Row 2: Skill level + status chips */}
