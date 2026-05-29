@@ -3006,36 +3006,23 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
   const upcomingTrips = trips.filter(t => !t.endDate || t.endDate >= today);
   const pastTrips     = trips.filter(t => t.endDate && t.endDate < today);
   // When initialFilter is "all" (itineraries view), show all trips without sub-tabs
-  const displayedTrips = initialFilter === "all" ? trips :
+  const displayedTrips = initialFilter === "upcoming" ? upcomingTrips :
+    initialFilter === "past" ? pastTrips :
+    initialFilter === "all" ? trips :
     tripsSubTab === "upcoming" ? upcomingTrips : pastTrips;
 
-  const emptyLabel = initialFilter === "all" ? "No trips yet" :
+  const emptyLabel = initialFilter === "upcoming" ? "No upcoming trips" :
+    initialFilter === "past" ? "No past trips" :
+    initialFilter === "all" ? "No trips yet" :
     tripsSubTab === "upcoming" ? "No upcoming trips" : "No past trips";
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        {initialFilter !== "all" ? (
-          <div className="flex gap-1 border-b flex-1 mr-3">
-            {([
-              { value: "upcoming" as const, label: `Upcoming (${upcomingTrips.length})` },
-              { value: "past"     as const, label: `Past (${pastTrips.length})` },
-            ] as const).map(tab => (
-              <button
-                key={tab.value}
-                onClick={() => setTripsSubTab(tab.value)}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px ${
-                  tripsSubTab === tab.value
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        ) : (
+        {initialFilter === "all" ? (
           <p className="text-sm font-semibold text-foreground flex-1">All Trips ({trips.length})</p>
+        ) : (
+          <span className="flex-1" />
         )}
         <Button size="sm" onClick={openNewTrip} className="gap-1.5 shrink-0">
           <Plus size={13} /> New Trip
