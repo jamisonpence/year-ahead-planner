@@ -2230,7 +2230,6 @@ export default function MusicPage() {
       .then(() => qc.invalidateQueries({ queryKey: ["/api/shares/count"] })).catch(() => {});
   }, [tab]);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
-  const [csvInfoOpen, setCsvInfoOpen] = useState(false);
   const [lastfmOpen, setLastfmOpen] = useState(false);
 
   // Recommend state
@@ -2293,113 +2292,6 @@ export default function MusicPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/music/songs/${id}`),
     onSuccess: () => { invalidate(); toast({ title: "Song removed" }); },
   });
-
-  // ── CSV upload ────────────────────────────────────────────────────────────────
-  const csvRef = useRef<HTMLInputElement>(null);
-
-  const SONG_STATUS_MAP_CSV: Record<string, string> = {
-    want_to_listen: "want_to_listen", "want to listen": "want_to_listen", want: "want_to_listen",
-    listening: "listening",
-    listened: "listened", done: "listened",
-  };
-
-  function parseCsvText(text: string): Record<string, string>[] {
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) return [];
-    const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
-    return lines.slice(1).map(line => {
-      const cols = parseCsvLine(line);
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
-      return row;
-    }).filter(row => Object.values(row).some(v => v));
-  }
-  function parseCsvLine(line: string): string[] {
-    const result: string[] = []; let cur = ""; let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
-      else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
-      else cur += c;
-    }
-    result.push(cur); return result;
-  }
-
-  function downloadCsvTemplate() {
-    const header = "artistName,songTitle,album,genre,year,status,rating,notes";
-    const ex1 = `"Radiohead","Karma Police","OK Computer",Rock,1997,want_to_listen,,`;
-    const ex2 = `"Radiohead","Creep","Pablo Honey",Rock,1992,listened,5,"Classic"`;
-    const ex3 = `"Arctic Monkeys","Do I Wanna Know","AM",Indie Rock,2013,listened,5,`;
-    const blob = new Blob([`${header}\n${ex1}\n${ex2}\n${ex3}`], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "music_template.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const rows = parseCsvText(text);
-    if (rows.length === 0) {
-      toast({ title: "No rows found", description: "Make sure your CSV has a header row and data rows.", variant: "destructive" });
-      e.target.value = ""; return;
-    }
-    // Group by artistname (headers are lowercased)
-    const byArtist = new Map<string, Record<string, string>[]>();
-    for (const row of rows) {
-      const artistName = (row.artistname || row.artist_name || row.artist || "").trim();
-      if (!artistName) continue;
-      if (!byArtist.has(artistName)) byArtist.set(artistName, []);
-      byArtist.get(artistName)!.push(row);
-    }
-    let artistsCreated = 0, songsCreated = 0, errors = 0;
-    const existingMap = new Map<string, number>(artists.map(a => [a.name.toLowerCase(), a.id]));
-    for (const [artistName, artistRows] of byArtist.entries()) {
-      let artistId = existingMap.get(artistName.toLowerCase());
-      if (!artistId) {
-        try {
-          const r = await apiRequest("POST", "/api/music/artists", {
-            name: artistName,
-            genres: artistRows[0].genres || null,
-            isFavorite: false,
-          });
-          const data = await r.json();
-          artistId = data.id;
-          existingMap.set(artistName.toLowerCase(), artistId!);
-          artistsCreated++;
-        } catch { errors++; continue; }
-      }
-      for (const row of artistRows) {
-        const songTitle = (row.songtitle || row.song_title || row.title || "").trim();
-        if (!songTitle) continue;
-        try {
-          const rawStatus = row.status || "want_to_listen";
-          const status = SONG_STATUS_MAP_CSV[rawStatus.toLowerCase().trim()] ?? "want_to_listen";
-          await apiRequest("POST", "/api/music/songs", {
-            artistId,
-            title: songTitle,
-            album: row.album || null,
-            genre: row.genre || null,
-            year: row.year ? parseInt(row.year) : null,
-            status,
-            isFavorite: row.isfavorite === "true" || row.isfavorite === "1",
-            rating: row.rating ? Math.min(5, Math.max(1, parseInt(row.rating))) : null,
-            notes: row.notes || null,
-          });
-          songsCreated++;
-        } catch { errors++; }
-      }
-    }
-    qc.invalidateQueries({ queryKey: ["/api/music/artists"] });
-    const parts = [];
-    if (artistsCreated) parts.push(`${artistsCreated} artist${artistsCreated !== 1 ? "s" : ""}`);
-    if (songsCreated) parts.push(`${songsCreated} song${songsCreated !== 1 ? "s" : ""}`);
-    const summary = parts.length ? parts.join(", ") : "0 items";
-    if (errors === 0) toast({ title: `✓ Imported ${summary}` });
-    else toast({ title: `Imported ${summary}, ${errors} errors`, variant: "destructive" });
-    e.target.value = "";
-  }
 
   // ── Modal helpers ─────────────────────────────────────────────────────────────
   function openAddArtist() {
@@ -2537,25 +2429,6 @@ export default function MusicPage() {
             <Button size="sm" onClick={openAddArtist} className="gap-1.5">
               <Plus className="h-3.5 w-3.5" /> Add Artist
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-1 px-2.5">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={() => csvRef.current?.click()}>
-                  <Upload size={13} className="mr-2" /> Import CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={downloadCsvTemplate}>
-                  <Download size={13} className="mr-2" /> Download CSV Template
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCsvInfoOpen(true)}>
-                  <HelpCircle size={13} className="mr-2" /> CSV Format Guide
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
           </div>
         }
         controls={
@@ -2908,34 +2781,6 @@ export default function MusicPage() {
         artistName={addToPlaylistTarget?.artistName ?? ""}
       />
 
-      {/* CSV Format Info Dialog */}
-      <Dialog open={csvInfoOpen} onOpenChange={setCsvInfoOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><HelpCircle size={16} /> Music CSV Format</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">Your CSV must have a header row. Column names are case-insensitive. <span className="font-semibold text-foreground">artistName</span> and <span className="font-semibold text-foreground">songTitle</span> are required — all others are optional.</p>
-          <div className="space-y-1 text-sm">
-            {[
-              { col: "artistName", req: true,  note: "Artist or band name" },
-              { col: "songTitle",  req: true,  note: "Song title" },
-              { col: "album",      req: false, note: "Album name" },
-              { col: "genre",      req: false, note: "e.g. Rock · Indie · Hip-Hop · Jazz" },
-              { col: "year",       req: false, note: "Release year, e.g. 1997" },
-              { col: "status",     req: false, note: "want_to_listen (default) · listening · listened" },
-              { col: "rating",     req: false, note: "1–5" },
-              { col: "notes",      req: false, note: "Free text" },
-            ].map(({ col, req, note }) => (
-              <div key={col} className="flex gap-3 py-1.5 border-b last:border-0">
-                <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded shrink-0 self-start">{col}</code>
-                {req && <span className="text-xs text-red-500 font-medium shrink-0 self-start pt-0.5">required</span>}
-                <span className="text-xs text-muted-foreground leading-relaxed">{note}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">Songs with the same <code className="font-mono bg-secondary px-1 rounded">artistName</code> are grouped under one artist automatically. Tip: click <strong>Template</strong> to download a pre-filled example CSV.</p>
-        </DialogContent>
-      </Dialog>
       </PageShell>
     </Tabs>
   );
