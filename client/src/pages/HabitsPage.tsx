@@ -59,11 +59,12 @@ function streakLabel(n: number) {
   return `${n} days`;
 }
 
-// Parse workout schedule JSON to get today's entry — mirrors WorkoutsPage logic exactly.
-// Checks ALL active plans (same as WorkoutsPage's merged view) so a workout is never missed.
-function getTodayWorkout(plans: WorkoutPlan[]): { label: string; templateId: number | null } | null {
+// Parse workout schedule JSON to get all of today's entries across active plans.
+// Mirrors WorkoutsPage logic exactly — returns every scheduled workout for today.
+function getTodayWorkouts(plans: WorkoutPlan[]): { label: string; templateId: number | null; planName: string }[] {
   const todayLower = format(new Date(), "EEEE").toLowerCase();
   const nowMs = new Date().getTime();
+  const results: { label: string; templateId: number | null; planName: string }[] = [];
 
   for (const plan of plans) {
     if (!plan.isActive) continue;
@@ -80,24 +81,23 @@ function getTodayWorkout(plans: WorkoutPlan[]): { label: string; templateId: num
           ? Math.max(0, Math.floor((nowMs - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
           : 0;
         const currentWeek = Math.min(weeksElapsed + 1, plan.durationWeeks ?? weeksElapsed + 1);
-        // Exact match first, fall back to week 1 (same as WorkoutsPage)
         const weekEntry = raw.find((w: any) => w.week === currentWeek) ?? raw[0];
         days = weekEntry?.days ?? [];
       } else {
-        // Legacy flat format
         days = raw;
       }
 
       const entry = days.find((d: any) => d.dayOfWeek?.toLowerCase() === todayLower);
       if (entry?.label || entry?.templateName) {
-        return {
+        results.push({
           label: entry.label ?? entry.templateName,
           templateId: entry.templateId ? Number(entry.templateId) : null,
-        };
+          planName: plan.name ?? "",
+        });
       }
     } catch {}
   }
-  return null;
+  return results;
 }
 
 // Extract today's hobby activity blocks from hobby plans
@@ -695,9 +695,7 @@ export default function HabitsPage() {
   });
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const todayWorkout = useMemo(() => getTodayWorkout(allWorkoutPlans), [allWorkoutPlans]);
-  const todayWorkoutLabel = todayWorkout?.label ?? null;
-  const todayWorkoutTemplateId = todayWorkout?.templateId ?? null;
+  const todayWorkouts = useMemo(() => getTodayWorkouts(allWorkoutPlans), [allWorkoutPlans]);
   const todayWorkoutLogged = useMemo(() =>
     workoutLogs.some(l => l.date === today), [workoutLogs, today]);
 
@@ -793,35 +791,32 @@ export default function HabitsPage() {
 
             {/* Workout section */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-sm flex items-center gap-1.5">
-                  <Dumbbell size={14} className="text-primary" />
-                  Workout
-                </h2>
-                <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2"
-                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(null); setWorkoutLogOpen(true); }}>
-                  <Plus size={10} /> Log
-                </Button>
-              </div>
+              <h2 className="font-semibold text-sm flex items-center gap-1.5">
+                <Dumbbell size={14} className="text-primary" />
+                Workout
+              </h2>
 
-              {todayWorkoutLabel ? (
-                <button
-                  className={`w-full rounded-xl border p-3 flex items-center gap-3 text-left transition-colors hover:bg-secondary/60 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}
-                  onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(todayWorkoutTemplateId); setWorkoutLogOpen(true); }}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${todayWorkoutLogged ? "bg-green-500/20" : "bg-primary/10"}`}>
-                    {todayWorkoutLogged
-                      ? <CheckCircle2 size={18} className="text-green-500" />
-                      : <Dumbbell size={18} className="text-primary" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm">{todayWorkoutLabel}</div>
-                    <div className="text-xs text-muted-foreground">{todayWorkoutLogged ? "Logged ✓" : "Tap to log"}</div>
-                  </div>
-                  {!todayWorkoutLogged && (
-                    <span className="text-xs text-primary font-medium shrink-0">Log it →</span>
-                  )}
-                </button>
+              {todayWorkouts.length > 0 ? (
+                todayWorkouts.map((w, i) => (
+                  <button
+                    key={`${w.label}-${i}`}
+                    className={`w-full rounded-xl border p-3 flex items-center gap-3 text-left transition-colors hover:bg-secondary/60 ${todayWorkoutLogged ? "bg-secondary/40" : "bg-card"}`}
+                    onClick={() => { setEditWorkoutLog(null); setPrefillTemplateId(w.templateId); setWorkoutLogOpen(true); }}
+                  >
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${todayWorkoutLogged ? "bg-green-500/20" : "bg-primary/10"}`}>
+                      {todayWorkoutLogged
+                        ? <CheckCircle2 size={18} className="text-green-500" />
+                        : <Dumbbell size={18} className="text-primary" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm">{w.label}</div>
+                      <div className="text-xs text-muted-foreground">{todayWorkoutLogged ? "Logged ✓" : "Tap to log"}</div>
+                    </div>
+                    {!todayWorkoutLogged && (
+                      <span className="text-xs text-primary font-medium shrink-0">Log it →</span>
+                    )}
+                  </button>
+                ))
               ) : (
                 <button
                   className="w-full rounded-xl border p-3 flex items-center gap-3 bg-card text-left transition-colors hover:bg-secondary/60"
