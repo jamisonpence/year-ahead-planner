@@ -102,7 +102,6 @@ const ALL_TABS = [
   { path: "/music",         label: "Music",                   icon: Music2          },
   { path: "/art",           label: "Art",                     icon: Palette         },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
-  { path: "/meal-planner",  label: "Meal Planner",            icon: UtensilsCrossed },
   // ── Places ──
   { path: "/spots",         label: "Places",                  icon: MapPin          },
   { path: "/travel",        label: "Trips",                   icon: Plane           },
@@ -124,7 +123,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal"] },
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
-  { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies", "/meal-planner"] },
+  { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies"] },
   { key: "places",    label: "Places",            paths: ["/spots", "/travel", "/events"] },
   { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
