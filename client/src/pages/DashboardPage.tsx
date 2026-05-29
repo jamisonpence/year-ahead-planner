@@ -31,36 +31,32 @@ import { useAuth } from "@/hooks/useAuth";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "day_planner" | "stats" | "events" | "goals" | "workouts" | "reading" | "quote" | "spots" | "due_soon" | "social_feed" | "my_activity";
+type SectionId = "today" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner";
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  day_planner:  "AI Day Planner",
-  stats:        "Stat Cards",
-  events:       "Upcoming Events",
-  goals:        "Active Goals",
-  workouts:     "Weekly Workouts",
-  reading:      "Currently Reading",
-  quote:        "Featured Quote",
-  spots:        "Places to Visit",
-  due_soon:     "Due Soon",
-  social_feed:  "Friends' Activity",
-  my_activity:  "My Recent Activity",
+  today:            "Today",
+  up_next:          "Up Next",
+  needs_attention:  "Needs Attention",
+  progress:         "Progress",
+  social_feed:      "Friends' Activity",
+  events:           "Upcoming Events",
+  recent_activity:  "Recent Activity",
+  quick_jump:       "Quick Jump",
+  day_planner:      "AI Day Planner",
 };
 
-const SECTION_ORDER: SectionId[] = ["social_feed", "my_activity", "day_planner", "stats", "events", "goals", "workouts", "reading", "quote", "spots", "due_soon"];
+const SECTION_ORDER: SectionId[] = ["today", "up_next", "needs_attention", "progress", "social_feed", "events", "recent_activity", "quick_jump", "day_planner"];
 
 const ALL_ON: Record<SectionId, boolean> = {
-  day_planner: true, stats: true, events: true, goals: true, workouts: true,
-  reading: true, quote: true, spots: true, due_soon: true,
-  social_feed: true, my_activity: true,
+  today: true, up_next: true, needs_attention: true, progress: true,
+  social_feed: true, events: true, recent_activity: true, quick_jump: true, day_planner: false,
 };
 
 function loadVisibility(): Record<SectionId, boolean> {
   try {
-    const raw = localStorage.getItem("dashboard_sections");
+    const raw = localStorage.getItem("dashboard_sections_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Merge with defaults so new sections default to on
       return { ...ALL_ON, ...parsed };
     }
   } catch {}
@@ -68,7 +64,7 @@ function loadVisibility(): Record<SectionId, boolean> {
 }
 
 function saveVisibility(v: Record<SectionId, boolean>) {
-  try { localStorage.setItem("dashboard_sections", JSON.stringify(v)); } catch {}
+  try { localStorage.setItem("dashboard_sections_v2", JSON.stringify(v)); } catch {}
 }
 
 // ── AI Day Planner Component ───────────────────────────────────────────────────
@@ -246,41 +242,39 @@ export default function DashboardPage() {
   const [visible, setVisible] = useState<Record<SectionId, boolean>>(loadVisibility);
   const customRef = useRef<HTMLDivElement>(null);
 
-  // Close customize panel when clicking outside
   useEffect(() => {
     if (!customizing) return;
     function handle(e: MouseEvent) {
-      if (customRef.current && !customRef.current.contains(e.target as Node)) {
-        setCustomizing(false);
-      }
+      if (customRef.current && !customRef.current.contains(e.target as Node)) setCustomizing(false);
     }
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [customizing]);
 
   function toggleSection(id: SectionId) {
-    setVisible(prev => {
-      const next = { ...prev, [id]: !prev[id] };
-      saveVisibility(next);
-      return next;
-    });
+    setVisible(prev => { const next = { ...prev, [id]: !prev[id] }; saveVisibility(next); return next; });
   }
 
   const { user: authUser } = useAuth();
 
-  const { data: events = [] }     = useQuery<EventWithTasks[]>({ queryKey: ["/api/events"] });
-  const { data: books = [] }      = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
-  const { data: wLogs = [] }      = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
-  const { data: wTemplates = [] } = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
-  const { data: goals = [] }      = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
-  const { data: chores = [] }     = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
-  const { data: nutritionGoal }   = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
-  const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
-  const { data: readingGoal }     = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
-  const { data: hobbies = [] }    = useQuery<any[]>({ queryKey: ["/api/hobbies"] });
-  const { data: spots = [] }      = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
-  const { data: quotes = [] }     = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
-  const { data: subs = [] }       = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
+  // ── Data queries (all existing, plus habits/tasks) ─────────────────────────
+  const { data: events = [] }           = useQuery<EventWithTasks[]>({ queryKey: ["/api/events"] });
+  const { data: books = [] }            = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
+  const { data: wLogs = [] }            = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
+  const { data: wTemplates = [] }       = useQuery<WorkoutTemplate[]>({ queryKey: ["/api/workout-templates"] });
+  const { data: goals = [] }            = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+  const { data: chores = [] }           = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
+  const { data: nutritionGoal }         = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
+  const { data: workoutPlans = [] }     = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
+  const { data: readingGoal }           = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
+  const { data: hobbies = [] }          = useQuery<any[]>({ queryKey: ["/api/hobbies"] });
+  const { data: spots = [] }            = useQuery<Spot[]>({ queryKey: ["/api/spots"] });
+  const { data: quotes = [] }           = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
+  const { data: subs = [] }             = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
+  const { data: generalTasks = [] }     = useQuery<any[]>({ queryKey: ["/api/general-tasks"] });
+  const { data: habits = [] }           = useQuery<any[]>({ queryKey: ["/api/habits"] });
+  const { data: habitLogs = [] }        = useQuery<any[]>({ queryKey: ["/api/habit-logs"] });
+  const { data: standaloneProjects = [] } = useQuery<any[]>({ queryKey: ["/api/projects/standalone"] });
 
   const today = todayStr();
   const allSessions = books.flatMap((b) => b.sessions ?? []);
@@ -290,14 +284,15 @@ export default function DashboardPage() {
     .map((e) => ({ ...e, displayDate: e.recurring !== "none" ? nextOccurrence(e.date, e.recurring) : e.date }))
     .filter((e) => { const d = daysUntil(e.displayDate); return d >= 0 && d <= 14; })
     .sort((a, b) => a.displayDate.localeCompare(b.displayDate))
-    .slice(0, 6);
-
+    .slice(0, 8);
   const todayEvents = upcomingEvents.filter((e) => e.displayDate === today);
 
   // ── Reading ────────────────────────────────────────────────────────────────
   const currentBooks = books.filter((b) => b.status === "current");
   const rStreak = readingStreak(allSessions);
-  const { pagesRead: monthPages, booksFinished: monthBooks } = monthlyReadingStats(allSessions, books);
+  const { booksFinished: monthBooks } = monthlyReadingStats(allSessions, books);
+  const currentYear = new Date().getFullYear();
+  const booksFinishedThisYear = books.filter((b) => b.status === "finished" && (b as any).finishDate?.startsWith(String(currentYear))).length;
 
   // ── Workouts ───────────────────────────────────────────────────────────────
   const wStreak = workoutStreak(wLogs);
@@ -305,15 +300,10 @@ export default function DashboardPage() {
   const recentPRs = getRecentPRs(wLogs);
   const weekDates = thisWeekDates();
   const weekDone = new Set(wLogs.filter((l) => l.completed && weekDates.includes(l.date)).map((l) => l.date));
+  const todayWorkoutDone = weekDone.has(today);
 
   // ── Goals ──────────────────────────────────────────────────────────────────
   const activeGoals = goals.filter((g) => !g.completedDate);
-  const currentYear = new Date().getFullYear();
-  const booksFinishedThisYear = books.filter((b) => {
-    if (b.status !== "finished") return false;
-    const fd = (b as any).finishDate as string | null;
-    return fd ? fd.startsWith(String(currentYear)) : false;
-  }).length;
   const avgGoalPct = activeGoals.length
     ? Math.round(activeGoals.reduce((sum, g) => {
         const pct = g.progressType === "boolean"
@@ -325,34 +315,125 @@ export default function DashboardPage() {
 
   // ── Spots ──────────────────────────────────────────────────────────────────
   const wantToVisit = spots.filter((s) => s.status === "want_to_visit");
-  const favoriteSpots = spots.filter((s) => s.isFavorite);
 
   // ── Quotes ─────────────────────────────────────────────────────────────────
   const favoriteQuotes = quotes.filter((q) => q.isFavorite);
   const quotePool = favoriteQuotes.length > 0 ? favoriteQuotes : quotes;
   const featuredQuote = quotePool.length > 0 ? quotePool[quoteIdx % quotePool.length] : null;
 
-  // ── Subscriptions due ──────────────────────────────────────────────────────
+  // ── Chores ─────────────────────────────────────────────────────────────────
+  const activeChores = chores.filter((c) => c.isActive && c.nextDue)
+    .map((c) => ({ ...c, daysLeft: daysUntil(c.nextDue!) }));
+  const choresToday   = activeChores.filter((c) => c.daysLeft !== null && c.daysLeft === 0);
+  const choresOverdue = activeChores.filter((c) => c.daysLeft !== null && c.daysLeft < 0);
+  const choresUpNext  = activeChores.filter((c) => c.daysLeft !== null && c.daysLeft > 0 && c.daysLeft <= 7);
+
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  const openGeneralTasks   = generalTasks.filter((t: any) => !t.completed);
+  const tasksDueToday      = openGeneralTasks.filter((t: any) => (t as any).dueDate === today);
+  const tasksOverdue       = openGeneralTasks.filter((t: any) => (t as any).dueDate && (t as any).dueDate < today);
+  const tasksDueThisWeek   = openGeneralTasks.filter((t: any) => {
+    const d = (t as any).dueDate;
+    if (!d || d <= today) return false;
+    const days = daysUntil(d);
+    return days !== null && days <= 7;
+  });
+
+  // Goal tasks due today / overdue
+  const goalTasksDueToday: any[] = [];
+  const goalTasksOverdue: any[]  = [];
+  goals.forEach((g) => {
+    (g.tasks ?? []).forEach((t: any) => {
+      if (t.completed || !t.dueDate) return;
+      if (t.dueDate === today) goalTasksDueToday.push({ ...t, source: g.title });
+      else if (t.dueDate < today) goalTasksOverdue.push({ ...t, source: g.title });
+    });
+  });
+
+  const allTasksDueToday   = [...tasksDueToday, ...goalTasksDueToday];
+  const allTasksOverdue    = [...tasksOverdue, ...goalTasksOverdue];
+
+  // ── Habits ─────────────────────────────────────────────────────────────────
+  const todayHabitLogIds = new Set(
+    habitLogs.filter((l: any) => l.date === today && l.completed).map((l: any) => l.habitId)
+  );
+  const habitsActiveToday = habits.filter((h: any) => h.isActive !== false);
+  const habitsDueToday    = habitsActiveToday.filter((h: any) => !todayHabitLogIds.has(h.id));
+  const habitsCompletedToday = habitsActiveToday.filter((h: any) => todayHabitLogIds.has(h.id));
+
+  // Yesterday's missed habits
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayLogIds = new Set(
+    habitLogs.filter((l: any) => l.date === yesterdayStr && l.completed).map((l: any) => l.habitId)
+  );
+  const habitsMissedYesterday = habitsActiveToday.filter((h: any) => !yesterdayLogIds.has(h.id));
+
+  // ── Subscriptions ──────────────────────────────────────────────────────────
   const dueSubs = (subs as Subscription[])
     .filter((s) => (s as any).isActive !== false && (s as any).nextRenewal)
     .map((s) => ({ ...s, daysLeft: daysUntil((s as any).nextRenewal) }))
-    .filter((s) => s.daysLeft !== null && s.daysLeft <= 14 && s.daysLeft >= 0)
+    .filter((s) => s.daysLeft !== null && s.daysLeft <= 7 && s.daysLeft >= 0)
     .sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0))
-    .slice(0, 4);
+    .slice(0, 3);
 
-  // ── Due soon ───────────────────────────────────────────────────────────────
-  const dueSoon: { title: string; due: string; source: string; type: string }[] = [];
-  events.forEach((e) => e.tasks?.filter((t) => !t.completed && t.dueDate && daysUntil(t.dueDate) <= 7 && daysUntil(t.dueDate) >= 0)
-    .forEach((t) => dueSoon.push({ title: t.title, due: t.dueDate!, source: e.title, type: "task" })));
-  goals.forEach((g) => g.tasks?.filter((t) => !t.completed && t.dueDate && daysUntil(t.dueDate) <= 7 && daysUntil(t.dueDate) >= 0)
-    .forEach((t) => dueSoon.push({ title: t.title, due: t.dueDate!, source: g.title, type: "task" })));
-  dueSoon.sort((a, b) => a.due.localeCompare(b.due));
+  // ── Projects ───────────────────────────────────────────────────────────────
+  const activeProjects = standaloneProjects.filter((p: any) => p.status !== "done");
+  const goalProjects   = goals.flatMap((g) => (g.projects ?? []).filter((p: any) => p.status !== "done"));
+  const totalActiveProjects = activeProjects.length + goalProjects.length;
 
-  const dueChores = chores
-    .filter((c) => c.isActive && c.nextDue)
-    .map((c) => ({ ...c, daysLeft: daysUntil(c.nextDue!) }))
-    .filter((c) => c.daysLeft !== null && c.daysLeft <= 3)
-    .sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0));
+  // ── Hobby plans ────────────────────────────────────────────────────────────
+  const activeHobbyPlans: Array<{ plan: any; hobby: any }> = [];
+  for (const h of hobbies) {
+    try {
+      const o = JSON.parse(h.extraJson || "{}");
+      if (Array.isArray(o.plans)) {
+        for (const p of o.plans) { if (p.isActive && !p.completedAt) activeHobbyPlans.push({ plan: p, hobby: h }); }
+      }
+    } catch {}
+  }
+
+  // ── TODAY items (aggregated) ────────────────────────────────────────────────
+  type TodayItem = { key: string; icon: React.ReactNode; label: string; sub?: string; href: string; urgent?: boolean; done?: boolean };
+  const todayItems: TodayItem[] = [];
+  todayEvents.forEach((e) => todayItems.push({
+    key: `ev-${e.id}`, icon: <Calendar size={13} className="text-violet-500" />,
+    label: e.title, sub: e.location ?? "Event today", href: "/calendar", urgent: true,
+  }));
+  allTasksDueToday.forEach((t) => todayItems.push({
+    key: `task-${t.id}`, icon: <CheckCircle2 size={13} className="text-blue-500" />,
+    label: t.title, sub: t.source ? `from ${t.source}` : "Task due today", href: "/tasks",
+  }));
+  habitsDueToday.slice(0, 3).forEach((h: any) => todayItems.push({
+    key: `habit-${h.id}`, icon: <Zap size={13} className="text-emerald-500" />,
+    label: h.name ?? h.title, sub: "Habit — not yet done", href: "/habits",
+  }));
+  choresToday.forEach((c) => todayItems.push({
+    key: `chore-${c.id}`, icon: <Home size={13} className="text-amber-500" />,
+    label: c.title, sub: "Chore due today", href: "/housekeeping",
+  }));
+  if (!todayWorkoutDone && wPlanned > 0) todayItems.push({
+    key: "workout", icon: <Dumbbell size={13} className="text-blue-400" />,
+    label: "Log today's workout", sub: `${wCompleted}/${wPlanned} this week`, href: "/workouts",
+  });
+
+  // ── UP NEXT items ──────────────────────────────────────────────────────────
+  const upNextEvents = upcomingEvents.filter((e) => e.displayDate > today).slice(0, 4);
+
+  // ── NEEDS ATTENTION ────────────────────────────────────────────────────────
+  const attentionItems: TodayItem[] = [];
+  allTasksOverdue.slice(0, 4).forEach((t) => attentionItems.push({
+    key: `ov-task-${t.id}`, icon: <AlertTriangle size={13} className="text-red-500" />,
+    label: t.title, sub: t.source ? `from ${t.source} · overdue` : "Task overdue", href: "/tasks", urgent: true,
+  }));
+  choresOverdue.slice(0, 3).forEach((c) => attentionItems.push({
+    key: `ov-chore-${c.id}`, icon: <RefreshCw size={13} className="text-red-500" />,
+    label: c.title, sub: `${Math.abs(c.daysLeft!)}d overdue`, href: "/housekeeping", urgent: true,
+  }));
+  habitsMissedYesterday.slice(0, 2).forEach((h: any) => attentionItems.push({
+    key: `miss-habit-${h.id}`, icon: <Zap size={13} className="text-amber-500" />,
+    label: h.name ?? h.title, sub: "Missed yesterday", href: "/habits",
+  }));
 
   const dayLabel = (d: number | null) => {
     if (d === null) return "";
@@ -362,82 +443,58 @@ export default function DashboardPage() {
     return `${d}d`;
   };
 
-  const SPOT_EMOJIS: Record<string, string> = {
-    restaurant: "🍽️", bar: "🍺", cafe: "☕", park: "🌳", trail: "🥾",
-    shop: "🛍️", service: "🔧", attraction: "🎡", hotel: "🏨", other: "📍",
-  };
-
   const hiddenCount = SECTION_ORDER.filter(id => !visible[id]).length;
+
+  const QUICK_LINKS = [
+    { href: "/goals",         label: "Goals",        icon: <Target size={15} />,       color: "text-amber-500" },
+    { href: "/tasks",         label: "Tasks",        icon: <CheckCircle2 size={15} />,  color: "text-blue-500"  },
+    { href: "/workouts",      label: "Workouts",     icon: <Dumbbell size={15} />,      color: "text-indigo-500"},
+    { href: "/nutrition",     label: "Nutrition",    icon: <Apple size={15} />,         color: "text-rose-500"  },
+    { href: "/spots",         label: "Places",       icon: <MapPin size={15} />,        color: "text-emerald-500"},
+    { href: "/calendar",      label: "Events",       icon: <Calendar size={15} />,      color: "text-violet-500"},
+    { href: "/messenger",     label: "Messenger",    icon: <MessageCircle size={15} />, color: "text-sky-500"   },
+    { href: "/relationships", label: "Friends",      icon: <Users size={15} />,         color: "text-pink-500"  },
+  ];
 
   return (
     <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
-      {/* Header */}
+
+      {/* ── 1. Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          <h1 className="text-2xl font-bold leading-tight">Dashboard</h1>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {/* Quick-add shortcuts — desktop only; on mobile use the + button in the nav */}
           <div className="hidden sm:flex gap-2 items-center">
-            <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5"><Plus size={13} /><Calendar size={13} />Event</Button>
-            <Button size="sm" variant="outline" onClick={() => setAddBook(true)} className="gap-1.5"><Plus size={13} /><BookOpen size={13} />Book</Button>
-            <Button size="sm" variant="outline" onClick={() => setAddSession(true)} className="gap-1.5"><Plus size={13} /><BookMarked size={13} />Reading Log</Button>
-            <Button size="sm" onClick={() => setAddWorkout(true)} className="gap-1.5"><Plus size={13} /><Dumbbell size={13} />Workout Log</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Calendar size={12} />Event</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddWorkout(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Dumbbell size={12} />Workout</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddSession(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><BookMarked size={12} />Reading</Button>
           </div>
           <div className="relative" ref={customRef}>
-            <Button
-              size="sm"
-              variant={customizing ? "secondary" : "outline"}
-              onClick={() => setCustomizing(v => !v)}
-              className="gap-1.5"
-              title="Customize dashboard"
-            >
-              <Settings2 size={13} />
-              Customize
-              {hiddenCount > 0 && (
-                <span className="ml-0.5 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                  {hiddenCount}
-                </span>
-              )}
+            <Button size="sm" variant={customizing ? "secondary" : "outline"} onClick={() => setCustomizing(v => !v)} className="gap-1.5 h-8 text-xs">
+              <Settings2 size={12} /> Customize
+              {hiddenCount > 0 && <span className="ml-0.5 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{hiddenCount}</span>}
             </Button>
             {customizing && (
-              <div className="absolute right-0 top-full mt-2 z-50 w-64 bg-popover border rounded-xl shadow-lg p-4">
+              <div className="absolute right-0 top-full mt-2 z-50 w-60 bg-popover border rounded-xl shadow-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-semibold">Dashboard Sections</span>
-                  <button onClick={() => setCustomizing(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                    <X size={14} />
-                  </button>
+                  <span className="text-sm font-semibold">Sections</span>
+                  <button onClick={() => setCustomizing(false)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
                 </div>
                 <div className="space-y-1">
                   {SECTION_ORDER.map((id) => (
-                    <label key={id} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-secondary/60 cursor-pointer group">
-                      <span className={`text-sm ${visible[id] ? "text-foreground" : "text-muted-foreground"}`}>
-                        {SECTION_LABELS[id]}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={visible[id]}
-                        onClick={() => toggleSection(id)}
-                        className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${visible[id] ? "bg-primary" : "bg-secondary border border-border"}`}
-                      >
+                    <label key={id} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-secondary/60 cursor-pointer">
+                      <span className={`text-sm ${visible[id] ? "text-foreground" : "text-muted-foreground"}`}>{SECTION_LABELS[id]}</span>
+                      <button type="button" role="switch" aria-checked={visible[id]} onClick={() => toggleSection(id)}
+                        className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${visible[id] ? "bg-primary" : "bg-secondary border border-border"}`}>
                         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${visible[id] ? "translate-x-4" : "translate-x-0.5"}`} />
                       </button>
                     </label>
                   ))}
                 </div>
                 {hiddenCount > 0 && (
-                  <button
-                    onClick={() => {
-                      const next = { ...ALL_ON };
-                      saveVisibility(next);
-                      setVisible(next);
-                    }}
-                    className="mt-3 text-xs text-muted-foreground hover:text-foreground w-full text-center transition-colors"
-                  >
-                    Show all sections
-                  </button>
+                  <button onClick={() => { const next = { ...ALL_ON }; saveVisibility(next); setVisible(next); }} className="mt-3 text-xs text-muted-foreground hover:text-foreground w-full text-center">Show all</button>
                 )}
               </div>
             )}
@@ -445,485 +502,341 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Today strip — always shown */}
-      {(todayEvents.length > 0 || dueChores.some((c) => (c.daysLeft ?? 1) <= 0)) && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex flex-wrap gap-4 items-center">
-          <span className="text-xs font-semibold text-primary uppercase tracking-wider shrink-0">Today</span>
-          {todayEvents.map((e) => (
-            <span key={e.id} className="flex items-center gap-1.5 text-sm">
-              <Calendar size={13} className="text-primary shrink-0" />
-              <span className="font-medium">{e.title}</span>
-            </span>
-          ))}
-          {dueChores.filter((c) => (c.daysLeft ?? 1) <= 0).map((c) => (
-            <span key={c.id} className="flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400">
-              <RefreshCw size={13} className="shrink-0" />
-              <span>{c.title} {(c.daysLeft ?? 0) < 0 ? `(${Math.abs(c.daysLeft!)}d overdue)` : "(due today)"}</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* ── 2-column layout ───────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
-      {/* Social Feed */}
-      {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
-
-      {/* My Recent Activity */}
-      {visible.my_activity && <MyRecentActivity />}
-
-      {/* AI Day Planner */}
-      {visible.day_planner && <AIDayPlanner />}
-
-      {/* Stat cards */}
-      {visible.stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard
-            icon={<Target size={17} />} color="text-[hsl(var(--cat-goal))]"
-            label="Goals" value={String(activeGoals.length)}
-            sub={activeGoals.length ? `${avgGoalPct}% avg progress` : "none active"}
-          />
-          <StatCard
-            icon={<Dumbbell size={17} />} color="text-[hsl(210_80%_48%)]"
-            label="Workouts" value={`${wCompleted}/${wPlanned}`}
-            sub={wStreak > 0 ? `${wStreak}d streak` : "this week"}
-          />
-          <StatCard
-            icon={<BookOpen size={17} />} color="text-[hsl(25_85%_52%)]"
-            label="Reading" value={String(currentBooks.length)}
-            sub={rStreak > 0 ? `${rStreak}d streak · ${monthBooks} finished` : `${monthPages} pages this month`}
-          />
-          <StatCard
-            icon={<MapPin size={17} />} color="text-emerald-500"
-            label="Places" value={String(spots.length)}
-            sub={wantToVisit.length > 0 ? `${wantToVisit.length} want to visit` : `${favoriteSpots.length} favorites`}
-          />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* ── Left column ──────────────────────────────────────────────── */}
+        {/* ── Left column (primary — 2/3 width on desktop) ───────────────── */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Upcoming Events */}
-          {visible.events && (
-            <Section title="Upcoming Events" icon={<Calendar size={14} className="text-[hsl(var(--cat-travel))]" />} linkHref="/calendar" linkLabel="Calendar">
-              {upcomingEvents.length === 0 ? (
-                <Empty icon={<Calendar size={26} />} text="No events in the next 2 weeks" />
+          {/* ── TODAY (most prominent) ─────────────────────────────────────── */}
+          {visible.today && (
+            <div className="bg-card border-2 border-primary/30 rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Sun size={15} className="text-amber-500" />
+                  <span className="text-sm font-bold">Today</span>
+                  {habitsCompletedToday.length > 0 && (
+                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
+                      {habitsCompletedToday.length} habit{habitsCompletedToday.length !== 1 ? "s" : ""} done
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">{todayItems.length} item{todayItems.length !== 1 ? "s" : ""}</span>
+              </div>
+              {todayItems.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+                  <p className="text-sm font-medium text-foreground">You're all caught up!</p>
+                  <p className="text-xs mt-1">Nothing urgent on the schedule today.</p>
+                </div>
               ) : (
-                <div className="space-y-1.5">
-                  {upcomingEvents.map((e) => {
-                    const d = daysUntil(e.displayDate);
-                    const isToday = d === 0;
-                    return (
-                      <div key={e.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${isToday ? "bg-primary/8 border border-primary/20" : "bg-secondary/40"}`}>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{e.title}</p>
-                          <p className="text-xs text-muted-foreground">{format(parseISO(e.displayDate), "MMM d")}{e.location ? ` · ${e.location}` : ""}</p>
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+                  {todayItems.map((item) => (
+                    <Link key={item.key} href={item.href}>
+                      <a className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-secondary/60 ${item.urgent ? "bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/50" : "bg-secondary/30"}`}>
+                        <span className="shrink-0">{item.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.label}</p>
+                          {item.sub && <p className="text-xs text-muted-foreground">{item.sub}</p>}
                         </div>
-                        <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full border ml-3 ${
-                          isToday ? "text-primary bg-primary/10 border-primary/20"
-                          : d <= 3 ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800"
-                          : "text-muted-foreground bg-secondary border-border"
-                        }`}>
-                          {dayLabel(d)}
-                        </span>
-                      </div>
-                    );
-                  })}
+                        <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+                      </a>
+                    </Link>
+                  ))}
                 </div>
               )}
-            </Section>
+              {/* AI Day Planner inline if enabled */}
+              {visible.day_planner && (
+                <div className="mt-4 pt-4 border-t">
+                  <AIDayPlanner />
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Active Goals */}
-          {visible.goals && (
-            <Section title="Active Goals" icon={<Target size={14} className="text-[hsl(var(--cat-goal))]" />} linkHref="/goals" linkLabel="Goals">
-              {activeGoals.length === 0 && !nutritionGoal && !workoutPlans.find(p => p.isActive) && !readingGoal && !hobbies.some((h: any) => { try { const o = JSON.parse(h.extraJson || "{}"); return (Array.isArray(o.plans) && o.plans.some((p: any) => p.isActive && !p.completedAt)) || (Array.isArray(o.goals) && o.goals.some((g: any) => g.status === "active")); } catch { return false; } }) ? (
-                <Empty icon={<Target size={26} />} text="No active goals yet" />
+          {/* ── UP NEXT ────────────────────────────────────────────────────── */}
+          {visible.up_next && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-blue-500" />
+                  <span className="text-sm font-semibold">Up Next</span>
+                </div>
+                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Calendar <ChevronRight size={12} /></a></Link>
+              </div>
+              {upNextEvents.length === 0 && tasksDueThisWeek.length === 0 && choresUpNext.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Nothing coming up in the next 7 days.</p>
               ) : (
-                <div className="space-y-3">
-                  {activeGoals.slice(0, 5).map((g) => {
-                    const pct = g.progressType === "boolean"
-                      ? (g.progressCurrent >= g.progressTarget ? 100 : 0)
-                      : g.progressTarget > 0 ? Math.min(100, Math.round((g.progressCurrent / g.progressTarget) * 100)) : 0;
-                    const openTasks = (g.tasks ?? []).filter((t: any) => !t.completed).length;
+                <div className="space-y-1.5">
+                  {upNextEvents.map((e) => {
+                    const d = daysUntil(e.displayDate);
                     return (
-                      <div key={g.id} className="p-3 rounded-lg bg-secondary/40 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium truncate">{g.title}</p>
-                          <span className="text-xs text-muted-foreground shrink-0 font-semibold">{pct}%</span>
-                        </div>
-                        <Progress value={pct} className="h-1.5" />
-                        {openTasks > 0 && (
-                          <p className="text-xs text-muted-foreground">{openTasks} task{openTasks !== 1 ? "s" : ""} remaining</p>
-                        )}
-                      </div>
+                      <Link key={e.id} href="/calendar">
+                        <a className="flex items-center gap-3 px-3 py-2 rounded-xl bg-secondary/30 hover:bg-secondary/60 transition-colors">
+                          <Calendar size={13} className="text-violet-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{e.title}</p>
+                            <p className="text-xs text-muted-foreground">{format(parseISO(e.displayDate), "EEE, MMM d")}{e.location ? ` · ${e.location}` : ""}</p>
+                          </div>
+                          <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full border ${d === 1 ? "text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800" : "text-muted-foreground bg-secondary border-border"}`}>
+                            {dayLabel(d)}
+                          </span>
+                        </a>
+                      </Link>
                     );
                   })}
-                  {/* Nutrition Goals card */}
-                  {nutritionGoal && (
-                    <Link href="/goals">
-                      <a className="block p-3 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 space-y-2 hover:border-rose-400 transition-colors">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Apple size={13} className="text-rose-500 shrink-0" />
-                            <p className="text-sm font-medium">Nutrition Goals</p>
-                          </div>
-                          <ChevronRight size={12} className="text-muted-foreground" />
+                  {tasksDueThisWeek.slice(0, 3).map((t: any) => (
+                    <Link key={t.id} href="/tasks">
+                      <a className="flex items-center gap-3 px-3 py-2 rounded-xl bg-secondary/30 hover:bg-secondary/60 transition-colors">
+                        <CheckCircle2 size={13} className="text-blue-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{t.title}</p>
+                          <p className="text-xs text-muted-foreground">Task · {dayLabel(daysUntil(t.dueDate))}</p>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.calories}</span> kcal</span>
-                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.protein}g</span> protein</span>
-                          <span className="flex items-center gap-1"><span className="font-semibold text-foreground">{nutritionGoal.waterGlasses}</span> glasses</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{format(parseISO(t.dueDate), "MMM d")}</span>
+                      </a>
+                    </Link>
+                  ))}
+                  {choresUpNext.slice(0, 2).map((c) => (
+                    <Link key={c.id} href="/housekeeping">
+                      <a className="flex items-center gap-3 px-3 py-2 rounded-xl bg-secondary/30 hover:bg-secondary/60 transition-colors">
+                        <RefreshCw size={13} className="text-amber-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{c.title}</p>
+                          <p className="text-xs text-muted-foreground">Chore · {dayLabel(c.daysLeft)}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">{dayLabel(c.daysLeft)}</span>
+                      </a>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── NEEDS ATTENTION ────────────────────────────────────────────── */}
+          {visible.needs_attention && attentionItems.length > 0 && (
+            <div className="bg-card border border-amber-200 dark:border-amber-800/60 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle size={14} className="text-amber-500" />
+                <span className="text-sm font-semibold">Needs Attention</span>
+                <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">{attentionItems.length}</span>
+              </div>
+              <div className="space-y-1.5">
+                {attentionItems.map((item) => (
+                  <Link key={item.key} href={item.href}>
+                    <a className="flex items-center gap-3 px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors">
+                      <span className="shrink-0">{item.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.label}</p>
+                        {item.sub && <p className="text-xs text-muted-foreground">{item.sub}</p>}
+                      </div>
+                      <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+                    </a>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* ── Right column (secondary) ────────────────────────────────────── */}
+        <div className="space-y-5">
+
+          {/* ── PROGRESS ───────────────────────────────────────────────────── */}
+          {visible.progress && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={14} className="text-primary" />
+                  <span className="text-sm font-semibold">Progress</span>
+                </div>
+                <Link href="/goals"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Goals <ChevronRight size={12} /></a></Link>
+              </div>
+              <div className="space-y-3">
+                {/* Goals summary */}
+                {activeGoals.length > 0 && (
+                  <Link href="/goals">
+                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Target size={13} className="text-amber-500 shrink-0" />
+                        <span className="text-xs font-medium">{activeGoals.length} active goal{activeGoals.length !== 1 ? "s" : ""}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-muted-foreground">{avgGoalPct}% avg</span>
+                    </a>
+                  </Link>
+                )}
+                {/* Projects */}
+                {totalActiveProjects > 0 && (
+                  <Link href="/tasks">
+                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={13} className="text-blue-500 shrink-0" />
+                        <span className="text-xs font-medium">{totalActiveProjects} active project{totalActiveProjects !== 1 ? "s" : ""}</span>
+                      </div>
+                      <ChevronRight size={12} className="text-muted-foreground" />
+                    </a>
+                  </Link>
+                )}
+                {/* Workout streak */}
+                <Link href="/workouts">
+                  <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                    <div className="flex items-center gap-2">
+                      <Flame size={13} className="text-amber-500 shrink-0" />
+                      <span className="text-xs font-medium">{wStreak}d workout streak</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{wCompleted}/{wPlanned} wk</span>
+                  </a>
+                </Link>
+                {/* Active workout plan */}
+                {(() => {
+                  const activePlan = workoutPlans.find(p => p.isActive);
+                  if (!activePlan) return null;
+                  const weeksElapsed = activePlan.startDate ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000)) : null;
+                  const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0) ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100)) : 0;
+                  return (
+                    <Link href="/workouts">
+                      <a className="block space-y-1 py-1 hover:opacity-80 transition-opacity">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Dumbbell size={13} className="text-blue-500 shrink-0" />
+                            <span className="text-xs font-medium truncate">{activePlan.name}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                        </div>
+                        <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </a>
                     </Link>
-                  )}
-                  {/* Active Workout Plan card */}
-                  {(() => {
-                    const activePlan = workoutPlans.find(p => p.isActive);
-                    if (!activePlan) return null;
-                    const weeksElapsed = activePlan.startDate
-                      ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
-                      : null;
-                    const pct = (weeksElapsed !== null && activePlan.durationWeeks > 0)
-                      ? Math.min(100, Math.round((weeksElapsed / activePlan.durationWeeks) * 100))
-                      : 0;
-                    const currentWeek = weeksElapsed !== null ? Math.min(weeksElapsed + 1, activePlan.durationWeeks) : null;
-                    return (
-                      <Link href="/workouts">
-                        <a className="block p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2 hover:border-blue-400 transition-colors">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <Dumbbell size={13} className="text-blue-500 shrink-0" />
-                              <p className="text-sm font-medium truncate">{activePlan.name}</p>
-                            </div>
-                            <ChevronRight size={12} className="text-muted-foreground shrink-0" />
-                          </div>
-                          <Progress value={pct} className="h-1.5" />
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span className="capitalize">{activePlan.goalType.replace(/_/g, " ")}</span>
-                            <span>{currentWeek !== null ? `Week ${currentWeek} of ${activePlan.durationWeeks}` : `${pct}% complete`}</span>
-                          </div>
-                        </a>
-                      </Link>
-                    );
-                  })()}
-                  {/* Reading Goal card */}
-                  {readingGoal && (() => {
-                    const pct = Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100));
-                    return (
-                      <Link href="/reading">
-                        <a className="block p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2 hover:border-amber-400 transition-colors">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <BookOpen size={13} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                              <p className="text-sm font-medium">{currentYear} Reading Goal</p>
-                            </div>
-                            <ChevronRight size={12} className="text-muted-foreground shrink-0" />
-                          </div>
-                          <Progress value={pct} className="h-1.5" />
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{booksFinishedThisYear} of {readingGoal.booksTarget} books</span>
-                            <span>{pct}% complete</span>
-                          </div>
-                        </a>
-                      </Link>
-                    );
-                  })()}
-                  {/* Active Hobby Plans & Goals card */}
-                  {(() => {
-                    const activeHobbyPlans: Array<{ plan: any; hobby: any }> = [];
-                    const activeHobbyGoals: Array<{ goal: any; hobby: any }> = [];
-                    for (const h of hobbies) {
-                      try {
-                        const o = JSON.parse(h.extraJson || "{}");
-                        if (Array.isArray(o.plans)) {
-                          for (const p of o.plans) {
-                            if (p.isActive && !p.completedAt) activeHobbyPlans.push({ plan: p, hobby: h });
-                          }
-                        }
-                        if (Array.isArray(o.goals)) {
-                          for (const g of o.goals) {
-                            if (g.status === "active") activeHobbyGoals.push({ goal: g, hobby: h });
-                          }
-                        }
-                      } catch {}
-                    }
-                    const allItems = [
-                      ...activeHobbyPlans.map(({ plan, hobby }) => ({ type: "plan" as const, item: plan, hobby })),
-                      ...activeHobbyGoals.map(({ goal, hobby }) => ({ type: "goal" as const, item: goal, hobby })),
-                    ];
-                    if (allItems.length === 0) return null;
-                    const shown = allItems.slice(0, 3);
-                    return (
-                      <Link href="/hobbies">
-                        <a className="block p-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 space-y-2 hover:border-violet-400 transition-colors">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <Heart size={13} className="text-violet-500 shrink-0" />
-                              <p className="text-sm font-medium">Hobby Plans & Goals</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">{allItems.length} active</span>
-                              <ChevronRight size={12} className="text-muted-foreground shrink-0" />
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            {shown.map((entry, i) => {
-                              if (entry.type === "plan") {
-                                const steps: any[] = entry.item.steps ?? [];
-                                const done = steps.filter((s: any) => s.done).length;
-                                const total = steps.length;
-                                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                                return (
-                                  <div key={i} className="flex items-center justify-between text-xs gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                                      <span className="truncate font-medium">{entry.item.title}</span>
-                                      <span className="text-muted-foreground shrink-0">· {entry.hobby.name}</span>
-                                    </div>
-                                    <span className="text-muted-foreground shrink-0">{pct}%</span>
-                                  </div>
-                                );
-                              } else {
-                                const g = entry.item;
-                                const pct = (g.target ?? 0) > 0 ? Math.min(100, Math.round(((g.current ?? 0) / g.target) * 100)) : 0;
-                                return (
-                                  <div key={i} className="flex items-center justify-between text-xs gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                                      <span className="truncate font-medium">{g.title}</span>
-                                      <span className="text-muted-foreground shrink-0">· {entry.hobby.name}</span>
-                                    </div>
-                                    <span className="text-muted-foreground shrink-0">{pct}%</span>
-                                  </div>
-                                );
-                              }
-                            })}
-                          </div>
-                          {allItems.length > 3 && (
-                            <p className="text-[10px] text-muted-foreground">+{allItems.length - 3} more</p>
-                          )}
-                        </a>
-                      </Link>
-                    );
-                  })()}
-                </div>
-              )}
-            </Section>
+                  );
+                })()}
+                {/* Reading goal */}
+                {readingGoal && (
+                  <Link href="/reading">
+                    <a className="block space-y-1 py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <BookOpen size={13} className="text-amber-500 shrink-0" />
+                          <span className="text-xs font-medium">{currentYear} Reading</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{booksFinishedThisYear}/{readingGoal.booksTarget}</span>
+                      </div>
+                      <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(100, Math.round((booksFinishedThisYear / readingGoal.booksTarget) * 100))}%` }} />
+                      </div>
+                    </a>
+                  </Link>
+                )}
+                {/* Nutrition */}
+                {nutritionGoal && (
+                  <Link href="/nutrition">
+                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-2">
+                        <Apple size={13} className="text-rose-500 shrink-0" />
+                        <span className="text-xs font-medium">Nutrition goals set</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{nutritionGoal.calories} kcal</span>
+                    </a>
+                  </Link>
+                )}
+                {/* Hobby plans */}
+                {activeHobbyPlans.length > 0 && (
+                  <Link href="/hobbies">
+                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-2">
+                        <Heart size={13} className="text-violet-500 shrink-0" />
+                        <span className="text-xs font-medium">{activeHobbyPlans.length} hobby plan{activeHobbyPlans.length !== 1 ? "s" : ""}</span>
+                      </div>
+                      <ChevronRight size={12} className="text-muted-foreground" />
+                    </a>
+                  </Link>
+                )}
+                {/* Currently reading */}
+                {currentBooks.length > 0 && (
+                  <Link href="/reading">
+                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={13} className="text-orange-500 shrink-0" />
+                        <span className="text-xs font-medium truncate">{currentBooks[0].title}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{rStreak}d streak</span>
+                    </a>
+                  </Link>
+                )}
+              </div>
+            </div>
           )}
 
-          {/* Weekly Workouts */}
-          {visible.workouts && (
-            <Section title="This Week's Workouts" icon={<Dumbbell size={14} className="text-[hsl(210_80%_48%)]" />} linkHref="/workouts" linkLabel="Workouts">
-              <div className="grid grid-cols-7 gap-1.5 mb-3">
-                {weekDates.map((d) => {
-                  const done = weekDone.has(d);
-                  const isToday = d === today;
-                  const label = format(parseISO(d), "EEE")[0];
+          {/* ── FRIENDS ACTIVITY ───────────────────────────────────────────── */}
+          {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
+
+          {/* ── UPCOMING EVENTS (compact) ──────────────────────────────────── */}
+          {visible.events && upcomingEvents.length > 0 && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} className="text-violet-500" />
+                  <span className="text-sm font-semibold">Upcoming Events</span>
+                </div>
+                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
+              </div>
+              <div className="space-y-1.5">
+                {upcomingEvents.slice(0, 4).map((e) => {
+                  const d = daysUntil(e.displayDate);
                   return (
-                    <div key={d} className={`flex flex-col items-center gap-1 p-2 rounded-lg border ${done ? "border-[hsl(210_80%_48%)] bg-[hsl(210_80%_48%/0.1)]" : isToday ? "border-primary bg-primary/5" : "border-border bg-secondary/30"}`}>
-                      <span className="text-xs text-muted-foreground font-medium">{label}</span>
-                      {done
-                        ? <CheckCircle2 size={15} className="text-[hsl(210_80%_48%)]" />
-                        : <div className={`w-3.5 h-3.5 rounded-full border-2 ${isToday ? "border-primary" : "border-border"}`} />}
+                    <div key={e.id} className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium truncate">{e.title}</p>
+                      <span className={`text-xs shrink-0 font-semibold ${d === 0 ? "text-primary" : d <= 3 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                        {dayLabel(d)}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1.5"><Flame size={13} className="text-amber-500" />{wStreak}d streak</span>
-                <span className="flex items-center gap-1.5"><TrendingUp size={13} />{wCompleted}/{wPlanned} this week</span>
-              </div>
-              {recentPRs.length > 0 && (
-                <div className="mt-3 pt-3 border-t space-y-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Recent PRs</p>
-                  {recentPRs.slice(0, 3).map((pr, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"><Zap size={12} />{pr.exercise}</span>
-                      <span className="font-semibold">{pr.weight} lb</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {wLogs.filter((l) => l.completed).length === 0 && (
-                <Empty icon={<Dumbbell size={26} />} text="No workouts logged yet this week" />
-              )}
-            </Section>
-          )}
-
-          {/* Empty state if everything in left column is hidden */}
-          {!visible.events && !visible.goals && !visible.workouts && (
-            <div className="bg-card border rounded-xl p-8 text-center text-muted-foreground">
-              <Settings2 size={28} className="mx-auto mb-2 opacity-20" />
-              <p className="text-sm">All sections hidden</p>
-              <button
-                onClick={() => setCustomizing(true)}
-                className="text-xs text-primary hover:underline mt-1"
-              >
-                Customize dashboard
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── Right column ──────────────────────────────────────────────── */}
-        <div className="space-y-5">
-
-          {/* Currently Reading */}
-          {visible.reading && (
-            <div className="bg-card border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen size={14} className="text-[hsl(25_85%_52%)]" />
-                  <span className="text-sm font-semibold">Currently Reading</span>
-                </div>
-                <Link href="/reading"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
-              </div>
-              {currentBooks.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-3">No books in progress</p>
-              ) : (
-                <div className="space-y-3">
-                  {currentBooks.slice(0, 2).map((b) => {
-                    const pct = bookProgress(b);
-                    return (
-                      <div key={b.id} className="flex items-start gap-2.5">
-                        <div className="w-7 h-9 rounded shrink-0 flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: b.coverColor || "#1e3a5f" }}>
-                          {(b.title[0] || "?").toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate leading-snug">{b.title}</p>
-                          {b.author && <p className="text-[10px] text-muted-foreground">{b.author}</p>}
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Progress value={pct} className="h-1 flex-1" />
-                            <span className="text-[10px] text-muted-foreground shrink-0">{pct}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="grid grid-cols-3 gap-1.5 pt-1">
-                    <MiniStat label="Streak" value={`${rStreak}d`} />
-                    <MiniStat label="Pages" value={String(monthPages)} />
-                    <MiniStat label="Finished" value={String(monthBooks)} />
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Featured Quote */}
-          {visible.quote && (
-            <div className="bg-card border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <QuoteIcon size={14} className="text-purple-500" />
-                  <span className="text-sm font-semibold">Quote</span>
-                </div>
-                <Link href="/quotes"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
-              </div>
-              {featuredQuote ? (
-                <div className="space-y-2">
-                  <p className="text-sm italic leading-relaxed text-foreground/80">
-                    &ldquo;{featuredQuote.text}&rdquo;
-                  </p>
-                  {featuredQuote.author && (
-                    <p className="text-xs text-muted-foreground font-medium">— {featuredQuote.author}</p>
-                  )}
-                  {quotePool.length > 1 && (
-                    <button
-                      onClick={() => setQuoteIdx((i) => (i + 1) % quotePool.length)}
-                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
-                    >
-                      <RefreshCw size={10} /> Next quote
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground text-center py-3">No saved quotes yet</p>
-              )}
-            </div>
-          )}
+          {/* ── RECENT ACTIVITY ────────────────────────────────────────────── */}
+          {visible.recent_activity && <MyRecentActivity />}
 
-          {/* Spots to Visit */}
-          {visible.spots && (wantToVisit.length > 0 || spots.length === 0) && (
-            <div className="bg-card border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-emerald-500" />
-                  <span className="text-sm font-semibold">Places to Visit</span>
-                </div>
-                <Link href="/spots"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
-              </div>
-              {wantToVisit.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-3">No places on your list yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {wantToVisit.slice(0, 4).map((s) => (
-                    <div key={s.id} className="flex items-center gap-2.5 py-1">
-                      <span className="text-base shrink-0">{SPOT_EMOJIS[s.type] ?? "📍"}</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{s.name}</p>
-                        {(s.neighborhood || s.city) && (
-                          <p className="text-[10px] text-muted-foreground truncate">
-                            {[s.neighborhood, s.city].filter(Boolean).join(", ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {wantToVisit.length > 4 && (
-                    <p className="text-xs text-muted-foreground pt-1">+{wantToVisit.length - 4} more</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Due Soon */}
-          {visible.due_soon && (dueSoon.length > 0 || dueChores.length > 0 || dueSubs.length > 0) && (
+          {/* ── QUICK JUMP ─────────────────────────────────────────────────── */}
+          {visible.quick_jump && (
             <div className="bg-card border rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle size={14} className="text-amber-500" />
-                <span className="text-sm font-semibold">Due Soon</span>
+                <Sparkles size={14} className="text-primary" />
+                <span className="text-sm font-semibold">Quick Jump</span>
               </div>
-              <div className="space-y-2.5">
-                {dueChores.map((c) => (
-                  <div key={`chore-${c.id}`} className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Home size={11} className="text-muted-foreground shrink-0" />
-                      <p className="text-xs font-medium truncate">{c.title}</p>
-                    </div>
-                    <span className={`text-xs font-semibold shrink-0 ${(c.daysLeft ?? 1) < 0 ? "text-red-500" : (c.daysLeft ?? 1) === 0 ? "text-orange-500" : "text-yellow-600 dark:text-yellow-400"}`}>
-                      {dayLabel(c.daysLeft)}
-                    </span>
-                  </div>
-                ))}
-                {dueSoon.slice(0, 4).map((item, i) => (
-                  <div key={`task-${i}`} className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <CheckCircle2 size={11} className="text-muted-foreground shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{item.title}</p>
-                        <p className="text-[10px] text-muted-foreground">{item.source}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">{dayLabel(daysUntil(item.due))}</span>
-                  </div>
-                ))}
-                {dueSubs.map((s) => (
-                  <div key={`sub-${s.id}`} className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <CreditCard size={11} className="text-muted-foreground shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{(s as any).name}</p>
-                        <p className="text-[10px] text-muted-foreground">${(s as any).amount?.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">{dayLabel(s.daysLeft)}</span>
-                  </div>
+              <div className="grid grid-cols-4 gap-2">
+                {QUICK_LINKS.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    <a className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-secondary/40 hover:bg-secondary transition-colors">
+                      <span className={link.color}>{link.icon}</span>
+                      <span className="text-[10px] font-medium text-muted-foreground text-center leading-tight">{link.label}</span>
+                    </a>
+                  </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Featured quote */}
+          {featuredQuote && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Star size={13} className="text-amber-400" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quote</span>
+                </div>
+                {quotePool.length > 1 && (
+                  <button onClick={() => setQuoteIdx((i) => (i + 1) % quotePool.length)} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <RefreshCw size={11} />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs italic text-foreground/80 leading-relaxed">&ldquo;{featuredQuote.text}&rdquo;</p>
+              {featuredQuote.author && <p className="text-[10px] text-muted-foreground mt-1.5">— {featuredQuote.author}</p>}
             </div>
           )}
 
