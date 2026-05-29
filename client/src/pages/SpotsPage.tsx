@@ -671,10 +671,11 @@ function MapView({ spots }: { spots: Spot[] }) {
       document.head.appendChild(link);
     }
 
+    let script: HTMLScriptElement | null = null;
     if ((window as any).L) {
       initMap();
     } else {
-      const script = document.createElement("script");
+      script = document.createElement("script");
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
       script.onload = initMap;
       document.head.appendChild(script);
@@ -682,6 +683,7 @@ function MapView({ spots }: { spots: Spot[] }) {
 
     return () => {
       unmounted = true;
+      if (script) { script.onload = null; }
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
     };
   }, [JSON.stringify(mappable.map(s => s.id + s.lat + s.lon))]);
@@ -3255,10 +3257,11 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
       document.head.appendChild(link);
     }
 
+    let script: HTMLScriptElement | null = null;
     if ((window as any).L) {
       initMap();
     } else {
-      const script = document.createElement("script");
+      script = document.createElement("script");
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
       script.onload = initMap;
       document.head.appendChild(script);
@@ -3266,6 +3269,7 @@ function VisitedCitiesWorldMap({ cities }: { cities: VisitedCity[] }) {
 
     return () => {
       unmounted = true;
+      if (script) { script.onload = null; }
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
     };
   }, [JSON.stringify(mappable.map(c => c.id))]);
