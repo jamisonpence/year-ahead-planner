@@ -1404,7 +1404,14 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
     setDurationWeeks(String(dur));
-    setGoalType((editing?.goalType as GoalType) ?? "general");
+    const preselected = !editing && sessionStorage.getItem("newPlanGoalType");
+    if (preselected) {
+      sessionStorage.removeItem("newPlanGoalType");
+      setGoalType(preselected as GoalType);
+      setStep("details");
+    } else {
+      setGoalType((editing?.goalType as GoalType) ?? "general");
+    }
     setStep(editing ? "details" : "goal");
     setEditingDay(null);
     setViewWeek(1);
@@ -2256,6 +2263,13 @@ export default function WorkoutsPage() {
       // Remove the param without a full reload
       const url = new URL(window.location.href);
       url.searchParams.delete("newPlan");
+      // If a goalType was passed (e.g. from Browse Goals & Plans), store it to pre-select
+      const gt = params.get("goalType");
+      if (gt) {
+        url.searchParams.delete("goalType");
+        // Store in sessionStorage so PlanBuilderModal can read it on open
+        sessionStorage.setItem("newPlanGoalType", gt);
+      }
       window.history.replaceState({}, "", url.toString());
     }
   }, []);

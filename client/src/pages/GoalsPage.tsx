@@ -1516,13 +1516,10 @@ const HOBBY_TYPES = [
 ];
 
 const GOAL_TYPES = [
-  { value: "strength",     label: "Strength"       },
-  { value: "muscle",       label: "Muscle Building"},
-  { value: "weight_loss",  label: "Weight Loss"    },
-  { value: "endurance",    label: "Endurance"      },
-  { value: "athleticism",  label: "General Fitness"},
-  { value: "flexibility",  label: "Flexibility"    },
-  { value: "custom",       label: "Custom"         },
+  { value: "strength_pr",     label: "Strength PR",       desc: "Hit a new max on a lift",        color: "border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:border-orange-700 dark:text-orange-300" },
+  { value: "endurance",       label: "Endurance Race",    desc: "Train for a run or race",         color: "border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300" },
+  { value: "body_composition",label: "Body Composition",  desc: "Weight, fat %, or muscle",       color: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:border-green-700 dark:text-green-300" },
+  { value: "general",         label: "General Fitness",   desc: "Build habit & consistency",      color: "border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:border-purple-700 dark:text-purple-300" },
 ];
 
 function getTimeframeDates(tf: "year" | "month" | "quarter" | "custom"): { start: string; end: string } {
@@ -1836,32 +1833,26 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
             </div>
           )}
 
-          {/* ── Workout Training Plan ─────────────────────────────────── */}
+          {/* ── Workout Training Plan — goal type picker ──────────────── */}
           {category === "workout" && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan Name (optional)</Label>
-                <Input className="mt-1.5" placeholder="e.g. Summer Strength Block" value={wName} onChange={e => setWName(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal Type</Label>
-                <Select value={wGoalType} onValueChange={setWGoalType}>
-                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>{GOAL_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration (weeks)</Label>
-                <div className="flex gap-2 mt-1.5 flex-wrap">
-                  {[4,8,12,16,20].map(w => (
-                    <button key={w} onClick={() => setWWeeks(String(w))}
-                      className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${wWeeks===String(w)?"bg-primary text-primary-foreground border-primary":"border-border hover:bg-secondary"}`}>{w}w</button>
-                  ))}
-                  <Input className="w-20" type="number" min="1" max="52" value={wWeeks} onChange={e => setWWeeks(e.target.value)} />
-                </div>
-              </div>
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
-                <p className="text-xs text-blue-700 dark:text-blue-300">💪 Your plan will activate immediately. Log workouts in the Workouts page.</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">What's your main goal for this plan?</p>
+              <div className="grid grid-cols-2 gap-3">
+                {GOAL_TYPES.map(g => (
+                  <button
+                    key={g.value}
+                    onClick={() => {
+                      handleClose();
+                      navigate(`/workouts?newPlan=1&goalType=${g.value}`);
+                    }}
+                    className={`flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${g.color}`}
+                  >
+                    <div>
+                      <p className="font-semibold text-sm leading-tight">{g.label}</p>
+                      <p className="text-xs opacity-70 mt-0.5">{g.desc}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -1938,10 +1929,10 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
         </div>
 
         {/* Footer */}
-        {category && (
+        {category && category !== "workout" && (
           <div className="px-5 py-4 border-t shrink-0 flex gap-2">
             <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 w-full">
-              <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : category === "workout" ? "Create Plan" : "Save"}
+              <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : "Save"}
             </Button>
           </div>
         )}
