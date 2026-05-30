@@ -54,14 +54,14 @@ export default function Setup({ onClose }: { onClose?: () => void } = {}) {
   }
 
   return (
-    <div className="w-full">
-      <div className="mb-4 sm:mb-8">
+    <div className="w-full flex flex-col h-full">
+      <div className="mb-4 sm:mb-6 shrink-0">
         <h1 className="text-xl font-semibold tracking-tight">Build your plan</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Four quick steps. No account. No tracking. Just food that fits your day.
         </p>
       </div>
-      <div className="mb-6 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2 shrink-0">
         {stepLabels.map((label, i) => {
           const idx = (i + 1) as Step;
           const active = step === idx;
@@ -85,19 +85,21 @@ export default function Setup({ onClose }: { onClose?: () => void } = {}) {
         })}
       </div>
 
-      {step === 1 && <StepMode />}
-      {step === 2 && (
-        <StepStats
-          useMetricHeight={useMetricHeight}
-          setUseMetricHeight={setUseMetricHeight}
-          useMetricWeight={useMetricWeight}
-          setUseMetricWeight={setUseMetricWeight}
-        />
-      )}
-      {step === 3 && <StepDiet />}
-      {step === 4 && <StepCategories />}
+      <div className="flex-1 overflow-y-auto min-h-0 pb-2">
+        {step === 1 && <StepMode />}
+        {step === 2 && (
+          <StepStats
+            useMetricHeight={useMetricHeight}
+            setUseMetricHeight={setUseMetricHeight}
+            useMetricWeight={useMetricWeight}
+            setUseMetricWeight={setUseMetricWeight}
+          />
+        )}
+        {step === 3 && <StepDiet />}
+        {step === 4 && <StepCategories />}
+      </div>
 
-      <div className="mt-8 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between shrink-0 pt-3 border-t">
         <Button variant="ghost" onClick={prev} disabled={step === 1} data-testid="button-back">
           <ChevronLeft className="mr-1 h-4 w-4" /> Back
         </Button>

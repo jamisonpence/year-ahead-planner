@@ -1453,7 +1453,7 @@ export default function GoalsPage() {
         </DialogContent>
       </Dialog>
       <Dialog open={mealPlanModal} onOpenChange={(o) => !o && setMealPlanModal(false)}>
-        <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-full max-w-2xl flex flex-col overflow-hidden p-4 sm:p-6" style={{maxHeight:"min(90dvh,90vh)"}}>
           <PlannerSetup onClose={() => setMealPlanModal(false)} />
         </DialogContent>
       </Dialog>
