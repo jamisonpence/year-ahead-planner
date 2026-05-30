@@ -54,8 +54,8 @@ export default function Setup({ onClose }: { onClose?: () => void } = {}) {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-8">
+    <div className="w-full">
+      <div className="mb-4 sm:mb-8">
         <h1 className="text-xl font-semibold tracking-tight">Build your plan</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Four quick steps. No account. No tracking. Just food that fits your day.

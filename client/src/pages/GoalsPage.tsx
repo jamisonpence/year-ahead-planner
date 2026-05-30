@@ -1347,7 +1347,7 @@ export default function GoalsPage() {
 
       <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} onOpenMealPlan={() => { setBrowseModal(false); setMealPlanModal(true); }} />
       <Dialog open={mealPlanModal} onOpenChange={(o) => !o && setMealPlanModal(false)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <PlannerSetup onClose={() => setMealPlanModal(false)} />
         </DialogContent>
       </Dialog>
