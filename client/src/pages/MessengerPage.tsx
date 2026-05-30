@@ -212,7 +212,35 @@ function NewGroupDialog({ friends, onCreate, onClose }: {
 
 // ── Reaction Picker ───────────────────────────────────────────────────────────
 
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢", "🎉", "👏"];
+const QUICK_EMOJIS = [
+  // Smileys & people
+  "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","😊","😇","🥰","😍","🤩","😘","😗",
+  "😚","😙","🥲","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐",
+  "😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢",
+  "🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥸","😎","🤓","🧐","😕","😟","🙁","☹️",
+  "😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞",
+  "😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺",
+  "👻","👽","👾","🤖",
+  // Hand gestures & people
+  "👋","🤚","🖐️","✋","🖖","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆",
+  "🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","✍️",
+  "💅","🤳","💪","🦾","🦵","🦶","👂","🦻","👃","🫀","🫁","🧠","🦷","🦴","👀","👁️",
+  "👅","👄","💋",
+  // Hearts & symbols
+  "❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❣️","💕","💞","💓","💗","💖",
+  "💘","💝","💟","♥️","🔥","✨","⭐","🌟","💫","⚡","❄️","🌈","☁️","🌊","💧","💦",
+  // Celebration & misc
+  "🎉","🎊","🎈","🎁","🏆","🥇","🎯","🎮","🕹️","🎲","🃏","🎰","🧩","🎭","🎨","🎬",
+  "🎤","🎧","🎼","🎵","🎶","🎷","🎸","🎹","🎺","🎻","🥁","🪘",
+  // Food & drink
+  "🍕","🍔","🌮","🍜","🍣","🍰","🎂","🍩","🍪","🍫","🍬","🍭","☕","🧋","🍺","🥂",
+  // Animals
+  "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🦄",
+  "🐙","🦋","🐝","🌸","🌺","🌻","🌹","🍀","🌴","🌵",
+  // Objects & activities
+  "💪","🏃","🚀","✈️","🚗","⚽","🏀","🏈","⚾","🎾","🏐","🏉","🎱","🏓","🏸","🥊",
+  "🎿","🛷","🏂","🪂","🤸","🏊","🚴","🧘","💼","📱","💻","📷","🎥","🔑","🏠","🌍",
+];
 
 // ── Share Card ────────────────────────────────────────────────────────────────
 
@@ -707,18 +735,20 @@ function SharePicker({ onShare, onClose }: {
 function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
   return (
     <div
-      className="absolute z-50 flex gap-1 p-1.5 rounded-2xl bg-popover border shadow-lg"
+      className="absolute z-50 p-2 rounded-2xl bg-popover border shadow-xl w-72"
       onMouseLeave={onClose}
     >
-      {QUICK_EMOJIS.map(e => (
-        <button
-          key={e}
-          onClick={() => { onPick(e); onClose(); }}
-          className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-secondary transition-colors text-base"
-        >
-          {e}
-        </button>
-      ))}
+      <div className="grid grid-cols-9 gap-0.5 max-h-56 overflow-y-auto">
+        {QUICK_EMOJIS.map((e, i) => (
+          <button
+            key={i}
+            onClick={() => { onPick(e); onClose(); }}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors text-base leading-none"
+          >
+            {e}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
