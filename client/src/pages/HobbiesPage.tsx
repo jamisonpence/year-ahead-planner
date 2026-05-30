@@ -1554,6 +1554,34 @@ const INSTRUMENT_PLAN_TEMPLATES: PlanTemplate[] = [
   { id: "inst-perf",    emoji: "🎤", label: "Performance / enjoyment",  description: "Perform for friends or family and play at least twice a week for fun",                  durationWeeks: 12, defaultSteps: [] },
 ];
 
+const SINGING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "inst-core",  emoji: "🎤", label: "Core vocal ability",       description: "Develop consistent pitch, breath control, and sing a song cleanly start to finish", durationWeeks: 8,  defaultSteps: [] },
+  { id: "inst-rep",   emoji: "🎵", label: "Song repertoire",          description: "Build a set of 5–10 songs you can perform confidently from memory",                  durationWeeks: 16, defaultSteps: [] },
+  { id: "inst-tech",  emoji: "🎼", label: "Vocal technique",          description: "Daily warm-ups, breath support, and resonance exercises to expand your range",        durationWeeks: 12, defaultSteps: [] },
+  { id: "inst-perf",  emoji: "🎭", label: "Perform for an audience",  description: "Prepare and deliver a live performance — open mic, recital, or informal show",       durationWeeks: 12, defaultSteps: [] },
+];
+
+const ACTING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "inst-core",  emoji: "🎭", label: "Foundational skills",      description: "Work through core acting techniques: presence, listening, and scene work",           durationWeeks: 8,  defaultSteps: [] },
+  { id: "inst-rep",   emoji: "📜", label: "Monologue / scene prep",   description: "Prepare 2–3 contrasting pieces you can perform confidently at an audition",           durationWeeks: 10, defaultSteps: [] },
+  { id: "inst-tech",  emoji: "🧠", label: "Method & technique",       description: "Study a specific acting method (Stanislavski, Meisner, etc.) through daily exercises", durationWeeks: 12, defaultSteps: [] },
+  { id: "inst-perf",  emoji: "🎬", label: "Audition / performance",   description: "Prepare for a specific role, audition, or showcase and nail the performance",        durationWeeks: 8,  defaultSteps: [] },
+];
+
+const COMEDY_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "inst-core",  emoji: "😂", label: "Find your voice",          description: "Develop your comedic persona and write your first 5-minute set",                      durationWeeks: 8,  defaultSteps: [] },
+  { id: "inst-rep",   emoji: "📝", label: "Build a set",              description: "Write and refine a polished 10–15 minute set of reliable material",                   durationWeeks: 12, defaultSteps: [] },
+  { id: "inst-tech",  emoji: "🎙️", label: "Craft & delivery",         description: "Focus on timing, callbacks, crowd work, and making material sharper and funnier",     durationWeeks: 10, defaultSteps: [] },
+  { id: "inst-perf",  emoji: "🎤", label: "Perform at an open mic",   description: "Get stage time regularly — prepare and perform at open mics or shows",                durationWeeks: 8,  defaultSteps: [] },
+];
+
+const DANCING_PLAN_TEMPLATES: PlanTemplate[] = [
+  { id: "inst-core",  emoji: "🕺", label: "Learn the fundamentals",   description: "Build body awareness, basic steps, and rhythm across your chosen dance style",       durationWeeks: 8,  defaultSteps: [] },
+  { id: "inst-rep",   emoji: "💃", label: "Learn a routine",          description: "Choreograph and perfect a specific routine or combination from start to finish",       durationWeeks: 10, defaultSteps: [] },
+  { id: "inst-tech",  emoji: "🎯", label: "Technique & conditioning", description: "Daily drills for flexibility, footwork, balance, and style-specific technique",        durationWeeks: 12, defaultSteps: [] },
+  { id: "inst-perf",  emoji: "🌟", label: "Perform / showcase",       description: "Prepare and deliver a polished performance at a recital, showcase, or social dance",  durationWeeks: 10, defaultSteps: [] },
+];
+
 const INSTRUMENT_GOAL_TYPE_MAP: Record<string, InstrumentGoalType> = {
   "inst-core": "core", "inst-rep": "repertoire", "inst-tech": "technique", "inst-perf": "performance",
 };
@@ -3502,6 +3530,10 @@ export function PlanWizard({
                   : isPokerHobby   ? POKER_PLAN_TEMPLATES
                   : isBirdHobby    ? BIRD_PLAN_TEMPLATES
                   : isLangHobby    ? LANGUAGE_PLAN_TEMPLATES
+                  : isSingingHobby ? SINGING_PLAN_TEMPLATES
+                  : isActingHobby  ? ACTING_PLAN_TEMPLATES
+                  : isComedyHobby  ? COMEDY_PLAN_TEMPLATES
+                  : isDancingHobby ? DANCING_PLAN_TEMPLATES
                   : isInstrHobby   ? INSTRUMENT_PLAN_TEMPLATES
                   : (PLAN_TEMPLATES[hobbyType] ?? []);
 
@@ -6125,7 +6157,7 @@ export function PlanWizard({
                   )}
                 </div>
               )}
-              {selectedHobby && isInstrHobby && (
+              {selectedHobby && isInstrumentHobby && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Which instrument? 🎵</label>
                   <select value={instrInstrument} onChange={e => setInstrInstrument(e.target.value)}
