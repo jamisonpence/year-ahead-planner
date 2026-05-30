@@ -26,7 +26,7 @@ import type {
   InsertGoal,
   NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_COLORS: Record<string, string> = {
@@ -1405,6 +1405,7 @@ function getTimeframeDates(tf: "year" | "month" | "quarter" | "custom"): { start
 function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const qc = queryClient;
+  const [, navigate] = useLocation();
   const [category, setCategory] = useState<BrowseCategory>(null);
 
   // Reading state
@@ -1527,7 +1528,10 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Choose a category to set up a goal or plan:</p>
               {BROWSE_CATEGORIES.map(cat => (
-                <button key={cat.key} onClick={() => setCategory(cat.key)}
+                <button key={cat.key} onClick={() => {
+                  if (cat.key === "workout") { onClose(); navigate("/workouts?newPlan=1"); return; }
+                  setCategory(cat.key);
+                }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border hover:border-primary hover:bg-primary/5 transition-all text-left group">
                   <span className="text-2xl shrink-0">{cat.emoji}</span>
                   <div className="flex-1 min-w-0">

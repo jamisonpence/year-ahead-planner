@@ -2247,6 +2247,18 @@ export default function WorkoutsPage() {
   const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
   const [planModal, setPlanModal] = useState(false);
   const [editPlan, setEditPlan] = useState<WorkoutPlan | null>(null);
+
+  // Auto-open plan builder if navigated here with ?newPlan=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("newPlan") === "1") {
+      setEditPlan(null); setPlanModal(true); setTab("plans");
+      // Remove the param without a full reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("newPlan");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
   const [bodyCompWizardOpen, setBodyCompWizardOpen] = useState(false);
   const [bodyCompEditingPlan, setBodyCompEditingPlan] = useState<WorkoutPlan | null>(null);
   const [shareModal, setShareModal] = useState(false);
