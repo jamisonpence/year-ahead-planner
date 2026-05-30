@@ -572,7 +572,7 @@ function TaskCompleteForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "52vh" }}>
         <Section label="Due Today" tasks={dueToday} type="general" />
         <Section label="No Due Date" tasks={noDueDate} type="general" />
         <Section label="Other Due Dates" tasks={otherDue} type="general" />
