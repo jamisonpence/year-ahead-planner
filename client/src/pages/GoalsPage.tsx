@@ -1681,7 +1681,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
               <p className="text-sm text-muted-foreground">Choose a category to set up a goal or plan:</p>
               {BROWSE_CATEGORIES.map(cat => (
                 <button key={cat.key} onClick={() => {
-                  if (cat.key === "workout") { onClose(); navigate("/workouts?newPlan=1"); return; }
+                  if (cat.key === "workout") { setCategory("workout"); return; }
                   if (cat.key === "nutrition") { if (onOpenMealPlan) onOpenMealPlan(); else { onClose(); navigate("/meal-planner/setup"); } return; }
                   if (cat.key === "skill") { onClose(); navigate("/hobbies?addHobby=1"); return; }
                   setCategory(cat.key);
