@@ -787,9 +787,9 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
               <button
                 onClick={() => setPickerOpen(p => !p)}
                 className="p-1 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors text-base leading-none"
-                title="React"
+                title="Add reaction"
               >
-                😊
+                <span className="text-sm font-bold leading-none">+</span>
               </button>
               {pickerOpen && (
                 <div className={`absolute bottom-full mb-1 ${isOwn ? "right-0" : "left-0"}`}>
