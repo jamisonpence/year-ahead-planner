@@ -228,6 +228,14 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     }
   });
 
+  // ── Login page (SPA, no auth required) ──────────────────────────────────────
+  app.get("/login", (req, res) => {
+    if (req.isAuthenticated()) return res.redirect("/");
+    const spaIndex = path.resolve(process.cwd(), "dist/public/index.html");
+    if (fs.existsSync(spaIndex)) return res.sendFile(spaIndex);
+    res.redirect("/");
+  });
+
   // ── Privacy Policy ────────────────────────────────────────────────────────
   app.get("/privacy", (req, res) => {
     res.sendFile(path.resolve(process.cwd(), "privacy.html"));
