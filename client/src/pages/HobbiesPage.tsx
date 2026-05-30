@@ -3427,6 +3427,7 @@ export function PlanWizard({
   const [instrSongCount,     setInstrSongCount]     = useState("7");
   const [instrPracticeMins,  setInstrPracticeMins]  = useState("20");
   const [instrPracticeDays,  setInstrPracticeDays]  = useState("5");
+  const [instrScheduleDays, setInstrScheduleDays] = useState<string[]>(["Mon", "Wed", "Fri"]);
   const [instrPerfSong,      setInstrPerfSong]      = useState("");
   const [instrSessions,      setInstrSessions]      = useState("2");
 
@@ -3572,7 +3573,7 @@ export function PlanWizard({
     setLangMode(false); setLangGoalType(""); setLlLanguage(""); setLlConvMins("10");
     setLlExamName(""); setLlExamLevel("B2"); setLlExamMonths("12");
     setLlStudyMins("30"); setLlStudyDays("5"); setLlWordsWeek("50"); setLlTravelCountry("");
-    setInstrMode(false); setInstrGoalType(""); setInstrInstrument(""); setInstrSong("");
+    setInstrMode(false); setInstrGoalType(""); setInstrInstrument(""); setInstrSong(""); setInstrScheduleDays(["Mon", "Wed", "Fri"]);
     setInstrSongCount("7"); setInstrPracticeMins("20"); setInstrPracticeDays("5");
     setInstrPerfSong(""); setInstrSessions("2");
     setCyclingMode(false); setCyclingGoalType(""); setCyCount("150"); setCyMiles("2000");
@@ -4626,7 +4627,8 @@ export function PlanWizard({
 
           {/* ── INSTRUMENT GOAL WIZARD ── */}
           {instrMode && (() => {
-            const tplMeta = INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType);
+            const activeTpls = isSingingHobby ? SINGING_PLAN_TEMPLATES : isActingHobby ? ACTING_PLAN_TEMPLATES : isComedyHobby ? COMEDY_PLAN_TEMPLATES : isDancingHobby ? DANCING_PLAN_TEMPLATES : INSTRUMENT_PLAN_TEMPLATES;
+            const tplMeta = activeTpls.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType);
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 rounded-xl border bg-violet-50/60 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">
@@ -4667,15 +4669,28 @@ export function PlanWizard({
                       </div>
                     )}
                     {instrGoalType === "technique" && (
-                      <div>
-                        <label className="text-xs font-medium mb-1 block">Daily practice time</label>
-                        <div className="flex flex-wrap gap-2">
-                          {["10","20","30","45","60"].map(m => (
-                            <button key={m} onClick={() => setInstrPracticeMins(m)}
-                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
-                              {m} min
-                            </button>
-                          ))}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-medium mb-1 block">Daily practice time</label>
+                          <div className="flex flex-wrap gap-2">
+                            {["10","20","30","45","60"].map(m => (
+                              <button key={m} onClick={() => setInstrPracticeMins(m)}
+                                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                                {m} min
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium mb-1 block">Practice days</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => (
+                              <button key={day} type="button" onClick={() => setInstrScheduleDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])}
+                                className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-colors ${instrScheduleDays.includes(day) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                                {day}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4746,15 +4761,28 @@ export function PlanWizard({
                       </div>
                     )}
                     {instrGoalType === "technique" && (
-                      <div>
-                        <label className="text-xs font-medium mb-1 block">Daily practice time</label>
-                        <div className="flex flex-wrap gap-2">
-                          {["15","20","30","45","60"].map(m => (
-                            <button key={m} onClick={() => setInstrPracticeMins(m)}
-                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
-                              {m} min
-                            </button>
-                          ))}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-medium mb-1 block">Daily practice time</label>
+                          <div className="flex flex-wrap gap-2">
+                            {["15","20","30","45","60"].map(m => (
+                              <button key={m} onClick={() => setInstrPracticeMins(m)}
+                                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                                {m} min
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium mb-1 block">Practice days</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => (
+                              <button key={day} type="button" onClick={() => setInstrScheduleDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])}
+                                className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-colors ${instrScheduleDays.includes(day) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                                {day}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4767,8 +4795,7 @@ export function PlanWizard({
                   </div>
                 )}
 
-                {/* Core playing ability */}
-                {instrGoalType === "core" && (
+                {isInstrumentHobby && instrGoalType === "core" && (
                   <div>
                     <label className="text-xs font-medium mb-1 block">Which song will you learn? (optional)</label>
                     <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "Wonderwall", "Für Elise", "Hallelujah"' />
@@ -4776,8 +4803,7 @@ export function PlanWizard({
                   </div>
                 )}
 
-                {/* Songs / repertoire */}
-                {instrGoalType === "repertoire" && (
+                {isInstrumentHobby && instrGoalType === "repertoire" && (
                   <div>
                     <label className="text-xs font-medium mb-1 block">How many songs in your repertoire?</label>
                     <div className="flex flex-wrap gap-2">
@@ -4791,8 +4817,7 @@ export function PlanWizard({
                   </div>
                 )}
 
-                {/* Technique / musicianship */}
-                {instrGoalType === "technique" && (
+                {isInstrumentHobby && instrGoalType === "technique" && (
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs font-medium mb-1 block">Daily practice time</label>
@@ -4806,12 +4831,12 @@ export function PlanWizard({
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-medium mb-1 block">Days per week</label>
-                      <div className="flex gap-2">
-                        {["3", "4", "5", "6", "7"].map(d => (
-                          <button key={d} onClick={() => setInstrPracticeDays(d)}
-                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeDays === d ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
-                            {d}×/wk
+                      <label className="text-xs font-medium mb-1 block">Practice days</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => (
+                          <button key={day} type="button" onClick={() => setInstrScheduleDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])}
+                            className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-colors ${instrScheduleDays.includes(day) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                            {day}
                           </button>
                         ))}
                       </div>
@@ -4819,8 +4844,7 @@ export function PlanWizard({
                   </div>
                 )}
 
-                {/* Performance / enjoyment */}
-                {instrGoalType === "performance" && (
+                {isInstrumentHobby && instrGoalType === "performance" && (
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs font-medium mb-1 block">Song to perform (optional)</label>
