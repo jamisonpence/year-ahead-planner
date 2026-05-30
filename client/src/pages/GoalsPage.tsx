@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
-import { HobbyFormDialog, EMPTY_FORM } from "@/pages/HobbiesPage";
+import { HobbyFormDialog, EMPTY_FORM, PlanWizard, parsePlans, setPlansInExtra } from "@/pages/HobbiesPage";
 import GoogleBooksModal from "@/components/GoogleBooksModal";
 import PlannerSetup from "@/pages/planner/Setup";
 import type {
@@ -660,6 +660,8 @@ export default function GoalsPage() {
   const [mealPlanModal, setMealPlanModal] = useState(false);
   const [hobbyFormOpen, setHobbyFormOpen] = useState(false);
   const [hobbyFormKey, setHobbyFormKey] = useState(0);
+  const [hobbyPlanWizardOpen, setHobbyPlanWizardOpen] = useState(false);
+  const [hobbyPlanWizardId, setHobbyPlanWizardId] = useState<number | undefined>(undefined);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
@@ -1438,6 +1440,33 @@ export default function GoalsPage() {
             toast({ title: "Hobby added!" });
           } catch { toast({ title: "Something went wrong", variant: "destructive" }); }
           setHobbyFormOpen(false);
+        }}
+        onSaveAndPlan={async (data) => {
+          try {
+            const res = await apiRequest("POST", "/api/hobbies", data);
+            const created = await res.json();
+            queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] });
+            setHobbyFormOpen(false);
+            setHobbyPlanWizardId(created.id);
+            setHobbyPlanWizardOpen(true);
+          } catch { toast({ title: "Something went wrong", variant: "destructive" }); }
+        }}
+      />
+      <PlanWizard
+        open={hobbyPlanWizardOpen}
+        onClose={() => { setHobbyPlanWizardOpen(false); setHobbyPlanWizardId(undefined); }}
+        hobbies={hobbies}
+        defaultHobbyId={hobbyPlanWizardId}
+        skipHobbyPicker={!!hobbyPlanWizardId}
+        onSave={(hobbyId, plan) => {
+          const hobby = (hobbies as any[]).find(h => h.id === hobbyId);
+          if (!hobby) return;
+          const plans = parsePlans(hobby.extraJson ?? "{}");
+          const updated = setPlansInExtra(hobby.extraJson ?? "{}", [...plans, plan]);
+          apiRequest("PATCH", `/api/hobbies/${hobbyId}`, { extraJson: updated })
+            .then(() => { queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] }); toast({ title: "Plan added!" }); })
+            .catch(() => toast({ title: "Something went wrong", variant: "destructive" }));
+          setHobbyPlanWizardOpen(false);
         }}
       />
 
