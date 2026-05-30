@@ -750,13 +750,13 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
     <>
       {/* Backdrop — shown on all screen sizes */}
       <div
-        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
+        className={`fixed inset-0 z-[75] bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
       />
 
       {/* ── Mobile: bottom sheet ──────────────────────────────────────────── */}
       <div
-        className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-3xl shadow-2xl
+        className={`lg:hidden fixed bottom-0 left-0 right-0 z-[80] bg-card rounded-t-3xl shadow-2xl
           transition-transform duration-300 ease-out
           ${visible ? "translate-y-0" : "translate-y-full"}`}
         onTouchStart={onTouchStart}
@@ -767,14 +767,14 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
         {modalHeader}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 12rem)" }}>
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 8rem)" }}>
           {modalBody}
         </div>
       </div>
 
       {/* ── Desktop: centered dialog ──────────────────────────────────────── */}
       <div
-        className={`hidden lg:flex fixed inset-0 z-50 items-center justify-center transition-all duration-200
+        className={`hidden lg:flex fixed inset-0 z-[80] items-center justify-center transition-all duration-200
           ${visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
       >
         <div
