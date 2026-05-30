@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 type Step = 1 | 2 | 3 | 4;
 
-export default function Setup() {
+export default function Setup({ onClose }: { onClose?: () => void } = {}) {
   const [, navigate] = useLocation();
   const planner = usePlanner();
   const [step, setStep] = useState<Step>(1);
@@ -36,7 +36,8 @@ export default function Setup() {
   useEffect(() => {
     if (pendingNav && planner.plan) {
       setPendingNav(false);
-      navigate("/meal-planner/plan");
+      if (onClose) { onClose(); navigate("/meal-planner/plan"); }
+      else navigate("/meal-planner/plan");
     }
   }, [planner.plan, pendingNav]);
 
@@ -49,6 +50,7 @@ export default function Setup() {
   }
   function prev() {
     if (step > 1) setStep(((step - 1) as Step));
+    else if (onClose) onClose();
   }
 
   return (

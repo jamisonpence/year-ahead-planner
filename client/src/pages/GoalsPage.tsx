@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
+import PlannerSetup from "@/pages/planner/Setup";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks,
   InsertGoal,
@@ -642,6 +643,7 @@ export default function GoalsPage() {
   const { toast } = useToast();
   const [goalModal, setGoalModal] = useState(false);
   const [browseModal, setBrowseModal] = useState(false);
+  const [mealPlanModal, setMealPlanModal] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
@@ -1343,7 +1345,12 @@ export default function GoalsPage() {
 
       </div>
 
-      <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} />
+      <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} onOpenMealPlan={() => { setBrowseModal(false); setMealPlanModal(true); }} />
+      <Dialog open={mealPlanModal} onOpenChange={(o) => !o && setMealPlanModal(false)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <PlannerSetup onClose={() => setMealPlanModal(false)} />
+        </DialogContent>
+      </Dialog>
       <GoalFormModal open={goalModal} onClose={() => { setGoalModal(false); setEditGoal(null); }} editGoal={editGoal} />
     </div>
   );
@@ -1402,7 +1409,7 @@ function getTimeframeDates(tf: "year" | "month" | "quarter" | "custom"): { start
   return { start: "", end: "" };
 }
 
-function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; onClose: () => void; onOpenMealPlan?: () => void }) {
   const { toast } = useToast();
   const qc = queryClient;
   const [, navigate] = useLocation();
@@ -1540,6 +1547,7 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
               {BROWSE_CATEGORIES.map(cat => (
                 <button key={cat.key} onClick={() => {
                   if (cat.key === "workout") { onClose(); navigate("/workouts?newPlan=1"); return; }
+                  if (cat.key === "nutrition") { if (onOpenMealPlan) onOpenMealPlan(); else { onClose(); navigate("/meal-planner/setup"); } return; }
                   if (cat.key === "skill") { onClose(); navigate("/hobbies?addHobby=1"); return; }
                   setCategory(cat.key);
                 }}
