@@ -4161,7 +4161,12 @@ export function PlanWizard({
                   : surfingMode ? `Surfing: ${SURFING_PLAN_TEMPLATES.find(t => SURFING_GOAL_TYPE_MAP[t.id] === surfingGoalType)?.label ?? "Goal"}`
                   : birdMode ? `Birding: ${BIRD_PLAN_TEMPLATES.find(t => BIRD_GOAL_TYPE_MAP[t.id] === birdGoalType)?.label ?? "Goal"}`
                   : langMode ? `Language: ${LANGUAGE_PLAN_TEMPLATES.find(t => LANGUAGE_GOAL_TYPE_MAP[t.id] === langGoalType)?.label ?? "Goal"}`
-                  : instrMode ? `Instrument: ${INSTRUMENT_PLAN_TEMPLATES.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal"}`
+                  : instrMode ? (() => {
+                    const templates = isSingingHobby ? SINGING_PLAN_TEMPLATES : isActingHobby ? ACTING_PLAN_TEMPLATES : isComedyHobby ? COMEDY_PLAN_TEMPLATES : isDancingHobby ? DANCING_PLAN_TEMPLATES : INSTRUMENT_PLAN_TEMPLATES;
+                    const label = templates.find(t => INSTRUMENT_GOAL_TYPE_MAP[t.id] === instrGoalType)?.label ?? "Goal";
+                    const prefix = isSingingHobby ? "Singing" : isActingHobby ? "Acting" : isComedyHobby ? "Comedy" : isDancingHobby ? "Dancing" : "Instrument";
+                    return `${prefix}: ${label}`;
+                  })()
                   : "Configure Your Plan"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -4179,7 +4184,7 @@ export function PlanWizard({
                   : surfingMode ? "Configure your surfing goal"
                   : birdMode ? "Configure your birding goal and optionally search for target species"
                   : langMode ? "Choose your language and configure your goal"
-                  : instrMode ? "Choose your instrument and configure your goal"
+                  : instrMode ? (isSingingHobby ? "Choose your vocal style and configure your goal" : isActingHobby ? "Choose your focus area and configure your goal" : isComedyHobby ? "Choose your comedy style and configure your goal" : isDancingHobby ? "Choose your dance style and configure your goal" : "Choose your instrument and configure your goal")
                   : "Name, schedule, and build out your steps"}
               </p>
             </div>
