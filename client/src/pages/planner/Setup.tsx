@@ -106,7 +106,7 @@ export default function Setup({ onClose }: { onClose?: () => void } = {}) {
       </div>
 
       <div className="mt-4 flex items-center justify-between shrink-0 pt-3 border-t">
-        <Button variant="ghost" onClick={prev} disabled={step === 1} data-testid="button-back">
+        <Button variant="ghost" onClick={prev} disabled={step === 1 && !onClose} data-testid="button-back">
           <ChevronLeft className="mr-1 h-4 w-4" /> Back
         </Button>
         <Button onClick={next} data-testid="button-next">
