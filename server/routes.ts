@@ -1540,7 +1540,7 @@ Return exactly this structure:
     try {
       const uid = (req.user as User).id;
       const goals = await storage.getNutritionGoals(uid);
-      res.json(goals ?? { calories: 2000, protein: 150, carbs: 250, fat: 65, waterGlasses: 8 });
+      res.json(goals ?? null);
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/nutrition/goals", requireAuth, async (req, res) => {
@@ -1555,7 +1555,7 @@ Return exactly this structure:
   app.delete("/api/nutrition/goals", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      await storage.upsertNutritionGoals(uid, { calories: 0, protein: 0, carbs: 0, fat: 0, waterGlasses: 0, buddyUserId: null });
+      await storage.deleteNutritionGoals(uid);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });

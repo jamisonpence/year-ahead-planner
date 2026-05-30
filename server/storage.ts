@@ -5737,6 +5737,9 @@ export const storage: IStorage = {
     const [r] = await db.select().from(nutritionGoals).where(eq(nutritionGoals.userId, userId));
     return r ?? null;
   },
+  async deleteNutritionGoals(userId: number): Promise<void> {
+    await db.delete(nutritionGoals).where(eq(nutritionGoals.userId, userId));
+  }
   async upsertNutritionGoals(userId: number, data: Partial<Omit<NutritionGoal, 'id' | 'userId'>>): Promise<NutritionGoal> {
     const existing = await storage.getNutritionGoals(userId);
     if (existing) {
