@@ -1411,8 +1411,8 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
       setStep("details");
     } else {
       setGoalType((editing?.goalType as GoalType) ?? "general");
+      setStep(editing ? "details" : "goal");
     }
-    setStep(editing ? "details" : "goal");
     setEditingDay(null);
     setViewWeek(1);
 
