@@ -643,6 +643,18 @@ export default function GoalsPage() {
   const { toast } = useToast();
   const [goalModal, setGoalModal] = useState(false);
   const [browseModal, setBrowseModal] = useState(false);
+  const [editNutritionModal, setEditNutritionModal] = useState(false);
+  const [editReadingModal, setEditReadingModal] = useState(false);
+  const [editWorkoutPlan, setEditWorkoutPlan] = useState<any>(null);
+  // Inline edit state for nutrition
+  const [editNCals, setEditNCals] = useState("");
+  const [editNProt, setEditNProt] = useState("");
+  const [editNCarbs, setEditNCarbs] = useState("");
+  const [editNFat, setEditNFat] = useState("");
+  const [editNWater, setEditNWater] = useState("");
+  // Inline edit state for reading
+  const [editRTarget, setEditRTarget] = useState("");
+  const [editRYear, setEditRYear] = useState("");
   const [mealPlanModal, setMealPlanModal] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
@@ -688,6 +700,26 @@ export default function GoalsPage() {
   const updateWorkoutPlan = useMutation({
     mutationFn: ({ id, ...data }: { id: number } & Record<string, any>) => apiRequest("PATCH", `/api/workout-plans/${id}`, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Workout plan updated" }); },
+  });
+  const deleteReadingGoal = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/reading/goal"),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/reading/goal"] }); toast({ title: "Reading goal deleted" }); },
+  });
+  const deleteNutritionGoal = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/nutrition/goals"),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/nutrition/goals"] }); toast({ title: "Nutrition goal deleted" }); },
+  });
+  const deleteWorkoutPlan = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-plans/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Workout plan deleted" }); },
+  });
+  const deleteHobbyPlan = useMutation({
+    mutationFn: ({ hobbyId, planId, extraJson }: { hobbyId: number; planId: string; extraJson: string }) => {
+      const parsed = JSON.parse(extraJson);
+      const updated = { ...parsed, plans: (parsed.plans ?? []).filter((p: any) => p.id !== planId) };
+      return apiRequest("PATCH", `/api/hobbies/${hobbyId}`, { extraJson: JSON.stringify(updated) });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] }); toast({ title: "Hobby plan deleted" }); },
   });
 
   // ── Derived state ─────────────────────────────────────────────────────────────
@@ -861,6 +893,10 @@ export default function GoalsPage() {
                     <p className="text-sm font-semibold">Nutrition Goals</p>
                     <p className="text-xs text-muted-foreground">{nutritionGoal.calories} cal · {nutritionGoal.protein}g protein</p>
                   </div>
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => { setEditNCals(String(nutritionGoal.calories)); setEditNProt(String(nutritionGoal.protein)); setEditNCarbs(String(nutritionGoal.carbs)); setEditNFat(String(nutritionGoal.fat)); setEditNWater(String(nutritionGoal.waterGlasses)); setEditNutritionModal(true); }} className="p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-900/30 text-muted-foreground hover:text-rose-600 transition-colors"><Pencil size={12} /></button>
+                    <button onClick={() => { if (confirm("Delete nutrition goals?")) deleteNutritionGoal.mutate(); }} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
+                  </div>
                   <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === NUTRITION_ID ? "rotate-90" : ""}`} />
                 </div>
               </div>
@@ -890,6 +926,10 @@ export default function GoalsPage() {
                       </div>
                       <p className="text-xs text-muted-foreground capitalize">{activePlan.goalType.replace(/_/g, " ")} · {activePlan.durationWeeks}w plan</p>
                     </div>
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setEditWorkoutPlan(activePlan)} className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-muted-foreground hover:text-blue-600 transition-colors"><Pencil size={12} /></button>
+                      <button onClick={() => { if (confirm("Delete this workout plan?")) deleteWorkoutPlan.mutate(activePlan.id); }} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
+                    </div>
                     <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 mt-1 ${isSelected ? "rotate-90" : ""}`} />
                   </div>
                   <div className="flex items-center gap-2">
@@ -916,6 +956,10 @@ export default function GoalsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">Reading Goal</p>
                       <p className="text-xs text-muted-foreground">{booksFinishedThisYear} / {readingGoal.booksTarget} books in {currentYear}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => { setEditRTarget(String(readingGoal.booksTarget)); setEditRYear(String(readingGoal.year ?? currentYear)); setEditReadingModal(true); }} className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 text-muted-foreground hover:text-amber-600 transition-colors"><Pencil size={12} /></button>
+                      <button onClick={() => { if (confirm("Delete reading goal?")) deleteReadingGoal.mutate(); }} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
                     </div>
                     <ChevronRight size={12} className={`text-muted-foreground transition-transform ${selectedGoalId === READING_GOAL_ID ? "rotate-90" : ""}`} />
                   </div>
@@ -952,6 +996,9 @@ export default function GoalsPage() {
                         <span>{p.hobby.name}</span>
                         {p.durationWeeks && <span>· {p.durationWeeks}w</span>}
                       </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => { if (confirm(`Delete "${p.title}"?`)) deleteHobbyPlan.mutate({ hobbyId: p.hobby.id, planId: p.id, extraJson: p.hobby.extraJson ?? "{}" }); }} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12} /></button>
                     </div>
                     <ChevronRight size={12} className={`text-muted-foreground transition-transform shrink-0 mt-1 ${isSelected ? "rotate-90" : ""}`} />
                   </div>
@@ -1346,6 +1393,65 @@ export default function GoalsPage() {
       </div>
 
       <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} onOpenMealPlan={() => { setBrowseModal(false); setMealPlanModal(true); }} />
+
+      {/* Edit Nutrition Modal */}
+      <Dialog open={editNutritionModal} onOpenChange={(o) => !o && setEditNutritionModal(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-base"><Apple size={15} className="text-rose-500" /> Edit Nutrition Goals</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Calories (kcal)</Label><Input className="mt-1" type="number" value={editNCals} onChange={e => setEditNCals(e.target.value)} /></div>
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Protein (g)</Label><Input className="mt-1" type="number" value={editNProt} onChange={e => setEditNProt(e.target.value)} /></div>
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Carbs (g)</Label><Input className="mt-1" type="number" value={editNCarbs} onChange={e => setEditNCarbs(e.target.value)} /></div>
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Fat (g)</Label><Input className="mt-1" type="number" value={editNFat} onChange={e => setEditNFat(e.target.value)} /></div>
+            </div>
+            <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Water (glasses/day)</Label><Input className="mt-1" type="number" value={editNWater} onChange={e => setEditNWater(e.target.value)} /></div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={() => { updateNutritionGoal.mutate({ calories: +editNCals, protein: +editNProt, carbs: +editNCarbs, fat: +editNFat, waterGlasses: +editNWater }); setEditNutritionModal(false); }}>Save</Button>
+              <Button variant="outline" onClick={() => setEditNutritionModal(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Reading Goal Modal */}
+      <Dialog open={editReadingModal} onOpenChange={(o) => !o && setEditReadingModal(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-base"><BookOpen size={15} className="text-amber-500" /> Edit Reading Goal</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Books Target</Label><Input className="mt-1" type="number" min="1" value={editRTarget} onChange={e => setEditRTarget(e.target.value)} /></div>
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Year</Label><Input className="mt-1" type="number" min="2020" max="2030" value={editRYear} onChange={e => setEditRYear(e.target.value)} /></div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={() => { updateReadingGoal.mutate({ booksTarget: +editRTarget, year: +editRYear }); setEditReadingModal(false); }}>Save</Button>
+              <Button variant="outline" onClick={() => setEditReadingModal(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Workout Plan Modal */}
+      <Dialog open={!!editWorkoutPlan} onOpenChange={(o) => !o && setEditWorkoutPlan(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-base"><Dumbbell size={15} className="text-blue-500" /> Edit Workout Plan</DialogTitle></DialogHeader>
+          {editWorkoutPlan && (
+            <div className="space-y-3 py-1">
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Plan Name</Label><Input className="mt-1" defaultValue={editWorkoutPlan.name} id="edit-wp-name" /></div>
+              <div><Label className="text-xs text-muted-foreground uppercase tracking-wide">Duration (weeks)</Label><Input className="mt-1" type="number" min="1" max="52" defaultValue={editWorkoutPlan.durationWeeks} id="edit-wp-weeks" /></div>
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1" onClick={() => {
+                  const name = (document.getElementById("edit-wp-name") as HTMLInputElement)?.value;
+                  const weeks = (document.getElementById("edit-wp-weeks") as HTMLInputElement)?.value;
+                  updateWorkoutPlan.mutate({ id: editWorkoutPlan.id, name, durationWeeks: +weeks });
+                  setEditWorkoutPlan(null);
+                }}>Save</Button>
+                <Button variant="outline" onClick={() => setEditWorkoutPlan(null)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={mealPlanModal} onOpenChange={(o) => !o && setMealPlanModal(false)}>
         <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <PlannerSetup onClose={() => setMealPlanModal(false)} />

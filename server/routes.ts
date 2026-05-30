@@ -1522,6 +1522,15 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // Delete nutrition goals
+  app.delete("/api/nutrition/goals", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      await storage.upsertNutritionGoals(uid, { calories: 0, protein: 0, carbs: 0, fat: 0, waterGlasses: 0, buddyUserId: null });
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Meal Bundles ────────────────────────────────────────────────────────────
   app.get("/api/meal-bundles", async (req, res) => {
     try {
