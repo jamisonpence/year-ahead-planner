@@ -1482,7 +1482,7 @@ export default function GoalsPage() {
       </Dialog>
       <Dialog open={mealPlanModal} onOpenChange={(o) => !o && setMealPlanModal(false)}>
         <DialogContent className="w-full max-w-2xl flex flex-col overflow-hidden p-3 sm:p-6 h-[calc(100dvh-11rem)] sm:h-auto sm:max-h-[88vh]">
-          <PlannerSetup onClose={() => setMealPlanModal(false)} />
+          <PlannerSetup onClose={() => { setMealPlanModal(false); setBrowseModal(true); }} />
         </DialogContent>
       </Dialog>
       <GoalFormModal open={goalModal} onClose={() => { setGoalModal(false); setEditGoal(null); }} editGoal={editGoal} />
