@@ -30,7 +30,7 @@ const QUICK_LOG_SECTIONS: { key: SectionKey; emoji: string; label: string; sub: 
   { key: "task",          emoji: "✅", label: "Add Task",       sub: "Create a new task"       },
   { key: "note",          emoji: "📝", label: "Add Note",       sub: "Capture a quick thought" },
   { key: "habit_complete",emoji: "🔥", label: "Log Habit",      sub: "Mark a habit done today" },
-  { key: "task_complete", emoji: "☑️", label: "Complete Task",  sub: "Check off a task"        },
+  { key: "task_complete", emoji: "☑️", label: "Log Task",       sub: "Complete a pending task" },
 ];
 
 const ALL_SECTIONS = [...REPO_SECTIONS, ...QUICK_LOG_SECTIONS];
