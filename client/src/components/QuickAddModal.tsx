@@ -572,7 +572,7 @@ function TaskCompleteForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-y-auto space-y-4" style={{ maxHeight: "calc(100dvh - 22rem)" }}>
+      <div className="space-y-4">
         <Section label="Due Today" tasks={dueToday} type="general" />
         <Section label="No Due Date" tasks={noDueDate} type="general" />
         <Section label="Other Due Dates" tasks={otherDue} type="general" />
@@ -829,17 +829,18 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
       {/* ── Mobile: bottom sheet ──────────────────────────────────────────── */}
       <div
         className={`lg:hidden fixed bottom-0 left-0 right-0 z-[80] bg-card rounded-t-3xl shadow-2xl
-          transition-transform duration-300 ease-out
+          transition-transform duration-300 ease-out flex flex-col
           ${visible ? "translate-y-0" : "translate-y-full"}`}
+        style={{ maxHeight: "calc(100dvh - 5rem)" }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
         {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
-        {modalHeader}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 8rem)" }}>
+        <div className="shrink-0">{modalHeader}</div>
+        <div className="overflow-y-auto flex-1 min-h-0">
           {modalBody}
         </div>
       </div>
