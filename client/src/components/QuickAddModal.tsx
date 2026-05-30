@@ -6,8 +6,8 @@ import { X, ArrowLeft, Check, Loader2 } from "lucide-react";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type SectionKey =
-  | "reading" | "movies" | "music" | "recipes" | "spots"
-  | "quotes" | "art" | "workouts" | "plants" | "hobbies";
+  | "reading" | "movies" | "music" | "spots"
+  | "task" | "note" | "habit_complete" | "task_complete";
 
 interface ActivityItem {
   id: number;
@@ -19,22 +19,25 @@ interface ActivityItem {
 
 // ── Section config ────────────────────────────────────────────────────────────
 
-const SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[] = [
-  { key: "reading",  emoji: "📚", label: "Reading",        sub: "Books"          },
-  { key: "movies",   emoji: "🎬", label: "Movies & Shows", sub: "Watch list"     },
-  { key: "music",    emoji: "🎵", label: "Music",          sub: "Artists & songs"},
-  { key: "recipes",  emoji: "🍽️", label: "Recipes",       sub: "Food & drink"   },
-  { key: "spots",    emoji: "📍", label: "Places",         sub: "Spots & locations" },
-  { key: "quotes",   emoji: "💬", label: "Quotes",         sub: "Inspiration"    },
-  { key: "art",      emoji: "🎨", label: "Art",            sub: "Artworks"       },
-  { key: "workouts", emoji: "💪", label: "Workouts",       sub: "Fitness"        },
-  { key: "plants",   emoji: "🌿", label: "Plants",         sub: "Garden"         },
-  { key: "hobbies",  emoji: "✨", label: "Hobbies",        sub: "Interests"      },
+const REPO_SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[] = [
+  { key: "reading", emoji: "📚", label: "Reading",  sub: "Add a book"          },
+  { key: "movies",  emoji: "🎬", label: "Movies",   sub: "Add to watch list"   },
+  { key: "music",   emoji: "🎵", label: "Music",    sub: "Add artist or song"  },
+  { key: "spots",   emoji: "📍", label: "Places",   sub: "Add a spot or place" },
 ];
 
-const SECTION_EMOJI: Record<SectionKey, string> = Object.fromEntries(
-  SECTIONS.map(s => [s.key, s.emoji])
-) as Record<SectionKey, string>;
+const QUICK_LOG_SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[] = [
+  { key: "task",          emoji: "✅", label: "Add Task",       sub: "Create a new task"       },
+  { key: "note",          emoji: "📝", label: "Add Note",       sub: "Capture a quick thought" },
+  { key: "habit_complete",emoji: "🔥", label: "Log Habit",      sub: "Mark a habit done today" },
+  { key: "task_complete", emoji: "☑️", label: "Complete Task",  sub: "Check off a task"        },
+];
+
+const ALL_SECTIONS = [...REPO_SECTIONS, ...QUICK_LOG_SECTIONS];
+
+const SECTION_EMOJI: Record<string, string> = Object.fromEntries(
+  ALL_SECTIONS.map(s => [s.key, s.emoji])
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -425,20 +428,120 @@ function HobbiesForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ── Quick Log: Add Task ───────────────────────────────────────────────────────
+function TaskForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<"low"|"medium"|"high">("medium");
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/general-tasks", { title, priority, completed: false }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/general-tasks"] }); onSuccess(); },
+  });
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
+      <FormInput label="Task" value={title} onChange={setTitle} placeholder="e.g. Call the dentist" required />
+      <SegmentPicker label="Priority"
+        options={[{ value:"low",label:"Low" },{ value:"medium",label:"Medium" },{ value:"high",label:"High" }]}
+        value={priority} onChange={setPriority} />
+      <SubmitButton loading={mut.isPending} disabled={!title.trim()} label="Add Task" />
+    </form>
+  );
+}
+
+// ── Quick Log: Add Note ───────────────────────────────────────────────────────
+function NoteForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const today = new Date().toISOString().split("T")[0];
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/journal", { title: title || "Quick Note", content, date: today, mood: "neutral", isPrivate: true }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/journal"] }); onSuccess(); },
+  });
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (content.trim()) mut.mutate(); }} className="space-y-4">
+      <FormInput label="Title (optional)" value={title} onChange={setTitle} placeholder="e.g. Meeting notes" />
+      <FormInput label="Note" value={content} onChange={setContent} placeholder="What's on your mind?" required multiline />
+      <SubmitButton loading={mut.isPending} disabled={!content.trim()} label="Save Note" />
+    </form>
+  );
+}
+
+// ── Quick Log: Mark Habit Done ────────────────────────────────────────────────
+function HabitCompleteForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const today = new Date().toISOString().split("T")[0];
+  const { data: habits = [] } = useQuery<any[]>({ queryKey: ["/api/habits"] });
+  const [selected, setSelected] = useState<number | null>(null);
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/habits/${selected}/complete/${today}`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/habits"] }); onSuccess(); },
+  });
+  if (!habits.length) return <p className="text-sm text-muted-foreground text-center py-6">No habits set up yet. Add habits in the Habits page first.</p>;
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">Select the habit you completed today:</p>
+      <div className="space-y-2 max-h-52 overflow-y-auto">
+        {habits.map((h: any) => (
+          <button key={h.id} type="button" onClick={() => setSelected(h.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${selected === h.id ? "border-violet-500 bg-violet-500/10" : "border-border hover:bg-secondary"}`}>
+            <span className="text-xl leading-none shrink-0">{h.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{h.title}</p>
+              <p className="text-xs text-muted-foreground capitalize">{h.category}</p>
+            </div>
+            {selected === h.id && <Check size={15} className="text-violet-500 shrink-0" />}
+          </button>
+        ))}
+      </div>
+      <SubmitButton loading={mut.isPending} disabled={!selected} label="Mark Complete" />
+    </div>
+  );
+}
+
+// ── Quick Log: Complete a Task ────────────────────────────────────────────────
+function TaskCompleteForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const { data: tasks = [] } = useQuery<any[]>({ queryKey: ["/api/general-tasks"] });
+  const pending = tasks.filter((t: any) => !t.completed);
+  const [selected, setSelected] = useState<number | null>(null);
+  const mut = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/general-tasks/${selected}`, { completed: true }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/general-tasks"] }); onSuccess(); },
+  });
+  if (!pending.length) return <p className="text-sm text-muted-foreground text-center py-6">No pending tasks — you're all caught up! 🎉</p>;
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">Select the task you completed:</p>
+      <div className="space-y-2 max-h-52 overflow-y-auto">
+        {pending.map((t: any) => (
+          <button key={t.id} type="button" onClick={() => setSelected(t.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${selected === t.id ? "border-violet-500 bg-violet-500/10" : "border-border hover:bg-secondary"}`}>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{t.title}</p>
+              {t.priority && <p className="text-xs text-muted-foreground capitalize">{t.priority} priority</p>}
+            </div>
+            {selected === t.id && <Check size={15} className="text-violet-500 shrink-0" />}
+          </button>
+        ))}
+      </div>
+      <SubmitButton loading={mut.isPending} disabled={!selected} label="Mark Complete" />
+    </div>
+  );
+}
+
 // ── Section form router ───────────────────────────────────────────────────────
 
 function SectionForm({ section, onSuccess }: { section: SectionKey; onSuccess: () => void }) {
   const forms: Record<SectionKey, React.ReactNode> = {
-    reading:  <ReadingForm  onSuccess={onSuccess} />,
-    movies:   <MoviesForm   onSuccess={onSuccess} />,
-    music:    <MusicForm    onSuccess={onSuccess} />,
-    recipes:  <RecipesForm  onSuccess={onSuccess} />,
-    spots:    <SpotsForm    onSuccess={onSuccess} />,
-    quotes:   <QuotesForm   onSuccess={onSuccess} />,
-    art:      <ArtForm      onSuccess={onSuccess} />,
-    workouts: <WorkoutsForm onSuccess={onSuccess} />,
-    plants:   <PlantsForm   onSuccess={onSuccess} />,
-    hobbies:  <HobbiesForm  onSuccess={onSuccess} />,
+    reading:        <ReadingForm        onSuccess={onSuccess} />,
+    movies:         <MoviesForm         onSuccess={onSuccess} />,
+    music:          <MusicForm          onSuccess={onSuccess} />,
+    spots:          <SpotsForm          onSuccess={onSuccess} />,
+    task:           <TaskForm           onSuccess={onSuccess} />,
+    note:           <NoteForm           onSuccess={onSuccess} />,
+    habit_complete: <HabitCompleteForm  onSuccess={onSuccess} />,
+    task_complete:  <TaskCompleteForm   onSuccess={onSuccess} />,
   };
   return <>{forms[section]}</>;
 }
@@ -477,7 +580,7 @@ function RecentAddsRow() {
 // ── Success flash ─────────────────────────────────────────────────────────────
 
 function SuccessFlash({ section, onDone }: { section: SectionKey; onDone: () => void }) {
-  const s = SECTIONS.find(x => x.key === section)!;
+  const s = ALL_SECTIONS.find(x => x.key === section)!;
   useEffect(() => {
     const t = setTimeout(onDone, 1400);
     return () => clearTimeout(t);
@@ -541,7 +644,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
 
   if (!rendered) return null;
 
-  const activeInfo = activeSection ? SECTIONS.find(s => s.key === activeSection) : null;
+  const activeInfo = activeSection ? ALL_SECTIONS.find(s => s.key === activeSection) : null;
 
   function handleSuccess() {
     setShowSuccess(true);
@@ -593,24 +696,52 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
           <SectionForm section={activeSection} onSuccess={handleSuccess} />
         </div>
       ) : (
-        /* Grid picker view */
-        <>
-          <RecentAddsRow />
-          <div className="px-5 pb-6">
-            <div className="grid grid-cols-4 gap-2.5">
-              {SECTIONS.map(sec => (
+        /* Two-section picker */
+        <div className="px-4 pb-6 space-y-5 pt-2">
+          {/* Repository section */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+              Add to Repository
+            </p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {REPO_SECTIONS.map(sec => (
                 <button
                   key={sec.key}
                   onClick={() => setActiveSection(sec.key)}
-                  className="flex flex-col items-center gap-1.5 py-3.5 px-1 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95"
+                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95 text-left"
                 >
-                  <span className="text-2xl leading-none">{sec.emoji}</span>
-                  <span className="text-[10px] font-semibold text-center leading-tight">{sec.label}</span>
+                  <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
+                  </div>
                 </button>
               ))}
             </div>
           </div>
-        </>
+
+          {/* Quick Logs section */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+              Quick Logs
+            </p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {QUICK_LOG_SECTIONS.map(sec => (
+                <button
+                  key={sec.key}
+                  onClick={() => setActiveSection(sec.key)}
+                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95 text-left"
+                >
+                  <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -636,7 +767,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
         {modalHeader}
-        <div className="overflow-y-auto" style={{ maxHeight: "65vh" }}>
+        <div className="overflow-y-auto" style={{ maxHeight: "75dvh" }}>
           {modalBody}
         </div>
       </div>
