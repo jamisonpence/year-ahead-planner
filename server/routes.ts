@@ -839,17 +839,46 @@ Return exactly this structure:
     try {
       const uid = (req.user as User).id;
       const data = { ...req.body, userId: uid, createdAt: new Date().toISOString() };
-      res.status(201).json(await storage.createWorkoutPlan(data, uid));
+      const plan = await storage.createWorkoutPlan(data, uid);
+      // Auto-create a linked Goal so the plan appears on the Goals page
+      await storage.createGoal({
+        title: plan.name,
+        category: "fitness",
+        progressType: "percent",
+        progressCurrent: 0,
+        progressTarget: 100,
+        priority: "medium",
+        recurring: "none",
+        startDate: plan.startDate ?? new Date().toISOString().slice(0, 10),
+        targetDate: plan.durationWeeks
+          ? new Date(Date.now() + plan.durationWeeks * 7 * 86400000).toISOString().slice(0, 10)
+          : null,
+        linkedWorkoutPlanId: plan.id,
+      }, uid);
+      res.status(201).json(plan);
     } catch (e) { handleError(res, e); }
   });
   app.patch("/api/workout-plans/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateWorkoutPlan(+req.params.id, req.body);
-      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      // Keep linked goal title in sync when plan is renamed
+      if (req.body.name) {
+        const uid = (req.user as User).id;
+        const allGoals = await storage.getAllGoalsWithProjects(uid);
+        const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
+        if (linked) await storage.updateGoal(linked.id, { title: req.body.name });
+      }
+      res.json(updated);
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/workout-plans/:id", requireAuth, async (req, res) => {
     try {
+      const uid = (req.user as User).id;
+      // Delete linked goal first
+      const allGoals = await storage.getAllGoalsWithProjects(uid);
+      const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
+      if (linked) await storage.deleteGoal(linked.id);
       const ok = await storage.deleteWorkoutPlan(+req.params.id);
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }

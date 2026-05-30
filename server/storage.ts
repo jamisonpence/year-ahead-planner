@@ -189,7 +189,8 @@ export async function initializeStorage() {
       recurring TEXT NOT NULL DEFAULT 'none',
       description TEXT,
       linked_book_id INTEGER,
-      linked_template_id INTEGER
+      linked_template_id INTEGER,
+      linked_workout_plan_id INTEGER
     )
   `);
 
@@ -248,6 +249,7 @@ export async function initializeStorage() {
   `);
   // Migrations for week_plan table
   await pool.query(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS bundle_id INTEGER`);
+  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS linked_workout_plan_id INTEGER`);
   await pool.query(`ALTER TABLE week_plan ALTER COLUMN recipe_id DROP NOT NULL`).catch(() => {});
 
   await pool.query(`

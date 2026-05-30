@@ -206,6 +206,7 @@ export const goals = pgTable("goals", {
   description: text("description"),
   linkedBookId: integer("linked_book_id"),
   linkedTemplateId: integer("linked_template_id"),
+  linkedWorkoutPlanId: integer("linked_workout_plan_id"),
   buddyUserId: integer("buddy_user_id"),
 });
 

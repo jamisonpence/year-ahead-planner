@@ -725,7 +725,9 @@ export default function GoalsPage() {
   // ── Derived state ─────────────────────────────────────────────────────────────
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) ?? null;
   const isNutritionSelected = selectedGoalId === NUTRITION_ID;
-  const isWorkoutGoalsSelected = selectedGoalId === WORKOUT_GOALS_ID;
+  // A regular goal that is linked to a workout plan also shows the workout plan detail
+  const selectedLinkedPlanId = selectedGoal?.linkedWorkoutPlanId ?? null;
+  const isWorkoutGoalsSelected = selectedGoalId === WORKOUT_GOALS_ID || !!selectedLinkedPlanId;
   const isReadingGoalSelected = selectedGoalId === READING_GOAL_ID;
   const isHobbyGoalsSelected = selectedGoalId === HOBBY_GOALS_ID;
 
@@ -817,22 +819,37 @@ export default function GoalsPage() {
               </div>
             )}
             {goals.map((g) => {
-              const pct = goalPct(g);
+              // For fitness goals linked to a workout plan, derive progress from the plan
+              const linkedPlan = (g as any).linkedWorkoutPlanId
+                ? workoutPlans.find(p => p.id === (g as any).linkedWorkoutPlanId)
+                : null;
+              const pct = linkedPlan
+                ? (() => {
+                    const weeksElapsed = linkedPlan.startDate
+                      ? Math.floor((Date.now() - new Date(linkedPlan.startDate).getTime()) / (7 * 86400000))
+                      : 0;
+                    return Math.min(100, Math.round((weeksElapsed / (linkedPlan.durationWeeks || 1)) * 100));
+                  })()
+                : goalPct(g);
               const isSelected = g.id === selectedGoalId;
               const d = g.targetDate ? daysUntil(g.targetDate) : null;
               const buddy = g.buddyUserId ? friends.find((f) => f.id === g.buddyUserId) : null;
+              const isFitness = !!(g as any).linkedWorkoutPlanId;
               return (
                 <div key={g.id}
                   onClick={() => { setSelectedGoalId(isSelected ? null : g.id); if (!isSelected) setMobileView("detail"); }}
-                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm ${isSelected ? "border-primary bg-primary/5" : "bg-card hover:border-primary/30"}`}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm ${isSelected ? (isFitness ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20" : "border-primary bg-primary/5") : (isFitness ? "bg-card hover:border-blue-300" : "bg-card hover:border-primary/30")}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        {isFitness && <Dumbbell size={12} className="text-blue-500 shrink-0" />}
                         <p className="text-sm font-semibold leading-tight truncate">{g.title}</p>
                         {g.recurring !== "none" && <RefreshCw size={10} className="text-muted-foreground shrink-0" />}
                       </div>
-                      <p className="text-xs text-muted-foreground capitalize mt-0.5">{g.category}</p>
+                      <p className="text-xs text-muted-foreground capitalize mt-0.5">
+                        {linkedPlan ? `${linkedPlan.goalType.replace(/_/g, " ")} · ${linkedPlan.durationWeeks}w plan` : g.category}
+                      </p>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -863,7 +880,13 @@ export default function GoalsPage() {
                     </span>
                     <div className="flex items-center gap-2">
                       {buddy && <BuddyAvatarSm user={buddy} size={16} />}
-                      {d !== null && (
+                      {linkedPlan && (() => {
+                        const weeksElapsed = linkedPlan.startDate
+                          ? Math.floor((Date.now() - new Date(linkedPlan.startDate).getTime()) / (7 * 86400000))
+                          : 0;
+                        return <span>Week {Math.min(weeksElapsed + 1, linkedPlan.durationWeeks)} of {linkedPlan.durationWeeks}</span>;
+                      })()}
+                      {!linkedPlan && d !== null && (
                         <span className={d < 0 ? "text-destructive font-medium" : d <= 14 ? "text-amber-600 dark:text-amber-400 font-medium" : ""}>
                           {d < 0 ? `${Math.abs(d)}d overdue` : d === 0 ? "Due today" : `${d}d left`}
                         </span>
@@ -902,10 +925,12 @@ export default function GoalsPage() {
               </div>
             )}
 
-            {/* Active Workout Plan */}
+            {/* Active Workout Plan — only shown for plans that predate the linked-goal feature */}
             {(() => {
               const activePlan = workoutPlans.find(p => p.isActive);
-              if (!activePlan) return null;
+              // If there is already a real linked goal for this plan, don't double-render it here
+              const hasLinkedGoal = goals.some((g: any) => g.linkedWorkoutPlanId === activePlan?.id);
+              if (!activePlan || hasLinkedGoal) return null;
               const weeksElapsed = activePlan.startDate
                 ? Math.floor((Date.now() - new Date(activePlan.startDate).getTime()) / (7 * 86400000))
                 : null;
@@ -1156,7 +1181,9 @@ export default function GoalsPage() {
 
             {/* ── Workout goal detail ──────────────────────────────────── */}
             {isWorkoutGoalsSelected && (() => {
-              const activePlan = workoutPlans.find(p => p.isActive);
+              const activePlan = selectedLinkedPlanId
+                ? workoutPlans.find(p => p.id === selectedLinkedPlanId)
+                : workoutPlans.find(p => p.isActive);
               if (!activePlan) return (
                 <div className="text-center py-12 text-muted-foreground">
                   <Dumbbell size={28} className="mx-auto mb-3 opacity-20" />
