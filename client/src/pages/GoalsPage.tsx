@@ -7,12 +7,13 @@ import {
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
   ClipboardList, Flag, X,
   Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
-  Users, Search,
+  Users, Search, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageShell";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -640,6 +641,7 @@ function WorkoutMilestonesEditor({ plan, currentWeek, metric, onSave }: {
 export default function GoalsPage() {
   const { toast } = useToast();
   const [goalModal, setGoalModal] = useState(false);
+  const [browseModal, setBrowseModal] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
@@ -743,9 +745,14 @@ export default function GoalsPage() {
         title="Goals"
         subtitle="Long-term outcomes and progress"
         action={
-          <Button size="sm" onClick={() => { setEditGoal(null); setGoalModal(true); }} className="gap-1.5">
-            <Plus size={13} /><Target size={13} />Goal
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setBrowseModal(true)} className="gap-1.5">
+              <Sparkles size={13} /> Browse Goals & Plans
+            </Button>
+            <Button size="sm" onClick={() => { setEditGoal(null); setGoalModal(true); }} className="gap-1.5">
+              <Plus size={13} /><Target size={13} />Goal
+            </Button>
+          </div>
         }
       />
 
@@ -1336,7 +1343,292 @@ export default function GoalsPage() {
 
       </div>
 
+      <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} />
       <GoalFormModal open={goalModal} onClose={() => { setGoalModal(false); setEditGoal(null); }} editGoal={editGoal} />
     </div>
+  );
+}
+
+// ── Browse Goals & Plans Modal ────────────────────────────────────────────────
+
+type BrowseCategory = "reading" | "workout" | "nutrition" | "skill" | null;
+
+const BROWSE_CATEGORIES = [
+  { key: "reading"   as const, emoji: "📚", label: "Reading",           sub: "Set a reading goal for the year or a custom period" },
+  { key: "workout"   as const, emoji: "💪", label: "Workout",           sub: "Create a training plan with a goal type and duration"  },
+  { key: "nutrition" as const, emoji: "🥗", label: "Nutrition",         sub: "Define your calorie and macro targets"                 },
+  { key: "skill"     as const, emoji: "✨", label: "Skill Development", sub: "Add a hobby and start tracking your growth"            },
+];
+
+const HOBBY_TYPES = [
+  { value: "creative",    label: "Creative",    emoji: "🎨" },
+  { value: "physical",    label: "Physical",    emoji: "🏃" },
+  { value: "intellectual",label: "Intellectual",emoji: "📖" },
+  { value: "social",      label: "Social",      emoji: "👥" },
+  { value: "outdoor",     label: "Outdoor",     emoji: "🌿" },
+  { value: "culinary",    label: "Culinary",    emoji: "🍳" },
+  { value: "musical",     label: "Musical",     emoji: "🎵" },
+  { value: "technical",   label: "Technical",   emoji: "💻" },
+  { value: "collecting",  label: "Collecting",  emoji: "🗂️" },
+  { value: "gaming",      label: "Gaming",      emoji: "🎮" },
+  { value: "other",       label: "Other",       emoji: "⭐" },
+];
+
+const GOAL_TYPES = [
+  { value: "strength",     label: "Strength"          },
+  { value: "muscle",       label: "Muscle Building"   },
+  { value: "weight_loss",  label: "Weight Loss"       },
+  { value: "endurance",    label: "Endurance"         },
+  { value: "athleticism",  label: "General Fitness"   },
+  { value: "flexibility",  label: "Flexibility"       },
+  { value: "custom",       label: "Custom"            },
+];
+
+function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = queryClient;
+  const [category, setCategory] = useState<BrowseCategory>(null);
+
+  // Reading state
+  const [rLabel, setRLabel] = useState("");
+  const [rTarget, setRTarget] = useState("12");
+  const [rYear, setRYear] = useState(String(new Date().getFullYear()));
+
+  // Workout state
+  const [wName, setWName] = useState("");
+  const [wGoalType, setWGoalType] = useState("strength");
+  const [wWeeks, setWWeeks] = useState("12");
+
+  // Nutrition state
+  const [nCals, setNCals] = useState("2000");
+  const [nProt, setNProt] = useState("150");
+  const [nCarbs, setNCarbs] = useState("200");
+  const [nFat, setNFat] = useState("65");
+  const [nWater, setNWater] = useState("8");
+
+  // Hobby/skill state
+  const [hName, setHName] = useState("");
+  const [hType, setHType] = useState("creative");
+  const [hDesc, setHDesc] = useState("");
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (category === "reading") {
+        return apiRequest("POST", "/api/reading/goals", {
+          booksTarget: parseInt(rTarget) || 12,
+          year: parseInt(rYear),
+          label: rLabel.trim() || null,
+          startDate: `${rYear}-01-01`,
+          endDate: `${rYear}-12-31`,
+        });
+      }
+      if (category === "workout") {
+        return apiRequest("POST", "/api/workout-plans", {
+          name: wName.trim() || `${GOAL_TYPES.find(t => t.value === wGoalType)?.label} Plan`,
+          goalType: wGoalType,
+          durationWeeks: parseInt(wWeeks) || 12,
+          isActive: true,
+          startDate: new Date().toISOString().slice(0, 10),
+        });
+      }
+      if (category === "nutrition") {
+        return apiRequest("PATCH", "/api/nutrition/goals", {
+          calories: parseInt(nCals) || 2000,
+          protein: parseInt(nProt) || 150,
+          carbs: parseInt(nCarbs) || 200,
+          fat: parseInt(nFat) || 65,
+          waterGlasses: parseInt(nWater) || 8,
+        });
+      }
+      if (category === "skill") {
+        return apiRequest("POST", "/api/hobbies", {
+          name: hName.trim(),
+          hobbyType: hType,
+          description: hDesc.trim() || null,
+          skillLevel: "beginner",
+          status: "active",
+          isFavorite: false,
+          extraJson: "{}",
+        });
+      }
+    },
+    onSuccess: () => {
+      const labels: Record<string, string> = { reading: "Reading goal created!", workout: "Training plan created!", nutrition: "Nutrition goals saved!", skill: "Hobby added!" };
+      toast({ title: labels[category!] ?? "Saved!" });
+      qc.invalidateQueries();
+      onClose();
+      setCategory(null);
+    },
+    onError: () => toast({ title: "Something went wrong", variant: "destructive" }),
+  });
+
+  function handleClose() { setCategory(null); onClose(); }
+
+  const canSave = category === "reading" ? !!rTarget :
+    category === "workout" ? true :
+    category === "nutrition" ? !!nCals :
+    category === "skill" ? !!hName.trim() : false;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            {category ? (
+              <button onClick={() => setCategory(null)} className="text-muted-foreground hover:text-foreground mr-1">←</button>
+            ) : null}
+            <Sparkles size={16} className="text-primary" />
+            {category ? BROWSE_CATEGORIES.find(c => c.key === category)?.label : "Browse Goals & Plans"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+
+          {/* Category picker */}
+          {!category && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Choose a category to set up a goal or plan:</p>
+              {BROWSE_CATEGORIES.map(cat => (
+                <button key={cat.key} onClick={() => setCategory(cat.key)}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border hover:border-primary hover:bg-primary/5 transition-all text-left group">
+                  <span className="text-2xl shrink-0">{cat.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{cat.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{cat.sub}</p>
+                  </div>
+                  <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Reading Goal */}
+          {category === "reading" && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal Name (optional)</Label>
+                <Input className="mt-1.5" placeholder="e.g. 2026 Reading Challenge" value={rLabel} onChange={e => setRLabel(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books Target</Label>
+                  <Input className="mt-1.5" type="number" min="1" max="365" value={rTarget} onChange={e => setRTarget(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Year</Label>
+                  <Input className="mt-1.5" type="number" min="2020" max="2030" value={rYear} onChange={e => setRYear(e.target.value)} />
+                </div>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+                <p className="text-xs text-blue-700 dark:text-blue-300">📚 You'll track progress as you finish books in the Reading page.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Workout Training Plan */}
+          {category === "workout" && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan Name (optional)</Label>
+                <Input className="mt-1.5" placeholder="e.g. Summer Strength Block" value={wName} onChange={e => setWName(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal Type</Label>
+                <Select value={wGoalType} onValueChange={setWGoalType}>
+                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {GOAL_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration (weeks)</Label>
+                <div className="flex gap-2 mt-1.5 flex-wrap">
+                  {[4, 8, 12, 16, 20].map(w => (
+                    <button key={w} onClick={() => setWWeeks(String(w))}
+                      className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${wWeeks === String(w) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+                      {w}w
+                    </button>
+                  ))}
+                  <Input className="w-20" type="number" min="1" max="52" value={wWeeks} onChange={e => setWWeeks(e.target.value)} />
+                </div>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+                <p className="text-xs text-blue-700 dark:text-blue-300">💪 Your plan will activate immediately. Log workouts in the Workouts page.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Nutrition Goals */}
+          {category === "nutrition" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calories (kcal)</Label>
+                  <Input className="mt-1.5" type="number" value={nCals} onChange={e => setNCals(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Protein (g)</Label>
+                  <Input className="mt-1.5" type="number" value={nProt} onChange={e => setNProt(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carbs (g)</Label>
+                  <Input className="mt-1.5" type="number" value={nCarbs} onChange={e => setNCarbs(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fat (g)</Label>
+                  <Input className="mt-1.5" type="number" value={nFat} onChange={e => setNFat(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Water (glasses/day)</Label>
+                <Input className="mt-1.5" type="number" min="1" max="20" value={nWater} onChange={e => setNWater(e.target.value)} />
+              </div>
+              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-3">
+                <p className="text-xs text-green-700 dark:text-green-300">🥗 These targets will appear in your Nutrition page and Dashboard.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Skill Development / Hobby */}
+          {category === "skill" && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hobby / Skill Name</Label>
+                <Input className="mt-1.5" placeholder="e.g. Guitar, Photography, Spanish…" value={hName} onChange={e => setHName(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</Label>
+                <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                  {HOBBY_TYPES.map(t => (
+                    <button key={t.value} onClick={() => setHType(t.value)}
+                      className={`flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${hType === t.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+                      <span>{t.emoji}</span>{t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description (optional)</Label>
+                <Textarea className="mt-1.5" rows={2} placeholder="What do you want to achieve?" value={hDesc} onChange={e => setHDesc(e.target.value)} />
+              </div>
+              <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-3">
+                <p className="text-xs text-violet-700 dark:text-violet-300">✨ Your hobby will appear in the Hobbies page where you can set plans and goals.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {category && (
+          <div className="px-5 py-4 border-t shrink-0 flex gap-2">
+            <Button variant="outline" onClick={() => setCategory(null)} className="flex-1">Back</Button>
+            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="flex-1">
+              {saveMut.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
