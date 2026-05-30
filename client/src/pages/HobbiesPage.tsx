@@ -11514,11 +11514,12 @@ const EMPTY_FORM: Partial<InsertHobby> = {
 
 // ── Simplified 3-step Add Hobby wizard ───────────────────────────────────────
 
-function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit = false }: {
+function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit = false, titleOverride }: {
   open: boolean; onClose: () => void; initial: Partial<InsertHobby>;
   onSave: (data: Partial<InsertHobby>) => void;
   onSaveAndPlan?: (data: Partial<InsertHobby>) => void;
   isEdit?: boolean;
+  titleOverride?: string;
 }) {
   const [step, setStep] = useState(isEdit ? 3 : 1); // edit mode = jump to full form
   const [form, setForm] = useState<Partial<InsertHobby>>(initial);
@@ -11594,7 +11595,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Hobby" : "Add a Hobby"}</DialogTitle>
+          <DialogTitle>{titleOverride ?? (isEdit ? "Edit Hobby" : "Add a Hobby")}</DialogTitle>
           <StepDots />
         </DialogHeader>
 
@@ -11829,6 +11830,7 @@ export default function HobbiesPage() {
   const [filterType, setFilterType] = useState<HobbyType | "all">("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showForm, setShowForm] = useState(false);
+  const [formTitleOverride, setFormTitleOverride] = useState<string | undefined>(undefined);
   const [editHobby, setEditHobby] = useState<Hobby | null>(null);
   const [detailHobby, setDetailHobby] = useState<Hobby | null>(null);
   const [formInitial, setFormInitial] = useState<Partial<InsertHobby>>(EMPTY_FORM);
@@ -11846,6 +11848,18 @@ export default function HobbiesPage() {
   }, [hobbies, filterType, filterStatus, search]);
 
   const openAdd = (type?: HobbyType) => { setFormInitial({ ...EMPTY_FORM, hobbyType: type ?? "creative" }); setEditHobby(null); setFormKey(k => k + 1); setShowForm(true); };
+
+  // Auto-open add hobby dialog if navigated here with ?addHobby=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("addHobby") === "1") {
+      setFormTitleOverride("Select a Skill");
+      openAdd();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("addHobby");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
   const openEdit = (h: Hobby) => {
     setFormInitial({ name: h.name, hobbyType: h.hobbyType as HobbyType, category: h.category ?? "", description: h.description ?? "", skillLevel: h.skillLevel, dateStarted: h.dateStarted ?? "", status: h.status, notes: h.notes ?? "", extraJson: h.extraJson ?? "{}", isFavorite: h.isFavorite, coverUrl: h.coverUrl ?? "" });
     setEditHobby(h); setFormKey(k => k + 1); setShowForm(true);
@@ -12134,7 +12148,7 @@ export default function HobbiesPage() {
         skipHobbyPicker={!!planWizardDefaultHobbyId}
         onSave={handleSavePlan}
       />
-      <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); }} initial={formInitial} onSave={handleSave} onSaveAndPlan={handleSaveAndPlan} isEdit={!!editHobby} />
+      <HobbyFormDialog key={formKey} open={showForm} onClose={() => { setShowForm(false); setEditHobby(null); setFormTitleOverride(undefined); }} initial={formInitial} onSave={handleSave} onSaveAndPlan={handleSaveAndPlan} isEdit={!!editHobby} titleOverride={editHobby ? undefined : formTitleOverride} />
 
       <HobbyDetailDialog
         hobby={detailHobby}

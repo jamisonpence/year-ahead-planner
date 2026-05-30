@@ -1531,6 +1531,7 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
                 <button key={cat.key} onClick={() => {
                   if (cat.key === "workout") { onClose(); navigate("/workouts?newPlan=1"); return; }
                   if (cat.key === "nutrition") { onClose(); navigate("/meal-planner/setup"); return; }
+                  if (cat.key === "skill") { onClose(); navigate("/hobbies?addHobby=1"); return; }
                   setCategory(cat.key);
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border hover:border-primary hover:bg-primary/5 transition-all text-left group">
