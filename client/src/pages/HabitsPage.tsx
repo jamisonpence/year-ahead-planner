@@ -249,6 +249,26 @@ function getHobbyTasksForToday(hobbies: Hobby[]): HobbyTask[] {
   return tasks;
 }
 
+
+// ── Habit Presets ─────────────────────────────────────────────────────────────
+const HABIT_PRESETS: { title: string; emoji: string; category: HabitCategory; description?: string }[] = [
+  { title: "Drink a full glass of water immediately upon waking up.", emoji: "💧", category: "health" },
+  { title: "Drink 8 glasses of water a day.", emoji: "💧", category: "health" },
+  { title: "Keep a dedicated water bottle at your desk and finish it twice a day.", emoji: "🫙", category: "health" },
+  { title: "Walk for X minutes after eating your largest meal.", emoji: "🚶", category: "fitness" },
+  { title: "Write down your top three priorities every morning before opening email.", emoji: "📝", category: "productivity" },
+  { title: "Put your phone in another room X minutes before going to bed.", emoji: "📵", category: "mindfulness" },
+  { title: "Stand up and stretch for two minutes for every hour spent sitting.", emoji: "🧘", category: "health" },
+  { title: "Read X pages of a non-fiction book every single day.", emoji: "📚", category: "learning" },
+  { title: "Clear your desk completely at the end of every workday.", emoji: "🗂️", category: "productivity" },
+  { title: "Meditate for X minutes a day.", emoji: "🧠", category: "mindfulness" },
+  { title: "Do X minutes of progressive resistance or bodyweight exercises daily.", emoji: "💪", category: "fitness" },
+  { title: "Pack a healthy, protein-rich lunch the night before work.", emoji: "🥗", category: "health" },
+  { title: "Put away items immediately if they take less than two minutes to tidy.", emoji: "🧹", category: "general" },
+  { title: "Get X minutes of direct morning sunlight on your eyes and skin.", emoji: "☀️", category: "health" },
+  { title: "Write down one specific thing you are grateful for before breakfast.", emoji: "🙏", category: "mindfulness" },
+];
+
 // ── Habit Modal (add/edit) ────────────────────────────────────────────────────
 
 function HabitModal({ open, onClose, edit }: {
@@ -300,6 +320,29 @@ function HabitModal({ open, onClose, edit }: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{edit ? "Edit Habit" : "New Habit"}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!edit && (
+            <div className="space-y-1.5">
+              <Label>Quick start <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Select onValueChange={(val) => {
+                const preset = HABIT_PRESETS[parseInt(val)];
+                if (preset) {
+                  setTitle(preset.title);
+                  setEmoji(preset.emoji);
+                  setCategory(preset.category);
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Choose a preset habit…" /></SelectTrigger>
+                <SelectContent>
+                  {HABIT_PRESETS.map((p, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      <span className="mr-1.5">{p.emoji}</span>{p.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label>Name *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Drink 8 glasses of water" required />
