@@ -502,30 +502,102 @@ function HabitCompleteForm({ onSuccess }: { onSuccess: () => void }) {
 // ── Quick Log: Complete a Task ────────────────────────────────────────────────
 function TaskCompleteForm({ onSuccess }: { onSuccess: () => void }) {
   const qc = useQueryClient();
-  const { data: tasks = [] } = useQuery<any[]>({ queryKey: ["/api/general-tasks"] });
-  const pending = tasks.filter((t: any) => !t.completed);
-  const [selected, setSelected] = useState<number | null>(null);
-  const mut = useMutation({
-    mutationFn: () => apiRequest("PATCH", `/api/general-tasks/${selected}`, { completed: true }),
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: generalTasks = [] } = useQuery<any[]>({ queryKey: ["/api/general-tasks"] });
+  const { data: projects = [] } = useQuery<any[]>({
+    queryKey: ["/api/projects/standalone"],
+    queryFn: () => apiRequest("GET", "/api/projects/standalone").then(r => r.json()),
+  });
+
+  const [selected, setSelected] = useState<{ id: number; type: "general" | "project" } | null>(null);
+
+  const generalMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/general-tasks/${id}`, { completed: true }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/general-tasks"] }); onSuccess(); },
   });
-  if (!pending.length) return <p className="text-sm text-muted-foreground text-center py-6">No pending tasks — you're all caught up! 🎉</p>;
+  const projectMut = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/project-tasks/${id}`, { completed: true }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/projects/standalone"] }); onSuccess(); },
+  });
+
+  const pending = generalTasks.filter((t: any) => !t.completed);
+  const dueToday = pending.filter((t: any) => t.dueDate === today);
+  const noDueDate = pending.filter((t: any) => !t.dueDate);
+  const otherDue  = pending.filter((t: any) => t.dueDate && t.dueDate !== today);
+
+  const pendingProjectTasks = projects.flatMap((p: any) =>
+    (p.tasks ?? []).filter((t: any) => !t.completed).map((t: any) => ({ ...t, projectTitle: p.title }))
+  );
+
+  const totalPending = pending.length + pendingProjectTasks.length;
+  if (totalPending === 0) return (
+    <p className="text-sm text-muted-foreground text-center py-6">No pending tasks — you're all caught up! 🎉</p>
+  );
+
+  function TaskRow({ t, type }: { t: any; type: "general" | "project" }) {
+    const isSelected = selected?.id === t.id && selected?.type === type;
+    return (
+      <button type="button"
+        onClick={() => setSelected({ id: t.id, type })}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${isSelected ? "border-violet-500 bg-violet-500/10" : "border-border hover:bg-secondary"}`}>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{t.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {t.projectTitle ? `📁 ${t.projectTitle}` : t.dueDate === today ? "📅 Due today" : t.priority ? `${t.priority} priority` : "No due date"}
+          </p>
+        </div>
+        {isSelected && <Check size={15} className="text-violet-500 shrink-0" />}
+      </button>
+    );
+  }
+
+  function Section({ label, tasks, type }: { label: string; tasks: any[]; type: "general" | "project" }) {
+    if (!tasks.length) return null;
+    return (
+      <div>
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{label}</p>
+        <div className="space-y-1.5">
+          {tasks.map(t => <TaskRow key={t.id} t={t} type={type} />)}
+        </div>
+      </div>
+    );
+  }
+
+  function handleComplete() {
+    if (!selected) return;
+    if (selected.type === "general") generalMut.mutate(selected.id);
+    else projectMut.mutate(selected.id);
+  }
+
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Select the task you completed:</p>
-      <div className="space-y-2 max-h-52 overflow-y-auto">
-        {pending.map((t: any) => (
-          <button key={t.id} type="button" onClick={() => setSelected(t.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${selected === t.id ? "border-violet-500 bg-violet-500/10" : "border-border hover:bg-secondary"}`}>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{t.title}</p>
-              {t.priority && <p className="text-xs text-muted-foreground capitalize">{t.priority} priority</p>}
+      <div className="space-y-4">
+        <Section label="Due Today" tasks={dueToday} type="general" />
+        <Section label="No Due Date" tasks={noDueDate} type="general" />
+        <Section label="Other Due Dates" tasks={otherDue} type="general" />
+        {projects.map((p: any) => {
+          const pts = (p.tasks ?? []).filter((t: any) => !t.completed);
+          if (!pts.length) return null;
+          return (
+            <div key={p.id}>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">📁 {p.title}</p>
+              <div className="space-y-1.5">
+                {pts.map((t: any) => <TaskRow key={t.id} t={{ ...t, projectTitle: p.title }} type="project" />)}
+              </div>
             </div>
-            {selected === t.id && <Check size={15} className="text-violet-500 shrink-0" />}
-          </button>
-        ))}
+          );
+        })}
       </div>
-      <SubmitButton loading={mut.isPending} disabled={!selected} label="Mark Complete" />
+      <button
+        type="button"
+        onClick={handleComplete}
+        disabled={!selected || generalMut.isPending || projectMut.isPending}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
+      >
+        {(generalMut.isPending || projectMut.isPending) ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+        {(generalMut.isPending || projectMut.isPending) ? "Saving…" : "Mark Complete"}
+      </button>
     </div>
   );
 }
