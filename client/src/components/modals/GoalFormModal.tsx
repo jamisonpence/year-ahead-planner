@@ -207,16 +207,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
             )}
           </div>
 
-          {books.length > 0 && (
-            <div className="space-y-1.5"><Label>Linked Book <span className="text-muted-foreground text-xs">(opt)</span></Label>
-              <Select value={linkedBookId} onValueChange={setLinkedBookId}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{books.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.title}</SelectItem>)}</SelectContent></Select>
-            </div>
-          )}
-          {templates.length > 0 && (
-            <div className="space-y-1.5"><Label>Linked Workout Template <span className="text-muted-foreground text-xs">(opt)</span></Label>
-              <Select value={linkedTemplateId} onValueChange={setLinkedTemplateId}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{templates.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent></Select>
-            </div>
-          )}
+
           <div className="space-y-1.5"><Label>Notes</Label><Textarea value={description} onChange={(e) => setDesc(e.target.value)} rows={2} /></div>
           <div className="flex gap-2"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editGoal ? "Save" : "Create Goal"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
         </form>
