@@ -314,6 +314,70 @@ function SearchSection({ onSendRequest, onAccept, friends, requests, sendPending
   );
 }
 
+
+// ── Friend Requests Section ───────────────────────────────────────────────────
+
+function FriendRequestsSection({
+  incoming,
+  onAccept,
+  onDecline,
+}: {
+  incoming: FriendRequest[];
+  onAccept: (id: number) => void;
+  onDecline: (id: number) => void;
+}) {
+  if (incoming.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="font-semibold text-base">Friend Requests</h2>
+        <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+          {incoming.length}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {incoming.map((req) => (
+          <div
+            key={req.id}
+            className="flex items-center gap-3 p-3 rounded-xl border bg-card"
+          >
+            {req.otherUser.avatarUrl ? (
+              <img
+                src={req.otherUser.avatarUrl}
+                alt={req.otherUser.name}
+                className="w-10 h-10 rounded-full object-cover shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                {req.otherUser.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{req.otherUser.name}</p>
+              <p className="text-xs text-muted-foreground">Wants to connect with you</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => onAccept(req.id)}
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+              >
+                Accept
+              </button>
+              <button
+                onClick={() => onDecline(req.id)}
+                className="px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-secondary transition-colors"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Inbox Section ─────────────────────────────────────────────────────────────
 
 function InboxSection() {
@@ -666,6 +730,13 @@ export default function FriendsSocialHub() {
         friends={friendsData}
         requests={requests}
         sendPending={sendMut.isPending}
+      />
+
+      {/* Incoming Friend Requests */}
+      <FriendRequestsSection
+        incoming={requests.incoming}
+        onAccept={(id) => respondMut.mutate({ id, status: "accepted" })}
+        onDecline={(id) => respondMut.mutate({ id, status: "declined" })}
       />
 
       {/* Recommendations Inbox */}
