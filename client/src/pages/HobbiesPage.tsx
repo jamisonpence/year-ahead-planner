@@ -3485,6 +3485,12 @@ export function PlanWizard({
   const isLangHobby    = isLanguageLearningHobby(selectedHobby);
   // Match any performance hobby (Playing an Instrument, Guitar, Piano, Singing, etc.)
   const isInstrHobby   = hobbyType === "performance";
+  const perfName = selectedHobby?.name?.toLowerCase() ?? "";
+  const isSingingHobby = perfName.includes("sing") || perfName.includes("vocal") || perfName.includes("choir") || perfName.includes("voice");
+  const isActingHobby  = perfName.includes("acting") || perfName.includes("theatre") || perfName.includes("theater") || perfName.includes("drama") || perfName.includes("improv");
+  const isComedyHobby  = perfName.includes("comedy") || perfName.includes("stand-up") || perfName.includes("standup") || perfName.includes("stand up");
+  const isDancingHobby = perfName.includes("danc") || perfName.includes("ballet") || perfName.includes("salsa") || perfName.includes("hip hop") || perfName.includes("breakdance") || perfName.includes("ballroom");
+  const isInstrumentHobby = isInstrHobby && !isSingingHobby && !isActingHobby && !isComedyHobby && !isDancingHobby;
   const templates = isHikingHobby    ? HIKING_PLAN_TEMPLATES
                   : isCyclingHobby   ? CYCLING_PLAN_TEMPLATES
                   : isFishingHobby   ? FISHING_PLAN_TEMPLATES
@@ -4594,19 +4600,135 @@ export function PlanWizard({
                   </div>
                 </div>
 
-                {/* Instrument picker — always shown first */}
-                <div>
-                  <label className="text-xs font-medium mb-1 block">Which instrument? *</label>
-                  <select value={instrInstrument} onChange={e => setInstrInstrument(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
-                    <option value="">Select an instrument…</option>
-                    {INSTRUMENT_LIST.map(i => <option key={i} value={i}>{i}</option>)}
-                    <option value="Other">Other…</option>
-                  </select>
-                  {instrInstrument === "Other" && (
-                    <Input className="text-sm mt-2" placeholder="Type your instrument…" onChange={e => setInstrInstrument(e.target.value)} />
-                  )}
-                </div>
+                {/* Instrument picker — only for Playing an Instrument */}
+                {isInstrumentHobby && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Which instrument? *</label>
+                    <select value={instrInstrument} onChange={e => setInstrInstrument(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
+                      <option value="">Select an instrument…</option>
+                      {INSTRUMENT_LIST.map(i => <option key={i} value={i}>{i}</option>)}
+                      <option value="Other">Other…</option>
+                    </select>
+                    {instrInstrument === "Other" && (
+                      <Input className="text-sm mt-2" placeholder="Type your instrument…" onChange={e => setInstrInstrument(e.target.value)} />
+                    )}
+                  </div>
+                )}
+
+                {/* Singing — vocal style */}
+                {isSingingHobby && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Vocal style / genre (optional)</label>
+                      <Input value={instrInstrument || ""} onChange={e => setInstrInstrument(e.target.value)} className="text-sm" placeholder='e.g. Pop, Classical, R&B, Musical Theatre…' />
+                    </div>
+                    {instrGoalType === "core" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Song to learn (optional)</label>
+                        <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "Someone Like You", "Bohemian Rhapsody"' />
+                      </div>
+                    )}
+                    {instrGoalType === "technique" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Daily practice time</label>
+                        <div className="flex flex-wrap gap-2">
+                          {["10","20","30","45","60"].map(m => (
+                            <button key={m} onClick={() => setInstrPracticeMins(m)}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                              {m} min
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {instrGoalType === "performance" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Song to perform (optional)</label>
+                        <Input value={instrPerfSong} onChange={e => setInstrPerfSong(e.target.value)} className="text-sm" placeholder='e.g. "Hallelujah", "Ave Maria"' />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Acting — scene / role focus */}
+                {isActingHobby && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Focus area (optional)</label>
+                      <Input value={instrInstrument || ""} onChange={e => setInstrInstrument(e.target.value)} className="text-sm" placeholder='e.g. Film, Stage, Improv, Commercial…' />
+                    </div>
+                    {instrGoalType === "core" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Scene or monologue to work on (optional)</label>
+                        <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "Hamlet Act 3", "Meisner exercise"' />
+                      </div>
+                    )}
+                    {instrGoalType === "performance" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Role or production to prepare for (optional)</label>
+                        <Input value={instrPerfSong} onChange={e => setInstrPerfSong(e.target.value)} className="text-sm" placeholder='e.g. "Romeo & Juliet", "Audition monologue"' />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Comedy — style focus */}
+                {isComedyHobby && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Comedy style (optional)</label>
+                      <Input value={instrInstrument || ""} onChange={e => setInstrInstrument(e.target.value)} className="text-sm" placeholder='e.g. Stand-up, Sketch, Improv, Roast…' />
+                    </div>
+                    {instrGoalType === "core" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Set or bit to develop (optional)</label>
+                        <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "5-minute open mic set", "office jokes"' />
+                      </div>
+                    )}
+                    {instrGoalType === "performance" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Performance target (optional)</label>
+                        <Input value={instrPerfSong} onChange={e => setInstrPerfSong(e.target.value)} className="text-sm" placeholder='e.g. "Open mic at Comedy Store"' />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dancing — style focus */}
+                {isDancingHobby && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Dance style (optional)</label>
+                      <Input value={instrInstrument || ""} onChange={e => setInstrInstrument(e.target.value)} className="text-sm" placeholder='e.g. Ballet, Salsa, Hip-Hop, Contemporary…' />
+                    </div>
+                    {instrGoalType === "core" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Routine or move to learn (optional)</label>
+                        <Input value={instrSong} onChange={e => setInstrSong(e.target.value)} className="text-sm" placeholder='e.g. "Basic salsa footwork", "pirouette"' />
+                      </div>
+                    )}
+                    {instrGoalType === "technique" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Daily practice time</label>
+                        <div className="flex flex-wrap gap-2">
+                          {["15","20","30","45","60"].map(m => (
+                            <button key={m} onClick={() => setInstrPracticeMins(m)}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${instrPracticeMins === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
+                              {m} min
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {instrGoalType === "performance" && (
+                      <div>
+                        <label className="text-xs font-medium mb-1 block">Performance to work toward (optional)</label>
+                        <Input value={instrPerfSong} onChange={e => setInstrPerfSong(e.target.value)} className="text-sm" placeholder='e.g. "Recital in June", "Dance showcase"' />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Core playing ability */}
                 {instrGoalType === "core" && (
@@ -4681,7 +4803,7 @@ export function PlanWizard({
                   </div>
                 )}
 
-                <Button onClick={applyInstrumentSettings} disabled={!instrGoalType || !instrInstrument} className="w-full">
+                <Button onClick={applyInstrumentSettings} disabled={!instrGoalType || (isInstrumentHobby && !instrInstrument)} className="w-full">
                   Build My Plan <ChevronRight size={14} />
                 </Button>
               </div>
