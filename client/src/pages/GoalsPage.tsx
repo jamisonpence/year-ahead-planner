@@ -7,7 +7,7 @@ import {
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
   ClipboardList, Flag, X,
   Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
-  Users, Search, Sparkles,
+  Users, Search, Sparkles, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageShell";
@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
+import { HOBBY_TYPES } from "@/pages/HobbiesPage";
 import GoogleBooksModal from "@/components/GoogleBooksModal";
 import PlannerSetup from "@/pages/planner/Setup";
 import type {
@@ -1583,6 +1584,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
   const [hName, setHName] = useState("");
   const [hType, setHType] = useState("creative");
   const [hDesc, setHDesc] = useState("");
+  const [skillStep, setSkillStep] = useState<1 | 2>(1);
 
   // Fetch books for Reading form
   const { data: books = [] } = useQuery<any[]>({ queryKey: ["/api/books"] });
@@ -1639,7 +1641,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
     onError: () => toast({ title: "Something went wrong", variant: "destructive" }),
   });
 
-  function handleClose() { setCategory(null); onClose(); }
+  function handleClose() { setCategory(null); setSkillStep(1); onClose(); }
 
   const modalStart = rTimeframe !== "custom" ? getTimeframeDates(rTimeframe).start : rStart;
   const modalEnd   = rTimeframe !== "custom" ? getTimeframeDates(rTimeframe).end   : rEnd;
@@ -1664,7 +1666,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            {category && <button onClick={() => setCategory(null)} className="text-muted-foreground hover:text-foreground mr-1">←</button>}
+            {category && <button onClick={() => { if (category === "skill" && skillStep === 2) { setSkillStep(1); } else { setCategory(null); setSkillStep(1); } }} className="text-muted-foreground hover:text-foreground mr-1">←</button>}
             <Sparkles size={16} className="text-primary" />
             {category ? BROWSE_CATEGORIES.find(c => c.key === category)?.label : "Browse Goals & Plans"}
           </DialogTitle>
@@ -1680,7 +1682,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
                 <button key={cat.key} onClick={() => {
                   if (cat.key === "workout") { setCategory("workout"); return; }
                   if (cat.key === "nutrition") { if (onOpenMealPlan) onOpenMealPlan(); else { onClose(); navigate("/meal-planner/setup"); } return; }
-                  if (cat.key === "skill") { onClose(); navigate("/hobbies?addHobby=1"); return; }
+                  if (cat.key === "skill") { setCategory("skill"); return; }
                   setCategory(cat.key);
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border hover:border-primary hover:bg-primary/5 transition-all text-left group">
@@ -1900,29 +1902,58 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
           )}
 
           {/* ── Skill Development / Hobby ─────────────────────────────── */}
-          {category === "skill" && (
+          {category === "skill" && skillStep === 1 && (
             <div className="space-y-4">
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hobby / Skill Name</Label>
-                <Input className="mt-1.5" placeholder="e.g. Guitar, Photography, Spanish…" value={hName} onChange={e => setHName(e.target.value)} />
+              {/* Step dots */}
+              <div className="flex items-center justify-center gap-1.5">
+                <div className="h-2 w-6 rounded-full bg-primary" />
+                <div className="h-2 w-2 rounded-full bg-muted" />
+                <div className="h-2 w-2 rounded-full bg-muted" />
               </div>
               <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</Label>
-                <div className="grid grid-cols-3 gap-1.5 mt-1.5">
-                  {HOBBY_TYPES.map(t => (
-                    <button key={t.value} onClick={() => setHType(t.value)}
-                      className={`flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${hType===t.value?"bg-primary text-primary-foreground border-primary":"border-border hover:bg-secondary"}`}>
-                      <span>{t.emoji}</span>{t.label}
-                    </button>
-                  ))}
+                <p className="text-sm text-muted-foreground mb-3">What kind of hobby?</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {HOBBY_TYPES.map(t => {
+                    const Icon = t.icon;
+                    const selected = hType === t.value;
+                    return (
+                      <button key={t.value} onClick={() => setHType(t.value)}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all hover:scale-[1.02] ${selected ? "border-primary bg-primary/10" : "border-border hover:border-primary/40"}`}>
+                        <span className="text-2xl">{t.emoji}</span>
+                        <p className="text-sm font-medium">{t.label}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hobby name *</Label>
+                <Input className="mt-1.5" placeholder="e.g. Photography" value={hName} onChange={e => setHName(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {category === "skill" && skillStep === 2 && (
+            <div className="space-y-4">
+              {/* Step dots */}
+              <div className="flex items-center justify-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-muted" />
+                <div className="h-2 w-6 rounded-full bg-primary" />
+                <div className="h-2 w-2 rounded-full bg-muted" />
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-xl border bg-primary/5">
+                <span className="text-2xl">{HOBBY_TYPES.find(t => t.value === hType)?.emoji}</span>
+                <div>
+                  <p className="text-sm font-semibold">{hName}</p>
+                  <p className="text-xs text-muted-foreground">{HOBBY_TYPES.find(t => t.value === hType)?.label}</p>
                 </div>
               </div>
               <div>
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description (optional)</Label>
-                <Textarea className="mt-1.5" rows={2} placeholder="What do you want to achieve?" value={hDesc} onChange={e => setHDesc(e.target.value)} />
+                <Textarea className="mt-1.5" rows={3} placeholder="What do you want to achieve with this hobby?" value={hDesc} onChange={e => setHDesc(e.target.value)} />
               </div>
               <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-3">
-                <p className="text-xs text-violet-700 dark:text-violet-300">✨ Your hobby will appear in the Hobbies page where you can set plans and goals.</p>
+                <p className="text-xs text-violet-700 dark:text-violet-300">✨ Your hobby will appear in the Hobbies page where you can add plans and set goals.</p>
               </div>
             </div>
           )}
@@ -1931,9 +1962,15 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
         {/* Footer */}
         {category && category !== "workout" && (
           <div className="px-5 py-4 border-t shrink-0 flex gap-2">
-            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 w-full">
-              <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : "Save"}
-            </Button>
+            {category === "skill" && skillStep === 1 ? (
+              <Button onClick={() => setSkillStep(2)} disabled={!hName.trim()} className="gap-1.5 w-full">
+                Next <ArrowRight size={13} />
+              </Button>
+            ) : (
+              <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 w-full">
+                <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : "Save"}
+              </Button>
+            )}
           </div>
         )}
       </DialogContent>
