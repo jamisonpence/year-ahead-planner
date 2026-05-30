@@ -1375,14 +1375,32 @@ const HOBBY_TYPES = [
 ];
 
 const GOAL_TYPES = [
-  { value: "strength",     label: "Strength"          },
-  { value: "muscle",       label: "Muscle Building"   },
-  { value: "weight_loss",  label: "Weight Loss"       },
-  { value: "endurance",    label: "Endurance"         },
-  { value: "athleticism",  label: "General Fitness"   },
-  { value: "flexibility",  label: "Flexibility"       },
-  { value: "custom",       label: "Custom"            },
+  { value: "strength",     label: "Strength"       },
+  { value: "muscle",       label: "Muscle Building"},
+  { value: "weight_loss",  label: "Weight Loss"    },
+  { value: "endurance",    label: "Endurance"      },
+  { value: "athleticism",  label: "General Fitness"},
+  { value: "flexibility",  label: "Flexibility"    },
+  { value: "custom",       label: "Custom"         },
 ];
+
+function getTimeframeDates(tf: "year" | "month" | "quarter" | "custom"): { start: string; end: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  if (tf === "year")    return { start: `${y}-01-01`, end: `${y}-12-31` };
+  if (tf === "month") {
+    const last = new Date(y, m + 1, 0).getDate();
+    return { start: `${y}-${String(m+1).padStart(2,"0")}-01`, end: `${y}-${String(m+1).padStart(2,"0")}-${last}` };
+  }
+  if (tf === "quarter") {
+    const q = Math.floor(m / 3);
+    const qs = q * 3; const qe = qs + 2;
+    const last = new Date(y, qe + 1, 0).getDate();
+    return { start: `${y}-${String(qs+1).padStart(2,"0")}-01`, end: `${y}-${String(qe+1).padStart(2,"0")}-${last}` };
+  }
+  return { start: "", end: "" };
+}
 
 function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
@@ -1390,20 +1408,25 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [category, setCategory] = useState<BrowseCategory>(null);
 
   // Reading state
-  const [rLabel, setRLabel] = useState("");
-  const [rTarget, setRTarget] = useState("12");
-  const [rYear, setRYear] = useState(String(new Date().getFullYear()));
+  const [rLabel, setRLabel]         = useState("");
+  const [rTarget, setRTarget]       = useState("12");
+  const [rTimeframe, setRTimeframe] = useState<"year" | "month" | "quarter" | "custom">("year");
+  const [rStart, setRStart]         = useState(() => getTimeframeDates("year").start);
+  const [rEnd, setREnd]             = useState(() => getTimeframeDates("year").end);
+  const [bookSearch, setBookSearch] = useState("");
+  const [addingBookId, setAddingBookId] = useState<number | null>(null);
+  const [addingBookDate, setAddingBookDate] = useState("");
 
   // Workout state
-  const [wName, setWName] = useState("");
+  const [wName, setWName]         = useState("");
   const [wGoalType, setWGoalType] = useState("strength");
-  const [wWeeks, setWWeeks] = useState("12");
+  const [wWeeks, setWWeeks]       = useState("12");
 
   // Nutrition state
-  const [nCals, setNCals] = useState("2000");
-  const [nProt, setNProt] = useState("150");
+  const [nCals, setNCals]   = useState("2000");
+  const [nProt, setNProt]   = useState("150");
   const [nCarbs, setNCarbs] = useState("200");
-  const [nFat, setNFat] = useState("65");
+  const [nFat, setNFat]     = useState("65");
   const [nWater, setNWater] = useState("8");
 
   // Hobby/skill state
@@ -1411,15 +1434,25 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [hType, setHType] = useState("creative");
   const [hDesc, setHDesc] = useState("");
 
+  // Fetch books for Reading form
+  const { data: books = [] } = useQuery<any[]>({ queryKey: ["/api/books"] });
+
+  const updateBookDateMut = useMutation({
+    mutationFn: ({ id, targetFinishDate }: { id: number; targetFinishDate: string | null }) =>
+      apiRequest("PATCH", `/api/books/${id}`, { targetFinishDate }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/books"] }); setAddingBookId(null); setAddingBookDate(""); },
+  });
+
   const saveMut = useMutation({
     mutationFn: async () => {
       if (category === "reading") {
+        const { start, end } = rTimeframe !== "custom" ? getTimeframeDates(rTimeframe) : { start: rStart, end: rEnd };
         return apiRequest("POST", "/api/reading/goals", {
           booksTarget: parseInt(rTarget) || 12,
-          year: parseInt(rYear),
+          year: parseInt(start.slice(0, 4)),
           label: rLabel.trim() || null,
-          startDate: `${rYear}-01-01`,
-          endDate: `${rYear}-12-31`,
+          startDate: start,
+          endDate: end,
         });
       }
       if (category === "workout") {
@@ -1442,13 +1475,8 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
       }
       if (category === "skill") {
         return apiRequest("POST", "/api/hobbies", {
-          name: hName.trim(),
-          hobbyType: hType,
-          description: hDesc.trim() || null,
-          skillLevel: "beginner",
-          status: "active",
-          isFavorite: false,
-          extraJson: "{}",
+          name: hName.trim(), hobbyType: hType, description: hDesc.trim() || null,
+          skillLevel: "beginner", status: "active", isFavorite: false, extraJson: "{}",
         });
       }
     },
@@ -1456,15 +1484,27 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
       const labels: Record<string, string> = { reading: "Reading goal created!", workout: "Training plan created!", nutrition: "Nutrition goals saved!", skill: "Hobby added!" };
       toast({ title: labels[category!] ?? "Saved!" });
       qc.invalidateQueries();
-      onClose();
-      setCategory(null);
+      onClose(); setCategory(null);
     },
     onError: () => toast({ title: "Something went wrong", variant: "destructive" }),
   });
 
   function handleClose() { setCategory(null); onClose(); }
 
-  const canSave = category === "reading" ? !!rTarget :
+  const modalStart = rTimeframe !== "custom" ? getTimeframeDates(rTimeframe).start : rStart;
+  const modalEnd   = rTimeframe !== "custom" ? getTimeframeDates(rTimeframe).end   : rEnd;
+
+  const assignedBooks = books.filter((b: any) => {
+    if (b.status === "finished") {
+      const fd = b.finishDate as string | null;
+      return fd && fd >= (modalStart || "") && fd <= (modalEnd || "");
+    }
+    const tfd = b.targetFinishDate;
+    return tfd && tfd >= (modalStart || "") && tfd <= (modalEnd || "");
+  });
+  const assignedIds = new Set(assignedBooks.map((b: any) => b.id));
+
+  const canSave = category === "reading" ? (!!rTarget && parseInt(rTarget) >= 1 && (rTimeframe !== "custom" || (!!rStart && !!rEnd))) :
     category === "workout" ? true :
     category === "nutrition" ? !!nCals :
     category === "skill" ? !!hName.trim() : false;
@@ -1474,9 +1514,7 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            {category ? (
-              <button onClick={() => setCategory(null)} className="text-muted-foreground hover:text-foreground mr-1">←</button>
-            ) : null}
+            {category && <button onClick={() => setCategory(null)} className="text-muted-foreground hover:text-foreground mr-1">←</button>}
             <Sparkles size={16} className="text-primary" />
             {category ? BROWSE_CATEGORIES.find(c => c.key === category)?.label : "Browse Goals & Plans"}
           </DialogTitle>
@@ -1502,30 +1540,140 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
           )}
 
-          {/* Reading Goal */}
+          {/* ── Reading Goal (full form) ─────────────────────────────── */}
           {category === "reading" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal Name (optional)</Label>
-                <Input className="mt-1.5" placeholder="e.g. 2026 Reading Challenge" value={rLabel} onChange={e => setRLabel(e.target.value)} />
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Goal Name (optional)</label>
+                <Input placeholder="e.g. Summer Reading 2026, Q1 Challenge…" value={rLabel} onChange={e => setRLabel(e.target.value)} className="text-sm" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books Target</Label>
-                  <Input className="mt-1.5" type="number" min="1" max="365" value={rTarget} onChange={e => setRTarget(e.target.value)} />
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Timeframe</label>
+                <div className="grid grid-cols-4 gap-1.5 mb-3">
+                  {(["year","month","quarter","custom"] as const).map(tf => {
+                    const labels = { year:"This Year", month:"This Month", quarter:"This Quarter", custom:"Custom" };
+                    return (
+                      <button key={tf} onClick={() => { setRTimeframe(tf); if (tf !== "custom") { const d = getTimeframeDates(tf); setRStart(d.start); setREnd(d.end); } }}
+                        className={`py-2 rounded-lg text-xs font-medium border transition-colors ${rTimeframe === tf ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary border-border"}`}>
+                        {labels[tf]}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Year</Label>
-                  <Input className="mt-1.5" type="number" min="2020" max="2030" value={rYear} onChange={e => setRYear(e.target.value)} />
+                {rTimeframe === "custom" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-muted-foreground mb-1 block">Start date</label><Input type="date" value={rStart} onChange={e => setRStart(e.target.value)} className="text-sm" /></div>
+                    <div><label className="text-xs text-muted-foreground mb-1 block">End date</label><Input type="date" value={rEnd} onChange={e => setREnd(e.target.value)} className="text-sm" /></div>
+                  </div>
+                ) : (
+                  modalStart && modalEnd && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Calendar size={11} />
+                      {format(parseISO(modalStart), "MMM d, yyyy")} – {format(parseISO(modalEnd), "MMM d, yyyy")}
+                    </p>
+                  )
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Books Target</label>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center border rounded-lg overflow-hidden">
+                    <button onClick={() => setRTarget(String(Math.max(1, parseInt(rTarget||"1")-1)))} className="px-3 py-2 text-sm hover:bg-secondary transition-colors font-bold">−</button>
+                    <Input type="number" min={1} max={500} value={rTarget} onChange={e => setRTarget(e.target.value)}
+                      className="w-16 text-center text-lg font-bold border-0 focus-visible:ring-0 rounded-none" />
+                    <button onClick={() => setRTarget(String(Math.min(500, parseInt(rTarget||"0")+1)))} className="px-3 py-2 text-sm hover:bg-secondary transition-colors font-bold">+</button>
+                  </div>
+                  <span className="text-sm text-muted-foreground">books to read</span>
                 </div>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
-                <p className="text-xs text-blue-700 dark:text-blue-300">📚 You'll track progress as you finish books in the Reading page.</p>
+
+              {/* Books in this goal */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Books in This Goal</label>
+                  <span className="text-xs text-muted-foreground">{assignedBooks.length} assigned</span>
+                </div>
+                {assignedBooks.length > 0 && (
+                  <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                    {assignedBooks.map((book: any) => {
+                      const isFinished = book.status === "finished";
+                      const date = isFinished ? book.finishDate : book.targetFinishDate;
+                      return (
+                        <div key={book.id} className="flex items-center gap-2 px-2 py-2 rounded-lg bg-secondary/40">
+                          {book.coverUrl ? <img src={book.coverUrl} alt={book.title} className="w-6 h-8 object-cover rounded shrink-0" /> :
+                            <div className="w-6 h-8 rounded shrink-0 bg-muted flex items-center justify-center"><BookOpen size={10} className="opacity-40" /></div>}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{book.title}</p>
+                            {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isFinished
+                              ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Done</span>
+                              : <span className="text-[10px] text-muted-foreground">by {date ? format(parseISO(date), "MMM d") : "—"}</span>}
+                            {!isFinished && (
+                              <button onClick={() => updateBookDateMut.mutate({ id: book.id, targetFinishDate: null })} className="text-muted-foreground hover:text-destructive transition-colors"><X size={12} /></button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Add a book */}
+                <div className="border rounded-xl p-3 space-y-2 bg-secondary/20">
+                  <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
+                  <Input placeholder="Search your reading list…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} className="text-xs h-8" />
+                  {(() => {
+                    const q = bookSearch.trim().toLowerCase();
+                    const unassigned = books.filter((b: any) => {
+                      if (b.status === "finished") return false;
+                      if (assignedIds.has(b.id)) return false;
+                      if (!q) return true;
+                      return b.title.toLowerCase().includes(q) || (b.author ?? "").toLowerCase().includes(q);
+                    }).slice(0, 5);
+                    if (!unassigned.length && !q) return <p className="text-[10px] text-muted-foreground text-center py-1">All backlog/current books are already assigned</p>;
+                    if (!unassigned.length) return <p className="text-[10px] text-muted-foreground text-center py-1">No books match "{bookSearch}"</p>;
+                    return (
+                      <div className="space-y-1">
+                        {unassigned.map((book: any) => (
+                          <div key={book.id}>
+                            {addingBookId === book.id ? (
+                              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
+                                <BookOpen size={11} className="text-primary shrink-0" />
+                                <span className="text-xs flex-1 truncate">{book.title}</span>
+                                <Input type="date" value={addingBookDate} min={modalStart||undefined} max={modalEnd||undefined}
+                                  onChange={e => setAddingBookDate(e.target.value)} className="h-6 text-xs w-32 shrink-0" autoFocus />
+                                <button onClick={() => { if (addingBookDate) updateBookDateMut.mutate({ id: book.id, targetFinishDate: addingBookDate }); }}
+                                  disabled={!addingBookDate} className="shrink-0 p-1 rounded bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/80 transition-colors"><Check size={11} /></button>
+                                <button onClick={() => { setAddingBookId(null); setAddingBookDate(""); }} className="shrink-0 p-1 text-muted-foreground hover:text-foreground"><X size={11} /></button>
+                              </div>
+                            ) : (
+                              <button onClick={() => { setAddingBookId(book.id); setAddingBookDate(modalEnd||""); setBookSearch(""); }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left">
+                                {book.coverUrl ? <img src={book.coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded shrink-0" /> :
+                                  <div className="w-5 h-7 rounded shrink-0 bg-muted flex items-center justify-center"><BookOpen size={9} className="opacity-40" /></div>}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{book.title}</p>
+                                  {book.author && <p className="text-[10px] text-muted-foreground truncate">{book.author}</p>}
+                                </div>
+                                <span className="text-[10px] text-muted-foreground capitalize shrink-0">{book.status}</span>
+                                <Plus size={11} className="text-primary shrink-0" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Workout Training Plan */}
+          {/* ── Workout Training Plan ─────────────────────────────────── */}
           {category === "workout" && (
             <div className="space-y-4">
               <div>
@@ -1536,19 +1684,15 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal Type</Label>
                 <Select value={wGoalType} onValueChange={setWGoalType}>
                   <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {GOAL_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{GOAL_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration (weeks)</Label>
                 <div className="flex gap-2 mt-1.5 flex-wrap">
-                  {[4, 8, 12, 16, 20].map(w => (
+                  {[4,8,12,16,20].map(w => (
                     <button key={w} onClick={() => setWWeeks(String(w))}
-                      className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${wWeeks === String(w) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
-                      {w}w
-                    </button>
+                      className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${wWeeks===String(w)?"bg-primary text-primary-foreground border-primary":"border-border hover:bg-secondary"}`}>{w}w</button>
                   ))}
                   <Input className="w-20" type="number" min="1" max="52" value={wWeeks} onChange={e => setWWeeks(e.target.value)} />
                 </div>
@@ -1559,38 +1703,23 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
           )}
 
-          {/* Nutrition Goals */}
+          {/* ── Nutrition Goals ───────────────────────────────────────── */}
           {category === "nutrition" && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calories (kcal)</Label>
-                  <Input className="mt-1.5" type="number" value={nCals} onChange={e => setNCals(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Protein (g)</Label>
-                  <Input className="mt-1.5" type="number" value={nProt} onChange={e => setNProt(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carbs (g)</Label>
-                  <Input className="mt-1.5" type="number" value={nCarbs} onChange={e => setNCarbs(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fat (g)</Label>
-                  <Input className="mt-1.5" type="number" value={nFat} onChange={e => setNFat(e.target.value)} />
-                </div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calories (kcal)</Label><Input className="mt-1.5" type="number" value={nCals} onChange={e => setNCals(e.target.value)} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Protein (g)</Label><Input className="mt-1.5" type="number" value={nProt} onChange={e => setNProt(e.target.value)} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carbs (g)</Label><Input className="mt-1.5" type="number" value={nCarbs} onChange={e => setNCarbs(e.target.value)} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fat (g)</Label><Input className="mt-1.5" type="number" value={nFat} onChange={e => setNFat(e.target.value)} /></div>
               </div>
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Water (glasses/day)</Label>
-                <Input className="mt-1.5" type="number" min="1" max="20" value={nWater} onChange={e => setNWater(e.target.value)} />
-              </div>
+              <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Water (glasses/day)</Label><Input className="mt-1.5" type="number" min="1" max="20" value={nWater} onChange={e => setNWater(e.target.value)} /></div>
               <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-3">
                 <p className="text-xs text-green-700 dark:text-green-300">🥗 These targets will appear in your Nutrition page and Dashboard.</p>
               </div>
             </div>
           )}
 
-          {/* Skill Development / Hobby */}
+          {/* ── Skill Development / Hobby ─────────────────────────────── */}
           {category === "skill" && (
             <div className="space-y-4">
               <div>
@@ -1602,7 +1731,7 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
                 <div className="grid grid-cols-3 gap-1.5 mt-1.5">
                   {HOBBY_TYPES.map(t => (
                     <button key={t.value} onClick={() => setHType(t.value)}
-                      className={`flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${hType === t.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>
+                      className={`flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${hType===t.value?"bg-primary text-primary-foreground border-primary":"border-border hover:bg-secondary"}`}>
                       <span>{t.emoji}</span>{t.label}
                     </button>
                   ))}
@@ -1623,8 +1752,8 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
         {category && (
           <div className="px-5 py-4 border-t shrink-0 flex gap-2">
             <Button variant="outline" onClick={() => setCategory(null)} className="flex-1">Back</Button>
-            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="flex-1">
-              {saveMut.isPending ? "Saving…" : "Save"}
+            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 flex-1">
+              <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : category === "workout" ? "Create Plan" : "Save"}
             </Button>
           </div>
         )}
