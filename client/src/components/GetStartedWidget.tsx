@@ -1,9 +1,36 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Check, X, ChevronRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { loadChecklist, saveChecklist } from "./OnboardingModal";
 
 const DISMISSED_KEY = "mylifos_getstarted_dismissed";
+
+// Map each checklist section name to a function that checks if data exists
+function useCompletionStatus() {
+  const { data: workoutLogs = [] }   = useQuery<any[]>({ queryKey: ["/api/workout-logs"],          staleTime: 60_000 });
+  const { data: nutritionGoal }      = useQuery<any>({   queryKey: ["/api/nutrition/goals"],        staleTime: 60_000 });
+  const { data: nutritionLog = [] }  = useQuery<any[]>({ queryKey: ["/api/nutrition/food-log"],     staleTime: 60_000 });
+  const { data: habits = [] }        = useQuery<any[]>({ queryKey: ["/api/habits"],                 staleTime: 60_000 });
+  const { data: goals = [] }         = useQuery<any[]>({ queryKey: ["/api/goals"],                  staleTime: 60_000 });
+  const { data: workoutTemplates = [] } = useQuery<any[]>({ queryKey: ["/api/workout-templates"],   staleTime: 60_000 });
+  const { data: workoutPlans = [] }  = useQuery<any[]>({ queryKey: ["/api/workout-plans"],          staleTime: 60_000 });
+
+  return (section: string): boolean => {
+    switch (section) {
+      case "Workouts":
+        return workoutLogs.length > 0 || workoutTemplates.length > 0 || workoutPlans.length > 0;
+      case "Nutrition":
+        return !!nutritionGoal || nutritionLog.length > 0;
+      case "Habits":
+        return habits.length > 0;
+      case "Goals":
+        return goals.length > 0;
+      default:
+        return false;
+    }
+  };
+}
 
 export default function GetStartedWidget() {
   const [items, setItems] = useState(loadChecklist);
@@ -11,15 +38,31 @@ export default function GetStartedWidget() {
     try { return localStorage.getItem(DISMISSED_KEY) === "1"; } catch { return false; }
   });
 
-  // Don't show if dismissed or no checklist
+  const isCompleted = useCompletionStatus();
+
+  // Merge live API completion status into checklist items
+  const mergedItems = items.map(item => ({
+    ...item,
+    done: item.done || isCompleted(item.section),
+  }));
+
+  // Persist any newly auto-completed items back to localStorage
+  useEffect(() => {
+    const hasNew = mergedItems.some((m, i) => m.done && !items[i].done);
+    if (hasNew) {
+      saveChecklist(mergedItems);
+      setItems(mergedItems);
+    }
+  }, [mergedItems.map(m => m.done).join(",")]);
+
   if (dismissed || items.length === 0) return null;
 
-  const doneCount = items.filter(i => i.done).length;
-  const allDone = doneCount === items.length;
-  const pct = Math.round((doneCount / items.length) * 100);
+  const doneCount = mergedItems.filter(i => i.done).length;
+  const allDone = doneCount === mergedItems.length;
+  const pct = Math.round((doneCount / mergedItems.length) * 100);
 
   function toggle(idx: number) {
-    const next = items.map((item, i) => i === idx ? { ...item, done: !item.done } : item);
+    const next = mergedItems.map((item, i) => i === idx ? { ...item, done: !item.done } : item);
     setItems(next);
     saveChecklist(next);
   }
@@ -29,7 +72,6 @@ export default function GetStartedWidget() {
     setDismissed(true);
   }
 
-  // Auto-dismiss after all done (with brief delay)
   useEffect(() => {
     if (allDone) {
       const t = setTimeout(dismiss, 2500);
@@ -43,7 +85,7 @@ export default function GetStartedWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold text-foreground">Get Started</span>
-          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{doneCount}/{items.length}</span>
+          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{doneCount}/{mergedItems.length}</span>
         </div>
         <button onClick={dismiss} className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors" title="Dismiss">
           <X size={13} />
@@ -60,11 +102,11 @@ export default function GetStartedWidget() {
 
       {/* Checklist */}
       <div className="space-y-1">
-        {items.map((item, i) => (
+        {mergedItems.map((item, i) => (
           <div key={i} className="flex items-center gap-2">
             <button
               onClick={() => toggle(i)}
-              className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+              className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
                 item.done ? "bg-emerald-500 border-emerald-500" : "border-border hover:border-primary"
               }`}
             >
