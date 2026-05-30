@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal from "@/components/QuickAddModal";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
@@ -822,6 +823,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
+          <GetStartedWidget />
           <div className="border-t my-1" />
           <button
             onClick={() => setManageMode(!manageMode)}
