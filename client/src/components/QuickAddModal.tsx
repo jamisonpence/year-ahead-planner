@@ -685,7 +685,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
         </div>
       ) : activeSection && activeInfo ? (
         /* Section form view */
-        <div className="px-5 py-5 space-y-5">
+        <div className="px-5 pt-5 pb-10 space-y-5">
           <div className="flex items-center gap-2.5">
             <span className="text-3xl leading-none">{activeInfo.emoji}</span>
             <div>
@@ -697,7 +697,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
         </div>
       ) : (
         /* Two-section picker */
-        <div className="px-4 pb-6 space-y-5 pt-2">
+        <div className="px-4 pb-10 space-y-5 pt-2">
           {/* Repository section */}
           <div>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
@@ -767,7 +767,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
         {modalHeader}
-        <div className="overflow-y-auto" style={{ maxHeight: "75dvh" }}>
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 12rem)" }}>
           {modalBody}
         </div>
       </div>
