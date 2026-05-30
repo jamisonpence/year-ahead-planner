@@ -55,31 +55,37 @@ export default function Setup({ onClose }: { onClose?: () => void } = {}) {
 
   return (
     <div className="w-full flex flex-col h-full">
-      <div className="mb-4 sm:mb-6 shrink-0">
-        <h1 className="text-xl font-semibold tracking-tight">Build your plan</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <div className="mb-3 sm:mb-5 shrink-0">
+        <h1 className="text-lg font-semibold tracking-tight">Build your plan</h1>
+        <p className="mt-0.5 text-xs text-muted-foreground hidden sm:block">
           Four quick steps. No account. No tracking. Just food that fits your day.
         </p>
       </div>
-      <div className="mb-4 flex items-center gap-2 shrink-0">
+      <div className="mb-4 flex items-center shrink-0">
         {stepLabels.map((label, i) => {
           const idx = (i + 1) as Step;
           const active = step === idx;
           const done = step > idx;
           return (
-            <div key={label} className="flex items-center gap-2">
-              <div
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-medium",
-                  active && "border-primary bg-primary text-primary-foreground",
-                  done && "border-primary/50 bg-primary/10 text-primary",
-                  !active && !done && "border-border text-muted-foreground",
-                )}
-              >
-                {idx}
+            <div key={label} className="flex items-center">
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-medium shrink-0",
+                    active && "border-primary bg-primary text-primary-foreground",
+                    done && "border-primary/50 bg-primary/10 text-primary",
+                    !active && !done && "border-border text-muted-foreground",
+                  )}
+                >
+                  {idx}
+                </div>
+                {/* Show label only for active step on mobile, always on sm+ */}
+                <span className={cn(
+                  "text-xs",
+                  active ? "text-foreground" : "text-muted-foreground hidden sm:inline",
+                )}>{label}</span>
               </div>
-              <span className={cn("text-xs", active ? "text-foreground" : "text-muted-foreground")}>{label}</span>
-              {i < stepLabels.length - 1 && <span className="mx-1 h-px w-6 bg-border" />}
+              {i < stepLabels.length - 1 && <span className="mx-2 h-px w-4 bg-border shrink-0" />}
             </div>
           );
         })}
