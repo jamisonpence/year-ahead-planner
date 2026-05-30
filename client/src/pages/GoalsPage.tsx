@@ -1430,6 +1430,16 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [nFat, setNFat]     = useState("65");
   const [nWater, setNWater] = useState("8");
 
+  const [nPreset, setNPreset] = useState<"maintain" | "cut" | "bulk" | "custom">("maintain");
+
+  // Preset applier
+  function applyNutritionPreset(preset: typeof nPreset) {
+    setNPreset(preset);
+    if (preset === "maintain") { setNCals("2000"); setNProt("150"); setNCarbs("200"); setNFat("65"); }
+    else if (preset === "cut")     { setNCals("1600"); setNProt("170"); setNCarbs("130"); setNFat("55"); }
+    else if (preset === "bulk")    { setNCals("2600"); setNProt("190"); setNCarbs("310"); setNFat("75"); }
+  }
+
   // Hobby/skill state
   const [hName, setHName] = useState("");
   const [hType, setHType] = useState("creative");
@@ -1530,7 +1540,6 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
               {BROWSE_CATEGORIES.map(cat => (
                 <button key={cat.key} onClick={() => {
                   if (cat.key === "workout") { onClose(); navigate("/workouts?newPlan=1"); return; }
-                  if (cat.key === "nutrition") { onClose(); navigate("/meal-planner/setup"); return; }
                   if (cat.key === "skill") { onClose(); navigate("/hobbies?addHobby=1"); return; }
                   setCategory(cat.key);
                 }}
@@ -1711,12 +1720,38 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
 
           {/* ── Nutrition Goals ───────────────────────────────────────── */}
           {category === "nutrition" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Preset selector at top — like Reading's timeframe buttons */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Goal Type</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {([
+                    { value: "maintain" as const, label: "Maintain" },
+                    { value: "cut"      as const, label: "Cut"      },
+                    { value: "bulk"     as const, label: "Bulk"     },
+                    { value: "custom"   as const, label: "Custom"   },
+                  ]).map(p => (
+                    <button key={p.value} onClick={() => applyNutritionPreset(p.value)}
+                      className={`py-2 rounded-lg text-xs font-medium border transition-colors ${nPreset === p.value ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary border-border"}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {nPreset !== "custom" && (
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <Calendar size={11} />
+                    {nPreset === "maintain" && "Balanced macros to maintain current weight"}
+                    {nPreset === "cut"      && "Caloric deficit with high protein to preserve muscle"}
+                    {nPreset === "bulk"     && "Caloric surplus with high carbs to support muscle gain"}
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calories (kcal)</Label><Input className="mt-1.5" type="number" value={nCals} onChange={e => setNCals(e.target.value)} /></div>
-                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Protein (g)</Label><Input className="mt-1.5" type="number" value={nProt} onChange={e => setNProt(e.target.value)} /></div>
-                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carbs (g)</Label><Input className="mt-1.5" type="number" value={nCarbs} onChange={e => setNCarbs(e.target.value)} /></div>
-                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fat (g)</Label><Input className="mt-1.5" type="number" value={nFat} onChange={e => setNFat(e.target.value)} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calories (kcal)</Label><Input className="mt-1.5" type="number" value={nCals} onChange={e => { setNCals(e.target.value); setNPreset("custom"); }} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Protein (g)</Label><Input className="mt-1.5" type="number" value={nProt} onChange={e => { setNProt(e.target.value); setNPreset("custom"); }} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carbs (g)</Label><Input className="mt-1.5" type="number" value={nCarbs} onChange={e => { setNCarbs(e.target.value); setNPreset("custom"); }} /></div>
+                <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fat (g)</Label><Input className="mt-1.5" type="number" value={nFat} onChange={e => { setNFat(e.target.value); setNPreset("custom"); }} /></div>
               </div>
               <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Water (glasses/day)</Label><Input className="mt-1.5" type="number" min="1" max="20" value={nWater} onChange={e => setNWater(e.target.value)} /></div>
               <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-3">
@@ -1757,8 +1792,7 @@ function BrowseGoalsModal({ open, onClose }: { open: boolean; onClose: () => voi
         {/* Footer */}
         {category && (
           <div className="px-5 py-4 border-t shrink-0 flex gap-2">
-            <Button variant="outline" onClick={() => setCategory(null)} className="flex-1">Back</Button>
-            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 flex-1">
+            <Button onClick={() => saveMut.mutate()} disabled={!canSave || saveMut.isPending} className="gap-1.5 w-full">
               <Check size={13} /> {saveMut.isPending ? "Saving…" : category === "reading" ? "Create Goal" : category === "workout" ? "Create Plan" : "Save"}
             </Button>
           </div>
