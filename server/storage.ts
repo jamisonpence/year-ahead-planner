@@ -1744,6 +1744,9 @@ export interface IStorage {
   } | null>;
   // Users
   upsertUser(data: { googleId: string; email: string; name: string; avatarUrl: string | null }): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createLocalUser(data: { email: string; name: string; passwordHash: string }): Promise<User>;
+  setPasswordHash(userId: number, hash: string): Promise<void>;
   getUserById(id: number): Promise<User | undefined>;
   completeOnboarding(userId: number): Promise<void>;
   deleteAccount(userId: number): Promise<void>;
@@ -2939,6 +2942,21 @@ export const storage: IStorage = {
     }
     const result = await db.insert(users).values({ googleId, email, name, avatarUrl, createdAt: new Date().toISOString() }).returning();
     return result[0];
+  },
+  async getUserByEmail(email: string) {
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
+  },
+  async createLocalUser({ email, name, passwordHash }: { email: string; name: string; passwordHash: string }) {
+    const localId = "local:" + email;
+    const result = await db.insert(users).values({
+      googleId: localId, email, name, passwordHash,
+      avatarUrl: null, createdAt: new Date().toISOString(),
+    }).returning();
+    return result[0];
+  },
+  async setPasswordHash(userId: number, hash: string) {
+    await db.update(users).set({ passwordHash: hash }).where(eq(users.id, userId));
   },
   async getUserById(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);

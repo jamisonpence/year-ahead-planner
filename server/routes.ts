@@ -86,10 +86,76 @@ function logActivity(
   storage.logActivity(userId, type, itemId, itemType, title, imageUrl, subtitle, extra).catch(() => {});
 }
 
+import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
+
 export async function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+
+  // Switch Google account (force account picker)
+  app.get("/auth/google/switch", passport.authenticate("google", {
+    scope: ["profile", "email"], prompt: "select_account",
+  }));
+
+  // Ensure password_hash column exists (safe to run on every boot)
+  try {
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text');
+  } catch (_) {}
+
+  // ── Local auth helpers ──────────────────────────────────────────────────────
+  function hashPassword(password: string): string {
+    const salt = randomBytes(16).toString("hex");
+    const hash = scryptSync(password, salt, 64).toString("hex");
+    return `${salt}:${hash}`;
+  }
+  function verifyPassword(password: string, stored: string): boolean {
+    try {
+      const [salt, hash] = stored.split(":");
+      const hashBuf = Buffer.from(hash, "hex");
+      const derived = scryptSync(password, salt, 64);
+      return timingSafeEqual(hashBuf, derived);
+    } catch { return false; }
+  }
+
+  // POST /auth/register
+  app.post("/auth/register", async (req, res) => {
+    const { email, name, password } = req.body ?? {};
+    if (!email || !name || !password) return res.status(400).json({ error: "email, name, and password required" });
+    if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+    try {
+      const existing = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (existing) return res.status(409).json({ error: "An account with that email already exists" });
+      const user = await storage.createLocalUser({
+        email: email.toLowerCase().trim(),
+        name: name.trim(),
+        passwordHash: hashPassword(password),
+      });
+      req.logIn(user, (err) => {
+        if (err) return res.status(500).json({ error: "Login failed after registration" });
+        res.json({ ok: true });
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  // POST /auth/login
+  app.post("/auth/login", async (req, res) => {
+    const { email, password } = req.body ?? {};
+    if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    try {
+      const user = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
+      if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: "Invalid email or password" });
+      req.logIn(user, (err) => {
+        if (err) return res.status(500).json({ error: "Login failed" });
+        res.json({ ok: true });
+      });
+    } catch {
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
 
   // /auth/google/callback handles BOTH regular login AND Google Calendar OAuth.
   // When req.session.gcalConnecting is set, it's a calendar auth — exchange the

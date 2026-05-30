@@ -7,6 +7,7 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   googleId: text("google_id").notNull().unique(),
+  passwordHash: text("password_hash"),
   email: text("email").notNull(),
   name: text("name").notNull(),
   avatarUrl: text("avatar_url"),
