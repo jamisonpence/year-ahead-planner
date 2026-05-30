@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
+import GoogleBooksModal from "@/components/GoogleBooksModal";
 import PlannerSetup from "@/pages/planner/Setup";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks,
@@ -1555,6 +1556,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
   const [rStart, setRStart]         = useState(() => getTimeframeDates("year").start);
   const [rEnd, setREnd]             = useState(() => getTimeframeDates("year").end);
   const [bookSearch, setBookSearch] = useState("");
+  const [findBooksOpen, setFindBooksOpen] = useState(false);
   const [addingBookId, setAddingBookId] = useState<number | null>(null);
   const [addingBookDate, setAddingBookDate] = useState("");
 
@@ -1780,7 +1782,12 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
 
                 {/* Add a book */}
                 <div className="border rounded-xl p-3 space-y-2 bg-secondary/20">
-                  <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Add a book with a target finish date</p>
+                    <button onClick={() => setFindBooksOpen(true)} className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
+                      <Search size={11} /> Find Books
+                    </button>
+                  </div>
                   <Input placeholder="Search your reading list…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} className="text-xs h-8" />
                   {(() => {
                     const q = bookSearch.trim().toLowerCase();
@@ -1939,6 +1946,16 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
           </div>
         )}
       </DialogContent>
+      <GoogleBooksModal
+        open={findBooksOpen}
+        onClose={() => setFindBooksOpen(false)}
+        onAdd={async (payload) => {
+          try {
+            await apiRequest("POST", "/api/books", payload);
+            qc.invalidateQueries({ queryKey: ["/api/books"] });
+          } catch {}
+        }}
+      />
     </Dialog>
   );
 }
