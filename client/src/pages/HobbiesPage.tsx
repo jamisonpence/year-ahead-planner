@@ -97,7 +97,7 @@ export const HOBBY_TYPES: { value: HobbyType; label: string; icon: React.Element
 
 export const HOBBY_TYPE_MAP = Object.fromEntries(HOBBY_TYPES.map(t => [t.value, t]));
 
-const PRESET_HOBBIES: Record<HobbyType, string[]> = {
+export const PRESET_HOBBIES: Record<HobbyType, string[]> = {
   creative:    ["Photography", "Painting", "Drawing", "Pottery", "Knitting/Crochet", "Woodworking", "Jewelry Making", "Sculpting"],
   collection:  ["Coins", "Stamps", "Vinyl Records", "Trading Cards", "Sneakers", "Watches", "Comic Books", "Antiques"],
   outdoor:     ["Hiking", "Cycling", "Fishing", "Gardening", "Rock Climbing", "Bird Watching", "Surfing", "Running"],
@@ -279,7 +279,7 @@ function BuddyPickerInline({
 
 // ── Goal templates per hobby type ─────────────────────────────────────────────
 
-const GOAL_TEMPLATES: Record<HobbyType, GoalTemplate[]> = {
+export const GOAL_TEMPLATES: Record<HobbyType, GoalTemplate[]> = {
   creative: [
     { id: "c1", emoji: "🖼️", label: "Complete a project",   description: "Finish a specific work with a deadline",    goalType: "milestone",  defaults: { title: "Complete a project" } },
     { id: "c2", emoji: "📅", label: "Weekly practice",       description: "Stay consistent with regular sessions",     goalType: "frequency",  defaults: { title: "Practice weekly", freqTimes: 3, freqPeriod: "week", durationWeeks: 12 } },
@@ -506,7 +506,7 @@ interface PlanTemplate {
   durationWeeks?: number;
 }
 
-const PLAN_TEMPLATES: Record<HobbyType, PlanTemplate[]> = {
+export const PLAN_TEMPLATES: Record<HobbyType, PlanTemplate[]> = {
   creative: [
     { id: "cp1", emoji: "🖼️", label: "Complete a project", description: "Step through a specific creative work to completion", durationWeeks: 4, defaultSteps: ["Gather materials & references", "Sketch / plan the composition", "Begin main work", "Refine and add detail", "Finishing touches", "Photograph & archive"] },
     { id: "cp2", emoji: "🎓", label: "Learn a technique", description: "Break down mastering a new skill into sessions", durationWeeks: 8, defaultSteps: ["Research the technique", "Watch / read tutorials", "Practice basics", "Apply to a small project", "Seek feedback", "Create a showcase piece"] },
@@ -2557,7 +2557,7 @@ function planProgress(plan: HobbyPlan): { pct: number; done: number; total: numb
 
 // ── ExtraFields (unchanged) ────────────────────────────────────────────────────
 
-function ExtraFields({ hobbyType, extra, onChange }: { hobbyType: HobbyType; extra: Record<string, any>; onChange: (key: string, value: any) => void }) {
+export function ExtraFields({ hobbyType, extra, onChange }: { hobbyType: HobbyType; extra: Record<string, any>; onChange: (key: string, value: any) => void }) {
   const field = (label: string, key: string, placeholder?: string, type: "input" | "textarea" = "input") => (
     <div key={key}>
       <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
@@ -2577,7 +2577,7 @@ function ExtraFields({ hobbyType, extra, onChange }: { hobbyType: HobbyType; ext
   return null;
 }
 
-function ExtraDisplay({ hobbyType, extra }: { hobbyType: HobbyType; extra: Record<string, any> }) {
+export function ExtraDisplay({ hobbyType, extra }: { hobbyType: HobbyType; extra: Record<string, any> }) {
   const row = (label: string, value: any) => value ? <div key={label} className="flex gap-2 text-sm"><span className="text-muted-foreground min-w-[120px] shrink-0">{label}</span><span className="text-foreground">{String(value)}</span></div> : null;
   if (hobbyType === "collection") return <>{row("Items", extra.itemCount)}{row("Est. Value", extra.estimatedValue)}{row("Prized Item", extra.mostPrizedItem)}</>;
   if (hobbyType === "outdoor") return <>{row("Locations", extra.favoriteLocations)}{row("Gear", extra.gearList)}{row("Personal Bests", extra.personalBests)}</>;
@@ -9649,7 +9649,7 @@ const DAYS_ORDERED = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; // displ
 const DAY_TO_IDX: Record<string, number> = {
   "Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6,
 };
-const SPREAD_PATTERNS: Record<number, string[]> = {
+export const SPREAD_PATTERNS: Record<number, string[]> = {
   1: ["Wed"], 2: ["Tue", "Fri"], 3: ["Mon", "Wed", "Fri"],
   4: ["Mon", "Tue", "Thu", "Fri"], 5: ["Mon", "Tue", "Wed", "Thu", "Fri"],
   6: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -11690,19 +11690,20 @@ function getPlanTemplatesForHobby(hobbyType: HobbyType, hobbyName: string): Plan
 
 // ── Add/Edit Hobby Form Dialog ─────────────────────────────────────────────────
 
-const EMPTY_FORM: Partial<InsertHobby> = {
+export const EMPTY_FORM: Partial<InsertHobby> = {
   name: "", hobbyType: "creative", category: "", description: "",
   skillLevel: "beginner", dateStarted: "", status: "active", notes: "", extraJson: "{}", isFavorite: false, coverUrl: "",
 };
 
 // ── Simplified 3-step Add Hobby wizard ───────────────────────────────────────
 
-function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit = false, titleOverride }: {
+export function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit = false, titleOverride, onBack }: {
   open: boolean; onClose: () => void; initial: Partial<InsertHobby>;
   onSave: (data: Partial<InsertHobby>) => void;
   onSaveAndPlan?: (data: Partial<InsertHobby>) => void;
   isEdit?: boolean;
   titleOverride?: string;
+  onBack?: () => void;
 }) {
   const [step, setStep] = useState(isEdit ? 3 : 1); // edit mode = jump to full form
   const [form, setForm] = useState<Partial<InsertHobby>>(initial);
@@ -11831,7 +11832,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit
             </div>
 
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button variant="outline" size="sm" onClick={onBack ?? onClose} className="flex-1">{onBack ? <><ChevronLeft size={13} className="mr-1" />Back</> : "Cancel"}</Button>
               <Button size="sm" onClick={() => setStep(2)} disabled={!canProceed1} className="flex-1">
                 Next <ChevronRight size={13} className="ml-1" />
               </Button>
@@ -11969,7 +11970,7 @@ function HobbyFormDialog({ open, onClose, initial, onSave, onSaveAndPlan, isEdit
                 </Button>
               )}
               {isEdit && (
-                <Button variant="outline" size="sm" onClick={onClose} className="flex-1">Cancel</Button>
+                <Button variant="outline" size="sm" onClick={onBack ?? onClose} className="flex-1">{onBack ? <><ChevronLeft size={13} className="mr-1" />Back</> : "Cancel"}</Button>
               )}
               <Button size="sm" onClick={handleSave} disabled={!form.name?.trim()} className="flex-1">
                 {isEdit ? "Save Changes" : "Add Hobby"}

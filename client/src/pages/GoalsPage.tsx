@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { daysUntil, PROGRESS_TYPES } from "@/lib/plannerUtils";
 import GoalFormModal from "@/components/modals/GoalFormModal";
-import { HOBBY_TYPES } from "@/pages/HobbiesPage";
+import { HobbyFormDialog, EMPTY_FORM } from "@/pages/HobbiesPage";
 import GoogleBooksModal from "@/components/GoogleBooksModal";
 import PlannerSetup from "@/pages/planner/Setup";
 import type {
@@ -658,6 +658,8 @@ export default function GoalsPage() {
   const [editRTarget, setEditRTarget] = useState("");
   const [editRYear, setEditRYear] = useState("");
   const [mealPlanModal, setMealPlanModal] = useState(false);
+  const [hobbyFormOpen, setHobbyFormOpen] = useState(false);
+  const [hobbyFormKey, setHobbyFormKey] = useState(0);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
@@ -1421,7 +1423,23 @@ export default function GoalsPage() {
 
       </div>
 
-      <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} onOpenMealPlan={() => { setBrowseModal(false); setMealPlanModal(true); }} />
+      <BrowseGoalsModal open={browseModal} onClose={() => setBrowseModal(false)} onOpenMealPlan={() => { setBrowseModal(false); setMealPlanModal(true); }} onOpenHobbyForm={() => { setBrowseModal(false); setHobbyFormKey(k => k + 1); setHobbyFormOpen(true); }} />
+      <HobbyFormDialog
+        key={hobbyFormKey}
+        open={hobbyFormOpen}
+        onClose={() => setHobbyFormOpen(false)}
+        onBack={() => { setHobbyFormOpen(false); setBrowseModal(true); }}
+        initial={EMPTY_FORM}
+        titleOverride="Select a Skill"
+        onSave={async (data) => {
+          try {
+            await apiRequest("POST", "/api/hobbies", data);
+            queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] });
+            toast({ title: "Hobby added!" });
+          } catch { toast({ title: "Something went wrong", variant: "destructive" }); }
+          setHobbyFormOpen(false);
+        }}
+      />
 
       {/* Edit Nutrition Modal */}
       <Dialog open={editNutritionModal} onOpenChange={(o) => !o && setEditNutritionModal(false)}>
@@ -1541,7 +1559,7 @@ function getTimeframeDates(tf: "year" | "month" | "quarter" | "custom"): { start
   return { start: "", end: "" };
 }
 
-function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; onClose: () => void; onOpenMealPlan?: () => void }) {
+function BrowseGoalsModal({ open, onClose, onOpenMealPlan, onOpenHobbyForm }: { open: boolean; onClose: () => void; onOpenMealPlan?: () => void; onOpenHobbyForm?: () => void }) {
   const { toast } = useToast();
   const qc = queryClient;
   const [, navigate] = useLocation();
@@ -1682,7 +1700,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan }: { open: boolean; on
                 <button key={cat.key} onClick={() => {
                   if (cat.key === "workout") { setCategory("workout"); return; }
                   if (cat.key === "nutrition") { if (onOpenMealPlan) onOpenMealPlan(); else { onClose(); navigate("/meal-planner/setup"); } return; }
-                  if (cat.key === "skill") { setCategory("skill"); return; }
+                  if (cat.key === "skill") { if (onOpenHobbyForm) { handleClose(); onOpenHobbyForm(); } return; }
                   setCategory(cat.key);
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border hover:border-primary hover:bg-primary/5 transition-all text-left group">
