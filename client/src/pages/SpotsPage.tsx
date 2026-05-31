@@ -1300,7 +1300,6 @@ export default function SpotsPage() {
   const displaySpots = tabSpots[placesSubTab] ?? tabSpots.saved;
 
   // ── Spot Folders ─────────────────────────────────────────────────────────────
-  const qc = useQueryClient();
   const { data: spotFolders = [] } = useQuery<SpotFolder[]>({
     queryKey: ["/api/spot-folders"],
     queryFn: () => apiRequest("GET", "/api/spot-folders").then(r => r.json()),
