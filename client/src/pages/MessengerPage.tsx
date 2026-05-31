@@ -11,7 +11,7 @@ import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
-  MapPin, Film, ChefHat, BookOpen, Dumbbell, Loader2,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell,
 } from "lucide-react";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
@@ -720,7 +720,7 @@ function SharePicker({ onShare, onClose, onGif }: {
           </div>
           <div className="max-h-48 overflow-y-auto">
             {gifBusy
-              ? <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
+              ? <div className="flex justify-center py-6"><div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" /></div>
               : gifRes.length === 0
                 ? <button type="button" onClick={() => fetchGifs('')} className="w-full text-xs text-primary font-medium py-6 hover:underline">Tap to load trending GIFs</button>
                 : <div className="grid grid-cols-3 gap-1">{gifRes.map((g, i) => {
