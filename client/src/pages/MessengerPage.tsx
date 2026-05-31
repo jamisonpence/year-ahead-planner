@@ -550,16 +550,53 @@ function ShareCard({ shareType, shareData, isOwn }: {
 
 // ── Share Picker ──────────────────────────────────────────────────────────────
 
-type SharePickerTab = 'spots' | 'movies' | 'recipes';
+type SharePickerTab = 'spots' | 'movies' | 'recipes' | 'gif';
 
-function SharePicker({ onShare, onClose }: {
+function SharePicker({ onShare, onClose, onGif }: {
   onShare: (shareType: string, shareData: SharePayload, note: string) => void;
   onClose: () => void;
+  onGif: (url: string) => void;
 }) {
   const [tab, setTab] = useState<SharePickerTab>('spots');
   const [search, setSearch] = useState('');
   const [note, setNote] = useState('');
   const [selected, setSelected] = useState<{ type: string; payload: SharePayload } | null>(null);
+  const [gifQuery, setGifQuery] = useState('');
+  const [gifResults, setGifResults] = useState<any[]>([]);
+  const [gifLoading, setGifLoading] = useState(false);
+
+  // Load trending GIFs when gif tab is opened
+  useEffect(() => {
+    if (tab === 'gif' && gifResults.length === 0) loadTrendingGifs();
+  }, [tab]);
+
+  async function loadTrendingGifs() {
+    setGifLoading(true);
+    try {
+      const r = await apiRequest('GET', '/api/gifs/trending?limit=24');
+      const data = await r.json();
+      setGifResults(data?.data ?? data?.results ?? []);
+    } catch { setGifResults([]); }
+    finally { setGifLoading(false); }
+  }
+
+  async function searchGifs(q: string) {
+    if (!q.trim()) { loadTrendingGifs(); return; }
+    setGifLoading(true);
+    try {
+      const r = await apiRequest('GET', `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
+      const data = await r.json();
+      setGifResults(data?.data ?? data?.results ?? []);
+    } catch { setGifResults([]); }
+    finally { setGifLoading(false); }
+  }
+
+  function getGifUrl(gif: any): string {
+    return gif?.gif ?? gif?.file ?? gif?.url ?? gif?.images?.fixed_height?.url ?? gif?.images?.original?.url ?? '';
+  }
+  function getGifPreview(gif: any): string {
+    return gif?.preview ?? gif?.thumbnail ?? gif?.small ?? getGifUrl(gif);
+  }
 
   const { data: spots = [] }   = useQuery<any[]>({ queryKey: ['/api/spots'],   queryFn: () => apiRequest('GET', '/api/spots').then(r => r.json())   });
   const { data: movies = [] }  = useQuery<any[]>({ queryKey: ['/api/movies'],  queryFn: () => apiRequest('GET', '/api/movies').then(r => r.json())  });
@@ -646,6 +683,7 @@ function SharePicker({ onShare, onClose }: {
   })();
 
   const tabs: { key: SharePickerTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'gif',     label: 'GIF',     icon: <span className="text-[10px] font-bold">GIF</span> },
     { key: 'spots',   label: 'Places',  icon: <MapPin size={13} /> },
     { key: 'movies',  label: 'Movies',  icon: <Film size={13} /> },
     { key: 'recipes', label: 'Recipes', icon: <ChefHat size={13} /> },
@@ -684,8 +722,49 @@ function SharePicker({ onShare, onClose }: {
         />
       </div>
 
+      {/* GIF panel */}
+      {tab === 'gif' && (
+        <div>
+          <div className="px-3 pt-2 pb-1 flex gap-2">
+            <input
+              className="flex-1 px-2 py-1.5 rounded-lg border bg-secondary/60 text-xs outline-none placeholder:text-muted-foreground"
+              placeholder="Search GIFs…"
+              value={gifQuery}
+              onChange={e => setGifQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') searchGifs(gifQuery); }}
+            />
+            <button type="button" onClick={() => searchGifs(gifQuery)}
+              className="px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium">
+              Search
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto px-2 pb-2">
+            {gifLoading ? (
+              <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+            ) : gifResults.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No GIFs found</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-1">
+                {gifResults.map((gif, i) => {
+                  const preview = getGifPreview(gif);
+                  const full = getGifUrl(gif);
+                  if (!preview || !full) return null;
+                  return (
+                    <button key={i} type="button"
+                      onClick={() => { onGif(full); onClose(); }}
+                      className="rounded-lg overflow-hidden aspect-square bg-muted hover:opacity-80 active:scale-95 transition-all">
+                      <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Items list */}
-      <div className="max-h-44 overflow-y-auto px-2 py-2 space-y-0.5">
+      <div className={`max-h-44 overflow-y-auto px-2 py-2 space-y-0.5 ${tab === 'gif' ? 'hidden' : ''}`}>
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">No {tab} found</p>
         ) : items.map((item, i) => (
@@ -753,111 +832,6 @@ function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onCl
   );
 }
 
-
-// ── GIF Picker Dialog ─────────────────────────────────────────────────────────
-function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (url: string) => void }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);   // start true so spinner shows immediately
-  const [apiError, setApiError] = useState(false);
-  const [apiErrorMsg, setApiErrorMsg] = useState("");
-
-  useEffect(() => {
-    if (open) { setQuery(""); setResults([]); setApiError(false); setLoading(true); loadTrending(); }
-  }, [open]);
-
-  async function loadTrending() {
-    setLoading(true);
-    try {
-      const r = await apiRequest("GET", "/api/gifs/trending?limit=24");
-      const data = await r.json();
-      const items = data?.data ?? data?.results ?? [];
-      setResults(items);
-      if (items.length === 0) { setApiError(true); setApiErrorMsg(""); }
-    } catch (e: any) {
-      setApiError(true);
-      setApiErrorMsg(e?.message ?? "Unknown error");
-      setResults([]);
-    }
-    finally { setLoading(false); }
-  }
-
-  async function doSearch(q: string) {
-    if (!q.trim()) { loadTrending(); return; }
-    setLoading(true); setApiError(false);
-    try {
-      const r = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
-      const data = await r.json();
-      setResults(data?.data ?? data?.results ?? []);
-    } catch { setResults([]); }
-    finally { setLoading(false); }
-  }
-
-  function getUrl(gif: any): string {
-    // Klipy format: gif.gif (main URL), or fallback to common patterns
-    return gif?.gif ?? gif?.file ?? gif?.url
-      ?? gif?.images?.fixed_height?.url ?? gif?.images?.original?.url
-      ?? gif?.gif_url ?? gif?.media_formats?.gif?.url ?? "";
-  }
-
-  function getPreview(gif: any): string {
-    // Klipy preview: gif.preview or gif.thumbnail
-    return gif?.preview ?? gif?.thumbnail ?? gif?.small ?? getUrl(gif);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm p-0 gap-0 flex flex-col" style={{ height: "420px" }}>
-        <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b">
-          <DialogTitle className="text-sm font-semibold">Send a GIF</DialogTitle>
-        </DialogHeader>
-        <div className="px-3 pt-3 pb-2 shrink-0">
-          <div className="flex gap-2">
-            <input
-              className="flex-1 px-3 py-2 rounded-xl border bg-secondary/60 text-sm outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
-              placeholder="Search GIFs…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") doSearch(query); }}
-            />
-            <button type="button" onClick={() => doSearch(query)}
-              className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shrink-0">
-              Search
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 pb-4">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 size={24} className="animate-spin text-muted-foreground" />
-            </div>
-          ) : apiError ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2 text-center px-4">
-              <p className="text-sm font-medium text-muted-foreground">Could not load GIFs</p>
-              <p className="text-xs text-muted-foreground">{apiErrorMsg || "Check that KLIPY_API_KEY is set in Railway Variables and the app has redeployed."}</p>
-            </div>
-          ) : results.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-10">No results. Try a different search.</p>
-          ) : (
-            <div className="grid grid-cols-3 gap-1.5">
-              {results.map((gif, i) => {
-                const preview = getPreview(gif);
-                const full = getUrl(gif);
-                if (!preview || !full) return null;
-                return (
-                  <button key={i} type="button" onClick={() => { onPick(full); onClose(); }}
-                    className="rounded-lg overflow-hidden aspect-square hover:opacity-80 transition-opacity active:scale-95 bg-muted">
-                    <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ── Message Bubble ────────────────────────────────────────────────────────────
 
@@ -1047,7 +1021,6 @@ export default function MessengerPage() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
-  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [showDMDialog, setShowDMDialog] = useState(false);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
@@ -1336,6 +1309,7 @@ export default function MessengerPage() {
                         sendShare.mutate({ shareType, shareData, note })
                       }
                       onClose={() => setShowSharePicker(false)}
+                      onGif={handleSendGif}
                     />
                   )}
                 </div>
@@ -1349,15 +1323,7 @@ export default function MessengerPage() {
                   className="flex-1 min-h-[40px] max-h-32 resize-none text-sm py-2 leading-snug"
                   rows={1}
                 />
-                {/* GIF button */}
-                <button
-                  type="button"
-                  onClick={e => { e.preventDefault(); e.stopPropagation(); setGifPickerOpen(true); }}
-                  className="h-10 w-10 flex items-center justify-center rounded-lg transition-colors shrink-0 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  title="Send GIF"
-                >
-                  <span className="text-[11px] font-bold leading-none tracking-tight">GIF</span>
-                </button>
+
                 <Button
                   size="sm"
                   className="h-10 w-10 p-0 shrink-0"
@@ -1392,12 +1358,6 @@ export default function MessengerPage() {
       </div>
 
       {/* ── Dialogs ──────────────────────────────────────────────────────────── */}
-      <GifPickerDialog
-        open={gifPickerOpen}
-        onClose={() => setGifPickerOpen(false)}
-        onPick={handleSendGif}
-      />
-
       {showDMDialog && (
         <NewDMDialog
           friends={friends}
