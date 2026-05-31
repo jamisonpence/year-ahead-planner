@@ -565,10 +565,6 @@ function SharePicker({ onShare, onClose, onGif }: {
   const [gifRes, setGifRes] = useState<any[]>([]);
   const [gifBusy, setGifBusy] = useState(false);
 
-  useEffect(() => {
-    if (tab === 'gif' && gifRes.length === 0) fetchGifs('');
-  }, [tab]);
-
   async function fetchGifs(q: string) {
     setGifBusy(true);
     try {
@@ -726,7 +722,7 @@ function SharePicker({ onShare, onClose, onGif }: {
             {gifBusy
               ? <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
               : gifRes.length === 0
-                ? <p className="text-xs text-muted-foreground text-center py-6">No GIFs yet — try searching!</p>
+                ? <button type="button" onClick={() => fetchGifs('')} className="w-full text-xs text-primary font-medium py-6 hover:underline">Tap to load trending GIFs</button>
                 : <div className="grid grid-cols-3 gap-1">{gifRes.map((g, i) => {
                     const url = g?.gif ?? g?.file ?? g?.url ?? g?.images?.fixed_height?.url ?? '';
                     const pre = g?.preview ?? g?.thumbnail ?? url;
