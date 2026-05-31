@@ -54,6 +54,7 @@ async function buildServer() {
       "process.env.TICKETMASTER_API_KEY": JSON.stringify(process.env.TICKETMASTER_API_KEY ?? ""),
       "process.env.SEATGEEK_CLIENT_ID": JSON.stringify(process.env.SEATGEEK_CLIENT_ID ?? ""),
       "process.env.SEATGEEK_CLIENT_SECRET": JSON.stringify(process.env.SEATGEEK_CLIENT_SECRET ?? ""),
+      "process.env.KLIPY_API_KEY": JSON.stringify(process.env.KLIPY_API_KEY ?? ""),
     },
     minify: true,
     external: externals,

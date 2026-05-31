@@ -7382,6 +7382,23 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // Send a GIF message
+  app.post("/api/messenger/conversations/:id/gif", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const convId = +req.params.id;
+      const { gifUrl, gifPreviewUrl, gifTitle } = req.body;
+      if (!gifUrl) return res.status(400).json({ error: "gifUrl required" });
+      const displayText = gifTitle ? `[GIF: ${gifTitle}]` : "[GIF]";
+      const shareData = JSON.stringify({ gifUrl, gifPreviewUrl: gifPreviewUrl ?? gifUrl, gifTitle: gifTitle ?? "" });
+      const msg = await storage.createMessage(convId, userId, displayText, {
+        messageType: 'gif', shareData,
+      });
+      res.status(201).json(msg);
+    } catch (e) { handleError(res, e); }
+  });
+
+
   // ── Facebook OAuth ────────────────────────────────────────────────────────────
 
   function fbCallbackUrl(req: Request): string {

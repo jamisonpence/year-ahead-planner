@@ -59,6 +59,7 @@ async function buildAll() {
       "process.env.ENCRYPTION_KEY": JSON.stringify(process.env.ENCRYPTION_KEY ?? ""),
       "process.env.EVENTBRITE_API_KEY": JSON.stringify(process.env.EVENTBRITE_API_KEY ?? ""),
       "process.env.TICKETMASTER_API_KEY": JSON.stringify(process.env.TICKETMASTER_API_KEY ?? ""),
+      "process.env.KLIPY_API_KEY": JSON.stringify(process.env.KLIPY_API_KEY ?? ""),
     },
     minify: true,
     external: externals,

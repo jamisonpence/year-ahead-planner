@@ -555,7 +555,7 @@ type SharePickerTab = 'spots' | 'movies' | 'recipes' | 'gif';
 function SharePicker({ onShare, onClose, onGif }: {
   onShare: (shareType: string, shareData: SharePayload, note: string) => void;
   onClose: () => void;
-  onGif: (url: string) => void;
+  onGif: (url: string, previewUrl: string, title: string) => void;
 }) {
   const [tab, setTab] = useState<SharePickerTab>('spots');
   const [search, setSearch] = useState('');
@@ -569,11 +569,13 @@ function SharePicker({ onShare, onClose, onGif }: {
     setGifBusy(true);
     try {
       const url = q.trim()
-        ? `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`
-        : '/api/gifs/trending?limit=24';
+        ? `/api/gifs/search?q=${encodeURIComponent(q)}`
+        : '/api/gifs/trending';
       const r = await apiRequest('GET', url);
       const data = await r.json();
-      setGifRes(data?.data ?? data?.results ?? []);
+      // Klipy returns { result: true, data: { data: [...], ... } }
+      const items = data?.data?.data ?? data?.data ?? data?.results ?? [];
+      setGifRes(Array.isArray(items) ? items : []);
     } catch { setGifRes([]); }
     finally { setGifBusy(false); }
   }
@@ -692,15 +694,17 @@ function SharePicker({ onShare, onClose, onGif }: {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="px-3 pt-2">
-        <Input
-          placeholder={`Search ${tab}…`}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="h-8 text-xs"
-        />
-      </div>
+      {/* Search — hidden on GIF tab which has its own search UI */}
+      {tab !== 'gif' && (
+        <div className="px-3 pt-2">
+          <Input
+            placeholder={`Search ${tab}…`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-8 text-xs"
+          />
+        </div>
+      )}
 
       {/* GIF panel — only shown when gif tab active */}
       {tab === 'gif' && (
@@ -724,11 +728,11 @@ function SharePicker({ onShare, onClose, onGif }: {
               : gifRes.length === 0
                 ? <button type="button" onClick={() => fetchGifs('')} className="w-full text-xs text-primary font-medium py-6 hover:underline">Tap to load trending GIFs</button>
                 : <div className="grid grid-cols-3 gap-1">{gifRes.map((g, i) => {
-                    const url = g?.gif ?? g?.file ?? g?.url ?? g?.images?.fixed_height?.url ?? '';
-                    const pre = g?.preview ?? g?.thumbnail ?? url;
+                    const url = g?.files?.gif?.url ?? g?.files?.mp4?.url ?? g?.gif ?? g?.file ?? g?.url ?? '';
+                    const pre = g?.files?.gif_preview?.url ?? g?.files?.gif_small?.url ?? g?.files?.mp4_small?.url ?? g?.preview ?? url;
                     if (!url) return null;
                     return (
-                      <button key={i} type="button" onClick={() => { onGif(url); onClose(); }}
+                      <button key={i} type="button" onClick={() => { onGif(url, pre, g?.title ?? g?.slug ?? ''); onClose(); }}
                         className="rounded overflow-hidden aspect-square bg-muted hover:opacity-75 active:scale-95 transition-all">
                         <img src={pre} alt="" className="w-full h-full object-cover" loading="lazy" />
                       </button>
@@ -854,7 +858,16 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
         <div className={`relative flex items-end gap-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
           {msg.messageType === 'share' && msg.shareType && msg.shareData ? (
             <ShareCard shareType={msg.shareType} shareData={msg.shareData} isOwn={isOwn} />
-          ) : msg.content?.startsWith('[gif]') ? (
+          ) : msg.messageType === 'gif' && msg.shareData ? (() => {
+              const gd = (() => { try { return JSON.parse(msg.shareData!); } catch { return null; } })();
+              const src = gd?.gifPreviewUrl ?? gd?.gifUrl ?? '';
+              return src ? (
+                <img src={src} alt={gd?.gifTitle ?? 'GIF'}
+                  className={`rounded-2xl max-w-[220px] block ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />
+              ) : null;
+            })()
+          : msg.content?.startsWith('[gif]') ? (
+            // Legacy fallback for old gif messages
             <img src={msg.content.slice(5)} alt="GIF"
               className="rounded-2xl max-w-[220px] max-h-[180px] object-cover" />
           ) : (
@@ -1065,6 +1078,18 @@ export default function MessengerPage() {
     onError: () => toast({ title: "Failed to send", variant: "destructive" }),
   });
 
+  const sendGif = useMutation({
+    mutationFn: ({ gifUrl, gifPreviewUrl, gifTitle }: { gifUrl: string; gifPreviewUrl: string; gifTitle: string }) =>
+      apiRequest("POST", `/api/messenger/conversations/${activeConvId}/gif`, {
+        gifUrl, gifPreviewUrl, gifTitle,
+      }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/messenger/conversations", activeConvId, "messages"] });
+      qc.invalidateQueries({ queryKey: ["/api/messenger/conversations"] });
+    },
+    onError: () => toast({ title: "Failed to send GIF", variant: "destructive" }),
+  });
+
   const deleteMessage = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/messenger/messages/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/messenger/conversations", activeConvId, "messages"] }),
@@ -1273,7 +1298,7 @@ export default function MessengerPage() {
                         sendShare.mutate({ shareType, shareData, note })
                       }
                       onClose={() => setShowSharePicker(false)}
-                      onGif={(url) => { sendMessage.mutate('[gif]' + url); setShowSharePicker(false); }}
+                      onGif={(url, previewUrl, title) => { sendGif.mutate({ gifUrl: url, gifPreviewUrl: previewUrl ?? url, gifTitle: title ?? '' }); setShowSharePicker(false); }}
                     />
                   )}
                 </div>
