@@ -2104,14 +2104,14 @@ Return exactly this structure:
   // ── Spot Folders CRUD ────────────────────────────────────────────────────────
   app.get("/api/spot-folders", requireAuth, async (req, res) => {
     try {
-      const uid = (req.user as User).id;
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
       const rows = await pool.query(`SELECT * FROM spot_folders WHERE user_id = $1 ORDER BY sort_order, id`, [uid]);
       res.json(rows.rows);
     } catch (e) { handleError(res, e); }
   });
   app.post("/api/spot-folders", requireAuth, async (req, res) => {
     try {
-      const uid = (req.user as User).id;
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
       const { name, emoji = "📁" } = req.body;
       if (!name?.trim()) return res.status(400).json({ error: "name required" });
       const r = await pool.query(
@@ -2123,7 +2123,7 @@ Return exactly this structure:
   });
   app.patch("/api/spot-folders/:id", requireAuth, async (req, res) => {
     try {
-      const uid = (req.user as User).id;
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
       const { name, emoji } = req.body;
       const sets: string[] = [];
       const vals: any[] = [];
@@ -2138,7 +2138,7 @@ Return exactly this structure:
   });
   app.delete("/api/spot-folders/:id", requireAuth, async (req, res) => {
     try {
-      const uid = (req.user as User).id;
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
       // Unassign spots from this folder before deleting
       await pool.query(`UPDATE spots SET folder_id = NULL WHERE folder_id = $1 AND user_id = $2`, [+req.params.id, uid]);
       await pool.query(`DELETE FROM spot_folders WHERE id = $1 AND user_id = $2`, [+req.params.id, uid]);
@@ -2147,11 +2147,11 @@ Return exactly this structure:
   });
 
   app.get("/api/spots", requireAuth, async (req, res) => {
-    try { res.json(await storage.getAllSpots((req.user as User).id)); } catch (e) { handleError(res, e); }
+    try { res.json(await storage.getAllSpots(await storage.getTabUserId((req.user as User).id, "places"))); } catch (e) { handleError(res, e); }
   });
   app.post("/api/spots", requireAuth, async (req, res) => {
     try {
-      const uid = (req.user as User).id;
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
       const data = insertSpotSchema.parse({ ...req.body, userId: uid });
       const spot = await storage.createSpot(data, uid);
       logActivity(uid, "spot_added", spot.id, "spot", spot.name, null, spot.address ?? spot.city ?? null);

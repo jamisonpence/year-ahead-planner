@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity, SpotFolder } from "@shared/schema";
+import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity, SpotFolder, TabCollaborationWithUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import {
   CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
   Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
   SlidersHorizontal, List, Map as MapIcon, CheckCheck, Share2,
-  FolderOpen, FolderPlus, FolderEdit,
+  FolderOpen, FolderPlus, FolderEdit, Users,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1301,6 +1301,13 @@ export default function SpotsPage() {
 
   const displaySpots = tabSpots[placesSubTab] ?? tabSpots.saved;
 
+  // ── Places collaboration ─────────────────────────────────────────────────────
+  const { data: allCollabs = [] } = useQuery<TabCollaborationWithUser[]>({
+    queryKey: ["/api/tab-collaborations"],
+    queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
+  });
+  const placesCollab = allCollabs.find(c => c.tabName === "places" && c.status === "accepted");
+
   // ── Spot Folders ─────────────────────────────────────────────────────────────
   const { data: spotFolders = [] } = useQuery<SpotFolder[]>({
     queryKey: ["/api/spot-folders"],
@@ -1338,6 +1345,16 @@ export default function SpotsPage() {
           <div>
             <h1 className="text-xl font-bold">Places</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Spots you've saved, visited, or want to explore</p>
+            {placesCollab && (
+              <div className="flex items-center gap-1.5 mt-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                <Users size={11} className="shrink-0" />
+                <span>
+                  {placesCollab.role === "collaborator"
+                    ? <>Viewing & editing <strong>{placesCollab.otherUser.name}</strong>'s places</>
+                    : <><strong>{placesCollab.otherUser.name}</strong> can view and edit your places</>}
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <button

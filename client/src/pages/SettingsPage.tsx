@@ -158,6 +158,7 @@ const COLLAB_TABS = [
   { name: "housekeeping", label: "Housekeeping",  icon: Home     },
   { name: "politics",     label: "Politics",      icon: Landmark },
   { name: "health",       label: "Health",        icon: Flame    },
+  { name: "places",       label: "Places",        icon: MapPin   },
 ];
 
 function CollaborationSection() {
