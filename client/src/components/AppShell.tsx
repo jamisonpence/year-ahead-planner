@@ -87,8 +87,8 @@ const ALL_TABS = [
   // ── Plan ──
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
-  { path: "/habits",        label: "Habits",  icon: CalendarCheck   },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  { path: "/habits",        label: "Habits",  icon: CalendarCheck   },
   // ── People ──
   { path: "/relationships", label: "Friends",                 icon: Users           },
   { path: "/kids",          label: "Family",                  icon: Baby            },
@@ -298,8 +298,8 @@ const COLLECTION_GROUPS = [
     tiles: [
       { path: "/goals",    emoji: "🎯", label: "Goals"   },
       { path: "/tasks",    emoji: "📋", label: "Projects & Tasks" },
-      { path: "/habits",   emoji: "✅", label: "Habits"  },
       { path: "/journal",  emoji: "📓", label: "Journal" },
+      { path: "/habits",   emoji: "✅", label: "Habits"  },
     ],
   },
   {
