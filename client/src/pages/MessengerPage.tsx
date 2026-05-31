@@ -754,17 +754,15 @@ function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onCl
 }
 
 
-// ── GIF Picker ────────────────────────────────────────────────────────────────
-function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+// ── GIF Picker Dialog ─────────────────────────────────────────────────────────
+function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (url: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadTrending();
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
+    if (open) { setQuery(""); loadTrending(); }
+  }, [open]);
 
   async function loadTrending() {
     setLoading(true);
@@ -776,7 +774,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
     finally { setLoading(false); }
   }
 
-  async function search(q: string) {
+  async function doSearch(q: string) {
     if (!q.trim()) { loadTrending(); return; }
     setLoading(true);
     try {
@@ -787,81 +785,62 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
     finally { setLoading(false); }
   }
 
-  function getGifUrl(gif: any): string {
-    return gif?.images?.fixed_height?.url
-      ?? gif?.images?.original?.url
-      ?? gif?.url
-      ?? gif?.gif_url
-      ?? gif?.media?.[0]?.gif?.url
-      ?? gif?.media_formats?.gif?.url
-      ?? "";
+  function getUrl(gif: any): string {
+    return gif?.images?.fixed_height?.url ?? gif?.images?.original?.url
+      ?? gif?.url ?? gif?.gif_url ?? gif?.media?.[0]?.gif?.url ?? gif?.media_formats?.gif?.url ?? "";
   }
 
-  function getPreviewUrl(gif: any): string {
-    return gif?.images?.fixed_height_small?.url
-      ?? gif?.images?.fixed_height?.url
-      ?? getGifUrl(gif);
+  function getPreview(gif: any): string {
+    return gif?.images?.fixed_height_small?.url ?? gif?.images?.fixed_height?.url ?? getUrl(gif);
   }
 
   return (
-    /* Fixed panel — spans full width above the input bar, avoids parent-relative sizing issues */
-    <div
-      className="fixed left-2 right-2 bottom-20 bg-card border rounded-2xl shadow-2xl z-[90] flex flex-col overflow-hidden"
-      style={{ height: "320px" }}
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 pt-3 pb-1 shrink-0">
-        <span className="text-xs font-semibold text-muted-foreground">GIFs</span>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground">
-          <X size={14} />
-        </button>
-      </div>
-      {/* Search bar */}
-      <div className="px-3 pb-2 shrink-0">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border">
-          <span className="text-xs font-bold text-muted-foreground">GIF</span>
-          <input
-            ref={inputRef}
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="Search GIFs…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") search(query); }}
-          />
-          {query && (
-            <button type="button" onClick={() => { setQuery(""); loadTrending(); }} className="text-muted-foreground hover:text-foreground">
-              <X size={13} />
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden" style={{ height: "420px" }}>
+        <DialogHeader className="px-4 pt-4 pb-2 shrink-0">
+          <DialogTitle className="text-sm font-semibold">Send a GIF</DialogTitle>
+        </DialogHeader>
+        <div className="px-3 pb-2 shrink-0">
+          <div className="flex gap-2">
+            <input
+              className="flex-1 px-3 py-2 rounded-xl border bg-secondary/60 text-sm outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
+              placeholder="Search GIFs…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") doSearch(query); }}
+              autoFocus
+            />
+            <button type="button" onClick={() => doSearch(query)}
+              className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+              Search
             </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 pb-4 min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 size={22} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : results.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-10">No GIFs found. Try searching!</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5">
+              {results.map((gif, i) => {
+                const preview = getPreview(gif);
+                const full = getUrl(gif);
+                if (!preview || !full) return null;
+                return (
+                  <button key={i} type="button" onClick={() => { onPick(full); onClose(); }}
+                    className="rounded-lg overflow-hidden aspect-square hover:opacity-80 transition-opacity active:scale-95 bg-muted">
+                    <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
-      </div>
-
-      {/* Grid */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 size={20} className="animate-spin text-muted-foreground" />
-          </div>
-        ) : results.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">No GIFs found</p>
-        ) : (
-          <div className="grid grid-cols-3 gap-1.5">
-            {results.map((gif, i) => {
-              const preview = getPreviewUrl(gif);
-              const full = getGifUrl(gif);
-              if (!preview || !full) return null;
-              return (
-                <button key={i} type="button" onClick={() => { onPick(full); onClose(); }}
-                  className="rounded-lg overflow-hidden aspect-square hover:opacity-80 transition-opacity active:scale-95 bg-muted">
-                  <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1356,22 +1335,14 @@ export default function MessengerPage() {
                   rows={1}
                 />
                 {/* GIF button */}
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setGifPickerOpen(p => !p)}
-                    className={`h-10 w-10 flex items-center justify-center rounded-lg transition-colors ${gifPickerOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
-                    title="Send GIF"
-                  >
-                    <span className="text-[11px] font-bold leading-none tracking-tight">GIF</span>
-                  </button>
-                  {gifPickerOpen && (
-                    <GifPicker
-                      onPick={handleSendGif}
-                      onClose={() => setGifPickerOpen(false)}
-                    />
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setGifPickerOpen(true)}
+                  className={`h-10 w-10 flex items-center justify-center rounded-lg transition-colors shrink-0 ${gifPickerOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
+                  title="Send GIF"
+                >
+                  <span className="text-[11px] font-bold leading-none tracking-tight">GIF</span>
+                </button>
                 <Button
                   size="sm"
                   className="h-10 w-10 p-0 shrink-0"
@@ -1406,6 +1377,12 @@ export default function MessengerPage() {
       </div>
 
       {/* ── Dialogs ──────────────────────────────────────────────────────────── */}
+      <GifPickerDialog
+        open={gifPickerOpen}
+        onClose={() => setGifPickerOpen(false)}
+        onPick={handleSendGif}
+      />
+
       {showDMDialog && (
         <NewDMDialog
           friends={friends}
