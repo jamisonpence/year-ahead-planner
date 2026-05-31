@@ -794,12 +794,15 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
   }
 
   function getUrl(gif: any): string {
-    return gif?.images?.fixed_height?.url ?? gif?.images?.original?.url
-      ?? gif?.url ?? gif?.gif_url ?? gif?.media?.[0]?.gif?.url ?? gif?.media_formats?.gif?.url ?? "";
+    // Klipy format: gif.gif (main URL), or fallback to common patterns
+    return gif?.gif ?? gif?.file ?? gif?.url
+      ?? gif?.images?.fixed_height?.url ?? gif?.images?.original?.url
+      ?? gif?.gif_url ?? gif?.media_formats?.gif?.url ?? "";
   }
 
   function getPreview(gif: any): string {
-    return gif?.images?.fixed_height_small?.url ?? gif?.images?.fixed_height?.url ?? getUrl(gif);
+    // Klipy preview: gif.preview or gif.thumbnail
+    return gif?.preview ?? gif?.thumbnail ?? gif?.small ?? getUrl(gif);
   }
 
   return (

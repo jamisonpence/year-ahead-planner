@@ -7215,15 +7215,13 @@ Rules:
   });
 
   // ── Klipy GIF Proxy ──────────────────────────────────────────────────────────
+  // Klipy docs: https://api.klipy.com — API key is in the URL path as {app_key}
   app.get("/api/gifs/trending", requireAuth, async (req, res) => {
     try {
       const key = process.env.KLIPY_API_KEY;
       if (!key) return res.status(503).json({ error: "GIF service not configured" });
-      const limit = req.query.limit ?? 20;
-      // Try Klipy API with Bearer token auth
-      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/trending?limit=${limit}`, {
-        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" }
-      });
+      const perPage = req.query.limit ?? 24;
+      const r = await fetch(`https://api.klipy.com/api/v1/${key}/gifs/trending?per_page=${perPage}&page=1`);
       if (!r.ok) {
         const errText = await r.text();
         console.error("[Klipy trending] status:", r.status, errText);
@@ -7240,10 +7238,8 @@ Rules:
       if (!key) return res.status(503).json({ error: "GIF service not configured" });
       const q = req.query.q as string;
       if (!q) return res.status(400).json({ error: "q required" });
-      const limit = req.query.limit ?? 20;
-      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/search?q=${encodeURIComponent(q)}&limit=${limit}`, {
-        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" }
-      });
+      const perPage = req.query.limit ?? 24;
+      const r = await fetch(`https://api.klipy.com/api/v1/${key}/gifs/search?q=${encodeURIComponent(q)}&per_page=${perPage}&page=1`);
       if (!r.ok) {
         const errText = await r.text();
         console.error("[Klipy search] status:", r.status, errText);
