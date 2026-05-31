@@ -1569,26 +1569,48 @@ export default function SpotsPage() {
                                 No places in this folder yet.
                               </div>
                             ) : (
-                              <div className="divide-y">
-                                {folderSpots.map(spot => (
-                                  <div key={spot.id} className="px-3 py-2">
-                                    <SpotCard
-                                      spot={spot}
-                                      onEdit={() => openEdit(spot)}
-                                      onDelete={() => deleteMut.mutate(spot.id)}
-                                      onShare={() => setShareSpot(spot)}
-                                      onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                                      onAddToTrip={() => setAddToTripSpot(spot)}
-                                      onCreateTrip={() => setCreateTripSpot(spot)}
-                                      onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                                    />
-                                    <button onClick={() => setAssigningSpot(spot)}
-                                      className="mt-1 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                                      <FolderOpen size={11} /> Move to another folder
-                                    </button>
+                              // Group by spot type
+                              (() => {
+                                const typeOrder = ["restaurant","bar","cafe","hotel","attraction","shop","park","other"];
+                                const byType = typeOrder
+                                  .map(t => ({ type: t, list: folderSpots.filter(s => s.type === t) }))
+                                  .filter(g => g.list.length > 0);
+                                // Also catch any types not in typeOrder
+                                const coveredTypes = new Set(typeOrder);
+                                const extraTypes = [...new Set(folderSpots.filter(s => !coveredTypes.has(s.type)).map(s => s.type))];
+                                extraTypes.forEach(t => byType.push({ type: t, list: folderSpots.filter(s => s.type === t) }));
+                                return (
+                                  <div>
+                                    {byType.map(({ type, list }) => (
+                                      <div key={type}>
+                                        <div className="px-3 py-1.5 bg-secondary/40 border-y">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                            {typeEmoji(type)} {type.charAt(0).toUpperCase() + type.slice(1)} · {list.length}
+                                          </span>
+                                        </div>
+                                        {list.map(spot => {
+                                          const loc = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
+                                          return (
+                                            <div key={spot.id} className="flex items-center gap-2.5 px-3 py-2 border-b last:border-b-0 hover:bg-secondary/30 transition-colors group">
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate leading-tight">{spot.name}</p>
+                                                {loc && <p className="text-[11px] text-muted-foreground truncate">{loc}</p>}
+                                              </div>
+                                              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => openEdit(spot)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Edit"><Pencil size={11} /></button>
+                                                <button onClick={() => setAssigningSpot(spot)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Move"><FolderOpen size={11} /></button>
+                                                <button onClick={() => deleteMut.mutate(spot.id)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive" title="Delete"><Trash2 size={11} /></button>
+                                              </div>
+                                              {spot.isFavorite && <Heart size={11} className="text-red-400 shrink-0" fill="currentColor" />}
+                                              {spot.rating ? <span className="text-[10px] text-amber-500 shrink-0">{"★".repeat(spot.rating)}</span> : null}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
+                                );
+                              })()
                             )}
 
                             {/* Add places to this folder */}
