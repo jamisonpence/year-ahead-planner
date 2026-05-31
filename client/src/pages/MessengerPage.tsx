@@ -758,10 +758,11 @@ function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onCl
 function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (url: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);   // start true so spinner shows immediately
+  const [apiError, setApiError] = useState(false);
 
   useEffect(() => {
-    if (open) { setQuery(""); loadTrending(); }
+    if (open) { setQuery(""); setResults([]); setApiError(false); setLoading(true); loadTrending(); }
   }, [open]);
 
   async function loadTrending() {
@@ -769,14 +770,16 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
     try {
       const r = await apiRequest("GET", "/api/gifs/trending?limit=24");
       const data = await r.json();
-      setResults(data?.data ?? data?.results ?? []);
-    } catch { setResults([]); }
+      const items = data?.data ?? data?.results ?? [];
+      setResults(items);
+      if (items.length === 0) setApiError(true);
+    } catch { setApiError(true); setResults([]); }
     finally { setLoading(false); }
   }
 
   async function doSearch(q: string) {
     if (!q.trim()) { loadTrending(); return; }
-    setLoading(true);
+    setLoading(true); setApiError(false);
     try {
       const r = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
       const data = await r.json();
@@ -796,11 +799,11 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden" style={{ height: "420px" }}>
-        <DialogHeader className="px-4 pt-4 pb-2 shrink-0">
+      <DialogContent className="max-w-sm p-0 gap-0 flex flex-col" style={{ height: "420px" }}>
+        <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b">
           <DialogTitle className="text-sm font-semibold">Send a GIF</DialogTitle>
         </DialogHeader>
-        <div className="px-3 pb-2 shrink-0">
+        <div className="px-3 pt-3 pb-2 shrink-0">
           <div className="flex gap-2">
             <input
               className="flex-1 px-3 py-2 rounded-xl border bg-secondary/60 text-sm outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
@@ -808,21 +811,25 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") doSearch(query); }}
-              autoFocus
             />
             <button type="button" onClick={() => doSearch(query)}
-              className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+              className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shrink-0">
               Search
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 pb-4 min-h-0">
+        <div className="flex-1 overflow-y-auto px-3 pb-4">
           {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 size={22} className="animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center h-40">
+              <Loader2 size={24} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : apiError ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2 text-center px-4">
+              <p className="text-sm font-medium text-muted-foreground">GIF service not active</p>
+              <p className="text-xs text-muted-foreground">Add <code className="bg-secondary px-1 rounded">KLIPY_API_KEY</code> in Railway Variables to enable GIFs.</p>
             </div>
           ) : results.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-10">No GIFs found. Try searching!</p>
+            <p className="text-xs text-muted-foreground text-center py-10">No results. Try a different search.</p>
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
               {results.map((gif, i) => {
@@ -1337,8 +1344,8 @@ export default function MessengerPage() {
                 {/* GIF button */}
                 <button
                   type="button"
-                  onClick={() => setGifPickerOpen(true)}
-                  className={`h-10 w-10 flex items-center justify-center rounded-lg transition-colors shrink-0 ${gifPickerOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); setGifPickerOpen(true); }}
+                  className="h-10 w-10 flex items-center justify-center rounded-lg transition-colors shrink-0 text-muted-foreground hover:text-foreground hover:bg-secondary"
                   title="Send GIF"
                 >
                   <span className="text-[11px] font-bold leading-none tracking-tight">GIF</span>
