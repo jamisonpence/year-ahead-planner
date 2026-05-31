@@ -858,24 +858,15 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
         <div className={`relative flex items-end gap-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
           {msg.messageType === 'share' && msg.shareType && msg.shareData ? (
             <ShareCard shareType={msg.shareType} shareData={msg.shareData} isOwn={isOwn} />
+          ) : msg.content?.startsWith('[gif]') ? (
+            <img src={msg.content.slice(5)} alt="GIF"
+              className="rounded-2xl max-w-[220px] max-h-[180px] object-cover" />
           ) : (
-            {msg.content?.startsWith("[gif]") ? (
-              <img
-                src={msg.content.slice(5)}
-                alt="GIF"
-                className="rounded-2xl max-w-[220px] max-h-[200px] object-cover"
-              />
-            ) : (
-              <div
-                className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-                  isOwn
-                    ? "bg-primary text-primary-foreground rounded-br-sm"
-                    : "bg-secondary text-foreground rounded-bl-sm"
-                }`}
-              >
-                {msg.content}
-              </div>
-            )}
+            <div className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
+              isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-secondary text-foreground rounded-bl-sm"
+            }`}>
+              {msg.content}
+            </div>
           )}
 
           {/* Action buttons: react + delete — visible on hover */}
