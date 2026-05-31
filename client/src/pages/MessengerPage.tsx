@@ -11,7 +11,7 @@ import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
-  MapPin, Film, ChefHat, BookOpen, Dumbbell,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell, Loader2,
 } from "lucide-react";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
