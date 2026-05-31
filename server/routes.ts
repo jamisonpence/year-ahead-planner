@@ -7216,6 +7216,18 @@ Rules:
 
   // ── Klipy GIF Proxy ──────────────────────────────────────────────────────────
   // Klipy docs: https://api.klipy.com — API key is in the URL path as {app_key}
+  // Debug: returns first raw GIF item so we can inspect field names
+  app.get("/api/gifs/debug", requireAuth, async (req, res) => {
+    try {
+      const key = process.env.KLIPY_API_KEY;
+      if (!key) return res.status(503).json({ error: "no key" });
+      const r = await fetch(`https://api.klipy.com/api/v1/${key}/gifs/trending?per_page=1&page=1`);
+      const data = await r.json() as any;
+      const first = data?.data?.data?.[0] ?? data?.data?.[0] ?? data;
+      res.json({ first, keys: first ? Object.keys(first) : [], filesKeys: first?.files ? Object.keys(first.files) : [] });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/gifs/trending", requireAuth, async (req, res) => {
     try {
       const key = process.env.KLIPY_API_KEY;
