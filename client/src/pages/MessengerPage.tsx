@@ -11,7 +11,7 @@ import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
-  MapPin, Film, ChefHat, BookOpen, Dumbbell,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell, ImageIcon,
 } from "lucide-react";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
@@ -753,6 +753,107 @@ function ReactionPicker({ onPick, onClose }: { onPick: (e: string) => void; onCl
   );
 }
 
+
+// ── GIF Picker ────────────────────────────────────────────────────────────────
+function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadTrending();
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  async function loadTrending() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/gifs/trending?limit=24");
+      const data = await r.json();
+      setResults(data?.data ?? []);
+    } catch { setResults([]); }
+    finally { setLoading(false); }
+  }
+
+  async function search(q: string) {
+    if (!q.trim()) { loadTrending(); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
+      const data = await r.json();
+      setResults(data?.data ?? []);
+    } catch { setResults([]); }
+    finally { setLoading(false); }
+  }
+
+  function getGifUrl(gif: any): string {
+    return gif?.images?.fixed_height?.url
+      ?? gif?.images?.original?.url
+      ?? gif?.url
+      ?? gif?.gif_url
+      ?? gif?.media?.[0]?.gif?.url
+      ?? gif?.media_formats?.gif?.url
+      ?? "";
+  }
+
+  function getPreviewUrl(gif: any): string {
+    return gif?.images?.fixed_height_small?.url
+      ?? gif?.images?.fixed_height?.url
+      ?? getGifUrl(gif);
+  }
+
+  return (
+    <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+      style={{ height: "320px" }}>
+      {/* Search bar */}
+      <div className="px-3 pt-3 pb-2 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border">
+          <ImageIcon size={14} className="text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            placeholder="Search GIFs…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") search(query); }}
+          />
+          {query && (
+            <button onClick={() => { setQuery(""); loadTrending(); }} className="text-muted-foreground hover:text-foreground">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          </div>
+        ) : results.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-8">No GIFs found</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-1.5">
+            {results.map((gif, i) => {
+              const preview = getPreviewUrl(gif);
+              const full = getGifUrl(gif);
+              if (!preview || !full) return null;
+              return (
+                <button key={i} onClick={() => { onPick(full); onClose(); }}
+                  className="rounded-lg overflow-hidden aspect-square hover:opacity-80 transition-opacity active:scale-95 bg-muted">
+                  <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Message Bubble ────────────────────────────────────────────────────────────
 
 function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
@@ -799,15 +900,23 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
           {msg.messageType === 'share' && msg.shareType && msg.shareData ? (
             <ShareCard shareType={msg.shareType} shareData={msg.shareData} isOwn={isOwn} />
           ) : (
-            <div
-              className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-                isOwn
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-secondary text-foreground rounded-bl-sm"
-              }`}
-            >
-              {msg.content}
-            </div>
+            {msg.content?.startsWith("[gif]") ? (
+              <img
+                src={msg.content.slice(5)}
+                alt="GIF"
+                className="rounded-2xl max-w-[220px] max-h-[200px] object-cover"
+              />
+            ) : (
+              <div
+                className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
+                  isOwn
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-secondary text-foreground rounded-bl-sm"
+                }`}
+              >
+                {msg.content}
+              </div>
+            )}
           )}
 
           {/* Action buttons: react + delete — visible on hover */}
@@ -935,6 +1044,7 @@ export default function MessengerPage() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [showDMDialog, setShowDMDialog] = useState(false);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
@@ -1054,6 +1164,12 @@ export default function MessengerPage() {
     const content = draft.trim();
     if (!content || !activeConvId) return;
     sendMessage.mutate(content);
+  }
+
+  function handleSendGif(url: string) {
+    if (!activeConvId) return;
+    sendMessage.mutate("[gif]" + url);
+    setGifPickerOpen(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -1230,6 +1346,23 @@ export default function MessengerPage() {
                   className="flex-1 min-h-[40px] max-h-32 resize-none text-sm py-2 leading-snug"
                   rows={1}
                 />
+                {/* GIF button */}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setGifPickerOpen(p => !p)}
+                    className={`h-10 w-10 flex items-center justify-center rounded-lg transition-colors ${gifPickerOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
+                    title="Send GIF"
+                  >
+                    <ImageIcon size={18} />
+                  </button>
+                  {gifPickerOpen && (
+                    <GifPicker
+                      onPick={handleSendGif}
+                      onClose={() => setGifPickerOpen(false)}
+                    />
+                  )}
+                </div>
                 <Button
                   size="sm"
                   className="h-10 w-10 p-0 shrink-0"

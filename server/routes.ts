@@ -7214,6 +7214,31 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Klipy GIF Proxy ──────────────────────────────────────────────────────────
+  app.get("/api/gifs/trending", requireAuth, async (req, res) => {
+    try {
+      const key = process.env.KLIPY_API_KEY;
+      if (!key) return res.status(503).json({ error: "GIF service not configured" });
+      const limit = req.query.limit ?? 20;
+      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/trending?api_key=${key}&limit=${limit}`);
+      const data = await r.json();
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/gifs/search", requireAuth, async (req, res) => {
+    try {
+      const key = process.env.KLIPY_API_KEY;
+      if (!key) return res.status(503).json({ error: "GIF service not configured" });
+      const q = req.query.q as string;
+      if (!q) return res.status(400).json({ error: "q required" });
+      const limit = req.query.limit ?? 20;
+      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/search?q=${encodeURIComponent(q)}&api_key=${key}&limit=${limit}`);
+      const data = await r.json();
+      res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Messenger ────────────────────────────────────────────────────────────────
 
   // List all conversations for the current user
