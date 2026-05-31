@@ -127,6 +127,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
   const [linkedBookId, setLinkedBookId] = useState("__none__");
   const [linkedTemplateId, setLinkedTemplateId] = useState("__none__");
   const [buddyUserId, setBuddyUserId] = useState<number | null>(null);
+  const [horizon, setHorizon] = useState<string>("this_year");
 
   useEffect(() => {
     if (open) {
@@ -140,6 +141,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
       setLinkedBookId(editGoal?.linkedBookId?.toString() ?? "__none__");
       setLinkedTemplateId(editGoal?.linkedTemplateId?.toString() ?? "__none__");
       setBuddyUserId(editGoal?.buddyUserId ?? null);
+      setHorizon((editGoal as any)?.horizon ?? "this_year");
     }
   }, [open, editGoal]);
 
@@ -159,6 +161,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
       linkedBookId: (linkedBookId && linkedBookId !== "__none__") ? parseInt(linkedBookId) : null,
       linkedTemplateId: (linkedTemplateId && linkedTemplateId !== "__none__") ? parseInt(linkedTemplateId) : null,
       buddyUserId: buddyUserId ?? null,
+      horizon,
     };
     editGoal ? updateMut.mutate(p) : createMut.mutate(p);
   };
@@ -169,6 +172,19 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
         <DialogHeader><DialogTitle>{editGoal ? "Edit Goal" : "Create Goal"}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5"><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Read 5 books this month" required /></div>
+          <div className="space-y-1.5">
+            <Label>Horizon</Label>
+            <Select value={horizon} onValueChange={setHorizon}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="this_year">📅 This Year</SelectItem>
+                <SelectItem value="next_year">📆 Next Year</SelectItem>
+                <SelectItem value="3_years">🗓️ 3 Years</SelectItem>
+                <SelectItem value="5_years">🏔️ 5 Years</SelectItem>
+                <SelectItem value="someday">💭 Someday / Vision</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Category</Label>
               <Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{GOAL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</SelectItem>)}</SelectContent></Select>

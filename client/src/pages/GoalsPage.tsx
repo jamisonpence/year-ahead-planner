@@ -54,6 +54,23 @@ const STATUS_PILL: Record<string, string> = {
 
 const INLINE_PRIORITIES = ["low", "medium", "high"] as const;
 
+const HORIZON_META: Record<string, { label: string; emoji: string; short: string; color: string }> = {
+  this_year: { label: "This Year",       emoji: "📅", short: "This Year", color: "text-emerald-600 dark:text-emerald-400" },
+  next_year: { label: "Next Year",       emoji: "📆", short: "Next Year", color: "text-blue-600 dark:text-blue-400" },
+  "3_years": { label: "3-Year Goal",     emoji: "🗓️",  short: "3 Yrs",    color: "text-violet-600 dark:text-violet-400" },
+  "5_years": { label: "5-Year Goal",     emoji: "🏔️",  short: "5 Yrs",    color: "text-amber-600 dark:text-amber-400" },
+  someday:   { label: "Someday / Vision",emoji: "💭", short: "Vision",   color: "text-pink-600 dark:text-pink-400" },
+};
+
+// Horizons that can be a parent of a given horizon
+const PARENT_HORIZONS: Record<string, string[]> = {
+  this_year: ["next_year", "3_years", "5_years", "someday"],
+  next_year:  ["3_years", "5_years", "someday"],
+  "3_years":  ["5_years", "someday"],
+  "5_years":  [],
+  someday:    [],
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function goalPct(g: GoalWithProjects): number {
   if (g.progressType === "boolean") return g.progressCurrent >= g.progressTarget ? 100 : 0;
@@ -667,9 +684,11 @@ export default function GoalsPage() {
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
   const [editingHobbyGoalId, setEditingHobbyGoalId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"goals" | "detail">("goals");
+  const [horizon, setHorizon] = useState<string>("this_year");
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+  const filteredGoals = goals.filter(g => ((g as any).horizon ?? "this_year") === horizon);
   const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
   const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
@@ -813,18 +832,39 @@ export default function GoalsPage() {
 
         {/* ── Column 1: Goals ───────────────────────────────────────────── */}
         <div className={`shrink-0 flex flex-col min-h-0 w-full md:w-72 ${mobileView !== "goals" ? "hidden md:flex" : "flex"}`}>
-          <div className="px-4 py-3 border-b flex items-center justify-between">
+          {/* Horizon tabs */}
+          <div className="flex overflow-x-auto border-b shrink-0 scrollbar-none">
+            {([
+              ["this_year", "📅 This Year"],
+              ["next_year", "📆 Next Year"],
+              ["3_years",   "3 Yrs"],
+              ["5_years",   "5 Yrs"],
+              ["someday",   "💭 Vision"],
+            ] as [string, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => { setHorizon(key); setSelectedGoalId(null); }}
+                className={`shrink-0 px-3 py-2 text-[11px] font-medium whitespace-nowrap transition-colors ${
+                  horizon === key ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="px-4 py-2 border-b flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Goals</span>
-            <span className="text-xs text-muted-foreground">{goals.length}</span>
+            <span className="text-xs text-muted-foreground">{filteredGoals.length}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {goals.length === 0 && (
+            {filteredGoals.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <Target size={28} className="mx-auto mb-3 opacity-20" />
-                <p className="text-xs">No goals yet</p>
+                <p className="text-xs">No {horizon === "this_year" ? "this year's" : horizon === "next_year" ? "next year's" : horizon === "3_years" ? "3-year" : horizon === "5_years" ? "5-year" : "someday"} goals yet</p>
+                <p className="text-[10px] mt-1 opacity-60">Add a goal and set its horizon</p>
               </div>
             )}
-            {goals.map((g) => {
+            {filteredGoals.map((g) => {
               // For fitness goals linked to a workout plan, derive progress from the plan
               const linkedPlan = (g as any).linkedWorkoutPlanId
                 ? workoutPlans.find(p => p.id === (g as any).linkedWorkoutPlanId)
@@ -853,9 +893,11 @@ export default function GoalsPage() {
                         <p className="text-sm font-semibold leading-tight truncate">{g.title}</p>
                         {g.recurring !== "none" && <RefreshCw size={10} className="text-muted-foreground shrink-0" />}
                       </div>
-                      <p className="text-xs text-muted-foreground capitalize mt-0.5">
-                        {linkedPlan ? `${linkedPlan.goalType.replace(/_/g, " ")} · ${linkedPlan.durationWeeks}w plan` : g.category}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {linkedPlan ? `${linkedPlan.goalType.replace(/_/g, " ")} · ${linkedPlan.durationWeeks}w plan` : g.category}
+                        </p>
+                      </div>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -1086,6 +1128,88 @@ export default function GoalsPage() {
                   friends={friends}
                   onSave={(data) => updateGoal.mutate(data)}
                 />
+
+                {/* ── Horizon & parent goal ──────────────────────────── */}
+                {(() => {
+                  const h = (selectedGoal as any).horizon ?? "this_year";
+                  const meta = HORIZON_META[h] ?? HORIZON_META.this_year;
+                  const parentGoalId: number | null = (selectedGoal as any).parentGoalId ?? null;
+                  const parentGoal = goals.find(g => g.id === parentGoalId) ?? null;
+                  const parentHorizons = PARENT_HORIZONS[h] ?? [];
+                  const eligibleParents = goals.filter(g => parentHorizons.includes((g as any).horizon ?? "this_year") && g.id !== selectedGoal.id);
+                  const childGoals = goals.filter(g => (g as any).parentGoalId === selectedGoal.id);
+                  return (
+                    <div className="mt-4 space-y-3">
+                      {/* Horizon badge */}
+                      <div className="flex items-center gap-2 px-1">
+                        <span className={`text-xs font-semibold ${meta.color}`}>{meta.emoji} {meta.label}</span>
+                      </div>
+
+                      {/* Parent goal selector */}
+                      {parentHorizons.length > 0 && (
+                        <div className="rounded-xl border bg-card px-3 py-2.5">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Rolls up to</p>
+                          {parentGoal ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs">{HORIZON_META[(parentGoal as any).horizon ?? "this_year"]?.emoji}</span>
+                              <span className="text-sm font-medium flex-1 truncate">{parentGoal.title}</span>
+                              <button
+                                onClick={() => updateGoal.mutate({ id: selectedGoal.id, parentGoalId: null } as any)}
+                                className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1"
+                                title="Remove link"
+                              >✕</button>
+                            </div>
+                          ) : (
+                            <select
+                              className="w-full text-xs bg-transparent border rounded-lg px-2 py-1.5 outline-none focus:border-primary"
+                              defaultValue=""
+                              onChange={e => {
+                                if (e.target.value) updateGoal.mutate({ id: selectedGoal.id, parentGoalId: parseInt(e.target.value) } as any);
+                              }}
+                            >
+                              <option value="">— Link to a longer-horizon goal —</option>
+                              {eligibleParents.map(g => (
+                                <option key={g.id} value={g.id}>
+                                  {HORIZON_META[(g as any).horizon ?? "this_year"]?.emoji} {g.title}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Child goals */}
+                      {childGoals.length > 0 && (
+                        <div className="rounded-xl border bg-card px-3 py-2.5">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Supporting goals</p>
+                          <div className="space-y-1">
+                            {childGoals.map(cg => {
+                              const cm = HORIZON_META[(cg as any).horizon ?? "this_year"];
+                              const cpct = goalPct(cg);
+                              return (
+                                <div key={cg.id}
+                                  onClick={() => { setSelectedGoalId(cg.id); setHorizon((cg as any).horizon ?? "this_year"); }}
+                                  className="flex items-center gap-2 py-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                                >
+                                  <span className="text-xs">{cm?.emoji}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium truncate">{cg.title}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
+                                        <div className="h-full bg-primary rounded-full" style={{ width: `${cpct}%` }} />
+                                      </div>
+                                      <span className="text-[10px] text-muted-foreground">{cpct}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Linked projects — read-only context */}
                 <div className="mt-4">

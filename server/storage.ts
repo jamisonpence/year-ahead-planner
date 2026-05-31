@@ -1558,6 +1558,10 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS end_date TEXT`);
   // Accountabilibuddy — link a friend to a goal
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
+  // Goal horizons: this_year | next_year | 3_years | 5_years | someday
+  await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS horizon TEXT NOT NULL DEFAULT 'this_year'`);
+  // Parent-child goal linking across horizons
+  await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS parent_goal_id INTEGER`);
   // Accountabilibuddy on reading + nutrition goals
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
   await db.execute(`ALTER TABLE nutrition_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);

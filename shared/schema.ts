@@ -195,6 +195,10 @@ export const goals = pgTable("goals", {
   userId: integer("user_id"),
   title: text("title").notNull(),
   category: text("category").notNull().default("general"),
+  // horizon: "this_year" | "next_year" | "3_years" | "5_years" | "someday"
+  horizon: text("horizon").notNull().default("this_year"),
+  // parent goal — a yearly goal can link up to a 3-year or 5-year goal
+  parentGoalId: integer("parent_goal_id"),
   // progressType: "percent" | "count" | "sessions" | "pages" | "books" | "weight" | "boolean"
   progressType: text("progress_type").notNull().default("percent"),
   progressCurrent: real("progress_current").notNull().default(0),
