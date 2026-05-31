@@ -728,8 +728,8 @@ function SharePicker({ onShare, onClose, onGif }: {
               : gifRes.length === 0
                 ? <button type="button" onClick={() => fetchGifs('')} className="w-full text-xs text-primary font-medium py-6 hover:underline">Tap to load trending GIFs</button>
                 : <div className="grid grid-cols-3 gap-1">{gifRes.map((g, i) => {
-                    const url = g?.files?.gif?.url ?? g?.files?.mp4?.url ?? g?.gif ?? g?.file ?? g?.url ?? '';
-                    const pre = g?.files?.gif_preview?.url ?? g?.files?.gif_small?.url ?? g?.files?.mp4_small?.url ?? g?.preview ?? url;
+                    const url = g?.file?.md?.gif?.url ?? g?.file?.hd?.gif?.url ?? g?.file?.sm?.gif?.url ?? '';
+                    const pre = g?.file?.sm?.gif?.url ?? g?.file?.xs?.gif?.url ?? url;
                     if (!url) return null;
                     return (
                       <button key={i} type="button" onClick={() => { onGif(url, pre, g?.title ?? g?.slug ?? ''); onClose(); }}
