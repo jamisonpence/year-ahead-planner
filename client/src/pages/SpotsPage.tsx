@@ -1105,6 +1105,8 @@ export default function SpotsPage() {
   const [editFolderName, setEditFolderName] = useState("");
   const [editFolderEmoji, setEditFolderEmoji] = useState("");
   const [assigningSpot, setAssigningSpot] = useState<Spot | null>(null);
+  const [addingToFolderId, setAddingToFolderId] = useState<number | null>(null);
+  const [addToFolderSearch, setAddToFolderSearch] = useState("");
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") {
       setPlacesSubTab("shared");
@@ -1562,10 +1564,9 @@ export default function SpotsPage() {
                         {/* Folder contents — shown when expanded */}
                         {collapsedFolders.has(-folder.id - 1) && (
                           <div className="border-t">
-                            {folderSpots.length === 0 ? (
+                            {folderSpots.length === 0 && addingToFolderId !== folder.id ? (
                               <div className="py-6 text-center text-xs text-muted-foreground">
-                                No spots in this folder yet.{" "}
-                                <button className="text-primary hover:underline" onClick={() => setAssigningSpot(spots[0] ?? null)}>Add one</button>
+                                No places in this folder yet.
                               </div>
                             ) : (
                               <div className="divide-y">
@@ -1588,6 +1589,53 @@ export default function SpotsPage() {
                                   </div>
                                 ))}
                               </div>
+                            )}
+
+                            {/* Add places to this folder */}
+                            {addingToFolderId === folder.id ? (
+                              <div className="border-t px-3 py-3 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    className="flex-1 h-7 text-xs"
+                                    placeholder="Search places to add…"
+                                    value={addToFolderSearch}
+                                    onChange={e => setAddToFolderSearch(e.target.value)}
+                                    autoFocus
+                                  />
+                                  <button onClick={() => { setAddingToFolderId(null); setAddToFolderSearch(""); }}
+                                    className="text-muted-foreground hover:text-foreground p-1"><X size={13} /></button>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto space-y-0.5">
+                                  {spots
+                                    .filter(s => (s as any).folderId !== folder.id)
+                                    .filter(s => !addToFolderSearch || s.name.toLowerCase().includes(addToFolderSearch.toLowerCase()))
+                                    .slice(0, 20)
+                                    .map(s => (
+                                      <button key={s.id}
+                                        onClick={() => { assignToFolder.mutate({ spotId: s.id, folderId: folder.id }); setAddToFolderSearch(""); }}
+                                        className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left text-xs"
+                                      >
+                                        <MapPin size={11} className="text-muted-foreground shrink-0" />
+                                        <span className="font-medium truncate">{s.name}</span>
+                                        {(s as any).folderId && (
+                                          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+                                            {spotFolders.find(f => f.id === (s as any).folderId)?.name ?? ""}
+                                          </span>
+                                        )}
+                                      </button>
+                                    ))}
+                                  {spots.filter(s => (s as any).folderId !== folder.id && (!addToFolderSearch || s.name.toLowerCase().includes(addToFolderSearch.toLowerCase()))).length === 0 && (
+                                    <p className="text-xs text-muted-foreground text-center py-3">No places found</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setAddingToFolderId(folder.id); setAddToFolderSearch(""); }}
+                                className="flex items-center gap-1.5 w-full px-3 py-2.5 text-xs text-muted-foreground hover:text-primary border-t transition-colors"
+                              >
+                                <Plus size={12} /> Add places to this folder
+                              </button>
                             )}
                           </div>
                         )}
