@@ -561,41 +561,25 @@ function SharePicker({ onShare, onClose, onGif }: {
   const [search, setSearch] = useState('');
   const [note, setNote] = useState('');
   const [selected, setSelected] = useState<{ type: string; payload: SharePayload } | null>(null);
-  const [gifQuery, setGifQuery] = useState('');
-  const [gifResults, setGifResults] = useState<any[]>([]);
-  const [gifLoading, setGifLoading] = useState(false);
+  const [gifQ, setGifQ] = useState('');
+  const [gifRes, setGifRes] = useState<any[]>([]);
+  const [gifBusy, setGifBusy] = useState(false);
 
-  // Load trending GIFs when gif tab is opened
   useEffect(() => {
-    if (tab === 'gif' && gifResults.length === 0) loadTrendingGifs();
+    if (tab === 'gif' && gifRes.length === 0) fetchGifs('');
   }, [tab]);
 
-  async function loadTrendingGifs() {
-    setGifLoading(true);
+  async function fetchGifs(q: string) {
+    setGifBusy(true);
     try {
-      const r = await apiRequest('GET', '/api/gifs/trending?limit=24');
+      const url = q.trim()
+        ? `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`
+        : '/api/gifs/trending?limit=24';
+      const r = await apiRequest('GET', url);
       const data = await r.json();
-      setGifResults(data?.data ?? data?.results ?? []);
-    } catch { setGifResults([]); }
-    finally { setGifLoading(false); }
-  }
-
-  async function searchGifs(q: string) {
-    if (!q.trim()) { loadTrendingGifs(); return; }
-    setGifLoading(true);
-    try {
-      const r = await apiRequest('GET', `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
-      const data = await r.json();
-      setGifResults(data?.data ?? data?.results ?? []);
-    } catch { setGifResults([]); }
-    finally { setGifLoading(false); }
-  }
-
-  function getGifUrl(gif: any): string {
-    return gif?.gif ?? gif?.file ?? gif?.url ?? gif?.images?.fixed_height?.url ?? gif?.images?.original?.url ?? '';
-  }
-  function getGifPreview(gif: any): string {
-    return gif?.preview ?? gif?.thumbnail ?? gif?.small ?? getGifUrl(gif);
+      setGifRes(data?.data ?? data?.results ?? []);
+    } catch { setGifRes([]); }
+    finally { setGifBusy(false); }
   }
 
   const { data: spots = [] }   = useQuery<any[]>({ queryKey: ['/api/spots'],   queryFn: () => apiRequest('GET', '/api/spots').then(r => r.json())   });
@@ -722,43 +706,39 @@ function SharePicker({ onShare, onClose, onGif }: {
         />
       </div>
 
-      {/* GIF panel */}
+      {/* GIF panel — only shown when gif tab active */}
       {tab === 'gif' && (
-        <div>
-          <div className="px-3 pt-2 pb-1 flex gap-2">
+        <div className="px-3 py-2 space-y-2">
+          <div className="flex gap-2">
             <input
-              className="flex-1 px-2 py-1.5 rounded-lg border bg-secondary/60 text-xs outline-none placeholder:text-muted-foreground"
+              className="flex-1 px-2 py-1.5 rounded-lg border bg-secondary/60 text-xs outline-none"
               placeholder="Search GIFs…"
-              value={gifQuery}
-              onChange={e => setGifQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') searchGifs(gifQuery); }}
+              value={gifQ}
+              onChange={e => setGifQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') fetchGifs(gifQ); }}
             />
-            <button type="button" onClick={() => searchGifs(gifQuery)}
-              className="px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium">
+            <button type="button" onClick={() => fetchGifs(gifQ)}
+              className="px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium shrink-0">
               Search
             </button>
           </div>
-          <div className="max-h-48 overflow-y-auto px-2 pb-2">
-            {gifLoading ? (
-              <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
-            ) : gifResults.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">No GIFs found</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-1">
-                {gifResults.map((gif, i) => {
-                  const preview = getGifPreview(gif);
-                  const full = getGifUrl(gif);
-                  if (!preview || !full) return null;
-                  return (
-                    <button key={i} type="button"
-                      onClick={() => { onGif(full); onClose(); }}
-                      className="rounded-lg overflow-hidden aspect-square bg-muted hover:opacity-80 active:scale-95 transition-all">
-                      <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+          <div className="max-h-48 overflow-y-auto">
+            {gifBusy
+              ? <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
+              : gifRes.length === 0
+                ? <p className="text-xs text-muted-foreground text-center py-6">No GIFs yet — try searching!</p>
+                : <div className="grid grid-cols-3 gap-1">{gifRes.map((g, i) => {
+                    const url = g?.gif ?? g?.file ?? g?.url ?? g?.images?.fixed_height?.url ?? '';
+                    const pre = g?.preview ?? g?.thumbnail ?? url;
+                    if (!url) return null;
+                    return (
+                      <button key={i} type="button" onClick={() => { onGif(url); onClose(); }}
+                        className="rounded overflow-hidden aspect-square bg-muted hover:opacity-75 active:scale-95 transition-all">
+                        <img src={pre} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      </button>
+                    );
+                  })}</div>
+            }
           </div>
         </div>
       )}
@@ -878,7 +858,8 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
         <div className={`relative flex items-end gap-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
           {msg.messageType === 'share' && msg.shareType && msg.shareData ? (
             <ShareCard shareType={msg.shareType} shareData={msg.shareData} isOwn={isOwn} />
-          ) : msg.content?.startsWith("[gif]") ? (
+          ) : (
+            {msg.content?.startsWith("[gif]") ? (
               <img
                 src={msg.content.slice(5)}
                 alt="GIF"
@@ -895,6 +876,7 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
                 {msg.content}
               </div>
             )}
+          )}
 
           {/* Action buttons: react + delete — visible on hover */}
           <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
@@ -1142,10 +1124,6 @@ export default function MessengerPage() {
     sendMessage.mutate(content);
   }
 
-  function handleSendGif(url: string) {
-    if (!activeConvId) return;
-    sendMessage.mutate("[gif]" + url);
-  }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1308,7 +1286,7 @@ export default function MessengerPage() {
                         sendShare.mutate({ shareType, shareData, note })
                       }
                       onClose={() => setShowSharePicker(false)}
-                      onGif={handleSendGif}
+                      onGif={(url) => { sendMessage.mutate('[gif]' + url); setShowSharePicker(false); }}
                     />
                   )}
                 </div>
