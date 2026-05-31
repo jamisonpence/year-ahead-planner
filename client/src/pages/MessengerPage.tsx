@@ -769,9 +769,9 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
   async function loadTrending() {
     setLoading(true);
     try {
-      const r = await fetch("/api/gifs/trending?limit=24");
+      const r = await apiRequest("GET", "/api/gifs/trending?limit=24");
       const data = await r.json();
-      setResults(data?.data ?? []);
+      setResults(data?.data ?? data?.results ?? []);
     } catch { setResults([]); }
     finally { setLoading(false); }
   }
@@ -780,9 +780,9 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
     if (!q.trim()) { loadTrending(); return; }
     setLoading(true);
     try {
-      const r = await fetch(`/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
+      const r = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(q)}&limit=24`);
       const data = await r.json();
-      setResults(data?.data ?? []);
+      setResults(data?.data ?? data?.results ?? []);
     } catch { setResults([]); }
     finally { setLoading(false); }
   }
@@ -804,10 +804,21 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
   }
 
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
-      style={{ height: "320px" }}>
+    /* Fixed panel — spans full width above the input bar, avoids parent-relative sizing issues */
+    <div
+      className="fixed left-2 right-2 bottom-20 bg-card border rounded-2xl shadow-2xl z-[90] flex flex-col overflow-hidden"
+      style={{ height: "320px" }}
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 pt-3 pb-1 shrink-0">
+        <span className="text-xs font-semibold text-muted-foreground">GIFs</span>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground">
+          <X size={14} />
+        </button>
+      </div>
       {/* Search bar */}
-      <div className="px-3 pt-3 pb-2 shrink-0">
+      <div className="px-3 pb-2 shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border">
           <ImageIcon size={14} className="text-muted-foreground shrink-0" />
           <input
@@ -819,7 +830,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
             onKeyDown={e => { if (e.key === "Enter") search(query); }}
           />
           {query && (
-            <button onClick={() => { setQuery(""); loadTrending(); }} className="text-muted-foreground hover:text-foreground">
+            <button type="button" onClick={() => { setQuery(""); loadTrending(); }} className="text-muted-foreground hover:text-foreground">
               <X size={13} />
             </button>
           )}
@@ -841,7 +852,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
               const full = getGifUrl(gif);
               if (!preview || !full) return null;
               return (
-                <button key={i} onClick={() => { onPick(full); onClose(); }}
+                <button key={i} type="button" onClick={() => { onPick(full); onClose(); }}
                   className="rounded-lg overflow-hidden aspect-square hover:opacity-80 transition-opacity active:scale-95 bg-muted">
                   <img src={preview} alt="" className="w-full h-full object-cover" loading="lazy" />
                 </button>
