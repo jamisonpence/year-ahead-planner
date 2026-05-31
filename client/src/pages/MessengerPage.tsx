@@ -1145,7 +1145,6 @@ export default function MessengerPage() {
   function handleSendGif(url: string) {
     if (!activeConvId) return;
     sendMessage.mutate("[gif]" + url);
-    setGifPickerOpen(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
