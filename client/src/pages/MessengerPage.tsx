@@ -665,7 +665,7 @@ function SharePicker({ onShare, onClose, onGif }: {
   })();
 
   const tabs: { key: SharePickerTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'gif',     label: 'GIF',     icon: <span className="text-[10px] font-bold">GIF</span> },
+    { key: 'gif',     label: 'GIF',     icon: null },
     { key: 'spots',   label: 'Places',  icon: <MapPin size={13} /> },
     { key: 'movies',  label: 'Movies',  icon: <Film size={13} /> },
     { key: 'recipes', label: 'Recipes', icon: <ChefHat size={13} /> },
