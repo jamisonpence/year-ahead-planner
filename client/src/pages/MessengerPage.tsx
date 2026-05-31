@@ -760,6 +760,7 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);   // start true so spinner shows immediately
   const [apiError, setApiError] = useState(false);
+  const [apiErrorMsg, setApiErrorMsg] = useState("");
 
   useEffect(() => {
     if (open) { setQuery(""); setResults([]); setApiError(false); setLoading(true); loadTrending(); }
@@ -772,8 +773,12 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
       const data = await r.json();
       const items = data?.data ?? data?.results ?? [];
       setResults(items);
-      if (items.length === 0) setApiError(true);
-    } catch { setApiError(true); setResults([]); }
+      if (items.length === 0) { setApiError(true); setApiErrorMsg(""); }
+    } catch (e: any) {
+      setApiError(true);
+      setApiErrorMsg(e?.message ?? "Unknown error");
+      setResults([]);
+    }
     finally { setLoading(false); }
   }
 
@@ -825,8 +830,8 @@ function GifPickerDialog({ open, onClose, onPick }: { open: boolean; onClose: ()
             </div>
           ) : apiError ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2 text-center px-4">
-              <p className="text-sm font-medium text-muted-foreground">GIF service not active</p>
-              <p className="text-xs text-muted-foreground">Add <code className="bg-secondary px-1 rounded">KLIPY_API_KEY</code> in Railway Variables to enable GIFs.</p>
+              <p className="text-sm font-medium text-muted-foreground">Could not load GIFs</p>
+              <p className="text-xs text-muted-foreground">{apiErrorMsg || "Check that KLIPY_API_KEY is set in Railway Variables and the app has redeployed."}</p>
             </div>
           ) : results.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-10">No results. Try a different search.</p>

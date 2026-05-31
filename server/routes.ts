@@ -7220,7 +7220,15 @@ Rules:
       const key = process.env.KLIPY_API_KEY;
       if (!key) return res.status(503).json({ error: "GIF service not configured" });
       const limit = req.query.limit ?? 20;
-      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/trending?api_key=${key}&limit=${limit}`);
+      // Try Klipy API with Bearer token auth
+      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/trending?limit=${limit}`, {
+        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" }
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        console.error("[Klipy trending] status:", r.status, errText);
+        return res.status(r.status).json({ error: `Klipy API error: ${r.status}`, detail: errText });
+      }
       const data = await r.json();
       res.json(data);
     } catch (e) { handleError(res, e); }
@@ -7233,7 +7241,14 @@ Rules:
       const q = req.query.q as string;
       if (!q) return res.status(400).json({ error: "q required" });
       const limit = req.query.limit ?? 20;
-      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/search?q=${encodeURIComponent(q)}&api_key=${key}&limit=${limit}`);
+      const r = await fetch(`https://g.api.klipy.co/api/v1/gifs/search?q=${encodeURIComponent(q)}&limit=${limit}`, {
+        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" }
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        console.error("[Klipy search] status:", r.status, errText);
+        return res.status(r.status).json({ error: `Klipy API error: ${r.status}`, detail: errText });
+      }
       const data = await r.json();
       res.json(data);
     } catch (e) { handleError(res, e); }
