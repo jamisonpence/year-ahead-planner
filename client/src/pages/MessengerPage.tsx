@@ -11,7 +11,7 @@ import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
-  MapPin, Film, ChefHat, BookOpen, Dumbbell, ImageIcon,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell,
 } from "lucide-react";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
@@ -820,7 +820,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
       {/* Search bar */}
       <div className="px-3 pb-2 shrink-0">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border">
-          <ImageIcon size={14} className="text-muted-foreground shrink-0" />
+          <span className="text-xs font-bold text-muted-foreground">GIF</span>
           <input
             ref={inputRef}
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -1363,7 +1363,7 @@ export default function MessengerPage() {
                     className={`h-10 w-10 flex items-center justify-center rounded-lg transition-colors ${gifPickerOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
                     title="Send GIF"
                   >
-                    <ImageIcon size={18} />
+                    <span className="text-[11px] font-bold leading-none tracking-tight">GIF</span>
                   </button>
                   {gifPickerOpen && (
                     <GifPicker
