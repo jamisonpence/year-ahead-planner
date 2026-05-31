@@ -675,7 +675,21 @@ export const spots = pgTable("spots", {
   openingHours: text("opening_hours"),
   lat: real("lat"),
   lon: real("lon"),
+  folderId: integer("folder_id"),          // optional: assigned to a user folder
 });
+
+// ── SPOT FOLDERS ──────────────────────────────────────────────────────────────
+export const spotFolders = pgTable("spot_folders", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("📁"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertSpotFolderSchema = createInsertSchema(spotFolders).omit({ id: true });
+export type InsertSpotFolder = z.infer<typeof insertSpotFolderSchema>;
+export type SpotFolder = typeof spotFolders.$inferSelect;
 
 // ── NAV PREFERENCES ───────────────────────────────────────────────────────────
 // Stores user's tab order and visibility as a single JSON row

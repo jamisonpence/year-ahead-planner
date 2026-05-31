@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity } from "@shared/schema";
+import type { Spot, SpotShareWithUser, PublicUser, Trip, TripItem, VisitedCity, SpotFolder } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
   Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
   SlidersHorizontal, List, Map as MapIcon, CheckCheck, Share2,
+  FolderOpen, FolderPlus, FolderEdit,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1095,6 +1096,15 @@ export default function SpotsPage() {
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(
     new Set(SPOT_TYPES.map(t => t.value))   // all collapsed by default
   );
+  // Spot folder state — all collapsed by default
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set());
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderEmoji, setNewFolderEmoji] = useState("📁");
+  const [showNewFolderForm, setShowNewFolderForm] = useState(false);
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null);
+  const [editFolderName, setEditFolderName] = useState("");
+  const [editFolderEmoji, setEditFolderEmoji] = useState("");
+  const [assigningSpot, setAssigningSpot] = useState<Spot | null>(null);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("shared") === "1") {
       setPlacesSubTab("shared");
@@ -1289,6 +1299,35 @@ export default function SpotsPage() {
 
   const displaySpots = tabSpots[placesSubTab] ?? tabSpots.saved;
 
+  // ── Spot Folders ─────────────────────────────────────────────────────────────
+  const qc = useQueryClient();
+  const { data: spotFolders = [] } = useQuery<SpotFolder[]>({
+    queryKey: ["/api/spot-folders"],
+    queryFn: () => apiRequest("GET", "/api/spot-folders").then(r => r.json()),
+  });
+  const createFolder = useMutation({
+    mutationFn: (data: { name: string; emoji: string }) => apiRequest("POST", "/api/spot-folders", data).then(r => r.json()),
+    onSuccess: (f: SpotFolder) => {
+      qc.invalidateQueries({ queryKey: ["/api/spot-folders"] });
+      setShowNewFolderForm(false); setNewFolderName(""); setNewFolderEmoji("📁");
+      // Auto-expand newly created folder
+      setCollapsedFolders(prev => { const next = new Set(prev); next.delete(f.id); return next; });
+    },
+  });
+  const updateFolder = useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name: string; emoji: string }) => apiRequest("PATCH", `/api/spot-folders/${id}`, data).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/spot-folders"] }); setEditingFolderId(null); },
+  });
+  const deleteFolder = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/spot-folders/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spot-folders", "/api/spots"] }),
+  });
+  const assignToFolder = useMutation({
+    mutationFn: ({ spotId, folderId }: { spotId: number; folderId: number | null }) =>
+      apiRequest("PATCH", `/api/spots/${spotId}`, { folderId }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/spots"] }); setAssigningSpot(null); },
+  });
+
   return (
     <div className="flex flex-col h-full">
 
@@ -1411,57 +1450,199 @@ export default function SpotsPage() {
             ) : placesSubTab === "map" ? (
               <MapView spots={applyFilters(spots)} />
             ) : placesSubTab === "collections" ? (
-              // ── Collections: tag-based grouping ──────────────────────────────
-              Object.keys(allTagGroups).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">🏷️</div>
-                  <div className="text-center">
-                    <p className="font-semibold text-foreground mb-1">No collections yet</p>
-                    <p className="text-sm">Add tags to your places to organize them into collections.</p>
+              // ── Collections: user-managed folders ────────────────────────────
+              <div className="space-y-2 pt-1">
+                {/* New folder button / form */}
+                {showNewFolderForm ? (
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <input
+                      className="w-10 text-center text-lg border rounded-lg p-1 bg-secondary"
+                      value={newFolderEmoji}
+                      onChange={e => setNewFolderEmoji(e.target.value)}
+                      maxLength={2}
+                    />
+                    <Input
+                      className="flex-1 h-8 text-sm"
+                      placeholder="Folder name…"
+                      value={newFolderName}
+                      onChange={e => setNewFolderName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && newFolderName.trim()) createFolder.mutate({ name: newFolderName, emoji: newFolderEmoji }); }}
+                      autoFocus
+                    />
+                    <Button size="sm" className="h-8 px-3" disabled={!newFolderName.trim()} onClick={() => createFolder.mutate({ name: newFolderName, emoji: newFolderEmoji })}>
+                      Create
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setShowNewFolderForm(false); setNewFolderName(""); }}>
+                      <X size={14} />
+                    </Button>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-1 pt-1">
-                  {Object.entries(allTagGroups).sort(([a], [b]) => a.localeCompare(b)).map(([tag, tagSpots]) => {
-                    const isCollapsed = collapsedTypes.has(`tag:${tag}`);
-                    return (
-                      <div key={tag} className="rounded-xl border overflow-hidden">
-                        <button
-                          onClick={() => setCollapsedTypes(prev => {
-                            const next = new Set(prev);
-                            if (isCollapsed) next.delete(`tag:${tag}`); else next.add(`tag:${tag}`);
-                            return next;
-                          })}
-                          className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/50 transition-colors"
-                        >
-                          <span className="text-lg shrink-0">🏷️</span>
-                          <span className="font-semibold text-sm flex-1 text-left capitalize">{tag}</span>
-                          <span className="text-xs text-muted-foreground mr-1">{tagSpots.length}</span>
-                          {isCollapsed ? <ChevronDown size={15} className="text-muted-foreground shrink-0" /> : <ChevronUp size={15} className="text-muted-foreground shrink-0" />}
+                ) : (
+                  <button
+                    onClick={() => setShowNewFolderForm(true)}
+                    className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    <FolderPlus size={15} /> New Folder
+                  </button>
+                )}
+
+                {/* Assign spot to folder dialog */}
+                {assigningSpot && (
+                  <div className="rounded-xl border bg-card p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add "{assigningSpot.name}" to folder</p>
+                    <div className="space-y-1">
+                      {spotFolders.map(f => (
+                        <button key={f.id} onClick={() => assignToFolder.mutate({ spotId: assigningSpot.id, folderId: f.id })}
+                          className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-secondary transition-colors text-sm">
+                          <span>{f.emoji}</span><span className="font-medium">{f.name}</span>
                         </button>
-                        {!isCollapsed && (
-                          <div className="divide-y border-t">
-                            {tagSpots.map(spot => (
-                              <div key={spot.id} className="px-3 py-2">
-                                <SpotCard
-                                  spot={spot}
-                                  onEdit={() => openEdit(spot)}
-                                  onDelete={() => deleteMut.mutate(spot.id)}
-                                  onShare={() => setShareSpot(spot)}
-                                  onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                                  onAddToTrip={() => setAddToTripSpot(spot)}
-                                  onCreateTrip={() => setCreateTripSpot(spot)}
-                                  onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                                />
+                      ))}
+                      {(assigningSpot as any).folderId && (
+                        <button onClick={() => assignToFolder.mutate({ spotId: assigningSpot.id, folderId: null })}
+                          className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-muted-foreground">
+                          <X size={13} /> Remove from folder
+                        </button>
+                      )}
+                    </div>
+                    <Button size="sm" variant="ghost" className="w-full h-7 text-xs" onClick={() => setAssigningSpot(null)}>Cancel</Button>
+                  </div>
+                )}
+
+                {/* Folder list */}
+                {spotFolders.length === 0 && !showNewFolderForm ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+                    <FolderOpen size={36} className="opacity-20" />
+                    <div className="text-center">
+                      <p className="font-semibold text-foreground mb-1">No folders yet</p>
+                      <p className="text-sm">Create a folder to organize your places.</p>
+                    </div>
+                  </div>
+                ) : (
+                  spotFolders.map(folder => {
+                    const folderSpots = spots.filter(s => (s as any).folderId === folder.id);
+                    const isCollapsed = collapsedFolders.has(folder.id) || !collapsedFolders.has(-folder.id - 1);
+                    const expanded = !isCollapsed;
+                    return (
+                      <div key={folder.id} className="rounded-xl border overflow-hidden">
+                        {/* Folder header */}
+                        {editingFolderId === folder.id ? (
+                          <div className="flex items-center gap-2 px-3 py-2.5 bg-card">
+                            <input className="w-10 text-center text-lg border rounded p-0.5 bg-secondary" value={editFolderEmoji} onChange={e => setEditFolderEmoji(e.target.value)} maxLength={2} />
+                            <Input className="flex-1 h-7 text-sm" value={editFolderName} onChange={e => setEditFolderName(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter") updateFolder.mutate({ id: folder.id, name: editFolderName, emoji: editFolderEmoji }); }} autoFocus />
+                            <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateFolder.mutate({ id: folder.id, name: editFolderName, emoji: editFolderEmoji })}>Save</Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingFolderId(null)}><X size={13} /></Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center bg-card hover:bg-secondary/40 transition-colors">
+                            <button
+                              className="flex items-center gap-2.5 flex-1 px-3 py-3 text-left"
+                              onClick={() => setCollapsedFolders(prev => {
+                                const next = new Set(prev);
+                                // use negative id as "expanded" marker
+                                if (next.has(-folder.id - 1)) { next.delete(-folder.id - 1); } else { next.add(-folder.id - 1); next.delete(folder.id); }
+                                return next;
+                              })}
+                            >
+                              <span className="text-lg shrink-0">{folder.emoji}</span>
+                              <span className="font-semibold text-sm flex-1">{folder.name}</span>
+                              <span className="text-xs text-muted-foreground mr-1">{folderSpots.length}</span>
+                              {collapsedFolders.has(-folder.id - 1) ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
+                            </button>
+                            <div className="flex items-center gap-0.5 pr-2">
+                              <button onClick={() => { setEditingFolderId(folder.id); setEditFolderName(folder.name); setEditFolderEmoji(folder.emoji); }}
+                                className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Rename">
+                                <Pencil size={12} />
+                              </button>
+                              <button onClick={() => { if (confirm(`Delete folder "${folder.name}"? Spots won't be deleted.`)) deleteFolder.mutate(folder.id); }}
+                                className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors" title="Delete folder">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {/* Folder contents — shown when expanded */}
+                        {collapsedFolders.has(-folder.id - 1) && (
+                          <div className="border-t">
+                            {folderSpots.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">
+                                No spots in this folder yet.{" "}
+                                <button className="text-primary hover:underline" onClick={() => setAssigningSpot(spots[0] ?? null)}>Add one</button>
                               </div>
-                            ))}
+                            ) : (
+                              <div className="divide-y">
+                                {folderSpots.map(spot => (
+                                  <div key={spot.id} className="px-3 py-2">
+                                    <SpotCard
+                                      spot={spot}
+                                      onEdit={() => openEdit(spot)}
+                                      onDelete={() => deleteMut.mutate(spot.id)}
+                                      onShare={() => setShareSpot(spot)}
+                                      onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                                      onAddToTrip={() => setAddToTripSpot(spot)}
+                                      onCreateTrip={() => setCreateTripSpot(spot)}
+                                      onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                                    />
+                                    <button onClick={() => setAssigningSpot(spot)}
+                                      className="mt-1 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                                      <FolderOpen size={11} /> Move to another folder
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     );
-                  })}
-                </div>
-              )
+                  })
+                )}
+
+                {/* Unassigned spots section */}
+                {(() => {
+                  const unassigned = spots.filter(s => !(s as any).folderId);
+                  if (unassigned.length === 0) return null;
+                  const unassignedExpanded = collapsedFolders.has(-99999);
+                  return (
+                    <div className="rounded-xl border overflow-hidden">
+                      <button
+                        className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/40 transition-colors text-left"
+                        onClick={() => setCollapsedFolders(prev => {
+                          const next = new Set(prev);
+                          if (next.has(-99999)) next.delete(-99999); else next.add(-99999);
+                          return next;
+                        })}
+                      >
+                        <span className="text-lg">📍</span>
+                        <span className="font-semibold text-sm flex-1 text-muted-foreground">Unfiled</span>
+                        <span className="text-xs text-muted-foreground mr-1">{unassigned.length}</span>
+                        {unassignedExpanded ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
+                      </button>
+                      {unassignedExpanded && (
+                        <div className="border-t divide-y">
+                          {unassigned.map(spot => (
+                            <div key={spot.id} className="px-3 py-2">
+                              <SpotCard
+                                spot={spot}
+                                onEdit={() => openEdit(spot)}
+                                onDelete={() => deleteMut.mutate(spot.id)}
+                                onShare={() => setShareSpot(spot)}
+                                onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
+                                onAddToTrip={() => setAddToTripSpot(spot)}
+                                onCreateTrip={() => setCreateTripSpot(spot)}
+                                onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
+                              />
+                              <button onClick={() => setAssigningSpot(spot)}
+                                className="mt-1 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                                <FolderPlus size={11} /> Add to folder
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
                 ) : spots.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>

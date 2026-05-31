@@ -2101,6 +2101,51 @@ Return exactly this structure:
   });
 
   // ── Spots ─────────────────────────────────────────────────────────────────────
+  // ── Spot Folders CRUD ────────────────────────────────────────────────────────
+  app.get("/api/spot-folders", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const rows = await pool.query(`SELECT * FROM spot_folders WHERE user_id = $1 ORDER BY sort_order, id`, [uid]);
+      res.json(rows.rows);
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/spot-folders", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { name, emoji = "📁" } = req.body;
+      if (!name?.trim()) return res.status(400).json({ error: "name required" });
+      const r = await pool.query(
+        `INSERT INTO spot_folders (user_id, name, emoji, sort_order) VALUES ($1,$2,$3,COALESCE((SELECT MAX(sort_order)+1 FROM spot_folders WHERE user_id=$1),0)) RETURNING *`,
+        [uid, name.trim(), emoji]
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/spot-folders/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { name, emoji } = req.body;
+      const sets: string[] = [];
+      const vals: any[] = [];
+      let i = 1;
+      if (name !== undefined) { sets.push(`name=$${i++}`); vals.push(name.trim()); }
+      if (emoji !== undefined) { sets.push(`emoji=$${i++}`); vals.push(emoji); }
+      if (!sets.length) return res.status(400).json({ error: "nothing to update" });
+      vals.push(+req.params.id, uid);
+      const r = await pool.query(`UPDATE spot_folders SET ${sets.join(",")} WHERE id=$${i++} AND user_id=$${i} RETURNING *`, vals);
+      r.rows[0] ? res.json(r.rows[0]) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/spot-folders/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      // Unassign spots from this folder before deleting
+      await pool.query(`UPDATE spots SET folder_id = NULL WHERE folder_id = $1 AND user_id = $2`, [+req.params.id, uid]);
+      await pool.query(`DELETE FROM spot_folders WHERE id = $1 AND user_id = $2`, [+req.params.id, uid]);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/spots", requireAuth, async (req, res) => {
     try { res.json(await storage.getAllSpots((req.user as User).id)); } catch (e) { handleError(res, e); }
   });

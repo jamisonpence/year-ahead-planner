@@ -1562,6 +1562,17 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS horizon TEXT NOT NULL DEFAULT 'this_year'`);
   // Parent-child goal linking across horizons
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS parent_goal_id INTEGER`);
+  // Spot folders (user-created collections)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spot_folders (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      emoji TEXT NOT NULL DEFAULT '📁',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS folder_id INTEGER`);
   // Accountabilibuddy on reading + nutrition goals
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
   await db.execute(`ALTER TABLE nutrition_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
