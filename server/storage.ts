@@ -1573,6 +1573,20 @@ export async function initializeStorage() {
     )
   `);
   await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS folder_id INTEGER`);
+  // Multi-folder: junction table replaces single folder_id
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spot_folder_members (
+      spot_id INTEGER NOT NULL,
+      folder_id INTEGER NOT NULL,
+      PRIMARY KEY (spot_id, folder_id)
+    )
+  `);
+  // Migrate existing folder_id assignments into junction table
+  await pool.query(`
+    INSERT INTO spot_folder_members (spot_id, folder_id)
+    SELECT id, folder_id FROM spots WHERE folder_id IS NOT NULL
+    ON CONFLICT DO NOTHING
+  `);
   // Accountabilibuddy on reading + nutrition goals
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
   await db.execute(`ALTER TABLE nutrition_goals ADD COLUMN IF NOT EXISTS buddy_user_id INTEGER`);
@@ -3402,7 +3416,16 @@ export const storage: IStorage = {
 
   // ── Spots ─────────────────────────────────────────────────────────────────────
   async getAllSpots(userId: number) {
-    return db.select().from(spots).where(eq(spots.userId, userId)).orderBy(asc(spots.name));
+    const rows = await pool.query(
+      `SELECT s.*, COALESCE(
+        (SELECT json_agg(sfm.folder_id ORDER BY sfm.folder_id)
+         FROM spot_folder_members sfm WHERE sfm.spot_id = s.id),
+        '[]'::json
+       ) AS "folderIds"
+       FROM spots s WHERE s.user_id = $1 ORDER BY s.name`,
+      [userId]
+    );
+    return rows.rows;
   },
   async createSpot(data, userId) {
     const result = await db.insert(spots).values({ ...data, userId }).returning();

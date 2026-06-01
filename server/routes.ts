@@ -2139,9 +2139,33 @@ Return exactly this structure:
   app.delete("/api/spot-folders/:id", requireAuth, async (req, res) => {
     try {
       const uid = await storage.getTabUserId((req.user as User).id, "places");
-      // Unassign spots from this folder before deleting
-      await pool.query(`UPDATE spots SET folder_id = NULL WHERE folder_id = $1 AND user_id = $2`, [+req.params.id, uid]);
+      // Remove all junction entries for this folder before deleting
+      await pool.query(`DELETE FROM spot_folder_members WHERE folder_id = $1`, [+req.params.id]);
       await pool.query(`DELETE FROM spot_folders WHERE id = $1 AND user_id = $2`, [+req.params.id, uid]);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Add spot to a folder (multi-folder via junction table)
+  app.post("/api/spot-folder-members", requireAuth, async (req, res) => {
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
+      const { spotId, folderId } = req.body;
+      if (!spotId || !folderId) return res.status(400).json({ error: "spotId and folderId required" });
+      // Verify ownership
+      const spot = await pool.query(`SELECT id FROM spots WHERE id = $1 AND user_id = $2`, [spotId, uid]);
+      if (!spot.rows[0]) return res.status(403).json({ error: "Not authorized" });
+      await pool.query(`INSERT INTO spot_folder_members (spot_id, folder_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [spotId, folderId]);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+  // Remove spot from a folder
+  app.delete("/api/spot-folder-members", requireAuth, async (req, res) => {
+    try {
+      const uid = await storage.getTabUserId((req.user as User).id, "places");
+      const { spotId, folderId } = req.body;
+      if (!spotId || !folderId) return res.status(400).json({ error: "spotId and folderId required" });
+      await pool.query(`DELETE FROM spot_folder_members WHERE spot_id = $1 AND folder_id = $2`, [spotId, folderId]);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });

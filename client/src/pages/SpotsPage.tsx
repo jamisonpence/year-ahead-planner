@@ -1323,10 +1323,15 @@ export default function SpotsPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/spot-folders/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spot-folders", "/api/spots"] }),
   });
-  const assignToFolder = useMutation({
-    mutationFn: ({ spotId, folderId }: { spotId: number; folderId: number | null }) =>
-      apiRequest("PATCH", `/api/spots/${spotId}`, { folderId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/spots"] }); setAssigningSpot(null); },
+  const addToFolder = useMutation({
+    mutationFn: ({ spotId, folderId }: { spotId: number; folderId: number }) =>
+      apiRequest("POST", "/api/spot-folder-members", { spotId, folderId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spots"] }),
+  });
+  const removeFromFolder = useMutation({
+    mutationFn: ({ spotId, folderId }: { spotId: number; folderId: number }) =>
+      apiRequest("DELETE", "/api/spot-folder-members", { spotId, folderId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/spots"] }),
   });
 
   return (
@@ -1495,25 +1500,32 @@ export default function SpotsPage() {
                   </button>
                 )}
 
-                {/* Assign spot to folder dialog */}
+                {/* Assign spot to folders dialog — multi-select via checkboxes */}
                 {assigningSpot && (
                   <div className="rounded-xl border bg-card p-3 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add "{assigningSpot.name}" to folder</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Folders for "{assigningSpot.name}"</p>
                     <div className="space-y-1">
-                      {spotFolders.map(f => (
-                        <button key={f.id} onClick={() => assignToFolder.mutate({ spotId: assigningSpot.id, folderId: f.id })}
-                          className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-secondary transition-colors text-sm">
-                          <span>{f.emoji}</span><span className="font-medium">{f.name}</span>
-                        </button>
-                      ))}
-                      {(assigningSpot as any).folderId && (
-                        <button onClick={() => assignToFolder.mutate({ spotId: assigningSpot.id, folderId: null })}
-                          className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-muted-foreground">
-                          <X size={13} /> Remove from folder
-                        </button>
-                      )}
+                      {spotFolders.map(f => {
+                        const inFolder = ((assigningSpot as any).folderIds ?? []).includes(f.id);
+                        return (
+                          <button key={f.id}
+                            onClick={() => {
+                              if (inFolder) removeFromFolder.mutate({ spotId: assigningSpot.id, folderId: f.id });
+                              else addToFolder.mutate({ spotId: assigningSpot.id, folderId: f.id });
+                              // optimistic update on assigningSpot
+                              const ids: number[] = (assigningSpot as any).folderIds ?? [];
+                              (assigningSpot as any).folderIds = inFolder ? ids.filter(i => i !== f.id) : [...ids, f.id];
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-secondary transition-colors text-sm">
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${inFolder ? "bg-primary border-primary" : "border-border"}`}>
+                              {inFolder && <Check size={10} className="text-primary-foreground" />}
+                            </span>
+                            <span>{f.emoji}</span><span className="font-medium">{f.name}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <Button size="sm" variant="ghost" className="w-full h-7 text-xs" onClick={() => setAssigningSpot(null)}>Cancel</Button>
+                    <Button size="sm" variant="ghost" className="w-full h-7 text-xs" onClick={() => setAssigningSpot(null)}>Done</Button>
                   </div>
                 )}
 
@@ -1528,7 +1540,7 @@ export default function SpotsPage() {
                   </div>
                 ) : (
                   spotFolders.map(folder => {
-                    const folderSpots = spots.filter(s => (s as any).folderId === folder.id);
+                    const folderSpots = spots.filter(s => ((s as any).folderIds ?? []).includes(folder.id));
                     const isCollapsed = collapsedFolders.has(folder.id) || !collapsedFolders.has(-folder.id - 1);
                     const expanded = !isCollapsed;
                     return (
@@ -1643,19 +1655,19 @@ export default function SpotsPage() {
                                     .slice(0, 20)
                                     .map(s => (
                                       <button key={s.id}
-                                        onClick={() => { assignToFolder.mutate({ spotId: s.id, folderId: folder.id }); setAddToFolderSearch(""); }}
+                                        onClick={() => { addToFolder.mutate({ spotId: s.id, folderId: folder.id }); setAddToFolderSearch(""); }}
                                         className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors text-left text-xs"
                                       >
                                         <MapPin size={11} className="text-muted-foreground shrink-0" />
                                         <span className="font-medium truncate">{s.name}</span>
-                                        {(s as any).folderId && (
+                                        {((s as any).folderIds ?? []).length > 0 && (
                                           <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-                                            {spotFolders.find(f => f.id === (s as any).folderId)?.name ?? ""}
+                                            {((s as any).folderIds ?? []).map((fid: number) => spotFolders.find(f => f.id === fid)?.name).filter(Boolean).join(", ")}
                                           </span>
                                         )}
                                       </button>
                                     ))}
-                                  {spots.filter(s => (s as any).folderId !== folder.id && (!addToFolderSearch || s.name.toLowerCase().includes(addToFolderSearch.toLowerCase()))).length === 0 && (
+                                  {spots.filter(s => !((s as any).folderIds ?? []).includes(folder.id) && (!addToFolderSearch || s.name.toLowerCase().includes(addToFolderSearch.toLowerCase()))).length === 0 && (
                                     <p className="text-xs text-muted-foreground text-center py-3">No places found</p>
                                   )}
                                 </div>
@@ -1675,51 +1687,7 @@ export default function SpotsPage() {
                   })
                 )}
 
-                {/* Unassigned spots section */}
-                {(() => {
-                  const unassigned = spots.filter(s => !(s as any).folderId);
-                  if (unassigned.length === 0) return null;
-                  const unassignedExpanded = collapsedFolders.has(-99999);
-                  return (
-                    <div className="rounded-xl border overflow-hidden">
-                      <button
-                        className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/40 transition-colors text-left"
-                        onClick={() => setCollapsedFolders(prev => {
-                          const next = new Set(prev);
-                          if (next.has(-99999)) next.delete(-99999); else next.add(-99999);
-                          return next;
-                        })}
-                      >
-                        <span className="text-lg">📍</span>
-                        <span className="font-semibold text-sm flex-1 text-muted-foreground">Unfiled</span>
-                        <span className="text-xs text-muted-foreground mr-1">{unassigned.length}</span>
-                        {unassignedExpanded ? <ChevronUp size={15} className="text-muted-foreground shrink-0" /> : <ChevronDown size={15} className="text-muted-foreground shrink-0" />}
-                      </button>
-                      {unassignedExpanded && (
-                        <div className="border-t divide-y">
-                          {unassigned.map(spot => (
-                            <div key={spot.id} className="px-3 py-2">
-                              <SpotCard
-                                spot={spot}
-                                onEdit={() => openEdit(spot)}
-                                onDelete={() => deleteMut.mutate(spot.id)}
-                                onShare={() => setShareSpot(spot)}
-                                onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                                onAddToTrip={() => setAddToTripSpot(spot)}
-                                onCreateTrip={() => setCreateTripSpot(spot)}
-                                onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                              />
-                              <button onClick={() => setAssigningSpot(spot)}
-                                className="mt-1 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                                <FolderPlus size={11} /> Add to folder
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+
               </div>
                 ) : spots.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
