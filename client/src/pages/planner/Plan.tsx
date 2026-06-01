@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { Plan, DayPlan, Recipe, MealSlot } from "@/lib/planner/types";
-import { Clock, RefreshCw, Repeat, Printer, Download, ChevronRight, Utensils, Coffee, Salad, Cookie, ListChecks } from "lucide-react";
+import { Clock, RefreshCw, Repeat, Printer, Download, ChevronRight, Utensils, Coffee, Salad, Cookie, ListChecks, Trash2, CalendarPlus } from "lucide-react";
 import { MacroBars } from "@/components/planner/MacroChips";
 import { planToCSV, downloadFile } from "@/lib/planner/shopping";
 import { cn } from "@/lib/utils";
