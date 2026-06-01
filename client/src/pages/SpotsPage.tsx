@@ -2812,6 +2812,7 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
   // Trips state — when showing all (itineraries), no internal sub-tab needed
   const [tripsSubTab, setTripsSubTab] = useState<"upcoming" | "past">(initialFilter === "past" ? "past" : "upcoming");
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [prepTaskInput, setPrepTaskInput] = useState("");
   const [tripModal, setTripModal] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [tripForm, setTripForm] = useState({ ...EMPTY_TRIP });
