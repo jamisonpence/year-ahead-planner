@@ -240,6 +240,24 @@ export const projectTasks = pgTable("project_tasks", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+// ── PURCHASE LIST ────────────────────────────────────────────────────────────
+export const purchaseItems = pgTable("purchase_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  notes: text("notes"),
+  price: real("price"),
+  url: text("url"),
+  priority: text("priority").notNull().default("medium"),
+  purchased: boolean("purchased").notNull().default(false),
+  linkedTaskId: integer("linked_task_id"),
+  category: text("category"),
+  createdAt: text("created_at").notNull(),
+});
+export const insertPurchaseItemSchema = createInsertSchema(purchaseItems).omit({ id: true });
+export type InsertPurchaseItem = z.infer<typeof insertPurchaseItemSchema>;
+export type PurchaseItem = typeof purchaseItems.$inferSelect;
+
 // ── RECIPES ─────────────────────────────────────────────────────
 export const recipes = pgTable("recipes", {
   id: serial("id").primaryKey(),

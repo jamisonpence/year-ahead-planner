@@ -11,7 +11,7 @@ import {
   Circle, CheckCircle2, Folder, ClipboardList, Flag, X,
   ChevronDown, ChevronUp, Home, Target, RefreshCw,
   AlertTriangle, CheckSquare, Layers, ArrowRight, PlayCircle,
-  Ban, Clock, Leaf,
+  Ban, Clock, Leaf, ShoppingCart, ExternalLink, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -26,7 +26,7 @@ import { daysUntil } from "@/lib/plannerUtils";
 import type {
   GoalWithProjects, ProjectWithTasks,
   InsertProject, InsertProjectTask,
-  GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks,
+  GeneralTask, InsertGeneralTask, Chore, InsertChore, HouseProjectWithTasks, PurchaseItem,
 } from "@shared/schema";
 import { Link } from "wouter";
 
@@ -904,7 +904,7 @@ function ChoreEditModal({ open, onClose, chore, onSave }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type ActiveView = "projects" | "tasks" | "recurring" | "completed";
+type ActiveView = "projects" | "tasks" | "recurring" | "completed" | "purchases";
 
 export default function TasksPage() {
   const { toast } = useToast();
@@ -928,6 +928,15 @@ export default function TasksPage() {
   const { data: chores = [] }             = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
   const { data: plants = [] }             = useQuery<any[]>({ queryKey: ["/api/plants"] });
   const { data: houseProjects = [] }      = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
+  const { data: purchaseItems = [] }     = useQuery<PurchaseItem[]>({ queryKey: ["/api/purchase-items"], queryFn: () => apiRequest("GET", "/api/purchase-items").then(r => r.json()) });
+  const [showPurchaseForm, setShowPurchaseForm] = useState(false);
+  const [purchaseForm, setPurchaseForm] = useState({ name: "", notes: "", price: "", url: "", priority: "medium", category: "", linkedTaskId: "" });
+  const [editingPurchase, setEditingPurchase] = useState<PurchaseItem | null>(null);
+  const invPurchase = () => queryClient.invalidateQueries({ queryKey: ["/api/purchase-items"] });
+  const addPurchase = useMutation({ mutationFn: (d: any) => apiRequest("POST", "/api/purchase-items", d), onSuccess: () => { invPurchase(); setShowPurchaseForm(false); setPurchaseForm({ name:"",notes:"",price:"",url:"",priority:"medium",category:"",linkedTaskId:"" }); } });
+  const togglePurchase = useMutation({ mutationFn: ({ id, purchased }: { id:number; purchased:boolean }) => apiRequest("PATCH", `/api/purchase-items/${id}`, { purchased }), onSuccess: invPurchase });
+  const deletePurchase = useMutation({ mutationFn: (id:number) => apiRequest("DELETE", `/api/purchase-items/${id}`), onSuccess: invPurchase });
+  const updatePurchase = useMutation({ mutationFn: ({ id, ...d }: any) => apiRequest("PATCH", `/api/purchase-items/${id}`, d), onSuccess: () => { invPurchase(); setEditingPurchase(null); } });
 
   const inv     = () => { queryClient.invalidateQueries({ queryKey: ["/api/goals"] }); queryClient.invalidateQueries({ queryKey: ["/api/projects/standalone"] }); queryClient.invalidateQueries({ queryKey: ["/api/general-tasks"] }); };
   const invHouse = () => queryClient.invalidateQueries({ queryKey: ["/api/house-projects"] });
@@ -1250,6 +1259,7 @@ export default function TasksPage() {
             { value: "projects",  label: `Projects (${activeProjects.length})` },
             { value: "tasks",     label: `Tasks (${openTasks.length})` },
             { value: "recurring", label: `Recurring (${activeChores.length})` },
+            { value: "purchases", label: `Purchases (${purchaseItems.filter((p:any)=>!p.purchased).length})` },
             { value: "completed", label: "Completed" },
           ] as { value: ActiveView; label: string }[]).map(tab => (
             <button
@@ -1518,6 +1528,124 @@ export default function TasksPage() {
         )}
 
         {/* ── Completed view ─────────────────────────────────────────── */}
+        {activeView === "purchases" && (
+          <div className="space-y-4">
+            {/* Add form */}
+            {showPurchaseForm ? (
+              <div className="rounded-xl border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">New Purchase Item</span>
+                  <button onClick={() => setShowPurchaseForm(false)}><X size={14} /></button>
+                </div>
+                <Input placeholder="Item name *" value={purchaseForm.name} onChange={e => setPurchaseForm(f => ({...f, name: e.target.value}))} className="h-8 text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input placeholder="Category (e.g. Tech, Home)" value={purchaseForm.category} onChange={e => setPurchaseForm(f => ({...f, category: e.target.value}))} className="h-8 text-sm" />
+                  <Input placeholder="Est. price ($)" type="number" value={purchaseForm.price} onChange={e => setPurchaseForm(f => ({...f, price: e.target.value}))} className="h-8 text-sm" />
+                </div>
+                <Input placeholder="Link (URL)" value={purchaseForm.url} onChange={e => setPurchaseForm(f => ({...f, url: e.target.value}))} className="h-8 text-sm" />
+                <Input placeholder="Notes" value={purchaseForm.notes} onChange={e => setPurchaseForm(f => ({...f, notes: e.target.value}))} className="h-8 text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={purchaseForm.priority} onValueChange={v => setPurchaseForm(f => ({...f, priority: v}))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low priority</SelectItem>
+                      <SelectItem value="medium">Medium priority</SelectItem>
+                      <SelectItem value="high">High priority</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={purchaseForm.linkedTaskId || "__none__"} onValueChange={v => setPurchaseForm(f => ({...f, linkedTaskId: v === "__none__" ? "" : v}))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Link to task…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">No linked task</SelectItem>
+                      {generalTasksData.filter(t => !t.completed).map(t => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1" disabled={!purchaseForm.name.trim() || addPurchase.isPending}
+                    onClick={() => addPurchase.mutate({ ...purchaseForm, price: purchaseForm.price ? parseFloat(purchaseForm.price) : null, linkedTaskId: purchaseForm.linkedTaskId ? parseInt(purchaseForm.linkedTaskId) : null })}>
+                    Add Item
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowPurchaseForm(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" className="gap-1.5 w-full" onClick={() => setShowPurchaseForm(true)}>
+                <Plus size={13} /> Add Purchase Item
+              </Button>
+            )}
+
+            {/* Items */}
+            {purchaseItems.length === 0 && !showPurchaseForm ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <ShoppingCart size={36} className="mx-auto mb-3 opacity-20" />
+                <p className="font-semibold text-foreground">Nothing on your list yet</p>
+                <p className="text-sm mt-1">Add items you want to buy.</p>
+              </div>
+            ) : (
+              <div>
+                {/* Active items */}
+                {purchaseItems.filter((p: any) => !p.purchased).length > 0 && (
+                  <div className="space-y-1.5 mb-4">
+                    {purchaseItems.filter((p: any) => !p.purchased).map((item: any) => {
+                      const linkedTask = item.linkedTaskId ? generalTasksData.find(t => t.id === item.linkedTaskId) : null;
+                      const priorityColor = item.priority === "high" ? "text-red-500" : item.priority === "low" ? "text-muted-foreground" : "text-amber-500";
+                      return (
+                        <div key={item.id} className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border bg-card group hover:shadow-sm transition-shadow">
+                          <button onClick={() => togglePurchase.mutate({ id: item.id, purchased: true })}
+                            className="mt-0.5 shrink-0 text-muted-foreground hover:text-emerald-500 transition-colors">
+                            <Circle size={16} />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{item.name}</span>
+                              {item.price && <span className="text-xs text-muted-foreground">${item.price}</span>}
+                              {item.category && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground flex items-center gap-1"><Tag size={9}/>{item.category}</span>}
+                              <Flag size={11} className={`shrink-0 ${priorityColor}`} />
+                            </div>
+                            {item.notes && <p className="text-xs text-muted-foreground mt-0.5">{item.notes}</p>}
+                            {linkedTask && (
+                              <p className="text-[11px] text-primary mt-0.5 flex items-center gap-1">
+                                <ClipboardList size={10}/> Linked: {linkedTask.title}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-primary transition-colors"><ExternalLink size={12}/></a>}
+                            <button onClick={() => { setEditingPurchase(item); setPurchaseForm({ name:item.name, notes:item.notes||"", price:item.price?String(item.price):"", url:item.url||"", priority:item.priority, category:item.category||"", linkedTaskId:item.linkedTaskId?String(item.linkedTaskId):"" }); setShowPurchaseForm(true); }}
+                              className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Pencil size={12}/></button>
+                            <button onClick={() => deletePurchase.mutate(item.id)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={12}/></button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Purchased items */}
+                {purchaseItems.filter((p: any) => p.purchased).length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Purchased</p>
+                    <div className="space-y-1">
+                      {purchaseItems.filter((p: any) => p.purchased).map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl border bg-secondary/30 group">
+                          <button onClick={() => togglePurchase.mutate({ id: item.id, purchased: false })}
+                            className="shrink-0 text-emerald-500 hover:text-muted-foreground transition-colors">
+                            <CheckCircle2 size={16} />
+                          </button>
+                          <span className="flex-1 text-sm line-through text-muted-foreground">{item.name}</span>
+                          <button onClick={() => deletePurchase.mutate(item.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-all"><Trash2 size={11}/></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeView === "completed" && (
           <div className="space-y-5">
             {/* Completed projects */}

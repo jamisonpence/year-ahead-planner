@@ -1582,6 +1582,22 @@ export async function initializeStorage() {
   }
   // Trip prep: projects can be linked to a trip
   await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS trip_id INTEGER`);
+  // Purchase list
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchase_items (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      notes TEXT,
+      price REAL,
+      url TEXT,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      purchased BOOLEAN NOT NULL DEFAULT FALSE,
+      linked_task_id INTEGER,
+      category TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
   // Spot folders (user-created collections)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_folders (

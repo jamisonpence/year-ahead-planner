@@ -2101,6 +2101,54 @@ Return exactly this structure:
   });
 
   // ── Spots ─────────────────────────────────────────────────────────────────────
+  // ── Purchase List ────────────────────────────────────────────────────────────
+  app.get("/api/purchase-items", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const r = await pool.query(`SELECT * FROM purchase_items WHERE user_id=$1 ORDER BY purchased, created_at DESC`, [uid]);
+      res.json(r.rows);
+    } catch (e) { handleError(res, e); }
+  });
+  app.post("/api/purchase-items", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { name, notes, price, url, priority, category, linkedTaskId } = req.body;
+      if (!name?.trim()) return res.status(400).json({ error: "name required" });
+      const r = await pool.query(
+        `INSERT INTO purchase_items (user_id,name,notes,price,url,priority,category,linked_task_id,purchased,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9) RETURNING *`,
+        [uid, name.trim(), notes||null, price||null, url||null, priority||'medium', category||null, linkedTaskId||null, new Date().toISOString()]
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) { handleError(res, e); }
+  });
+  app.patch("/api/purchase-items/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { name, notes, price, url, priority, category, linkedTaskId, purchased } = req.body;
+      const sets: string[] = []; const vals: any[] = []; let i = 1;
+      if (name !== undefined)         { sets.push(`name=$${i++}`); vals.push(name); }
+      if (notes !== undefined)        { sets.push(`notes=$${i++}`); vals.push(notes); }
+      if (price !== undefined)        { sets.push(`price=$${i++}`); vals.push(price); }
+      if (url !== undefined)          { sets.push(`url=$${i++}`); vals.push(url); }
+      if (priority !== undefined)     { sets.push(`priority=$${i++}`); vals.push(priority); }
+      if (category !== undefined)     { sets.push(`category=$${i++}`); vals.push(category); }
+      if (linkedTaskId !== undefined) { sets.push(`linked_task_id=$${i++}`); vals.push(linkedTaskId); }
+      if (purchased !== undefined)    { sets.push(`purchased=$${i++}`); vals.push(purchased); }
+      if (!sets.length) return res.status(400).json({ error: "nothing to update" });
+      vals.push(+req.params.id, uid);
+      const r = await pool.query(`UPDATE purchase_items SET ${sets.join(",")} WHERE id=$${i++} AND user_id=$${i} RETURNING *`, vals);
+      r.rows[0] ? res.json(r.rows[0]) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  app.delete("/api/purchase-items/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      await pool.query(`DELETE FROM purchase_items WHERE id=$1 AND user_id=$2`, [+req.params.id, uid]);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Trip Prep Project ────────────────────────────────────────────────────────
   // Get or create the prep project for a trip, with its tasks
   app.get("/api/trips/:id/prep-project", requireAuth, async (req, res) => {
