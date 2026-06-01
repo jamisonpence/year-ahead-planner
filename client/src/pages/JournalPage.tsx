@@ -810,26 +810,18 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Add / Edit Modal — slides up from bottom on mobile, centered on desktop */}
+      {/* Add / Edit Modal — full-screen on mobile (above app chrome), centered on desktop */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={closeModal}>
-          <div
-            className="w-full sm:max-w-lg bg-background border sm:rounded-2xl rounded-t-2xl flex flex-col"
-            style={{ maxHeight: "92vh" }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+        <>
+          {/* Mobile: full-screen above header+nav (z-[80] beats z-[70]) */}
+          <div className="lg:hidden fixed inset-0 z-[80] bg-background flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0 h-14">
               <span className="text-base font-semibold">{editing ? "Edit Entry" : "New Journal Entry"}</span>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+              <button onClick={closeModal} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={18} /></button>
             </div>
-
-            {/* Scrollable form */}
-            <div className="flex-1 overflow-y-auto space-y-4 p-5">
+            <div className="flex-1 overflow-y-auto space-y-4 p-4 pb-6">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Calendar size={11} /> Date
-                </label>
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Calendar size={11} /> Date</label>
                 <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
               </div>
               <div className="space-y-1">
@@ -844,8 +836,7 @@ export default function JournalPage() {
                 <label className="text-xs font-medium text-muted-foreground">Mood</label>
                 <div className="flex flex-wrap gap-1.5">
                   {MOODS.map((m) => (
-                    <button key={m.value} type="button"
-                      onClick={() => setForm((f) => ({ ...f, mood: f.mood === m.value ? "" : m.value }))}
+                    <button key={m.value} type="button" onClick={() => setForm((f) => ({ ...f, mood: f.mood === m.value ? "" : m.value }))}
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-all ${form.mood === m.value ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary border-border"}`}>
                       <span>{m.emoji}</span><span>{m.label}</span>
                     </button>
@@ -853,9 +844,7 @@ export default function JournalPage() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Tag size={11} /> Tags (comma-separated)
-                </label>
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Tag size={11} /> Tags (comma-separated)</label>
                 <Input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))} placeholder="e.g. gratitude, work, family" />
               </div>
               <div>
@@ -866,16 +855,66 @@ export default function JournalPage() {
                 </button>
               </div>
             </div>
-
-            {/* Sticky actions */}
-            <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
-              <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
-              <Button size="sm" onClick={save} disabled={createMut.isPending || updateMut.isPending}>
+            <div className="flex gap-2 px-4 py-3 border-t shrink-0">
+              <Button variant="outline" className="flex-1" onClick={closeModal}>Cancel</Button>
+              <Button className="flex-1" onClick={save} disabled={createMut.isPending || updateMut.isPending}>
                 {editing ? "Save Changes" : "Save Entry"}
               </Button>
             </div>
           </div>
-        </div>
+
+          {/* Desktop: centered dialog */}
+          <div className="hidden lg:flex fixed inset-0 z-50 items-center justify-center bg-black/60" onClick={closeModal}>
+            <div className="w-full max-w-lg bg-background border rounded-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+                <span className="text-base font-semibold">{editing ? "Edit Entry" : "New Journal Entry"}</span>
+                <button onClick={closeModal} className="p-1 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-4 p-5">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Calendar size={11} /> Date</label>
+                  <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Title (optional)</label>
+                  <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Give this entry a title…" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">What's on your mind *</label>
+                  <Textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} placeholder="What's on your mind…" rows={8} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Mood</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MOODS.map((m) => (
+                      <button key={m.value} type="button" onClick={() => setForm((f) => ({ ...f, mood: f.mood === m.value ? "" : m.value }))}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-all ${form.mood === m.value ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-secondary border-border"}`}>
+                        <span>{m.emoji}</span><span>{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Tag size={11} /> Tags (comma-separated)</label>
+                  <Input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))} placeholder="e.g. gratitude, work, family" />
+                </div>
+                <div>
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, isFavorite: !f.isFavorite }))}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors ${form.isFavorite ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400" : "bg-card hover:bg-secondary border-border"}`}>
+                    <Heart size={14} className={form.isFavorite ? "fill-current" : ""} />
+                    {form.isFavorite ? "Favorited" : "Add to favorites"}
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
+                <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
+                <Button size="sm" onClick={save} disabled={createMut.isPending || updateMut.isPending}>
+                  {editing ? "Save Changes" : "Save Entry"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
       </>}
     </div>
