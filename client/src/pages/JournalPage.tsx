@@ -494,7 +494,6 @@ function NotesSection() {
               <Button variant="outline" onClick={() => setFolderModal(null)}>Cancel</Button>
             </div>
           </div>
-        </div>
       )}
 
       {/* ── Note modal ──────────────────────────────────────────── */}
