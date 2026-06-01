@@ -511,8 +511,7 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, o
   return (
     <>
       <div className="rounded-xl border bg-card overflow-hidden active:opacity-90 transition-opacity">
-        {/* Status-colored top border */}
-        <div className={`h-1 w-full ${accentBar}`} />
+
 
         <div className="flex gap-3 p-3">
           {/* Left thumbnail */}
@@ -546,10 +545,7 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, o
               </p>
             )}
 
-            {/* Status badge */}
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
-              {statusLabel}
-            </span>
+
 
             {/* Star rating — always shown, tappable */}
             <div className="flex gap-0.5 mt-1.5">
@@ -1076,7 +1072,6 @@ export default function SpotsPage() {
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [filterCity, setFilterCity] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
@@ -1271,17 +1266,15 @@ export default function SpotsPage() {
         (s.city ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (s.neighborhood ?? "").toLowerCase().includes(search.toLowerCase());
       const matchType = filterType === "all" || s.type === filterType;
-      const matchStatus = filterStatus === "all" || s.status === filterStatus;
       const matchTag = filterTag === "all" || (s.tags ?? "").split(",").map((t) => t.trim()).includes(filterTag);
       const matchCity = filterCity === "all" || s.city === filterCity;
-      return matchSearch && matchType && matchStatus && matchTag && matchCity;
+      return matchSearch && matchType && matchTag && matchCity;
     });
   }
 
   const tabSpots: Record<string, Spot[]> = {
     all:           applyFilters(spots),
-    saved:         applyFilters(spots.filter((s) => s.status === "want_to_visit")),
-    visited:       applyFilters(spots.filter((s) => s.status === "visited" || s.isFavorite)),
+    saved:         applyFilters(spots),
     favorites:     applyFilters(spots.filter((s) => s.isFavorite)),
     want_to_visit: applyFilters(spots.filter((s) => s.status === "want_to_visit")),
   };
@@ -1407,14 +1400,14 @@ export default function SpotsPage() {
                 <button
                   onClick={() => setFilterSheetOpen(true)}
                   className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border text-sm font-medium shrink-0 transition-colors relative ${
-                    (filterType !== "all" || filterStatus !== "all" || filterCity !== "all")
+                    (filterType !== "all" || filterCity !== "all")
                       ? "border-primary text-primary bg-primary/5"
                       : "border-border text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <SlidersHorizontal size={14} />
                   Filters
-                  {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
+                  {(filterType !== "all" || filterCity !== "all") && (
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary" />
                   )}
                 </button>
@@ -1441,7 +1434,6 @@ export default function SpotsPage() {
             <div className="flex gap-1 w-max">
               {[
                 { value: "saved",       label: `Saved (${tabSpots.saved.length})` },
-                { value: "visited",     label: `Visited (${tabSpots.visited.length})` },
                 { value: "collections", label: `Collections (${Object.keys(allTagGroups).length})` },
                 { value: "map",         label: "🗺 Map" },
                 { value: "shared",      label: "Shared" },
@@ -1751,7 +1743,7 @@ export default function SpotsPage() {
                   <p className="text-sm">Try adjusting or clearing your filters.</p>
                 </div>
                 <button
-                  onClick={() => { setSearch(""); setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); }}
+                  onClick={() => { setSearch(""); setFilterType("all"); setFilterCity("all"); }}
                   className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
                 >
                   Clear filters
@@ -1914,33 +1906,12 @@ export default function SpotsPage() {
             </div>
           </div>
 
-          {/* Status */}
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Status</label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "all", label: "All statuses" },
-                { value: "want_to_visit", label: "Want to Visit" },
-                { value: "visited", label: "Visited" },
-                { value: "favorite", label: "❤️ Favorite" },
-              ].map(s => (
-                <button
-                  key={s.value}
-                  onClick={() => setFilterStatus(s.value)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                    filterStatus === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
+
 
           {/* Clear all */}
-          {(filterType !== "all" || filterStatus !== "all" || filterCity !== "all") && (
+          {(filterType !== "all" || filterCity !== "all") && (
             <button
-              onClick={() => { setFilterType("all"); setFilterStatus("all"); setFilterCity("all"); setFilterSheetOpen(false); }}
+              onClick={() => { setFilterType("all"); setFilterCity("all"); setFilterSheetOpen(false); }}
               className="w-full py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm font-medium"
             >
               Clear all filters
@@ -1977,13 +1948,7 @@ export default function SpotsPage() {
                   <SelectContent>{SPOT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{SPOT_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
@@ -2028,12 +1993,7 @@ export default function SpotsPage() {
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Hours</label>
               <Input placeholder="e.g. Mon–Fri 9am–10pm" value={form.openingHours} onChange={(e) => setForm({ ...form, openingHours: e.target.value })} />
             </div>
-            {(form.status === "visited" || form.status === "favorite") && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Date Visited</label>
-                <Input type="date" value={form.visitedDate} onChange={(e) => setForm({ ...form, visitedDate: e.target.value })} />
-              </div>
-            )}
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Tags (comma-separated)</label>
               <Input placeholder="e.g. Date Night, Kid-Friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
