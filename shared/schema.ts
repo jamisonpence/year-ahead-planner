@@ -220,6 +220,7 @@ export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
   goalId: integer("goal_id"),  // nullable — null means standalone project
+  tripId: integer("trip_id"),   // nullable — links to a trip for prep tasks
   title: text("title").notNull(),
   status: text("status").notNull().default("not_started"),
   dueDate: text("due_date"),

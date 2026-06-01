@@ -2101,6 +2101,68 @@ Return exactly this structure:
   });
 
   // ── Spots ─────────────────────────────────────────────────────────────────────
+  // ── Trip Prep Project ────────────────────────────────────────────────────────
+  // Get or create the prep project for a trip, with its tasks
+  app.get("/api/trips/:id/prep-project", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const tripId = +req.params.id;
+      const projRow = await pool.query(
+        `SELECT p.*, COALESCE(json_agg(pt.* ORDER BY pt.sort_order, pt.id) FILTER (WHERE pt.id IS NOT NULL), '[]') AS tasks
+         FROM projects p LEFT JOIN project_tasks pt ON pt.project_id = p.id
+         WHERE p.trip_id = $1 AND p.user_id = $2 GROUP BY p.id LIMIT 1`,
+        [tripId, uid]
+      );
+      res.json(projRow.rows[0] ?? null);
+    } catch (e) { handleError(res, e); }
+  });
+  // Create a task in the trip's prep project (auto-creates the project if needed)
+  app.post("/api/trips/:id/prep-tasks", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const tripId = +req.params.id;
+      const { title } = req.body;
+      if (!title?.trim()) return res.status(400).json({ error: "title required" });
+      // Get or create the prep project
+      let proj = await pool.query(
+        `SELECT id FROM projects WHERE trip_id = $1 AND user_id = $2 LIMIT 1`,
+        [tripId, uid]
+      );
+      let projectId: number;
+      if (proj.rows[0]) {
+        projectId = proj.rows[0].id;
+      } else {
+        const trip = await pool.query(`SELECT name FROM trips WHERE id = $1`, [tripId]);
+        const tripName = trip.rows[0]?.name ?? "Trip";
+        const newProj = await pool.query(
+          `INSERT INTO projects (user_id, trip_id, title, status, sort_order) VALUES ($1,$2,$3,'in_progress',0) RETURNING id`,
+          [uid, tripId, `Trip Prep: ${tripName}`]
+        );
+        projectId = newProj.rows[0].id;
+      }
+      const task = await pool.query(
+        `INSERT INTO project_tasks (project_id, title, completed, sort_order) VALUES ($1,$2,false,COALESCE((SELECT MAX(sort_order)+1 FROM project_tasks WHERE project_id=$1),0)) RETURNING *`,
+        [projectId, title.trim()]
+      );
+      res.status(201).json({ task: task.rows[0], projectId });
+    } catch (e) { handleError(res, e); }
+  });
+  // Toggle a prep task complete
+  app.patch("/api/trips/:id/prep-tasks/:taskId", requireAuth, async (req, res) => {
+    try {
+      const { completed } = req.body;
+      const r = await pool.query(`UPDATE project_tasks SET completed=$1 WHERE id=$2 RETURNING *`, [completed, +req.params.taskId]);
+      r.rows[0] ? res.json(r.rows[0]) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+  // Delete a prep task
+  app.delete("/api/trips/:id/prep-tasks/:taskId", requireAuth, async (req, res) => {
+    try {
+      await pool.query(`DELETE FROM project_tasks WHERE id=$1`, [+req.params.taskId]);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Spot Folders CRUD ────────────────────────────────────────────────────────
   app.get("/api/spot-folders", requireAuth, async (req, res) => {
     try {

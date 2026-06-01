@@ -1080,7 +1080,7 @@ export default function SpotsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   // Route-locked: /spots = Places only, /travel = Trips only
   const isTravelRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
-  const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "itineraries" | "visited">("upcoming");
+  const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "visited">("upcoming");
   const [placesSubTab, setPlacesSubTab] = useState("saved");
   const [createTripSpot, setCreateTripSpot] = useState<Spot | null>(null);
   const [shareSpot, setShareSpot] = useState<Spot | null>(null);
@@ -1805,10 +1805,9 @@ export default function SpotsPage() {
           <div className="overflow-x-auto scrollbar-hide px-3 pt-2 pb-0 shrink-0">
             <div className="flex gap-1 w-max">
               {([
-                { value: "upcoming"    as const, label: "Upcoming",    icon: <Plane size={13} /> },
-                { value: "past"        as const, label: "Past",         icon: <Globe size={13} /> },
-                { value: "itineraries" as const, label: "Itineraries",  icon: <MapPin size={13} /> },
-                { value: "visited"   as const, label: "Visited",    icon: <Globe size={13} /> },
+                { value: "upcoming" as const, label: "Upcoming", icon: <Plane size={13} /> },
+                { value: "past"     as const, label: "Past",     icon: <Globe size={13} /> },
+                { value: "visited"  as const, label: "Visited",  icon: <Globe size={13} /> },
               ]).map(tab => (
                 <button
                   key={tab.value}
@@ -2876,6 +2875,26 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "items"] }); },
   });
 
+  // Prep task mutations
+  const { data: prepProject, refetch: refetchPrepProject } = useQuery<any>({
+    queryKey: ["/api/trips", selectedTrip?.id, "prep-project"],
+    queryFn: () => apiRequest("GET", `/api/trips/${selectedTrip!.id}/prep-project`).then(r => r.json()),
+    enabled: !!selectedTrip,
+  });
+  const addPrepTask = useMutation({
+    mutationFn: (title: string) => apiRequest("POST", `/api/trips/${selectedTrip!.id}/prep-tasks`, { title }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "prep-project"] }); setPrepTaskInput(""); },
+  });
+  const togglePrepTask = useMutation({
+    mutationFn: ({ taskId, completed }: { taskId: number; completed: boolean }) =>
+      apiRequest("PATCH", `/api/trips/${selectedTrip!.id}/prep-tasks/${taskId}`, { completed }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "prep-project"] }),
+  });
+  const deletePrepTask = useMutation({
+    mutationFn: (taskId: number) => apiRequest("DELETE", `/api/trips/${selectedTrip!.id}/prep-tasks/${taskId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/trips", selectedTrip?.id, "prep-project"] }),
+  });
+
   function openNewTrip() { setEditingTrip(null); setTripForm({ ...EMPTY_TRIP }); setTripModal(true); }
   function openEditTrip(t: Trip) { setEditingTrip(t); setTripForm({ name: t.name, destination: t.destination ?? "", startDate: t.startDate ?? "", endDate: t.endDate ?? "", emoji: t.emoji, notes: t.notes ?? "", coverColor: t.coverColor ?? "#6366f1" }); setTripModal(true); }
   function saveTripForm() {
@@ -3043,6 +3062,65 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
 
         {/* AI Trip Planner */}
         <AITripPlanner trip={tripData} />
+
+        {/* Prep Tasks */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold flex items-center gap-1.5">
+              <ClipboardList size={14} className="text-primary" /> Prep Tasks
+            </h3>
+            {prepProject?.tasks?.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {prepProject.tasks.filter((t: any) => t.completed).length}/{prepProject.tasks.length} done
+              </span>
+            )}
+          </div>
+          {/* Task list */}
+          {prepProject?.tasks?.length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              {prepProject.tasks.map((task: any) => (
+                <div key={task.id} className="flex items-center gap-2 group">
+                  <button
+                    onClick={() => togglePrepTask.mutate({ taskId: task.id, completed: !task.completed })}
+                    className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {task.completed
+                      ? <CheckCircle2 size={16} className="text-emerald-500" />
+                      : <Circle size={16} />}
+                  </button>
+                  <span className={`flex-1 text-sm ${task.completed ? "line-through text-muted-foreground" : ""}`}>
+                    {task.title}
+                  </span>
+                  <button
+                    onClick={() => deletePrepTask.mutate(task.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add task input */}
+          <div className="flex gap-2">
+            <input
+              className="flex-1 h-8 px-3 text-sm border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Add a prep task…"
+              value={prepTaskInput}
+              onChange={e => setPrepTaskInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && prepTaskInput.trim()) addPrepTask.mutate(prepTaskInput.trim()); }}
+            />
+            <Button size="sm" className="h-8 px-3 text-xs" disabled={!prepTaskInput.trim() || addPrepTask.isPending}
+              onClick={() => addPrepTask.mutate(prepTaskInput.trim())}>
+              Add
+            </Button>
+          </div>
+          {prepProject && (
+            <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
+              <ClipboardList size={10} /> Saved as project "{prepProject.title}" in Projects & Tasks
+            </p>
+          )}
+        </div>
 
         {/* Notes & reflection */}
         {tripData.notes && (

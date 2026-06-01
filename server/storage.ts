@@ -1580,6 +1580,8 @@ export async function initializeStorage() {
       } catch { /* skip malformed rows */ }
     }
   }
+  // Trip prep: projects can be linked to a trip
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS trip_id INTEGER`);
   // Spot folders (user-created collections)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_folders (
