@@ -812,12 +812,12 @@ export default function JournalPage() {
 
       {/* Add / Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col !top-[2%] !translate-y-0 sm:!top-[50%] sm:!-translate-y-1/2 max-h-[96vh] sm:max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editing ? "Edit Entry" : "New Journal Entry"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
+          <div className="flex-1 overflow-y-auto space-y-4 pt-2 pr-1">
             {/* Date */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -901,8 +901,10 @@ export default function JournalPage() {
               </button>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-1">
+          </div>
+
+          {/* Actions — always visible at bottom */}
+          <div className="flex justify-end gap-2 pt-3 border-t shrink-0">
               <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
               <Button
                 size="sm"
@@ -912,7 +914,6 @@ export default function JournalPage() {
                 {editing ? "Save Changes" : "Save Entry"}
               </Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
       </>}
