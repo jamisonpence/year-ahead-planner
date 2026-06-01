@@ -810,14 +810,21 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Add / Edit Modal */}
-      <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
-        <DialogContent className="max-w-lg flex flex-col !top-[2%] !translate-y-0 sm:!top-[50%] sm:!-translate-y-1/2 max-h-[96vh] sm:max-h-[90vh]">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>{editing ? "Edit Entry" : "New Journal Entry"}</DialogTitle>
-          </DialogHeader>
+      {/* Add / Edit Modal — full-screen on mobile, centered dialog on desktop */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={closeModal}>
+          <div
+            className="w-full sm:max-w-lg bg-background border sm:rounded-2xl rounded-t-2xl flex flex-col"
+            style={{ maxHeight: "92vh" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+              <span className="text-base font-semibold">{editing ? "Edit Entry" : "New Journal Entry"}</span>
+              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
+            </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pt-2 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-4 p-5">
             {/* Date */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -903,19 +910,18 @@ export default function JournalPage() {
 
           </div>
 
-          {/* Actions — always visible at bottom */}
-          <div className="flex justify-end gap-2 pt-3 border-t shrink-0">
-              <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
-              <Button
-                size="sm"
-                onClick={save}
-                disabled={createMut.isPending || updateMut.isPending}
-              >
-                {editing ? "Save Changes" : "Save Entry"}
-              </Button>
-            </div>
-        </DialogContent>
-      </Dialog>
+          </div>
+
+          {/* Actions — sticky at bottom */}
+          <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
+            <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={createMut.isPending || updateMut.isPending}>
+              {editing ? "Save Changes" : "Save Entry"}
+            </Button>
+          </div>
+        </div>
+        </div>
+      )}
       </>}
     </div>
   );
