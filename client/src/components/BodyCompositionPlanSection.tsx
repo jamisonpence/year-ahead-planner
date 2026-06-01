@@ -22,7 +22,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { usePlanner } from "@/state/PlannerContext";
+import { usePlanner, ALL_CATEGORIES, CATEGORY_PRESETS } from "@/state/PlannerContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -803,7 +803,7 @@ function Step5MealPlan({ s, totalCals, proteinG, carbG, fatG, strategy, onSkip, 
 
       <div className="flex gap-2 pt-1">
         <Button className="flex-1 gap-1.5" onClick={() => onCreatePlan(selectedDiets, exclusions, mealsPerDay, planLength)}>
-          🥗 Generate Meal Plan
+          Next: Categories →
         </Button>
         <Button variant="outline" onClick={onSkip}>Skip</Button>
       </div>
@@ -854,6 +854,44 @@ function Step5({ s, totalCals, proteinG, carbG, fatG, maintenance, strategy }:
   );
 }
 
+// ── Step 6: Categories ────────────────────────────────────────────────────────
+
+function Step6Categories({ selectedCategories, onToggle, onPreset, onClear }:
+  { selectedCategories: string[]; onToggle: (c: string) => void; onPreset: (name: string) => void; onClear: () => void; }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs text-muted-foreground mb-3">Leave empty for any. Or pick a preset below.</p>
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {Object.keys(CATEGORY_PRESETS).map(name => (
+            <button key={name} type="button" onClick={() => onPreset(name)}
+              className="rounded-full border px-3 py-1.5 text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors">
+              {name}
+            </button>
+          ))}
+          {selectedCategories.length > 0 && (
+            <button type="button" onClick={onClear}
+              className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Any
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto pr-1">
+          {ALL_CATEGORIES.map(c => {
+            const active = selectedCategories.includes(c);
+            return (
+              <label key={c} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors text-xs ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}>
+                <input type="checkbox" checked={active} onChange={() => onToggle(c)} className="w-3.5 h-3.5 accent-primary" />
+                {c}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Plan Wizard Modal ─────────────────────────────────────────────────────────
 
 interface WizardProps {
@@ -867,6 +905,7 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
   const qc = useQueryClient();
   const [step, setStep] = useState(editing ? 2 : 1);
   const planner = usePlanner();
+  const [wizardCategories, setWizardCategories] = useState<string[]>([]);
   const [ws, setWs] = useState<WizardState>(() => editing ? stateFromPlan(editing) : makeDefaultState("body_fat"));
 
   // Merge partial updates
@@ -974,28 +1013,33 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
     });
   }
 
+  // Stores diet prefs temporarily; categories are picked in step 6
+  const [wizardDietPrefs, setWizardDietPrefs] = useState<{ diets: string[]; exclusions: string; mealsPerDay: 3|4; planLength: 1|7 } | null>(null);
+
   function handleCreateMealPlan(diets: string[], exclusions: string, mealsPerDay: 3|4, planLength: 1|7) {
+    setWizardDietPrefs({ diets, exclusions, mealsPerDay, planLength });
+    setStep(6); // go to categories step
+  }
+
+  function handleGenerateMealPlan(categories: string[]) {
+    const prefs = wizardDietPrefs ?? { diets: [], exclusions: "", mealsPerDay: 3 as const, planLength: 7 as const };
     const heightIn = (parseFloat(ws.heightFt) || 0) * 12 + (parseFloat(ws.heightIn) || 0);
     const heightCm = Math.round(heightIn * 2.54);
     const weightKg = ws.weightUnit === "kg" ? parseFloat(ws.currentWeight) || 70 : Math.round((parseFloat(ws.currentWeight) || 154) * 0.453592);
     const age = parseInt(ws.age) || 30;
     const actMap: Record<string, any> = { sedentary:"sedentary", lightly_active:"light", moderately_active:"moderate", very_active:"very", extremely_active:"athlete" };
     const goalMap: Record<string, any> = { cut:"cut", bulk:"bulk", recomp:"maintain", maintain:"maintain" };
-    // Set planner state
     planner.setMode("personal");
     planner.setStats({ sex: ws.sex, age, heightCm: heightCm || 170, weightKg, activity: actMap[ws.activityLevel] ?? "moderate", goal: goalMap[strategy] ?? "maintain" });
     planner.setMacros({ cal: effectiveCals, p: proteinG, c: Math.max(0, carbG), f: fatG });
-    // Apply diet preferences
-    const excList = exclusions.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    planner.setPrefs({ ...planner.prefs, diets: diets as any, exclusions: excList, mealsPerDay, planLength });
-    // Generate the plan
+    const excList = prefs.exclusions.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    planner.setPrefs({ ...planner.prefs, diets: prefs.diets as any, exclusions: excList, mealsPerDay: prefs.mealsPerDay, planLength: prefs.planLength, categories });
     planner.generate();
-    toast({ title: "Meal Plan created!", description: "Your meal plan is ready in the Nutrition → Meal Planner." });
-    // Advance to summary
-    setStep(6);
+    toast({ title: "Meal Plan created!", description: "Your meal plan is ready in Nutrition → Meal Planner." });
+    setStep(7);
   }
 
-  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Meal Plan", "Summary"];
+  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Diet", "Categories", "Summary"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -1003,12 +1047,12 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
             <h2 className="font-semibold">{editing ? "Edit" : "New"} Body Composition Plan</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 6 — {STEP_LABELS[step - 1]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 7 — {STEP_LABELS[step - 1]}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
         </div>
         <div className="h-1 bg-secondary">
-          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 6) * 100}%` }} />
+          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 7) * 100}%` }} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -1033,10 +1077,18 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
           {step === 5 && (
             <Step5MealPlan s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               strategy={strategy}
-              onSkip={() => setStep(6)}
+              onSkip={() => setStep(7)}
               onCreatePlan={handleCreateMealPlan} />
           )}
           {step === 6 && (
+            <Step6Categories
+              selectedCategories={wizardCategories}
+              onToggle={c => setWizardCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])}
+              onPreset={name => setWizardCategories(CATEGORY_PRESETS[name] ?? [])}
+              onClear={() => setWizardCategories([])}
+            />
+          )}
+          {step === 7 && (
             <Step5 s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               maintenance={maintenanceNum} strategy={strategy} />
           )}
@@ -1047,7 +1099,11 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
             <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1.5"><ChevronLeft size={14} /> Back</Button>
             {step === 5
               ? null  // step 5 has its own CTA buttons
-              : step < 6
+              : step === 6
+              ? <Button size="sm" onClick={() => handleGenerateMealPlan(wizardCategories)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">
+                  🥗 Generate Meal Plan
+                </Button>
+              : step < 7
               ? <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
               : <Button size="sm" onClick={handleSave} disabled={saveMut.isPending}
                   className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
