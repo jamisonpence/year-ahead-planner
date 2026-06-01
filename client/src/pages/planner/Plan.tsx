@@ -64,6 +64,8 @@ export default function PlanPage() {
           plan={plan}
           onRegenDay={regenerateDay}
           onSwap={(dayIndex, mealIndex) => setSwapTarget({ dayIndex, mealIndex })}
+          onRemove={(dayIndex, mealIndex) => removeMeal(dayIndex, mealIndex)}
+          onMarkLeftover={(dayIndex, mealIndex) => setLeftoverSource({ dayIndex, mealIndex })}
           onView={(r) => setRecipeView(r)}
         />
       ) : (
@@ -75,9 +77,36 @@ export default function PlanPage() {
               target={plan.target}
               onRegen={() => regenerateDay(i)}
               onSwap={(mealIndex) => setSwapTarget({ dayIndex: i, mealIndex })}
+              onRemove={(mealIndex) => removeMeal(i, mealIndex)}
+              onMarkLeftover={(mealIndex) => setLeftoverSource({ dayIndex: i, mealIndex })}
               onView={setRecipeView}
             />
           ))}
+        </div>
+      )}
+
+      {/* Leftover picker sheet */}
+      {leftoverSource && plan && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setLeftoverSource(null)}>
+          <div className="w-full sm:max-w-sm bg-background border sm:rounded-2xl rounded-t-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Copy as Leftover to…</h3>
+              <button onClick={() => setLeftoverSource(null)} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              "{plan.days[leftoverSource.dayIndex]?.meals[leftoverSource.mealIndex]?.recipe.name}" will be added to the selected day.
+            </p>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {plan.days.filter(d => d.day !== leftoverSource.dayIndex).map(d => (
+                <button key={d.day}
+                  onClick={() => { markLeftover(leftoverSource.dayIndex, leftoverSource.mealIndex, d.day); setLeftoverSource(null); }}
+                  className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border hover:bg-secondary transition-colors text-sm font-medium">
+                  <CalendarPlus className="h-4 w-4 text-muted-foreground shrink-0" />
+                  {DAY_LABELS[d.day % 7]}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -124,9 +153,11 @@ function PlanHeader({ plan, onRegenAll, onExportCSV }: { plan: Plan; onRegenAll:
   );
 }
 
-function DailyTabs({ plan, onRegenDay, onSwap, onView }: {
+function DailyTabs({ plan, onRegenDay, onSwap, onRemove, onMarkLeftover, onView }: {
   plan: Plan; onRegenDay: (i: number) => void;
   onSwap: (dayIndex: number, mealIndex: number) => void;
+  onRemove: (dayIndex: number, mealIndex: number) => void;
+  onMarkLeftover: (dayIndex: number, mealIndex: number) => void;
   onView: (r: Recipe) => void;
 }) {
   const [active, setActive] = useState("0");
@@ -146,6 +177,8 @@ function DailyTabs({ plan, onRegenDay, onSwap, onView }: {
             target={plan.target}
             onRegen={() => onRegenDay(i)}
             onSwap={(mealIndex) => onSwap(i, mealIndex)}
+            onRemove={(mealIndex) => onRemove(i, mealIndex)}
+            onMarkLeftover={(mealIndex) => onMarkLeftover(i, mealIndex)}
             onView={onView}
           />
         </TabsContent>
@@ -154,9 +187,12 @@ function DailyTabs({ plan, onRegenDay, onSwap, onView }: {
   );
 }
 
-function DayCard({ day, target, onRegen, onSwap, onView }: {
+function DayCard({ day, target, onRegen, onSwap, onRemove, onMarkLeftover, onView }: {
   day: DayPlan; target: any; onRegen: () => void;
-  onSwap: (mealIndex: number) => void; onView: (r: Recipe) => void;
+  onSwap: (mealIndex: number) => void;
+  onRemove: (mealIndex: number) => void;
+  onMarkLeftover: (mealIndex: number) => void;
+  onView: (r: Recipe) => void;
 }) {
   return (
     <Card className="rounded-2xl">
@@ -174,17 +210,23 @@ function DayCard({ day, target, onRegen, onSwap, onView }: {
           <MacroBars totals={day.totals} target={target} />
         </div>
         <div className="mt-5 space-y-3">
-          {day.meals.map((m, mi) => {
+          {day.meals.filter(m => !m.removed).map((m) => {
+            const mi = day.meals.indexOf(m);
             const Icon = SLOT_ICON[m.slot];
             return (
               <div
                 key={mi}
-                className="flex flex-col gap-3 rounded-xl border border-border bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between"
+                className={cn("flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between", m.isLeftover ? "border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20" : "border-border bg-background/40")}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground flex-wrap">
                     <Icon className="h-3.5 w-3.5" />
                     {m.slot}
+                    {m.isLeftover && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-medium normal-case tracking-normal">
+                        🍱 Leftover from {DAY_LABELS[(m.leftoverFromDay ?? 0) % 7]}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => onView(m.recipe)}
@@ -201,9 +243,17 @@ function DayCard({ day, target, onRegen, onSwap, onView }: {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onSwap(mi)} data-testid={`button-swap-${day.day}-${mi}`}>
-                    <Repeat className="mr-1 h-3.5 w-3.5" /> Swap
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  {!m.isLeftover && (
+                    <Button variant="outline" size="sm" onClick={() => onSwap(mi)} data-testid={`button-swap-${day.day}-${mi}`}>
+                      <Repeat className="mr-1 h-3.5 w-3.5" /> Swap
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => onMarkLeftover(mi)} title="Copy as leftover to another day">
+                    <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Leftover
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 px-2" onClick={() => onRemove(mi)} title="Remove meal">
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>

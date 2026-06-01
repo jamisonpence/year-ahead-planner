@@ -55,6 +55,9 @@ export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 export type PlannedMeal = {
   slot: MealSlot;
   recipe: Recipe;
+  removed?: boolean;          // user removed this meal from the day
+  isLeftover?: boolean;       // this meal is a leftover copy
+  leftoverFromDay?: number;   // which day index the leftover came from
 };
 
 export type DayPlan = {

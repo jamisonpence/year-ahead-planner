@@ -95,6 +95,8 @@ type Ctx = {
   regenerateDay: (dayIndex: number) => void;
   swap: (dayIndex: number, mealIndex: number, recipe: Recipe) => void;
   swapOptions: (dayIndex: number, mealIndex: number) => Recipe[];
+  removeMeal: (dayIndex: number, mealIndex: number) => void;
+  markLeftover: (sourceDayIndex: number, mealIndex: number, targetDayIndex: number) => void;
 };
 
 const PlannerCtx = createContext<Ctx | null>(null);
@@ -210,6 +212,32 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function removeMeal(dayIndex: number, mealIndex: number) {
+    if (!plan) return;
+    const day = plan.days[dayIndex];
+    const newMeals = day.meals.map((m, i) => i === mealIndex ? { ...m, removed: true } : m);
+    const totals = newMeals.filter(m => !m.removed).reduce(
+      (acc, m) => ({ cal: acc.cal + m.recipe.macros.cal, p: acc.p + m.recipe.macros.p, c: acc.c + m.recipe.macros.c, f: acc.f + m.recipe.macros.f }),
+      { cal: 0, p: 0, c: 0, f: 0 }
+    );
+    setPlan({ ...plan, days: plan.days.map((d, i) => i === dayIndex ? { ...d, meals: newMeals, totals } : d) });
+  }
+
+  function markLeftover(sourceDayIndex: number, mealIndex: number, targetDayIndex: number) {
+    if (!plan) return;
+    const sourceMeal = plan.days[sourceDayIndex]?.meals[mealIndex];
+    if (!sourceMeal) return;
+    const leftoverMeal = { ...sourceMeal, isLeftover: true, leftoverFromDay: sourceDayIndex };
+    const targetDay = plan.days[targetDayIndex];
+    // Add leftover to target day (or replace an existing leftover slot if present)
+    const newMeals = [...targetDay.meals, leftoverMeal];
+    const totals = newMeals.filter(m => !m.removed).reduce(
+      (acc, m) => ({ cal: acc.cal + m.recipe.macros.cal, p: acc.p + m.recipe.macros.p, c: acc.c + m.recipe.macros.c, f: acc.f + m.recipe.macros.f }),
+      { cal: 0, p: 0, c: 0, f: 0 }
+    );
+    setPlan({ ...plan, days: plan.days.map((d, i) => i === targetDayIndex ? { ...d, meals: newMeals, totals } : d) });
+  }
+
   function swapOptions(dayIndex: number, mealIndex: number): Recipe[] {
     if (!plan) return [];
     const day = plan.days[dayIndex];
@@ -244,6 +272,8 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
       regenerateDay,
       swap,
       swapOptions,
+      removeMeal,
+      markLeftover,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [recipes, recipesQ.isLoading, recipesQ.error, mode, stats, macros, adults, kids, kidCalsEach, prefs, plan],
