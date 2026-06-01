@@ -299,7 +299,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
                   <label className="text-xs font-semibold text-muted-foreground">Goal</label>
                   <Select value={goal} onValueChange={setGoal}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[90]">
                       <SelectItem value="balanced">Balanced</SelectItem>
                       <SelectItem value="hypertrophy">Hypertrophy</SelectItem>
                       <SelectItem value="strength">Strength</SelectItem>
@@ -312,7 +312,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
                   <label className="text-xs font-semibold text-muted-foreground">Focus Area</label>
                   <Select value={focus} onValueChange={setFocus}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[90]">
                       <SelectItem value="balanced">Balanced</SelectItem>
                       <SelectItem value="Core Strength">Core Strength</SelectItem>
                       <SelectItem value="Upper Body">Upper Body</SelectItem>
@@ -326,7 +326,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
                   <label className="text-xs font-semibold text-muted-foreground">Experience</label>
                   <Select value={experience} onValueChange={setExperience}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[90]">
                       <SelectItem value="beginner">Beginner</SelectItem>
                       <SelectItem value="intermediate">Intermediate</SelectItem>
                       <SelectItem value="advanced">Advanced</SelectItem>
@@ -341,7 +341,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
                   <label className="text-xs font-semibold text-muted-foreground">Session Duration</label>
                   <Select value={duration} onValueChange={setDuration}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[90]">
                       <SelectItem value="45">45 min</SelectItem>
                       <SelectItem value="60">60 min</SelectItem>
                       <SelectItem value="75">75 min</SelectItem>
