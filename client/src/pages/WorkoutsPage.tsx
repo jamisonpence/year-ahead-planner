@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { workoutStreak, weeklyWorkoutStats, getRecentPRs, WORKOUT_TYPE_LABELS, WORKOUT_TYPES } from "@/lib/plannerUtils";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import WorkoutTemplateModal from "@/components/modals/WorkoutTemplateModal";
+import GeneralFitnessWizard from "@/components/modals/GeneralFitnessWizard";
 import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser, WorkoutPlanMilestone } from "@shared/schema";
 
 // Legacy flat format (kept for backward compat reading)
@@ -1297,10 +1298,11 @@ const GOAL_TYPES: { value: GoalType; label: string; icon: React.ReactNode; desc:
 
 const RACE_DISTANCES = ["5K", "10K", "Half Marathon", "Marathon", "50K Ultra", "50 Mile Ultra", "Triathlon (Sprint)", "Triathlon (Olympic)", "Triathlon (Ironman)", "Custom"];
 
-function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelected }: {
+function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelected, onGeneralFitnessSelected }: {
   open: boolean; onClose: () => void;
   editing: WorkoutPlan | null; templates: WorkoutTemplate[];
   onBodyCompSelected?: () => void;
+  onGeneralFitnessSelected?: () => void;
 }) {
   const { toast } = useToast();
   const [step, setStep] = useState<"goal" | "details" | "schedule">("goal");
@@ -1478,6 +1480,11 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
     if (type === "body_composition" && onBodyCompSelected) {
       onClose();
       onBodyCompSelected();
+      return;
+    }
+    if (type === "general" && onGeneralFitnessSelected) {
+      onClose();
+      onGeneralFitnessSelected();
       return;
     }
     setGoalType(type);
@@ -2253,6 +2260,7 @@ export default function WorkoutsPage() {
   const [equipmentModal, setEquipmentModal] = useState(false);
   const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
   const [planModal, setPlanModal] = useState(false);
+  const [generalFitnessWizardOpen, setGeneralFitnessWizardOpen] = useState(false);
   const [editPlan, setEditPlan] = useState<WorkoutPlan | null>(null);
 
   // Auto-open plan builder if navigated here with ?newPlan=1
@@ -3498,7 +3506,8 @@ export default function WorkoutsPage() {
       <ExerciseSearchModal open={exerciseSearchOpen} onClose={() => setExerciseSearchOpen(false)} templates={templates} />
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
       <EquipmentModal open={equipmentModal} onClose={() => { setEquipmentModal(false); setEditEquipment(null); }} editing={editEquipment} />
-      <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} onBodyCompSelected={() => setBodyCompWizardOpen(true)} />
+      <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} onBodyCompSelected={() => setBodyCompWizardOpen(true)} onGeneralFitnessSelected={() => { setPlanModal(false); setGeneralFitnessWizardOpen(true); }} />
+      <GeneralFitnessWizard open={generalFitnessWizardOpen} onClose={() => setGeneralFitnessWizardOpen(false)} />
       {sharePayload && (
         <ShareWorkoutModal
           open={shareModal} onClose={() => { setShareModal(false); setSharePayload(null); }}
