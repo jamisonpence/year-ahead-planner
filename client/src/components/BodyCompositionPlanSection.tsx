@@ -892,6 +892,123 @@ function Step6Categories({ selectedCategories, onToggle, onPreset, onClear }:
   );
 }
 
+// ── Step 7: Review Meal Plan ──────────────────────────────────────────────────
+
+const DAY_LABELS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const SLOT_EMOJI: Record<string, string> = { breakfast:"☕", lunch:"🥗", dinner:"🍽️", snack:"🍪" };
+
+function Step7ReviewPlan() {
+  const planner = usePlanner();
+  const plan = planner.plan;
+  const [activeDay, setActiveDay] = useState(0);
+  const [swapTarget, setSwapTarget] = useState<{dayIndex:number;mealIndex:number}|null>(null);
+  const [swapOptions, setSwapOptions] = useState<any[]>([]);
+
+  if (!plan) return (
+    <div className="text-center py-10 text-muted-foreground">
+      <p className="text-sm">No plan generated yet.</p>
+    </div>
+  );
+
+  const day = plan.days[activeDay];
+  if (!day) return null;
+
+  function openSwap(dayIndex: number, mealIndex: number) {
+    setSwapTarget({ dayIndex, mealIndex });
+    setSwapOptions(planner.swapOptions(dayIndex, mealIndex));
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Day tabs */}
+      {plan.days.length > 1 && (
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {plan.days.map((d, i) => (
+            <button key={i} onClick={() => setActiveDay(i)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${activeDay === i ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+              Day {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Macro bar */}
+      <div className="grid grid-cols-4 gap-1.5 text-center">
+        {[
+          { label: "Cal", val: day.totals.cal, target: plan.target.cal, color: "text-primary" },
+          { label: "P", val: day.totals.p, target: plan.target.p, color: "text-blue-500" },
+          { label: "C", val: day.totals.c, target: plan.target.c, color: "text-amber-500" },
+          { label: "F", val: day.totals.f, target: plan.target.f, color: "text-rose-500" },
+        ].map(m => (
+          <div key={m.label} className="rounded-lg border bg-card p-2">
+            <p className={`text-sm font-bold ${m.color}`}>{m.val}</p>
+            <p className="text-[10px] text-muted-foreground">/{m.target} {m.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Meal cards */}
+      <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+        {day.meals.filter((m: any) => !m.removed).map((m: any) => {
+          const mi = day.meals.indexOf(m);
+          return (
+            <div key={mi} className={`rounded-xl border p-3 ${m.isLeftover ? "border-amber-300 dark:border-amber-700 bg-amber-50/20 dark:bg-amber-950/10" : "bg-card"}`}>
+              <div className="flex items-start gap-2">
+                <span className="text-base shrink-0">{SLOT_EMOJI[m.slot] ?? "🍴"}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{m.slot}{m.isLeftover ? " · 🍱 Leftover" : ""}</p>
+                  <p className="text-sm font-semibold leading-tight">{m.recipe.name}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{m.recipe.macros.cal} cal · {m.recipe.macros.p}P · {m.recipe.macros.c}C · {m.recipe.macros.f}F</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {!m.isLeftover && (
+                    <button onClick={() => openSwap(activeDay, mi)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg border text-xs hover:bg-secondary transition-colors">
+                      <RefreshCw size={11} /> Swap
+                    </button>
+                  )}
+                  <button onClick={() => planner.removeMeal(activeDay, mi)}
+                    className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Regenerate day */}
+      <button onClick={() => planner.regenerateDay(activeDay)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <RefreshCw size={11} /> Regenerate {DAY_LABELS_SHORT[activeDay % 7]}
+      </button>
+
+      {/* Swap picker */}
+      {swapTarget && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60" onClick={() => setSwapTarget(null)}>
+          <div className="w-full sm:max-w-sm bg-background border sm:rounded-2xl rounded-t-2xl p-4 space-y-2 max-h-[60vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0">
+              <p className="text-sm font-semibold">Swap with…</p>
+              <button onClick={() => setSwapTarget(null)} className="text-muted-foreground hover:text-foreground text-lg">×</button>
+            </div>
+            <div className="overflow-y-auto space-y-1.5 flex-1">
+              {swapOptions.map((r: any) => (
+                <button key={r.id} onClick={() => { planner.swap(swapTarget.dayIndex, swapTarget.mealIndex, r); setSwapTarget(null); }}
+                  className="w-full text-left px-3 py-2 rounded-xl border hover:bg-secondary transition-colors">
+                  <p className="text-sm font-medium">{r.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{r.macros.cal} cal · {r.macros.p}P · {r.macros.c}C · {r.macros.f}F</p>
+                </button>
+              ))}
+              {swapOptions.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No alternatives found.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Plan Wizard Modal ─────────────────────────────────────────────────────────
 
 interface WizardProps {
@@ -1035,11 +1152,10 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
     const excList = prefs.exclusions.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     planner.setPrefs({ ...planner.prefs, diets: prefs.diets as any, exclusions: excList, mealsPerDay: prefs.mealsPerDay, planLength: prefs.planLength, categories });
     planner.generate();
-    toast({ title: "Meal Plan created!", description: "Your meal plan is ready in Nutrition → Meal Planner." });
-    setStep(7);
+    setStep(7); // go to Review step
   }
 
-  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Diet", "Categories", "Summary"];
+  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Diet", "Categories", "Review Plan", "Summary"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -1047,12 +1163,12 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
             <h2 className="font-semibold">{editing ? "Edit" : "New"} Body Composition Plan</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 7 — {STEP_LABELS[step - 1]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 8 — {STEP_LABELS[step - 1]}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
         </div>
         <div className="h-1 bg-secondary">
-          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 7) * 100}%` }} />
+          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 8) * 100}%` }} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -1077,7 +1193,7 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
           {step === 5 && (
             <Step5MealPlan s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               strategy={strategy}
-              onSkip={() => setStep(7)}
+              onSkip={() => setStep(8)}
               onCreatePlan={handleCreateMealPlan} />
           )}
           {step === 6 && (
@@ -1088,7 +1204,8 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
               onClear={() => setWizardCategories([])}
             />
           )}
-          {step === 7 && (
+          {step === 7 && <Step7ReviewPlan />}
+          {step === 8 && (
             <Step5 s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               maintenance={maintenanceNum} strategy={strategy} />
           )}
@@ -1101,9 +1218,13 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
               ? null  // step 5 has its own CTA buttons
               : step === 6
               ? <Button size="sm" onClick={() => handleGenerateMealPlan(wizardCategories)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">
-                  🥗 Generate Meal Plan
+                  🥗 Generate &amp; Review
                 </Button>
-              : step < 7
+              : step === 7
+              ? <Button size="sm" onClick={() => setStep(8)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">
+                  Looks good <ChevronRight size={14} />
+                </Button>
+              : step < 8
               ? <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
               : <Button size="sm" onClick={handleSave} disabled={saveMut.isPending}
                   className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
