@@ -1562,6 +1562,24 @@ export async function initializeStorage() {
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS horizon TEXT NOT NULL DEFAULT 'this_year'`);
   // Parent-child goal linking across horizons
   await db.execute(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS parent_goal_id INTEGER`);
+  // Fix nav_prefs ordering: ensure /habits comes before /journal for all users
+  {
+    const navRows = await pool.query(`SELECT id, prefs_json FROM nav_prefs WHERE prefs_json IS NOT NULL`);
+    for (const row of navRows.rows) {
+      try {
+        const prefs: { path: string; hidden: boolean }[] = JSON.parse(row.prefs_json || '[]');
+        const hi = prefs.findIndex(p => p.path === '/habits');
+        const ji = prefs.findIndex(p => p.path === '/journal');
+        if (hi !== -1 && ji !== -1 && ji < hi) {
+          // Journal is before habits — swap them to correct order
+          const habitsItem = prefs.splice(hi, 1)[0];
+          const journalIdx = prefs.findIndex(p => p.path === '/journal');
+          prefs.splice(journalIdx + 1, 0, habitsItem);
+          await pool.query(`UPDATE nav_prefs SET prefs_json = $1 WHERE id = $2`, [JSON.stringify(prefs), row.id]);
+        }
+      } catch { /* skip malformed rows */ }
+    }
+  }
   // Spot folders (user-created collections)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_folders (
