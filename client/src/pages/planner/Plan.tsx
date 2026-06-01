@@ -22,11 +22,12 @@ const SLOT_ICON: Record<MealSlot, any> = {
 const DAY_LABELS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
 export default function PlanPage() {
-  const { plan, generate, regenerateDay, recipesLoading } = usePlanner();
+  const { plan, generate, regenerateDay, removeMeal, markLeftover, recipesLoading } = usePlanner();
   const [, navigate] = useLocation();
   const [view, setView] = useState<"daily" | "weekly">("daily");
   const [swapTarget, setSwapTarget] = useState<{ dayIndex: number; mealIndex: number } | null>(null);
   const [recipeView, setRecipeView] = useState<Recipe | null>(null);
+  const [leftoverSource, setLeftoverSource] = useState<{ dayIndex: number; mealIndex: number } | null>(null);
 
   if (recipesLoading) {
     return <div className="text-sm text-muted-foreground">Loading recipes…</div>;
