@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Flame, TrendingUp, RefreshCw, X, ChevronRight, ChevronLeft,
   Scale, Target, Dumbbell, CheckCircle2, Pencil, Trash2,
-  MoreHorizontal, ClipboardList, Zap, Sparkles, Heart, Play,
+  MoreHorizontal, ClipboardList, Zap, Sparkles, Heart, Play, CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -903,6 +903,7 @@ function Step7ReviewPlan() {
   const [activeDay, setActiveDay] = useState(0);
   const [swapTarget, setSwapTarget] = useState<{dayIndex:number;mealIndex:number}|null>(null);
   const [swapOptions, setSwapOptions] = useState<any[]>([]);
+  const [leftoverTarget, setLeftoverTarget] = useState<{dayIndex:number;mealIndex:number;name:string}|null>(null);
 
   if (!plan) return (
     <div className="text-center py-10 text-muted-foreground">
@@ -967,6 +968,10 @@ function Step7ReviewPlan() {
                       <RefreshCw size={11} /> Swap
                     </button>
                   )}
+                  <button onClick={() => setLeftoverTarget({ dayIndex: activeDay, mealIndex: mi, name: m.recipe.name })}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg border text-xs hover:bg-secondary transition-colors">
+                    <CalendarPlus size={11} /> Leftover
+                  </button>
                   <button onClick={() => planner.removeMeal(activeDay, mi)}
                     className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
                     <Trash2 size={12} />
@@ -983,6 +988,29 @@ function Step7ReviewPlan() {
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
         <RefreshCw size={11} /> Regenerate {DAY_LABELS_SHORT[activeDay % 7]}
       </button>
+
+      {/* Leftover day picker */}
+      {leftoverTarget && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60" onClick={() => setLeftoverTarget(null)}>
+          <div className="w-full sm:max-w-sm bg-background border sm:rounded-2xl rounded-t-2xl p-4 space-y-3 max-h-[60vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0">
+              <p className="text-sm font-semibold">Copy as Leftover to…</p>
+              <button onClick={() => setLeftoverTarget(null)} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
+            </div>
+            <p className="text-xs text-muted-foreground shrink-0">"{leftoverTarget.name}" will be added to the selected day.</p>
+            <div className="overflow-y-auto space-y-1.5 flex-1">
+              {plan.days.filter(d => d.day !== leftoverTarget.dayIndex).map(d => (
+                <button key={d.day}
+                  onClick={() => { planner.markLeftover(leftoverTarget.dayIndex, leftoverTarget.mealIndex, d.day); setLeftoverTarget(null); }}
+                  className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl border hover:bg-secondary transition-colors text-sm font-medium">
+                  <CalendarPlus size={15} className="text-muted-foreground shrink-0" />
+                  {DAY_LABELS_SHORT[d.day % 7] === "Mon" ? "Monday" : DAY_LABELS_SHORT[d.day % 7] === "Tue" ? "Tuesday" : DAY_LABELS_SHORT[d.day % 7] === "Wed" ? "Wednesday" : DAY_LABELS_SHORT[d.day % 7] === "Thu" ? "Thursday" : DAY_LABELS_SHORT[d.day % 7] === "Fri" ? "Friday" : DAY_LABELS_SHORT[d.day % 7] === "Sat" ? "Saturday" : "Sunday"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Swap picker */}
       {swapTarget && (
@@ -1214,7 +1242,18 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
         {step > 1 && (
           <div className="px-5 py-4 border-t flex items-center justify-between gap-3">
             <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1.5"><ChevronLeft size={14} /> Back</Button>
-            {step === 5
+            {step === 4
+              ? (
+                <div className="flex gap-2 flex-1">
+                  <Button size="sm" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
+                    🥗 Add Meal Plan
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setStep(8)}>
+                    Skip to Summary
+                  </Button>
+                </div>
+              )
+              : step === 5
               ? null  // step 5 has its own CTA buttons
               : step === 6
               ? <Button size="sm" onClick={() => handleGenerateMealPlan(wizardCategories)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">
