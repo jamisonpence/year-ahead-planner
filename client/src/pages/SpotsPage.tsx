@@ -1750,7 +1750,7 @@ export default function SpotsPage() {
                 </button>
               </div>
             ) : !search && filterType === "all" ? (
-              // ── Grouped by type, all collapsed by default ──────────────────
+              // ── Grouped by type, compact rows ──────────────────────────────
               (() => {
                 const typeGroups = SPOT_TYPES
                   .map(t => ({ type: t, spots: displaySpots.filter(s => s.type === t.value) }))
@@ -1767,29 +1767,33 @@ export default function SpotsPage() {
                               if (collapsed) next.delete(type.value); else next.add(type.value);
                               return next;
                             })}
-                            className="flex items-center gap-2.5 w-full px-3 py-3 bg-card hover:bg-secondary/50 transition-colors"
+                            className="flex items-center gap-2.5 w-full px-3 py-2.5 bg-card hover:bg-secondary/50 transition-colors"
                           >
-                            <span className="text-lg shrink-0">{type.emoji}</span>
+                            <span className="text-base shrink-0">{type.emoji}</span>
                             <span className="font-semibold text-sm flex-1 text-left">{type.label}</span>
                             <span className="text-xs text-muted-foreground mr-1">{typeSpots.length}</span>
-                            {collapsed ? <ChevronDown size={15} className="text-muted-foreground shrink-0" /> : <ChevronUp size={15} className="text-muted-foreground shrink-0" />}
+                            {collapsed ? <ChevronDown size={14} className="text-muted-foreground shrink-0" /> : <ChevronUp size={14} className="text-muted-foreground shrink-0" />}
                           </button>
                           {!collapsed && (
-                            <div className="divide-y border-t">
-                              {typeSpots.map(spot => (
-                                <div key={spot.id} className="px-3 py-2">
-                                  <SpotCard
-                                    spot={spot}
-                                    onEdit={() => openEdit(spot)}
-                                    onDelete={() => deleteMut.mutate(spot.id)}
-                                    onShare={() => setShareSpot(spot)}
-                                    onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                                    onAddToTrip={() => setAddToTripSpot(spot)}
-                                    onCreateTrip={() => setCreateTripSpot(spot)}
-                                    onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                                  />
-                                </div>
-                              ))}
+                            <div className="border-t">
+                              {typeSpots.map(spot => {
+                                const loc = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
+                                return (
+                                  <div key={spot.id} className="flex items-center gap-2.5 px-3 py-2 border-b last:border-b-0 hover:bg-secondary/30 transition-colors group">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate leading-tight">{spot.name}</p>
+                                      {loc && <p className="text-[11px] text-muted-foreground truncate">{loc}</p>}
+                                    </div>
+                                    {spot.rating ? <span className="text-[11px] text-amber-500 shrink-0">{"★".repeat(spot.rating)}</span> : null}
+                                    {spot.isFavorite && <Heart size={11} className="text-red-400 shrink-0" fill="currentColor" />}
+                                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button onClick={() => openEdit(spot)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Edit"><Pencil size={11} /></button>
+                                      <button onClick={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-red-400 transition-colors" title="Favourite"><Heart size={11} /></button>
+                                      <button onClick={() => deleteMut.mutate(spot.id)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive" title="Delete"><Trash2 size={11} /></button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1799,21 +1803,27 @@ export default function SpotsPage() {
                 );
               })()
             ) : (
-              // ── Flat list (when searching or type-filtered) ────────────────
-              <div className="space-y-2 pt-1">
-                {displaySpots.map(spot => (
-                  <SpotCard
-                    key={spot.id}
-                    spot={spot}
-                    onEdit={() => openEdit(spot)}
-                    onDelete={() => deleteMut.mutate(spot.id)}
-                    onShare={() => setShareSpot(spot)}
-                    onToggleFav={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })}
-                    onAddToTrip={() => setAddToTripSpot(spot)}
-                    onCreateTrip={() => setCreateTripSpot(spot)}
-                    onRate={(r) => rateMut.mutate({ id: spot.id, rating: r })}
-                  />
-                ))}
+              // ── Flat compact list (searching or type-filtered) ─────────────
+              <div className="rounded-xl border overflow-hidden mt-1">
+                {displaySpots.map(spot => {
+                  const loc = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
+                  return (
+                    <div key={spot.id} className="flex items-center gap-2.5 px-3 py-2 border-b last:border-b-0 hover:bg-secondary/30 transition-colors group">
+                      <span className="text-base shrink-0">{typeEmoji(spot.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate leading-tight">{spot.name}</p>
+                        {loc && <p className="text-[11px] text-muted-foreground truncate">{loc}</p>}
+                      </div>
+                      {spot.rating ? <span className="text-[11px] text-amber-500 shrink-0">{"★".repeat(spot.rating)}</span> : null}
+                      {spot.isFavorite && <Heart size={11} className="text-red-400 shrink-0" fill="currentColor" />}
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEdit(spot)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Edit"><Pencil size={11} /></button>
+                        <button onClick={() => favMut.mutate({ id: spot.id, isFavorite: !spot.isFavorite })} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-red-400 transition-colors" title="Favourite"><Heart size={11} /></button>
+                        <button onClick={() => deleteMut.mutate(spot.id)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive" title="Delete"><Trash2 size={11} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
