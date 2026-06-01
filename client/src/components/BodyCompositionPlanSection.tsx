@@ -22,7 +22,6 @@
  */
 
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
 import { usePlanner } from "@/state/PlannerContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -718,43 +717,96 @@ function Step4({ s, totalCals, weightLbs, onProteinChange, onFatChange }:
   );
 }
 
-// ── Step 5: Add Meal Plan ─────────────────────────────────────────────────────
+// ── Step 5: Add Meal Plan (inline diet configurator) ─────────────────────────
 
-function Step5MealPlan({ s, totalCals, proteinG, carbG, fatG, strategy, onSkip, onLink }:
+const DIET_OPTIONS: { v: string; l: string }[] = [
+  { v: "vegan", l: "Vegan" }, { v: "vegetarian", l: "Vegetarian" },
+  { v: "keto", l: "Keto" }, { v: "whole30", l: "Whole30" },
+  { v: "mediterranean", l: "Mediterranean" }, { v: "gluten-free", l: "Gluten-Free" },
+  { v: "dairy-free", l: "Dairy-Free" },
+];
+
+function Step5MealPlan({ s, totalCals, proteinG, carbG, fatG, strategy, onSkip, onCreatePlan }:
   { s: WizardState; totalCals: number; proteinG: number; carbG: number; fatG: number; strategy: CalStrategy;
-    onSkip: () => void; onLink: () => void; }) {
+    onSkip: () => void; onCreatePlan: (diets: string[], exclusions: string, mealsPerDay: 3|4, planLength: 1|7) => void; }) {
+  const [selectedDiets, setSelectedDiets] = useState<string[]>([]);
+  const [exclusions, setExclusions] = useState("");
+  const [mealsPerDay, setMealsPerDay] = useState<3|4>(3);
+  const [planLength, setPlanLength] = useState<1|7>(7);
+
+  function toggleDiet(v: string) {
+    setSelectedDiets(prev => prev.includes(v) ? prev.filter(d => d !== v) : [...prev, v]);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="text-center space-y-1 pb-2">
-        <p className="text-sm font-semibold">Want to build a matching Meal Plan?</p>
-        <p className="text-xs text-muted-foreground">Your body comp stats will be pre-loaded into the Meal Planner so your food plan matches your goals.</p>
-      </div>
-
-      {/* Macro summary */}
-      <div className="rounded-xl border bg-card p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Your daily targets</p>
-        <div className="flex items-center justify-between border-b pb-2 mb-3">
+      {/* Macro targets */}
+      <div className="rounded-xl border bg-card p-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Your daily targets</p>
+        <div className="flex items-center justify-between border-b pb-2 mb-2">
           <span className="text-sm font-medium">Calories</span>
-          <span className="text-lg font-bold text-primary">{totalCals.toLocaleString()} kcal</span>
+          <span className="text-base font-bold text-primary">{totalCals.toLocaleString()} kcal</span>
         </div>
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div><p className="text-xl font-bold text-blue-600 dark:text-blue-400">{proteinG}g</p><p className="text-[11px] text-muted-foreground">Protein</p></div>
-          <div><p className="text-xl font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbG)}g</p><p className="text-[11px] text-muted-foreground">Carbs</p></div>
-          <div><p className="text-xl font-bold text-rose-600 dark:text-rose-400">{fatG}g</p><p className="text-[11px] text-muted-foreground">Fat</p></div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div><p className="text-lg font-bold text-blue-600 dark:text-blue-400">{proteinG}g</p><p className="text-[10px] text-muted-foreground">Protein</p></div>
+          <div><p className="text-lg font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbG)}g</p><p className="text-[10px] text-muted-foreground">Carbs</p></div>
+          <div><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{fatG}g</p><p className="text-[10px] text-muted-foreground">Fat</p></div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Button className="w-full gap-2" onClick={onLink}>
-          🥗 Create a Meal Plan from these stats
-        </Button>
-        <Button variant="outline" className="w-full" onClick={onSkip}>
-          Skip — go to summary
-        </Button>
+      {/* Diet style */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dietary style <span className="font-normal normal-case">(optional)</span></p>
+        <div className="flex flex-wrap gap-1.5">
+          {DIET_OPTIONS.map(d => (
+            <button key={d.v} type="button"
+              onClick={() => toggleDiet(d.v)}
+              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${selectedDiets.includes(d.v) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-secondary"}`}>
+              {d.l}
+            </button>
+          ))}
+        </div>
       </div>
-      <p className="text-[11px] text-muted-foreground text-center">
-        This will open the Meal Planner setup with your stats pre-filled. You can adjust diet preferences there.
-      </p>
+
+      {/* Exclusions */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Ingredients to avoid</p>
+        <Input placeholder="e.g. mushrooms, cilantro, peanuts" value={exclusions} onChange={e => setExclusions(e.target.value)} className="h-8 text-sm" />
+        <p className="text-[11px] text-muted-foreground mt-1">Comma-separated. Recipes with these ingredients will be excluded.</p>
+      </div>
+
+      {/* Meals per day + plan length */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Meals per day</p>
+          <div className="flex gap-2">
+            {([3,4] as const).map(n => (
+              <button key={n} type="button" onClick={() => setMealsPerDay(n)}
+                className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${mealsPerDay === n ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}>
+                {n === 3 ? "3 meals" : "3 + snack"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Plan length</p>
+          <div className="flex gap-2">
+            {([1,7] as const).map(n => (
+              <button key={n} type="button" onClick={() => setPlanLength(n)}
+                className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${planLength === n ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}>
+                {n === 1 ? "1 day" : "7 days"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button className="flex-1 gap-1.5" onClick={() => onCreatePlan(selectedDiets, exclusions, mealsPerDay, planLength)}>
+          🥗 Generate Meal Plan
+        </Button>
+        <Button variant="outline" onClick={onSkip}>Skip</Button>
+      </div>
     </div>
   );
 }
@@ -814,7 +866,6 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [step, setStep] = useState(editing ? 2 : 1);
-  const [, navigate] = useLocation();
   const planner = usePlanner();
   const [ws, setWs] = useState<WizardState>(() => editing ? stateFromPlan(editing) : makeDefaultState("body_fat"));
 
@@ -923,19 +974,25 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
     });
   }
 
-  function handleLinkMealPlan() {
-    // Pre-fill PlannerContext with body comp stats, then navigate to meal planner setup step 3 (diet)
+  function handleCreateMealPlan(diets: string[], exclusions: string, mealsPerDay: 3|4, planLength: 1|7) {
     const heightIn = (parseFloat(ws.heightFt) || 0) * 12 + (parseFloat(ws.heightIn) || 0);
     const heightCm = Math.round(heightIn * 2.54);
     const weightKg = ws.weightUnit === "kg" ? parseFloat(ws.currentWeight) || 70 : Math.round((parseFloat(ws.currentWeight) || 154) * 0.453592);
     const age = parseInt(ws.age) || 30;
     const actMap: Record<string, any> = { sedentary:"sedentary", lightly_active:"light", moderately_active:"moderate", very_active:"very", extremely_active:"athlete" };
     const goalMap: Record<string, any> = { cut:"cut", bulk:"bulk", recomp:"maintain", maintain:"maintain" };
+    // Set planner state
     planner.setMode("personal");
     planner.setStats({ sex: ws.sex, age, heightCm: heightCm || 170, weightKg, activity: actMap[ws.activityLevel] ?? "moderate", goal: goalMap[strategy] ?? "maintain" });
     planner.setMacros({ cal: effectiveCals, p: proteinG, c: Math.max(0, carbG), f: fatG });
-    onClose();
-    navigate("/meal-planner/setup?step=3");
+    // Apply diet preferences
+    const excList = exclusions.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    planner.setPrefs({ ...planner.prefs, diets: diets as any, exclusions: excList, mealsPerDay, planLength });
+    // Generate the plan
+    planner.generate();
+    toast({ title: "Meal Plan created!", description: "Your meal plan is ready in the Nutrition → Meal Planner." });
+    // Advance to summary
+    setStep(6);
   }
 
   const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Meal Plan", "Summary"];
@@ -977,7 +1034,7 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
             <Step5MealPlan s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               strategy={strategy}
               onSkip={() => setStep(6)}
-              onLink={handleLinkMealPlan} />
+              onCreatePlan={handleCreateMealPlan} />
           )}
           {step === 6 && (
             <Step5 s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
