@@ -198,6 +198,7 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function NotesSection() {
   const [folders, setFolders] = useState<NoteFolder[]>(loadNotes);
   const persist = (next: NoteFolder[]) => { setFolders(next); saveNotes(next); };
+  const [mobileNotesView, setMobileNotesView] = useState<"folders" | "note">("folders");
 
   // UI state
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -304,9 +305,9 @@ function NotesSection() {
   const [activeFolder, setActiveFolder] = useState<{ folderId: string; subfolderId?: string } | null>(null);
 
   return (
-    <div className="flex gap-4 min-h-[500px]">
+    <div className="flex flex-col md:flex-row gap-4 min-h-[500px]">
       {/* ── Sidebar: Folders ──────────────────────────────────── */}
-      <div className="w-72 shrink-0 flex flex-col gap-1.5">
+      <div className={`shrink-0 flex flex-col gap-1.5 w-full md:w-72 ${mobileNotesView === "note" ? "hidden md:flex" : "flex"}`}>
 
         {/* Header + New Folder button */}
         <div className="flex items-center justify-between mb-2">
@@ -396,7 +397,7 @@ function NotesSection() {
                           {sub.notes.map(note => (
                             <div key={note.id}
                               className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors ${selectedNote?.note.id === note.id ? "bg-primary/15 text-primary font-medium" : "hover:bg-secondary text-muted-foreground"}`}
-                              onClick={() => setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note })}>
+                              onClick={() => { setSelectedNote({ folderId: folder.id, subfolderId: sub.id, note }); setMobileNotesView("note"); }}>
                               <FileText size={11} className="shrink-0" />
                               <span className="flex-1 truncate">{note.title}</span>
                             </div>
@@ -413,7 +414,7 @@ function NotesSection() {
                   {folder.notes.map(note => (
                     <div key={note.id}
                       className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors ${selectedNote?.note.id === note.id ? "bg-primary/15 text-primary font-medium" : "hover:bg-secondary text-muted-foreground"}`}
-                      onClick={() => setSelectedNote({ folderId: folder.id, note })}>
+                      onClick={() => { setSelectedNote({ folderId: folder.id, note }); setMobileNotesView("note"); }}>
                       <FileText size={11} className="shrink-0" />
                       <span className="flex-1 truncate">{note.title}</span>
                     </div>
@@ -426,7 +427,7 @@ function NotesSection() {
       </div>
 
       {/* ── Main: Note viewer / empty state ────────────────────── */}
-      <div className="flex-1 min-w-0 bg-card border rounded-xl p-5 flex flex-col">
+      <div className={`flex-1 min-w-0 bg-card border rounded-xl p-5 flex flex-col ${mobileNotesView === "folders" && selectedNote ? "hidden md:flex" : "flex"}`}>
         {!selectedNote ? (
           <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground py-16">
             <FileText size={36} className="mb-3 opacity-20" />
@@ -441,6 +442,12 @@ function NotesSection() {
           <div className="flex flex-col gap-4 h-full">
             <div className="flex items-start justify-between gap-3">
               <div>
+                <button
+                  onClick={() => setMobileNotesView("folders")}
+                  className="md:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1.5 transition-colors"
+                >
+                  ← Back to folders
+                </button>
                 <h2 className="text-lg font-bold">{selectedNote.note.title}</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Updated {new Date(selectedNote.note.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
