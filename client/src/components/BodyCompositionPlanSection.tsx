@@ -22,6 +22,8 @@
  */
 
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { usePlanner } from "@/state/PlannerContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -716,7 +718,48 @@ function Step4({ s, totalCals, weightLbs, onProteinChange, onFatChange }:
   );
 }
 
-// ── Step 5: Summary ───────────────────────────────────────────────────────────
+// ── Step 5: Add Meal Plan ─────────────────────────────────────────────────────
+
+function Step5MealPlan({ s, totalCals, proteinG, carbG, fatG, strategy, onSkip, onLink }:
+  { s: WizardState; totalCals: number; proteinG: number; carbG: number; fatG: number; strategy: CalStrategy;
+    onSkip: () => void; onLink: () => void; }) {
+  return (
+    <div className="space-y-4">
+      <div className="text-center space-y-1 pb-2">
+        <p className="text-sm font-semibold">Want to build a matching Meal Plan?</p>
+        <p className="text-xs text-muted-foreground">Your body comp stats will be pre-loaded into the Meal Planner so your food plan matches your goals.</p>
+      </div>
+
+      {/* Macro summary */}
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Your daily targets</p>
+        <div className="flex items-center justify-between border-b pb-2 mb-3">
+          <span className="text-sm font-medium">Calories</span>
+          <span className="text-lg font-bold text-primary">{totalCals.toLocaleString()} kcal</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div><p className="text-xl font-bold text-blue-600 dark:text-blue-400">{proteinG}g</p><p className="text-[11px] text-muted-foreground">Protein</p></div>
+          <div><p className="text-xl font-bold text-amber-600 dark:text-amber-400">{Math.max(0, carbG)}g</p><p className="text-[11px] text-muted-foreground">Carbs</p></div>
+          <div><p className="text-xl font-bold text-rose-600 dark:text-rose-400">{fatG}g</p><p className="text-[11px] text-muted-foreground">Fat</p></div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Button className="w-full gap-2" onClick={onLink}>
+          🥗 Create a Meal Plan from these stats
+        </Button>
+        <Button variant="outline" className="w-full" onClick={onSkip}>
+          Skip — go to summary
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground text-center">
+        This will open the Meal Planner setup with your stats pre-filled. You can adjust diet preferences there.
+      </p>
+    </div>
+  );
+}
+
+// ── Step 6: Summary ───────────────────────────────────────────────────────────
 
 function Step5({ s, totalCals, proteinG, carbG, fatG, maintenance, strategy }:
   { s: WizardState; totalCals: number; proteinG: number; carbG: number; fatG: number; maintenance: number; strategy: CalStrategy }) {
@@ -771,6 +814,8 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [step, setStep] = useState(editing ? 2 : 1);
+  const [, navigate] = useLocation();
+  const planner = usePlanner();
   const [ws, setWs] = useState<WizardState>(() => editing ? stateFromPlan(editing) : makeDefaultState("body_fat"));
 
   // Merge partial updates
@@ -878,7 +923,22 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
     });
   }
 
-  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Summary"];
+  function handleLinkMealPlan() {
+    // Pre-fill PlannerContext with body comp stats, then navigate to meal planner setup step 3 (diet)
+    const heightIn = (parseFloat(ws.heightFt) || 0) * 12 + (parseFloat(ws.heightIn) || 0);
+    const heightCm = Math.round(heightIn * 2.54);
+    const weightKg = ws.weightUnit === "kg" ? parseFloat(ws.currentWeight) || 70 : Math.round((parseFloat(ws.currentWeight) || 154) * 0.453592);
+    const age = parseInt(ws.age) || 30;
+    const actMap: Record<string, any> = { sedentary:"sedentary", lightly_active:"light", moderately_active:"moderate", very_active:"very", extremely_active:"athlete" };
+    const goalMap: Record<string, any> = { cut:"cut", bulk:"bulk", recomp:"maintain", maintain:"maintain" };
+    planner.setMode("personal");
+    planner.setStats({ sex: ws.sex, age, heightCm: heightCm || 170, weightKg, activity: actMap[ws.activityLevel] ?? "moderate", goal: goalMap[strategy] ?? "maintain" });
+    planner.setMacros({ cal: effectiveCals, p: proteinG, c: Math.max(0, carbG), f: fatG });
+    onClose();
+    navigate("/meal-planner/setup?step=3");
+  }
+
+  const STEP_LABELS = ["Goal", "Your Stats", "Calorie Target", "Macros", "Meal Plan", "Summary"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -886,12 +946,12 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
             <h2 className="font-semibold">{editing ? "Edit" : "New"} Body Composition Plan</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 6 — {STEP_LABELS[step - 1]}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
         </div>
         <div className="h-1 bg-secondary">
-          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 5) * 100}%` }} />
+          <div className="h-full bg-primary transition-all" style={{ width: `${(step / 6) * 100}%` }} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -914,6 +974,12 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
               onFatChange={v => set({ fatPct: v })} />
           )}
           {step === 5 && (
+            <Step5MealPlan s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
+              strategy={strategy}
+              onSkip={() => setStep(6)}
+              onLink={handleLinkMealPlan} />
+          )}
+          {step === 6 && (
             <Step5 s={ws} totalCals={effectiveCals} proteinG={proteinG} carbG={Math.max(0, carbG)} fatG={fatG}
               maintenance={maintenanceNum} strategy={strategy} />
           )}
@@ -922,7 +988,9 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
         {step > 1 && (
           <div className="px-5 py-4 border-t flex items-center justify-between gap-3">
             <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1.5"><ChevronLeft size={14} /> Back</Button>
-            {step < 5
+            {step === 5
+              ? null  // step 5 has its own CTA buttons
+              : step < 6
               ? <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
               : <Button size="sm" onClick={handleSave} disabled={saveMut.isPending}
                   className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
