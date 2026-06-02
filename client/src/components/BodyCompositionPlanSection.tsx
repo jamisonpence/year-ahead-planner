@@ -1045,9 +1045,10 @@ interface WizardProps {
   editing: WorkoutPlan | null;
   onClose: () => void;
   onSaved: () => void;
+  onAddWorkoutPlan?: () => void;
 }
 
-function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
+function PlanWizardModal({ editing, onClose, onSaved, onAddWorkoutPlan }: WizardProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [step, setStep] = useState(editing ? 2 : 1);
@@ -1661,6 +1662,7 @@ export default function BodyCompositionPlanSection({
           editing={editingPlan}
           onClose={closeWizard}
           onSaved={closeWizard}
+          onAddWorkoutPlan={onAddWorkoutPlan}
         />
       )}
 
