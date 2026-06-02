@@ -1552,6 +1552,25 @@ export async function initializeStorage() {
       completions_json TEXT NOT NULL DEFAULT '[]'
     )
   `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS bud_bets (
+      id SERIAL PRIMARY KEY,
+      creator_id INTEGER NOT NULL,
+      opponent_id INTEGER,
+      opponent_name TEXT,
+      arbitrator_id INTEGER,
+      arbitrator_name TEXT,
+      title TEXT NOT NULL,
+      wager TEXT NOT NULL,
+      due_date TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      winner_id INTEGER,
+      payout_status TEXT NOT NULL DEFAULT 'pending',
+      payout_marked_by_id INTEGER,
+      created_at TEXT NOT NULL,
+      settled_at TEXT
+    )
+  `);
   // Migrate reading_goals to add flexible timeframe columns
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS label TEXT`);
   await db.execute(`ALTER TABLE reading_goals ADD COLUMN IF NOT EXISTS start_date TEXT`);
