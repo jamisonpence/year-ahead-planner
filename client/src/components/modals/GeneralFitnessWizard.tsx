@@ -207,7 +207,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
     const p = build14DayPlan(goal, focus, experience, Math.max(45, parseInt(bench) || 185), parseInt(duration), days, avoid, notes, equipment);
     setPlan(p); setPlanWeights({});
     if (!planName) setPlanName(`General Fitness — ${goal.charAt(0).toUpperCase() + goal.slice(1)}`);
-  }, [goal, focus, experience, bench, duration, days, avoid, notes, planName]);
+  }, [goal, focus, experience, bench, duration, days, avoid, notes, planName, equipment]);
 
   function handleNextStep() {
     if (step === STEP_NAMES.length - 2) { generate(); setStep(step + 1); }
