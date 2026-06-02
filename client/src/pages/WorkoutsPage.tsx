@@ -2261,6 +2261,7 @@ export default function WorkoutsPage() {
   const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
   const [planModal, setPlanModal] = useState(false);
   const [generalFitnessWizardOpen, setGeneralFitnessWizardOpen] = useState(false);
+  const [generalFitnessWizardGoal, setGeneralFitnessWizardGoal] = useState<string | undefined>(undefined);
   const [editPlan, setEditPlan] = useState<WorkoutPlan | null>(null);
 
   // Auto-open plan builder if navigated here with ?newPlan=1
@@ -3252,6 +3253,7 @@ export default function WorkoutsPage() {
           {/* Body Composition Plans section */}
           <BodyCompositionPlanSection
             externalWizardOpen={bodyCompWizardOpen}
+            onAddWorkoutPlan={() => { setGeneralFitnessWizardGoal("hypertrophy"); setGeneralFitnessWizardOpen(true); }}
             externalEditingPlan={bodyCompEditingPlan}
             onExternalWizardClose={() => { setBodyCompWizardOpen(false); setBodyCompEditingPlan(null); }}
           />
@@ -3624,7 +3626,7 @@ export default function WorkoutsPage() {
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
       <EquipmentModal open={equipmentModal} onClose={() => { setEquipmentModal(false); setEditEquipment(null); }} editing={editEquipment} />
       <PlanBuilderModal open={planModal} onClose={() => { setPlanModal(false); setEditPlan(null); }} editing={editPlan} templates={templates} onBodyCompSelected={() => setBodyCompWizardOpen(true)} onGeneralFitnessSelected={() => { setPlanModal(false); setGeneralFitnessWizardOpen(true); }} />
-      <GeneralFitnessWizard open={generalFitnessWizardOpen} onClose={() => setGeneralFitnessWizardOpen(false)} />
+      <GeneralFitnessWizard open={generalFitnessWizardOpen} onClose={() => { setGeneralFitnessWizardOpen(false); setGeneralFitnessWizardGoal(undefined); }} defaultGoal={generalFitnessWizardGoal} />
       {sharePayload && (
         <ShareWorkoutModal
           open={shareModal} onClose={() => { setShareModal(false); setSharePayload(null); }}

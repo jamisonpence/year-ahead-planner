@@ -1,6 +1,6 @@
 // GeneralFitnessWizard.tsx — ports workout-wizard-v10.html to React
 // Preserves the full exercise repository, equipmentMap, generator, and weight sync logic.
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -165,14 +165,15 @@ function build14DayPlan(goal: string, focusRaw: string, experience: string, benc
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function GeneralFitnessWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function GeneralFitnessWizard({ open, onClose, defaultGoal }: { open: boolean; onClose: () => void; defaultGoal?: string }) {
   const { toast } = useToast();
   const [step, setStep] = useState(0);
 
   // Step 1: Equipment
   const [equipment, setEquipment] = useState<Set<string>>(new Set(['Barbell & Plates','Dumbbells','Weight Machine','Cable Machine','Pull-up Bar','Bench / Box','Cardio Machine','Bodyweight / Rings']));
   // Step 2: Plan
-  const [goal, setGoal] = useState('balanced');
+  const [goal, setGoal] = useState(defaultGoal ?? 'balanced');
+  useEffect(() => { if (open && defaultGoal) setGoal(defaultGoal); }, [open, defaultGoal]);
   const [focus, setFocus] = useState('balanced');
   const [experience, setExperience] = useState('intermediate');
   const [bench, setBench] = useState('185');

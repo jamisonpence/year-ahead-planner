@@ -75,6 +75,8 @@ export interface BodyCompSectionProps {
   externalEditingPlan?: WorkoutPlan | null;
   /** Called when externally-triggered wizard closes */
   onExternalWizardClose?: () => void;
+  /** Called when user wants to add a workout plan from within the body comp wizard */
+  onAddWorkoutPlan?: () => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -1248,6 +1250,11 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
                   <Button size="sm" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
                     🥗 Add Meal Plan
                   </Button>
+                  {ws.metric === "muscle_mass" && onAddWorkoutPlan && (
+                    <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={onAddWorkoutPlan}>
+                      💪 Add Workout Plan
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" onClick={() => setStep(8)}>
                     Skip to Summary
                   </Button>
@@ -1539,6 +1546,7 @@ export default function BodyCompositionPlanSection({
   externalWizardOpen = false,
   externalEditingPlan = null,
   onExternalWizardClose,
+  onAddWorkoutPlan,
 }: BodyCompSectionProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
