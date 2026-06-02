@@ -114,7 +114,7 @@ function chooseAccessories(focus: string, usedAll: Set<string>, count: number, f
   return result;
 }
 
-function build14DayPlan(goal: string, focusRaw: string, experience: string, bench: number, duration: number, days: Set<string>, avoid: string, notes: string): any {
+function build14DayPlan(goal: string, focusRaw: string, experience: string, bench: number, duration: number, days: Set<string>, avoid: string, notes: string, equipment: Set<string>): any {
   const activeDays = WEEKDAY_OPTIONS.filter(d => days.has(d));
   const daysPerWeek = activeDays.length || 4;
   let focusArea = focusRaw;
@@ -131,7 +131,7 @@ function build14DayPlan(goal: string, focusRaw: string, experience: string, benc
   const cardioReuseCap = (goal === 'fatloss' || goal === 'power' || focusArea === 'Cardio') ? 3 : 1;
   const cardioBias = focusArea === 'Cardio' ? 'high' : cardioBiasFor(goal);
   const weeks: any = { A: [], B: [] };
-  const equipment = new Set(EQUIPMENT_OPTIONS); // default all — caller passes actual set
+
   ['A', 'B'].forEach((weekLabel, weekIndex) => {
     let sessionTypes: string[] = templates[weekLabel].slice();
     if (cardioBias === 'high') { const slots = Math.max(2, Math.ceil(sessionTypes.length / 3)); for (let c = 0; c < slots; c++) { if (c < sessionTypes.length) sessionTypes[sessionTypes.length - 1 - c] = 'Cardio'; } }
@@ -204,7 +204,7 @@ export default function GeneralFitnessWizard({ open, onClose }: { open: boolean;
 
   const generate = useCallback(() => {
     genSeed = (genSeed * 1103515245 + 12345) >>> 0;
-    const p = build14DayPlan(goal, focus, experience, Math.max(45, parseInt(bench) || 185), parseInt(duration), days, avoid, notes);
+    const p = build14DayPlan(goal, focus, experience, Math.max(45, parseInt(bench) || 185), parseInt(duration), days, avoid, notes, equipment);
     setPlan(p); setPlanWeights({});
     if (!planName) setPlanName(`General Fitness — ${goal.charAt(0).toUpperCase() + goal.slice(1)}`);
   }, [goal, focus, experience, bench, duration, days, avoid, notes, planName]);
