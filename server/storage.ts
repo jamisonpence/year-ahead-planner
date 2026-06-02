@@ -6228,6 +6228,30 @@ export const storage: IStorage = {
     const [updated] = await db.update(habits).set({ completionsJson: JSON.stringify(completions) }).where(eq(habits.id, id)).returning();
     return updated;
   },
+  // ── BUD BETS ────────────────────────────────────────────────────────────────
+  async getBudBets(userId: number) {
+    return db.select().from(budBets).where(
+      or(eq(budBets.creatorId, userId), eq(budBets.opponentId, userId), eq(budBets.arbitratorId, userId))
+    ).orderBy(desc(budBets.createdAt));
+  },
+  async createBudBet(data: any) {
+    const [row] = await db.insert(budBets).values({ ...data, createdAt: new Date().toISOString() }).returning();
+    return row;
+  },
+  async updateBudBet(id: number, userId: number, data: any) {
+    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
+    if (!row) throw new Error("Bet not found");
+    if (row.creatorId !== userId && row.opponentId !== userId && row.arbitratorId !== userId) throw new Error("Unauthorized");
+    const [updated] = await db.update(budBets).set(data).where(eq(budBets.id, id)).returning();
+    return updated;
+  },
+  async deleteBudBet(id: number, userId: number) {
+    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
+    if (!row) throw new Error("Bet not found");
+    if (row.creatorId !== userId) throw new Error("Only creator can delete");
+    await db.delete(budBets).where(eq(budBets.id, id));
+  },
+
 };
 
 // ── System Recipe Seeding ─────────────────────────────────────────────────────
@@ -6282,31 +6306,6 @@ export async function seedSystemRecipes() {
   }
   console.log(`Seeded ${SYSTEM_RECIPES.length} system recipes`);
 }
-
-  // ── BUD BETS ────────────────────────────────────────────────────────────────
-  async getBudBets(userId: number) {
-    return db.select().from(budBets).where(
-      or(eq(budBets.creatorId, userId), eq(budBets.opponentId, userId), eq(budBets.arbitratorId, userId))
-    ).orderBy(desc(budBets.createdAt));
-  },
-  async createBudBet(data: any) {
-    const [row] = await db.insert(budBets).values({ ...data, createdAt: new Date().toISOString() }).returning();
-    return row;
-  },
-  async updateBudBet(id: number, userId: number, data: any) {
-    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
-    if (!row) throw new Error("Bet not found");
-    // Only parties involved can update
-    if (row.creatorId !== userId && row.opponentId !== userId && row.arbitratorId !== userId) throw new Error("Unauthorized");
-    const [updated] = await db.update(budBets).set(data).where(eq(budBets.id, id)).returning();
-    return updated;
-  },
-  async deleteBudBet(id: number, userId: number) {
-    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
-    if (!row) throw new Error("Bet not found");
-    if (row.creatorId !== userId) throw new Error("Only creator can delete");
-    await db.delete(budBets).where(eq(budBets.id, id));
-  },
 
 
 export { pool };
