@@ -29,7 +29,7 @@ import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutP
 // Legacy flat format (kept for backward compat reading)
 type PlanDayEntry = { dayOfWeek: string; templateId?: number | null; templateName?: string; label?: string; notes?: string };
 // New per-week format
-type PlanDayEntryV2 = { dayOfWeek: string; label: string; notes?: string; templateId?: number | null };
+type PlanDayEntryV2 = { dayOfWeek: string; label: string; notes?: string; templateId?: number | null; wizardSession?: any };
 type WeekScheduleV2 = { week: number; days: PlanDayEntryV2[] };
 type PublicUser = { id: number; name: string; avatarUrl: string | null; email: string };
 
@@ -2579,6 +2579,22 @@ export default function WorkoutsPage() {
           } else {
             currentWeekDays = parsedSched.flatDays.map(e => ({ dayOfWeek: e.dayOfWeek, label: e.label ?? e.templateName ?? "Workout", templateId: e.templateId }));
           }
+          // Detect General Fitness Wizard format: { plan: { weeks: { A, B } } }
+          if (currentWeekDays.length === 0 && plan.goalType === 'general') {
+            try {
+              const raw = JSON.parse(plan.scheduleJson ?? '{}');
+              const wizardPlan = raw.plan ?? raw;
+              if (wizardPlan?.weeks?.A) {
+                const weekLabel = weeksElapsed % 2 === 0 ? 'A' : 'B';
+                const sessions: any[] = wizardPlan.weeks[weekLabel] ?? wizardPlan.weeks.A ?? [];
+                currentWeekDays = sessions.map((s: any) => ({
+                  dayOfWeek: s.day.toLowerCase(),
+                  label: `${s.session_type} · ${s.marker}`,
+                  wizardSession: s,
+                }));
+              }
+            } catch {}
+          }
           let goalMetric: any = null;
           try { goalMetric = plan.goalMetricJson ? JSON.parse(plan.goalMetricJson) : null; } catch {}
           let milestones: WorkoutPlanMilestone[] = [];
@@ -2656,6 +2672,31 @@ export default function WorkoutsPage() {
                                   <MoreHorizontal size={12} className="ml-auto opacity-0 group-hover:opacity-40 text-muted-foreground" />
                                 </div>
                                 {entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}
+                                {entry.wizardSession && (() => {
+                                  const ws = entry.wizardSession;
+                                  function fmtSets(sets: any[]) {
+                                    if (!sets?.length) return "";
+                                    const isCardio = sets[0]?.reps?.toString().includes("min");
+                                    if (isCardio) return sets[0].reps + " — " + sets[0].weight;
+                                    const allSame = sets.every((s: any) => s.reps === sets[0].reps && s.weight === sets[0].weight);
+                                    if (allSame) return `${sets.length}×${sets[0].reps} @ ${sets[0].weight}`;
+                                    return sets.map((s: any) => `${s.reps}@${s.weight}`).join(", ");
+                                  }
+                                  const allExs = [
+                                    { name: ws.primary_lift?.name, sets: ws.primary_lift?.sets, isPrimary: true },
+                                    ...(ws.accessories ?? []).map((a: any) => ({ name: a.name, sets: a.sets, isPrimary: false })),
+                                  ].filter(e => e.name);
+                                  return (
+                                    <div className="mt-1 space-y-0.5">
+                                      {allExs.map((ex: any, xi: number) => (
+                                        <p key={xi} className="text-xs text-muted-foreground">
+                                          <span className={`font-medium ${ex.isPrimary ? "text-foreground/80" : "text-foreground/60"}`}>{ex.name}</span>
+                                          <span className="ml-1">— {fmtSets(ex.sets)}</span>
+                                        </p>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                                 {entry.templateId && (() => {
                                   const tmpl = templates.find(t => t.id === entry.templateId);
                                   if (!tmpl) return null;
