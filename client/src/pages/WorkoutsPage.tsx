@@ -2292,6 +2292,7 @@ export default function WorkoutsPage() {
   const [workoutActionMode, setWorkoutActionMode] = useState<"menu" | "edit">("menu");
   const [editEntryLabel, setEditEntryLabel] = useState("");
   const [editEntryNotes, setEditEntryNotes] = useState("");
+  const [editWizardSession, setEditWizardSession] = useState<any>(null);
   const [logPrefillName, setLogPrefillName] = useState("");
   const [logPrefillTemplateId, setLogPrefillTemplateId] = useState<number | undefined>(undefined);
 
@@ -3438,8 +3439,8 @@ export default function WorkoutsPage() {
       <WorkoutLogModal open={logModal} onClose={() => { setLogModal(false); setEditLog(null); setLogPrefillName(""); setLogPrefillTemplateId(undefined); }} templates={templates} editLog={editLog} prefillName={logPrefillName} prefillTemplateId={logPrefillTemplateId} />
 
       {/* Workout action dialog (Edit / Delete / Log from Active Plan) */}
-      <Dialog open={!!workoutActionTarget} onOpenChange={open => { if (!open) { setWorkoutActionTarget(null); setWorkoutActionMode("menu"); } }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={!!workoutActionTarget} onOpenChange={open => { if (!open) { setWorkoutActionTarget(null); setWorkoutActionMode("menu"); setEditWizardSession(null); } }}>
+        <DialogContent className={workoutActionMode === "edit" && workoutActionTarget?.entry.wizardSession ? "max-w-lg" : "max-w-sm"}>
           <DialogHeader>
             <DialogTitle className="text-base">
               {workoutActionMode === "edit" ? "Edit Workout" : workoutActionTarget?.entry.label ?? "Workout"}
@@ -3464,7 +3465,10 @@ export default function WorkoutsPage() {
                 </Button>
                 {/* Edit — for template entries open full log modal; for custom show label/notes editor */}
                 <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
-                  if (workoutActionTarget.entry.templateId) {
+                  if (workoutActionTarget.entry.wizardSession) {
+                    setEditWizardSession(JSON.parse(JSON.stringify(workoutActionTarget.entry.wizardSession)));
+                    setWorkoutActionMode("edit");
+                  } else if (workoutActionTarget.entry.templateId) {
                     // Template-linked: open the full workout log modal pre-populated
                     setLogPrefillName(workoutActionTarget.entry.label);
                     setLogPrefillTemplateId(workoutActionTarget.entry.templateId);
@@ -3505,7 +3509,79 @@ export default function WorkoutsPage() {
             </div>
           )}
 
-          {workoutActionMode === "edit" && workoutActionTarget && (
+          {workoutActionMode === "edit" && workoutActionTarget && workoutActionTarget.entry.wizardSession && editWizardSession && (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Primary lift */}
+              {editWizardSession.primary_lift && (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Primary — {editWizardSession.primary_lift.name}</p>
+                  {editWizardSession.primary_lift.sets?.map((s: any, si: number) => (
+                    <div key={si} className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground w-10 shrink-0">Set {s.set}</span>
+                      <Input className="h-7 text-xs w-16" value={s.reps} onChange={e => {
+                        const ws = JSON.parse(JSON.stringify(editWizardSession));
+                        ws.primary_lift.sets[si].reps = e.target.value;
+                        setEditWizardSession(ws);
+                      }} />
+                      <Input className="h-7 text-xs flex-1" value={s.weight} onChange={e => {
+                        const ws = JSON.parse(JSON.stringify(editWizardSession));
+                        ws.primary_lift.sets[si].weight = e.target.value;
+                        setEditWizardSession(ws);
+                      }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Accessories */}
+              {editWizardSession.accessories?.map((acc: any, ai: number) => (
+                <div key={ai} className="rounded-lg border p-3 space-y-2">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{acc.name}</p>
+                  {acc.sets?.map((s: any, si: number) => (
+                    <div key={si} className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground w-10 shrink-0">Set {s.set}</span>
+                      <Input className="h-7 text-xs w-16" value={s.reps} onChange={e => {
+                        const ws = JSON.parse(JSON.stringify(editWizardSession));
+                        ws.accessories[ai].sets[si].reps = e.target.value;
+                        setEditWizardSession(ws);
+                      }} />
+                      <Input className="h-7 text-xs flex-1" value={s.weight} onChange={e => {
+                        const ws = JSON.parse(JSON.stringify(editWizardSession));
+                        ws.accessories[ai].sets[si].weight = e.target.value;
+                        setEditWizardSession(ws);
+                      }} />
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => { setWorkoutActionMode("menu"); setEditWizardSession(null); }}>Cancel</Button>
+                <Button className="flex-1" disabled={patchPlanSchedule.isPending} onClick={() => {
+                  const target = workoutActionTarget;
+                  const plan = plans.find(p => p.id === target.planId);
+                  if (!plan) return;
+                  let raw: any = {};
+                  try { raw = JSON.parse(plan.scheduleJson ?? "{}"); } catch {}
+                  const wizardPlan = raw.plan ?? raw;
+                  if (!wizardPlan?.weeks) return;
+                  // Update the session in whichever week contains this day
+                  ["A","B"].forEach(wl => {
+                    if (!wizardPlan.weeks[wl]) return;
+                    wizardPlan.weeks[wl] = wizardPlan.weeks[wl].map((s: any) =>
+                      s.day.toLowerCase() === target.dayOfWeek ? { ...s, ...editWizardSession } : s
+                    );
+                  });
+                  const newJson = JSON.stringify(raw.plan ? { ...raw, plan: wizardPlan } : wizardPlan);
+                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: newJson });
+                  setEditWizardSession(null);
+                  toast({ title: "Workout updated" });
+                }}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {workoutActionMode === "edit" && workoutActionTarget && !workoutActionTarget.entry.wizardSession && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Workout name</label>
