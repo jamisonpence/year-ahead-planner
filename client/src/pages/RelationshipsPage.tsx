@@ -2950,7 +2950,7 @@ function PersonalAssistantSection() {
 type BetStatus = "active" | "settled" | "cancelled";
 type PayoutStatus = "pending" | "paid" | "stiffed";
 
-function BudBetsSection() {
+function BudBetsSection({ friends = [] }: { friends: PublicUser[] }) {
   const { toast } = useToast();
   const { user: me } = useAuth();
   const qc = useQueryClient();
@@ -2980,8 +2980,14 @@ function BudBetsSection() {
   const [filterTab, setFilterTab] = useState<"active" | "settled" | "all">("active");
 
   // Create form state
-  const [form, setForm] = useState({ opponentName: "", arbitratorName: "", title: "", wager: "", dueDate: "" });
-  function resetForm() { setForm({ opponentName: "", arbitratorName: "", title: "", wager: "", dueDate: "" }); }
+  const [form, setForm] = useState({ opponentId: null as number | null, arbitratorId: null as number | null, title: "", wager: "", dueDate: "" });
+  function resetForm() { setForm({ opponentId: null, arbitratorId: null, title: "", wager: "", dueDate: "" }); }
+  const [oppSearch, setOppSearch] = useState("");
+  const [arbSearch, setArbSearch] = useState("");
+  const [oppOpen, setOppOpen] = useState(false);
+  const [arbOpen, setArbOpen] = useState(false);
+  function friendName(id: number | null) { return friends.find(f => f.id === id)?.name ?? ""; }
+  function filteredFriends(q: string) { const lq = q.toLowerCase(); return friends.filter(f => f.name.toLowerCase().includes(lq) || f.email.toLowerCase().includes(lq)); }
 
   // ── Integrity score ────────────────────────────────────────────────────────
   function integrityScore(userId: number) {
@@ -3138,12 +3144,48 @@ function BudBetsSection() {
               <Input placeholder="e.g. Dinner and drinks at their choice" value={form.wager} onChange={e => setForm(p => ({ ...p, wager: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Opponent's name *</label>
-              <Input placeholder="e.g. Mike" value={form.opponentName} onChange={e => setForm(p => ({ ...p, opponentName: e.target.value }))} />
+              <label className="text-xs font-medium text-muted-foreground">Opponent *</label>
+              <div className="relative">
+                <Input placeholder="Search connected friends…" value={oppOpen ? oppSearch : (friendName(form.opponentId) || "")}
+                  onFocus={() => { setOppOpen(true); setOppSearch(""); }}
+                  onBlur={() => setTimeout(() => setOppOpen(false), 150)}
+                  onChange={e => { setOppSearch(e.target.value); setOppOpen(true); }} />
+                {oppOpen && filteredFriends(oppSearch).length > 0 && (
+                  <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredFriends(oppSearch).filter(f => f.id !== form.arbitratorId).map(f => (
+                      <button key={f.id} type="button" onMouseDown={() => { setForm(p => ({ ...p, opponentId: f.id })); setOppOpen(false); setOppSearch(""); }}
+                        className="w-full text-left px-3 py-2 hover:bg-secondary text-sm flex items-center gap-2">
+                        {f.avatarUrl ? <img src={f.avatarUrl} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">{f.name[0]}</div>}
+                        <span>{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {form.opponentId && <div className="mt-1 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400"><CheckCircle2 size={12} /> {friendName(form.opponentId)} selected</div>}
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Impartial arbitrator <span className="text-muted-foreground/60">optional</span></label>
-              <Input placeholder="e.g. Sarah (will judge the outcome)" value={form.arbitratorName} onChange={e => setForm(p => ({ ...p, arbitratorName: e.target.value }))} />
+              <div className="relative">
+                <Input placeholder="Search connected friends…" value={arbOpen ? arbSearch : (friendName(form.arbitratorId) || "")}
+                  onFocus={() => { setArbOpen(true); setArbSearch(""); }}
+                  onBlur={() => setTimeout(() => setArbOpen(false), 150)}
+                  onChange={e => { setArbSearch(e.target.value); setArbOpen(true); }} />
+                {arbOpen && (
+                  <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <button type="button" onMouseDown={() => { setForm(p => ({ ...p, arbitratorId: null })); setArbOpen(false); setArbSearch(""); }}
+                      className="w-full text-left px-3 py-2 hover:bg-secondary text-sm text-muted-foreground italic">None</button>
+                    {filteredFriends(arbSearch).filter(f => f.id !== form.opponentId).map(f => (
+                      <button key={f.id} type="button" onMouseDown={() => { setForm(p => ({ ...p, arbitratorId: f.id })); setArbOpen(false); setArbSearch(""); }}
+                        className="w-full text-left px-3 py-2 hover:bg-secondary text-sm flex items-center gap-2">
+                        {f.avatarUrl ? <img src={f.avatarUrl} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">{f.name[0]}</div>}
+                        <span>{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {form.arbitratorId && <div className="mt-1 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400"><CheckCircle2 size={12} /> {friendName(form.arbitratorId)} will arbitrate</div>}
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Due date <span className="text-muted-foreground/60">optional</span></label>
@@ -3154,8 +3196,8 @@ function BudBetsSection() {
             </div>
             <div className="flex gap-2 pt-1">
               <Button variant="outline" className="flex-1" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button className="flex-1" disabled={!form.title.trim() || !form.wager.trim() || !form.opponentName.trim() || muCreate.isPending}
-                onClick={() => muCreate.mutate({ title: form.title.trim(), wager: form.wager.trim(), opponentName: form.opponentName.trim(), arbitratorName: form.arbitratorName.trim() || null, dueDate: form.dueDate || null, status: "active", payoutStatus: "pending" })}>
+              <Button className="flex-1" disabled={!form.title.trim() || !form.wager.trim() || !form.opponentId || muCreate.isPending}
+                onClick={() => muCreate.mutate({ title: form.title.trim(), wager: form.wager.trim(), opponentId: form.opponentId, opponentName: friendName(form.opponentId), arbitratorId: form.arbitratorId, arbitratorName: friendName(form.arbitratorId) || null, dueDate: form.dueDate || null, status: "active", payoutStatus: "pending" })}>
                 Create Bet
               </Button>
             </div>
@@ -3486,7 +3528,7 @@ export default function RelationshipsPage() {
 
       {/* ── Personal Assistant ────────────────────────────────────────────────── */}
       {socialTab === "assistant" && <PersonalAssistantSection />}
-      {socialTab === "budBets" && <BudBetsSection />}
+      {socialTab === "budBets" && <BudBetsSection friends={friends} />}
 
       {/* ── Contacts ─────────────────────────────────────────────────────────── */}
       {socialTab === "contacts" && (
