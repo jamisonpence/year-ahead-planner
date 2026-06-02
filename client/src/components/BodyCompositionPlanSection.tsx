@@ -1209,10 +1209,11 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
               onTargetChange={v => set({ targetCalories: v })} />
           )}
           {step === 3 && maintenanceNum === 0 && (
-            <div className="text-center py-10 text-muted-foreground">
-              <Scale size={36} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">Enter your maintenance calories in Step 2 first.</p>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => setStep(2)}>← Back to Stats</Button>
+            <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-6 text-center space-y-3">
+              <Scale size={32} className="mx-auto text-amber-500" />
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Maintenance calories required</p>
+              <p className="text-xs text-muted-foreground">Go back to Step 2 and enter your estimated daily calorie burn (TDEE) to continue.</p>
+              <Button size="sm" variant="outline" className="mt-1" onClick={() => setStep(2)}>← Back to Stats</Button>
             </div>
           )}
           {step === 4 && (
@@ -1271,7 +1272,13 @@ function PlanWizardModal({ editing, onClose, onSaved }: WizardProps) {
                   Looks good <ChevronRight size={14} />
                 </Button>
               : step < 8
-              ? <Button size="sm" onClick={() => setStep(s => s + 1)} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
+              ? <Button size="sm" onClick={() => {
+                  if (step === 2 && !parseInt(ws.maintenanceCalories)) {
+                    toast({ title: "Enter your maintenance calories (TDEE) before continuing.", variant: "destructive" });
+                    return;
+                  }
+                  setStep(s => s + 1);
+                }} className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px]">Next <ChevronRight size={14} /></Button>
               : <Button size="sm" onClick={handleSave} disabled={saveMut.isPending}
                   className="gap-1.5 flex-1 sm:flex-none sm:min-w-[120px] bg-green-600 hover:bg-green-700 text-white">
                   <CheckCircle2 size={14} /> {editing ? "Update Plan" : "Save Plan"}
