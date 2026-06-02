@@ -952,6 +952,12 @@ Return exactly this structure:
         fromUserId: uid, toUserId, shareType, contentJson, notes: notes ?? null,
         createdAt: new Date().toISOString(),
       });
+      // Send DM message to recipient
+      let workoutName = shareType;
+      try { const parsed = JSON.parse(contentJson); workoutName = parsed.name || parsed.title || shareType; } catch {}
+      await storage.createDMShareMessage(uid, toUserId, 'workout', JSON.stringify({
+        shareType: 'workout', name: workoutName, emoji: '🏋️',
+      }), `Shared a workout with you: ${workoutName}`);
       res.status(201).json(share);
     } catch (e) { handleError(res, e); }
   });
@@ -3412,6 +3418,9 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         createdAt: new Date().toISOString(),
         isDismissed: false,
       });
+      await storage.createDMShareMessage(userId, toUserId, 'book', JSON.stringify({
+        shareType: 'book', name: bookTitle, subtitle: bookAuthor || '', emoji: '📚',
+      }), `Recommended a book: ${bookTitle}${bookAuthor ? ' by ' + bookAuthor : ''}`);
       res.status(201).json(rec);
     } catch (e) { handleError(res, e); }
   });
@@ -3505,6 +3514,10 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         createdAt: new Date().toISOString(),
         isDismissed: false,
       });
+      const musicName = songTitle ? `${songTitle} by ${artistName}` : artistName;
+      await storage.createDMShareMessage(userId, toUserId, 'music', JSON.stringify({
+        shareType: 'music', name: musicName, subtitle: artistName, emoji: '🎵',
+      }), `Recommended ${type === 'song' ? 'a song' : 'an artist'}: ${musicName}`);
       res.status(201).json(rec);
     } catch (e) { handleError(res, e); }
   });
@@ -3545,7 +3558,12 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         notes: req.body.notes ?? null,
         createdAt: new Date().toISOString(),
       };
-      res.status(201).json(await storage.sendQuoteShare(data));
+      const quoteShare = await storage.sendQuoteShare(data);
+      const quotePreview = data.text.length > 60 ? data.text.slice(0, 60) + '…' : data.text;
+      await storage.createDMShareMessage(userId, data.toUserId, 'quote', JSON.stringify({
+        shareType: 'quote', name: quotePreview, subtitle: data.author || '', emoji: '💬',
+      }), `Shared a quote: "${quotePreview}"${data.author ? ' — ' + data.author : ''}`);
+      res.status(201).json(quoteShare);
     } catch (e) { handleError(res, e); }
   });
 
@@ -3589,7 +3607,11 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         notes: req.body.notes ?? null,
         createdAt: new Date().toISOString(),
       };
-      res.status(201).json(await storage.sendArtShare(data));
+      const artShare = await storage.sendArtShare(data);
+      await storage.createDMShareMessage(userId, data.toUserId, 'art', JSON.stringify({
+        shareType: 'art', name: data.title, subtitle: data.artistName || '', emoji: '🎨',
+      }), `Shared a piece of art: ${data.title}${data.artistName ? ' by ' + data.artistName : ''}`);
+      res.status(201).json(artShare);
     } catch (e) { handleError(res, e); }
   });
 
@@ -8257,6 +8279,17 @@ Rules:
     try {
       const uid = (req.user as User).id;
       const bet = await storage.createBudBet({ ...req.body, creatorId: uid });
+      // Send a DM to the opponent (and arbitrator if set) so the bet appears in Messages
+      if (bet.opponentId) {
+        await storage.createDMShareMessage(uid, bet.opponentId, 'bet', JSON.stringify({
+          shareType: 'bet', name: bet.title, subtitle: `Wager: ${bet.wager}`, emoji: '🤝',
+        }), `Challenged you to a bet: "${bet.title}" — Wager: ${bet.wager}`);
+      }
+      if (bet.arbitratorId) {
+        await storage.createDMShareMessage(uid, bet.arbitratorId, 'bet', JSON.stringify({
+          shareType: 'bet', name: bet.title, subtitle: `You've been asked to arbitrate`, emoji: '⚖️',
+        }), `Asked you to arbitrate a bet: "${bet.title}"`);
+      }
       res.json(bet);
     } catch (e) { handleError(res, e); }
   });
