@@ -1249,7 +1249,7 @@ function PlanWizardModal({ editing, onClose, onSaved, onAddWorkoutPlan }: Wizard
             {step === 4
               ? (
                 <div className="flex gap-2 flex-1">
-                  <Button size="sm" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
+                  <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
                     🥗 Add Meal Plan
                   </Button>
                   {onAddWorkoutPlan && (
