@@ -1252,9 +1252,13 @@ function PlanWizardModal({ editing, onClose, onSaved, onAddWorkoutPlan }: Wizard
                   <Button size="sm" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
                     🥗 Add Meal Plan
                   </Button>
-                  {(ws.metric === "muscle_mass" || ws.metric === "body_fat") && onAddWorkoutPlan && (
+                  {onAddWorkoutPlan && (
                     <Button size="sm" variant="outline" className="flex-1 gap-1.5"
-                      onClick={() => onAddWorkoutPlan(ws.metric === "muscle_mass" ? "hypertrophy" : "fatloss")}>
+                      onClick={() => onAddWorkoutPlan(
+                        ws.metric === "muscle_mass" ? "hypertrophy"
+                        : ws.metric === "body_fat" ? "fatloss"
+                        : "balanced"
+                      )}>
                       💪 Add Workout Plan
                     </Button>
                   )}
