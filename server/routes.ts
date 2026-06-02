@@ -8243,4 +8243,39 @@ Rules:
       res.json(habit);
     } catch (e) { handleError(res, e); }
   });
+
+  // ── BUD BETS ──────────────────────────────────────────────────────────────
+  app.get("/api/bud-bets", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const bets = await storage.getBudBets(uid);
+      res.json(bets);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/bud-bets", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const bet = await storage.createBudBet({ ...req.body, creatorId: uid });
+      res.json(bet);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/bud-bets/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const id = parseInt(req.params.id);
+      const bet = await storage.updateBudBet(id, uid, req.body);
+      res.json(bet);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/bud-bets/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const id = parseInt(req.params.id);
+      await storage.deleteBudBet(id, uid);
+      res.json({ success: true });
+    } catch (e) { handleError(res, e); }
+  });
 }

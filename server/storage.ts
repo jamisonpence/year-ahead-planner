@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals, habits } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals, habits, budBets } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -6263,5 +6263,31 @@ export async function seedSystemRecipes() {
   }
   console.log(`Seeded ${SYSTEM_RECIPES.length} system recipes`);
 }
+
+  // ── BUD BETS ────────────────────────────────────────────────────────────────
+  async getBudBets(userId: number) {
+    return db.select().from(budBets).where(
+      or(eq(budBets.creatorId, userId), eq(budBets.opponentId, userId), eq(budBets.arbitratorId, userId))
+    ).orderBy(desc(budBets.createdAt));
+  },
+  async createBudBet(data: any) {
+    const [row] = await db.insert(budBets).values({ ...data, createdAt: new Date().toISOString() }).returning();
+    return row;
+  },
+  async updateBudBet(id: number, userId: number, data: any) {
+    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
+    if (!row) throw new Error("Bet not found");
+    // Only parties involved can update
+    if (row.creatorId !== userId && row.opponentId !== userId && row.arbitratorId !== userId) throw new Error("Unauthorized");
+    const [updated] = await db.update(budBets).set(data).where(eq(budBets.id, id)).returning();
+    return updated;
+  },
+  async deleteBudBet(id: number, userId: number) {
+    const [row] = await db.select().from(budBets).where(eq(budBets.id, id));
+    if (!row) throw new Error("Bet not found");
+    if (row.creatorId !== userId) throw new Error("Only creator can delete");
+    await db.delete(budBets).where(eq(budBets.id, id));
+  },
+
 
 export { pool };

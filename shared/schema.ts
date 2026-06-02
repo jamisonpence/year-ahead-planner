@@ -1991,3 +1991,32 @@ export type ConversationWithDetails = Conversation & {
   lastMessage: MessageWithSender | null;
   unreadCount: number;
 };
+
+// ── BUD BETS ───────────────────────────────────────────────────────────────────
+export const budBets = pgTable("bud_bets", {
+  id:               serial("id").primaryKey(),
+  creatorId:        integer("creator_id").notNull(),
+  // opponent — either an app user (opponentId) or a free-text name (opponentName)
+  opponentId:       integer("opponent_id"),
+  opponentName:     text("opponent_name"),
+  // optional impartial arbitrator
+  arbitratorId:     integer("arbitrator_id"),
+  arbitratorName:   text("arbitrator_name"),
+  // bet details
+  title:            text("title").notNull(),           // "Who wins the Super Bowl"
+  wager:            text("wager").notNull(),            // "Loser buys dinner and drinks"
+  dueDate:          text("due_date"),                  // ISO date string, optional
+  // lifecycle: pending → active → settled | cancelled
+  status:           text("status").notNull().default("active"),
+  winnerId:         integer("winner_id"),               // null until settled; -1 = creator lost
+  // payout tracking
+  payoutStatus:     text("payout_status").notNull().default("pending"), // "pending" | "paid" | "stiffed"
+  payoutMarkedById: integer("payout_marked_by_id"),
+  // timestamps
+  createdAt:        text("created_at").notNull(),
+  settledAt:        text("settled_at"),
+});
+
+export const insertBudBetSchema = createInsertSchema(budBets).omit({ id: true });
+export type BudBet = typeof budBets.$inferSelect;
+export type InsertBudBet = z.infer<typeof insertBudBetSchema>;
