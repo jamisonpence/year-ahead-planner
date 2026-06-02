@@ -2462,7 +2462,7 @@ export default function WorkoutsPage() {
               { value: "plans", label: "Plans", icon: CalendarDays, count: plans.length },
               { value: "templates", label: "My Workouts", icon: LayoutTemplate, count: templates.length },
               { value: "shared", label: "Shared", icon: Users, count: sharedItems.length },
-              { value: "equipment", label: "Equipment", icon: Package, count: equipmentList.length },
+
               { value: "logs", label: "History", icon: ClipboardList, count: logs.length },
             ].map(t => (
               <button
