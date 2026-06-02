@@ -3253,7 +3253,7 @@ export default function WorkoutsPage() {
           {/* Body Composition Plans section */}
           <BodyCompositionPlanSection
             externalWizardOpen={bodyCompWizardOpen}
-            onAddWorkoutPlan={() => { setGeneralFitnessWizardGoal("hypertrophy"); setGeneralFitnessWizardOpen(true); }}
+            onAddWorkoutPlan={(goal) => { setGeneralFitnessWizardGoal(goal); setGeneralFitnessWizardOpen(true); }}
             externalEditingPlan={bodyCompEditingPlan}
             onExternalWizardClose={() => { setBodyCompWizardOpen(false); setBodyCompEditingPlan(null); }}
           />

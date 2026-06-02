@@ -76,7 +76,7 @@ export interface BodyCompSectionProps {
   /** Called when externally-triggered wizard closes */
   onExternalWizardClose?: () => void;
   /** Called when user wants to add a workout plan from within the body comp wizard */
-  onAddWorkoutPlan?: () => void;
+  onAddWorkoutPlan?: (goal: string) => void;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -1045,7 +1045,7 @@ interface WizardProps {
   editing: WorkoutPlan | null;
   onClose: () => void;
   onSaved: () => void;
-  onAddWorkoutPlan?: () => void;
+  onAddWorkoutPlan?: (goal: string) => void;
 }
 
 function PlanWizardModal({ editing, onClose, onSaved, onAddWorkoutPlan }: WizardProps) {
@@ -1252,8 +1252,9 @@ function PlanWizardModal({ editing, onClose, onSaved, onAddWorkoutPlan }: Wizard
                   <Button size="sm" className="flex-1 gap-1.5" onClick={() => setStep(5)}>
                     🥗 Add Meal Plan
                   </Button>
-                  {ws.metric === "muscle_mass" && onAddWorkoutPlan && (
-                    <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={onAddWorkoutPlan}>
+                  {(ws.metric === "muscle_mass" || ws.metric === "body_fat") && onAddWorkoutPlan && (
+                    <Button size="sm" variant="outline" className="flex-1 gap-1.5"
+                      onClick={() => onAddWorkoutPlan(ws.metric === "muscle_mass" ? "hypertrophy" : "fatloss")}>
                       💪 Add Workout Plan
                     </Button>
                   )}
