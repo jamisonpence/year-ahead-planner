@@ -236,11 +236,12 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-xl flex flex-col max-h-[92dvh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editRecipe ? "Edit Recipe" : "Add Recipe"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Paste & Parse */}
           <div className="rounded-xl border border-dashed bg-secondary/20 overflow-hidden">
             <button type="button" onClick={() => setShowPaste(v => !v)}
@@ -337,7 +338,8 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
             <Textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={4} placeholder="Cooking steps..." />
           </div>
 
-          <div className="flex gap-2">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">
               {createMut.isPending || updateMut.isPending ? "Saving..." : editRecipe ? "Save Changes" : "Save Recipe"}
             </Button>
@@ -398,11 +400,12 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[92dvh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editBundle ? "Edit Bundle" : "Create Meal Bundle"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Emoji</Label>
@@ -472,7 +475,8 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
             </div>
           )}
 
-          <div className="flex gap-2">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">
               {createMut.isPending || updateMut.isPending ? "Saving..." : editBundle ? "Save Bundle" : "Create Bundle"}
             </Button>
