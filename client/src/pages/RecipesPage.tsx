@@ -236,7 +236,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-xl flex flex-col max-h-[92dvh] p-0 gap-0">
+      <DialogContent className="sm:max-w-xl flex flex-col max-h-[90vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editRecipe ? "Edit Recipe" : "Add Recipe"}</DialogTitle>
         </DialogHeader>
@@ -400,7 +400,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[92dvh] p-0 gap-0">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editBundle ? "Edit Bundle" : "Create Meal Bundle"}</DialogTitle>
         </DialogHeader>
