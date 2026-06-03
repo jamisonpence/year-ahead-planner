@@ -1,6 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-export const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
+// In web production: API calls are relative (same origin as the server).
+// In Capacitor native builds: VITE_API_URL must be set to the Railway backend URL
+// e.g. https://your-app.up.railway.app
+export const API_BASE = (import.meta.env.VITE_API_URL as string) ?? "";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
