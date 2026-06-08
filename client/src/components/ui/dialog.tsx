@@ -38,13 +38,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed z-50 w-full border bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 inset-x-0 bottom-0 rounded-t-2xl data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:left-[50%] sm:top-[50%] sm:bottom-auto sm:inset-x-auto sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 ",
+        "fixed z-50 w-full border bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 inset-x-0 bottom-0 rounded-t-2xl h-screen max-h-[90dvh] [max-height:calc(90dvh-env(safe-area-inset-top,0px))] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:left-[50%] sm:top-[50%] sm:bottom-auto sm:inset-x-auto sm:h-auto sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 ",
         className
       )}
       {...props}
     >
       {/* Drag handle — mobile bottom sheet only */}
-      <div className="flex justify-center pt-2 pb-0.5 sm:hidden" aria-hidden>
+      <div className="flex justify-center pt-2 pb-0.5 shrink-0 sm:hidden" aria-hidden>
         <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
       </div>
       {children}

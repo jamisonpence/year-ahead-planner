@@ -236,7 +236,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-xl flex flex-col max-h-[90vh] p-0 gap-0">
+      <DialogContent className="sm:max-w-xl flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editRecipe ? "Edit Recipe" : "Add Recipe"}</DialogTitle>
         </DialogHeader>
@@ -400,7 +400,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh] p-0 gap-0">
+      <DialogContent className="sm:max-w-2xl flex flex-col p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
           <DialogTitle>{editBundle ? "Edit Bundle" : "Create Meal Bundle"}</DialogTitle>
         </DialogHeader>
@@ -1023,7 +1023,7 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
   });
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh] p-0 gap-0">
+      <DialogContent className="sm:max-w-lg flex flex-col p-0 gap-0">
         <div className="flex-1 overflow-y-auto min-h-0">
         {recipe.imageUrl && (
           <div className="relative h-52 w-full overflow-hidden rounded-t-lg">
@@ -1315,7 +1315,7 @@ function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className={`${preview ? "max-w-5xl" : "max-w-3xl"} max-h-[88vh] flex flex-col p-0 gap-0 transition-all duration-200`}>
+      <DialogContent className={`${preview ? "max-w-5xl" : "max-w-3xl"} sm:max-h-[88vh] flex flex-col p-0 gap-0 transition-all duration-200`}>
         <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ChefHat size={18} /> Find Recipes from MealDB
@@ -1592,7 +1592,7 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }:
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh] p-0 gap-0">
+      <DialogContent className="sm:max-w-lg flex flex-col p-0 gap-0">
         <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 pt-5 pb-2">
           <DialogHeader>
