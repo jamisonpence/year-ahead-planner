@@ -1226,13 +1226,13 @@ export default function TasksPage() {
         <h1 className="text-xl font-bold">Projects &amp; Tasks</h1>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setNewProjectModal(true)} className="gap-1.5">
-            <Plus size={13} /><Folder size={13} /> Project
+            <Plus size={13} /><Folder size={13} /><span className="hidden sm:inline">Project</span>
           </Button>
           <Button size="sm" variant="outline" onClick={() => setNewTaskModal(true)} className="gap-1.5">
-            <Plus size={13} /><ClipboardList size={13} /> Task
+            <Plus size={13} /><ClipboardList size={13} /><span className="hidden sm:inline">Task</span>
           </Button>
           <Button size="sm" variant="outline" onClick={() => setNewChoreModal(true)} className="gap-1.5">
-            <Plus size={13} /><RefreshCw size={13} /> Chore
+            <Plus size={13} /><RefreshCw size={13} /><span className="hidden sm:inline">Chore</span>
           </Button>
         </div>
       </div>
@@ -1253,8 +1253,8 @@ export default function TasksPage() {
       </div>
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <div className="px-4 pt-3 pb-0 shrink-0">
-        <div className="flex gap-1">
+      <div className="px-4 pt-3 pb-1 shrink-0 overflow-x-auto">
+        <div className="flex gap-1 w-max">
           {([
             { value: "projects",  label: `Projects (${activeProjects.length})` },
             { value: "tasks",     label: `Tasks (${openTasks.length})` },
