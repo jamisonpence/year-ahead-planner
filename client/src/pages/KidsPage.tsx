@@ -811,9 +811,9 @@ function MilestoneDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{editing ? "Edit Milestone" : "Add Milestone"}</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
+      <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editing ? "Edit Milestone" : "Add Milestone"}</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Title *</label>
             <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="First steps!" />
@@ -839,11 +839,11 @@ function MilestoneDialog({
             <label className="text-xs font-medium text-muted-foreground">Notes</label>
             <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any details…" />
           </div>
-          <div className="flex justify-end gap-2 pt-1">
+        </div>
+          <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
             <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={save}>Save</Button>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
@@ -897,9 +897,9 @@ function MemoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{editing ? "Edit Memory" : "Add Memory"}</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
+      <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editing ? "Edit Memory" : "Add Memory"}</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Title *</label>
             <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="First day of school" />
@@ -929,11 +929,11 @@ function MemoryDialog({
             <label className="text-xs font-medium text-muted-foreground">Tags (comma-separated)</label>
             <Input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))} placeholder="funny, outdoors" />
           </div>
-          <div className="flex justify-end gap-2 pt-1">
+        </div>
+          <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
             <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={save}>Save</Button>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
@@ -985,9 +985,9 @@ function PrepDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{editing ? "Edit Prep Item" : "Add Prep Item"}</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
+      <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editing ? "Edit Prep Item" : "Add Prep Item"}</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Title *</label>
             <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Doctor checkup" />
@@ -1013,11 +1013,11 @@ function PrepDialog({
             <label className="text-xs font-medium text-muted-foreground">Notes</label>
             <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
           </div>
-          <div className="flex justify-end gap-2 pt-1">
+        </div>
+          <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
             <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={save}>Save</Button>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1527,9 +1527,9 @@ function PetsSection() {
 
       {/* Vet Visit Dialog */}
       <Dialog open={vetDialog} onOpenChange={(o) => { if (!o) { setVetDialog(false); setEditingVisit(null); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingVisit ? "Edit Vet Visit" : "Log Vet Visit"}</DialogTitle></DialogHeader>
-          <div className="space-y-3 pt-2">
+        <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editingVisit ? "Edit Vet Visit" : "Log Vet Visit"}</DialogTitle></DialogHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Reason *</label>
               <Input value={vetForm.reason} onChange={(e) => setVetForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Annual checkup, Vaccination" />
@@ -1548,11 +1548,11 @@ function PetsSection() {
               <label className="text-xs font-medium text-muted-foreground">Notes</label>
               <Textarea value={vetForm.notes} onChange={(e) => setVetForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Medications, follow-up, observations…" />
             </div>
-            <div className="flex gap-2">
+          </div>
+            <div className="flex gap-2 px-5 py-4 border-t shrink-0">
               <Button className="flex-1" onClick={saveVisit} disabled={!vetForm.reason.trim()}>Save</Button>
               <Button variant="outline" onClick={() => { setVetDialog(false); setEditingVisit(null); }}>Cancel</Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -1568,9 +1568,9 @@ function PetFormDialog({ open, onClose, form, setForm, onSave, editing }: {
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{editing ? "Edit Pet" : "Add Pet"}</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
+      <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editing ? "Edit Pet" : "Add Pet"}</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Name *</label>
@@ -1608,13 +1608,13 @@ function PetFormDialog({ open, onClose, form, setForm, onSave, editing }: {
               ))}
             </div>
           </div>
-          <div className="flex gap-2">
+        </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button className="flex-1" onClick={onSave} disabled={!form.name.trim()}>
               {editing ? "Save" : "Add Pet"}
             </Button>
             <Button variant="outline" onClick={onClose}>Cancel</Button>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1818,9 +1818,9 @@ export default function KidsPage() {
 
       {/* Add/Edit Child Dialog */}
       <Dialog open={childDialog} onOpenChange={(o) => { if (!o) closeChildDialog(); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingChild ? "Edit Child" : "Add Child"}</DialogTitle></DialogHeader>
-          <div className="space-y-3 pt-2">
+        <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editingChild ? "Edit Child" : "Add Child"}</DialogTitle></DialogHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Name *</label>
               <Input value={childForm.name} onChange={(e) => setChildForm((f) => ({ ...f, name: e.target.value }))} placeholder="Child's name" />
@@ -1847,11 +1847,11 @@ export default function KidsPage() {
                 ))}
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-1">
+          </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0">
               <Button variant="outline" size="sm" onClick={closeChildDialog}>Cancel</Button>
               <Button size="sm" onClick={saveChild}>Save</Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -2823,7 +2823,7 @@ function FamilyTreeSection() {
 
       {/* Add / Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-sm flex flex-col max-h-[90vh] p-0 gap-0">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Person" : "Add to Family Tree"}</DialogTitle>
           </DialogHeader>

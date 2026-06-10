@@ -415,8 +415,8 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople, linkedU
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b">
           <DialogTitle className="flex items-center gap-2">
             {editPerson ? "Edit Profile" : isConnectedProfile ? "Set Up Profile" : "Add Person"}
             {isConnectedProfile && (
@@ -426,7 +426,8 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople, linkedU
             )}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>First Name *</Label>
@@ -482,7 +483,8 @@ function PersonFormModal({ open, onClose, editPerson, groups, allPeople, linkedU
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
               placeholder="How you know them, things to remember..." />
           </div>
-          <div className="flex gap-2">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" disabled={saveMut.isPending} className="flex-1">
               {saveMut.isPending ? "Saving..." : editPerson ? "Save Changes" : isConnectedProfile ? "Create Profile" : "Add Person"}
             </Button>
@@ -527,7 +529,8 @@ function GroupFormModal({ open, onClose, editGroup }: {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader><DialogTitle>{editGroup ? "Edit Group" : "New Group"}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-1.5">
             <Label>Group Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Daycare, Hometown, Austin" required />
@@ -3132,9 +3135,9 @@ function BudBetsSection({ friends = [] }: { friends: PublicUser[] }) {
 
       {/* ── Create Bet Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Trophy size={16} className="text-amber-500" /> New Bud Bet</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+        <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle className="flex items-center gap-2"><Trophy size={16} className="text-amber-500" /> New Bud Bet</DialogTitle></DialogHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">What's the bet? *</label>
               <Input placeholder="e.g. Who wins the Super Bowl" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
@@ -3194,14 +3197,14 @@ function BudBetsSection({ friends = [] }: { friends: PublicUser[] }) {
             <div className="rounded-lg bg-secondary/30 border px-3 py-2 text-xs text-muted-foreground">
               💡 If no arbitrator is set, either party can settle the outcome. The winner marks when the loser pays up.
             </div>
-            <div className="flex gap-2 pt-1">
+          </div>
+            <div className="flex gap-2 px-5 py-4 border-t shrink-0">
               <Button variant="outline" className="flex-1" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button className="flex-1" disabled={!form.title.trim() || !form.wager.trim() || !form.opponentId || muCreate.isPending}
                 onClick={() => muCreate.mutate({ title: form.title.trim(), wager: form.wager.trim(), opponentId: form.opponentId, opponentName: friendName(form.opponentId), arbitratorId: form.arbitratorId, arbitratorName: friendName(form.arbitratorId) || null, dueDate: form.dueDate || null, status: "active", payoutStatus: "pending" })}>
                 Create Bet
               </Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
 

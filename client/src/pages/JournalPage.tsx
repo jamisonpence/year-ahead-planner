@@ -473,46 +473,54 @@ function NotesSection() {
 
       {/* ── Folder modal ────────────────────────────────────────── */}
       {folderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setFolderModal(null)}>
-          <div className="bg-card border rounded-2xl p-5 w-80 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => setFolderModal(null)}>
+          <div className="bg-card border rounded-t-2xl sm:rounded-2xl w-full sm:w-80 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-0.5 sm:hidden"><div className="w-10 h-1 rounded-full bg-muted-foreground/30" /></div>
+            <div className="px-5 pt-3 pb-3 flex items-center justify-between border-b shrink-0">
               <h3 className="font-semibold">{folderModal.mode === "add" ? (folderModal.parentFolderId ? "New Subfolder" : "New Folder") : "Edit Folder"}</h3>
               <button onClick={() => setFolderModal(null)}><X size={16} className="text-muted-foreground" /></button>
             </div>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Folder name" value={folderName} onChange={e => setFolderName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && saveFolder()} autoFocus />
-            <div className="flex gap-2 flex-wrap">
-              {FOLDER_COLORS.map(c => (
-                <button key={c.value} onClick={() => setFolderColor(c.value)}
-                  className={`w-7 h-7 rounded-full ${c.value} border-2 transition-all ${folderColor === c.value ? "border-foreground scale-110" : "border-transparent"}`}
-                  title={c.label} />
-              ))}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
+              <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Folder name" value={folderName} onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && saveFolder()} autoFocus />
+              <div className="flex gap-2 flex-wrap">
+                {FOLDER_COLORS.map(c => (
+                  <button key={c.value} onClick={() => setFolderColor(c.value)}
+                    className={`w-7 h-7 rounded-full ${c.value} border-2 transition-all ${folderColor === c.value ? "border-foreground scale-110" : "border-transparent"}`}
+                    title={c.label} />
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 px-5 py-4 border-t shrink-0">
               <Button className="flex-1" onClick={saveFolder} disabled={!folderName.trim()}>Save</Button>
               <Button variant="outline" onClick={() => setFolderModal(null)}>Cancel</Button>
             </div>
+            <div className="h-[env(safe-area-inset-bottom,0px)] shrink-0 sm:hidden" />
           </div>
         </div>
       )}
 
       {/* ── Note modal ──────────────────────────────────────────── */}
       {noteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setNoteModal(null)}>
-          <div className="bg-card border rounded-2xl p-5 w-full max-w-lg space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => setNoteModal(null)}>
+          <div className="bg-card border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-0.5 sm:hidden"><div className="w-10 h-1 rounded-full bg-muted-foreground/30" /></div>
+            <div className="px-5 pt-3 pb-3 flex items-center justify-between border-b shrink-0">
               <h3 className="font-semibold">{noteModal.note ? "Edit Note" : "New Note"}</h3>
               <button onClick={() => setNoteModal(null)}><X size={16} className="text-muted-foreground" /></button>
             </div>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-              placeholder="Note title" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} autoFocus />
-            <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              placeholder="Write your note…" rows={8} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
-            <div className="flex gap-2 pt-1">
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+              <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                placeholder="Note title" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} autoFocus />
+              <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                placeholder="Write your note…" rows={8} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t shrink-0">
               <Button className="flex-1" onClick={saveNote} disabled={!noteTitle.trim()}>Save</Button>
               <Button variant="outline" onClick={() => setNoteModal(null)}>Cancel</Button>
             </div>
+            <div className="h-[env(safe-area-inset-bottom,0px)] shrink-0 sm:hidden" />
           </div>
         </div>
       )}

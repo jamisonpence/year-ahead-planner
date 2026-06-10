@@ -531,9 +531,10 @@ function NewProjectModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>New Project</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>New Project</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1.5">
             <Label>Project Name *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Build Deck, Clean Garage" required autoFocus />
@@ -583,7 +584,8 @@ function NewProjectModal({
             <Label>Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="What is this project about?" />
           </div>
-          <div className="flex gap-2 pt-1">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" className="flex-1" disabled={!title.trim()}>Create Project</Button>
             <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>Cancel</Button>
           </div>
@@ -621,9 +623,10 @@ function NewTaskModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader><DialogTitle>New Task</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+      <DialogContent className="sm:max-w-sm flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>New Task</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1.5">
             <Label>Task *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to get done?" required autoFocus />
@@ -645,7 +648,8 @@ function NewTaskModal({
             <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any context?" />
           </div>
-          <div className="flex gap-2 pt-1">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" className="flex-1" disabled={!title.trim()}>Add Task</Button>
             <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>Cancel</Button>
           </div>
@@ -686,9 +690,10 @@ function NewChoreModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>New Recurring Chore</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>New Recurring Chore</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1.5">
             <Label>Title *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Vacuum living room" required autoFocus />
@@ -730,7 +735,8 @@ function NewChoreModal({
             <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
-          <div className="flex gap-2 pt-1">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" className="flex-1" disabled={!title.trim()}>Add Chore</Button>
             <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>Cancel</Button>
           </div>
@@ -771,9 +777,10 @@ function ProjectEditModal({ open, onClose, project, onSave }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Edit Project</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>Edit Project</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-1.5">
             <Label>Project Name *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -801,7 +808,8 @@ function ProjectEditModal({ open, onClose, project, onSave }: {
             <Label>Description <span className="text-xs text-muted-foreground">(opt)</span></Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
-          <div className="flex gap-2">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" className="flex-1">Save Changes</Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
@@ -848,9 +856,10 @@ function ChoreEditModal({ open, onClose, chore, onSave }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Edit Chore</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>Edit Chore</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div className="space-y-1.5">
             <Label>Title *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -892,7 +901,8 @@ function ChoreEditModal({ open, onClose, chore, onSave }: {
             <Label>Notes <span className="text-xs text-muted-foreground">(opt)</span></Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
-          <div className="flex gap-2 pt-1">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" className="flex-1" disabled={!title.trim()}>Save Changes</Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
