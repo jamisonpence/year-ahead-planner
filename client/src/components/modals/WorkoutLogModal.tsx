@@ -147,9 +147,10 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog, pre
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{editLog ? "Edit Workout" : "Log Workout"}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editLog ? "Edit Workout" : "Log Workout"}</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {templates.length > 0 && (
             <div className="space-y-1.5">
               <Label>Load from Template <span className="text-muted-foreground text-xs">(opt)</span></Label>
@@ -310,7 +311,8 @@ export default function WorkoutLogModal({ open, onClose, templates, editLog, pre
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
 
-          <div className="flex gap-2">
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">
               {editLog ? "Save" : "Log Workout"}
             </Button>

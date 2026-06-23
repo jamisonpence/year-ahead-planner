@@ -63,9 +63,10 @@ export default function BookFormModal({ open, onClose, editBook }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{editBook ? "Edit Book" : "Add Book"}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editBook ? "Edit Book" : "Add Book"}</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-1.5"><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Book title" required /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Author</Label><Input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author name" /></div>
@@ -98,7 +99,8 @@ export default function BookFormModal({ open, onClose, editBook }: {
             </div>
           </div>
           <div className="space-y-1.5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
-          <div className="flex gap-2"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editBook ? "Save" : "Add Book"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editBook ? "Save" : "Add Book"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
         </form>
       </DialogContent>
     </Dialog>

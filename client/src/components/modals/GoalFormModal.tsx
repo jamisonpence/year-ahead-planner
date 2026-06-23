@@ -168,9 +168,10 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{editGoal ? "Edit Goal" : "Create Goal"}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b"><DialogTitle>{editGoal ? "Edit Goal" : "Create Goal"}</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-1.5"><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Read 5 books this month" required /></div>
           <div className="space-y-1.5">
             <Label>Horizon</Label>
@@ -225,7 +226,8 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
 
 
           <div className="space-y-1.5"><Label>Notes</Label><Textarea value={description} onChange={(e) => setDesc(e.target.value)} rows={2} /></div>
-          <div className="flex gap-2"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editGoal ? "Save" : "Create Goal"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t shrink-0"><Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">{editGoal ? "Save" : "Create Goal"}</Button><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></div>
         </form>
       </DialogContent>
     </Dialog>
