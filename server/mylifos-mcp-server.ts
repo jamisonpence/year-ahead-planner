@@ -181,8 +181,10 @@ export function createMcpRouter() {
     await server.connect(transport);
   });
 
-  /** POST /mcp/message?sessionId=<id> — send a message to an active session */
-  router.post("/message", requireMcpAuth, async (req: Request, res: Response) => {
+  /** POST /mcp/message?sessionId=<id> — send a message to an active session.
+   *  No auth header needed here — the sessionId UUID is only known to clients
+   *  that already authenticated via /sse. */
+  router.post("/message", async (req: Request, res: Response) => {
     const sessionId = req.query.sessionId as string;
     const transport = activeSessions.get(sessionId);
     if (!transport) {
