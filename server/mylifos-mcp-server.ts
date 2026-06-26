@@ -117,6 +117,44 @@ function buildMcpServer() {
     },
   );
 
+  // ── Workouts ─────────────────────────────────────────────────────────────
+
+  server.tool(
+    "list_scheduled_workouts",
+    "Get the workout(s) scheduled for today from the active workout plan. Returns the template name and day, or empty if rest day.",
+    {},
+    async () => {
+      const plans = await storage.getAllWorkoutPlans(uid);
+      const activePlan = plans.find((p) => p.isActive);
+      if (!activePlan) {
+        return { content: [{ type: "text", text: JSON.stringify({ restDay: true, reason: "No active workout plan" }) }] };
+      }
+
+      const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const todayName = days[new Date().getDay()];
+
+      type ScheduleEntry = { dayOfWeek: string; templateId: number; templateName: string };
+      const schedule: ScheduleEntry[] = JSON.parse(activePlan.scheduleJson || "[]");
+      const todaysWorkouts = schedule.filter((e) => e.dayOfWeek === todayName);
+
+      if (todaysWorkouts.length === 0) {
+        return { content: [{ type: "text", text: JSON.stringify({ restDay: true, day: todayName, plan: activePlan.name }) }] };
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            restDay: false,
+            day: todayName,
+            plan: activePlan.name,
+            workouts: todaysWorkouts.map((e) => ({ templateId: e.templateId, name: e.templateName })),
+          }),
+        }],
+      };
+    },
+  );
+
   // ── Email ────────────────────────────────────────────────────────────────
 
   server.tool(
