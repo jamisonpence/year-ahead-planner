@@ -165,6 +165,11 @@ export function createMcpRouter() {
 
   /** GET /mcp/sse — open an SSE connection */
   router.get("/sse", requireMcpAuth, async (req: Request, res: Response) => {
+    // Disable proxy buffering so SSE events flow through Railway's CDN immediately
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
     const transport = new SSEServerTransport("/mcp/message", res);
     activeSessions.set(transport.sessionId, transport);
 
