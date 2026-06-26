@@ -117,6 +117,76 @@ function buildMcpServer() {
     },
   );
 
+  // ── Recipes ──────────────────────────────────────────────────────────────
+
+  server.tool(
+    "list_recipes",
+    "Get recipes with full ingredients and instructions. Optionally filter by category (e.g. 'Chicken', 'Beef', 'Seafood', 'Vegetarian'). Use this to build grocery orders.",
+    {
+      category: z.string().optional().describe("Filter by recipe category (case-insensitive partial match). Omit to return all recipes."),
+    },
+    async ({ category }) => {
+      const all = await storage.getAllRecipes(uid);
+      const filtered = category
+        ? all.filter((r) => r.category?.toLowerCase().includes(category.toLowerCase()))
+        : all;
+      const result = filtered.map((r) => ({
+        id: r.id,
+        name: r.name,
+        emoji: r.emoji,
+        category: r.category,
+        componentType: r.componentType,
+        servings: r.servings,
+        prepTime: r.prepTime,
+        cookTime: r.cookTime,
+        ingredients: JSON.parse(r.ingredientsJson || "[]") as { name: string; qty: string }[],
+        instructions: r.instructions,
+        tags: r.tags,
+      }));
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_week_meal_plan",
+    "Get the meal plan for the current week (or any week). Returns each day's assigned recipes/bundles with their ingredients — useful for generating a grocery list.",
+    {
+      weekOffset: z.number().optional().describe("0 = this week (default), 1 = next week, -1 = last week"),
+    },
+    async ({ weekOffset = 0 }) => {
+      // Compute the Sunday of the target week
+      const today = new Date();
+      const sunday = new Date(today);
+      sunday.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+      const weekStart = sunday.toISOString().slice(0, 10);
+
+      const plan = await storage.getWeekPlan(weekStart, uid);
+      const allRecipes = await storage.getAllRecipes(uid);
+      const recipeMap = new Map(allRecipes.map((r) => [r.id, r]));
+
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const result = plan.map((entry) => {
+        const recipe = entry.recipeId ? recipeMap.get(entry.recipeId) : null;
+        return {
+          day: days[entry.dayIndex],
+          dayIndex: entry.dayIndex,
+          recipe: recipe
+            ? {
+                id: recipe.id,
+                name: recipe.name,
+                category: recipe.category,
+                servings: recipe.servings,
+                ingredients: JSON.parse(recipe.ingredientsJson || "[]") as { name: string; qty: string }[],
+              }
+            : null,
+          bundleId: entry.bundleId ?? null,
+        };
+      });
+
+      return { content: [{ type: "text", text: JSON.stringify({ weekStart, days: result }, null, 2) }] };
+    },
+  );
+
   // ── Workouts ─────────────────────────────────────────────────────────────
 
   server.tool(
