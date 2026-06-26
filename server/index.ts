@@ -4,7 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
 import { initializeStorage, seedSystemRecipes } from "./storage";
-import { createMcpRouter } from "./mylifos-mcp-server";
+import { createMcpRouter, createOAuthRouter, createOAuthEndpoints } from "./mylifos-mcp-server";
 
 const app = express();
 const httpServer = createServer(app);
@@ -80,6 +80,9 @@ app.use((req, res, next) => {
     await registerRoutes(httpServer, app);
     log("Routes registered.");
 
+    // OAuth endpoints (required by MCP spec for Cowork/Claude connectors)
+    app.use("/.well-known", createOAuthRouter());
+    app.use("/oauth", createOAuthEndpoints());
     // MCP server (AI tool access)
     app.use("/mcp", createMcpRouter());
 

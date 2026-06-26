@@ -156,6 +156,85 @@ function buildMcpServer() {
   return server;
 }
 
+// ── OAuth 2.0 endpoints (required by MCP spec for Cowork/Claude connectors) ──
+// Single-user app: authorize auto-approves and issues MCP_AUTH_TOKEN directly.
+
+const pendingCodes = new Map<string, string>(); // code → redirect_uri
+
+export function createOAuthRouter() {
+  const router = Router();
+
+  /** GET /.well-known/oauth-authorization-server */
+  router.get("/oauth-authorization-server", (req: Request, res: Response) => {
+    const base = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      issuer: base,
+      authorization_endpoint: `${base}/oauth/authorize`,
+      token_endpoint: `${base}/oauth/token`,
+      registration_endpoint: `${base}/oauth/register`,
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code"],
+      code_challenge_methods_supported: ["S256"],
+    });
+  });
+
+  return router;
+}
+
+export function createOAuthEndpoints() {
+  const router = Router();
+
+  /** POST /oauth/register — dynamic client registration */
+  router.post("/register", (req: Request, res: Response) => {
+    res.json({
+      client_id: "mylifos-mcp",
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      redirect_uris: req.body?.redirect_uris ?? [],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    });
+  });
+
+  /** GET /oauth/authorize — auto-approve and redirect with code */
+  router.get("/authorize", (req: Request, res: Response) => {
+    const { redirect_uri, state } = req.query as Record<string, string>;
+    if (!redirect_uri) return res.status(400).send("Missing redirect_uri");
+
+    const code = `mlcode-${Math.random().toString(36).slice(2)}`;
+    pendingCodes.set(code, redirect_uri);
+    // Codes expire after 5 minutes
+    setTimeout(() => pendingCodes.delete(code), 5 * 60 * 1000);
+
+    const url = new URL(redirect_uri);
+    url.searchParams.set("code", code);
+    if (state) url.searchParams.set("state", state);
+    res.redirect(url.toString());
+  });
+
+  /** POST /oauth/token — exchange code for access token */
+  router.post("/token", (req: Request, res: Response) => {
+    const { code, grant_type } = req.body ?? {};
+    if (grant_type !== "authorization_code") {
+      return res.status(400).json({ error: "unsupported_grant_type" });
+    }
+    if (!code || !pendingCodes.has(code)) {
+      return res.status(400).json({ error: "invalid_grant" });
+    }
+    pendingCodes.delete(code);
+
+    const token = process.env.MCP_AUTH_TOKEN?.trim();
+    if (!token) return res.status(503).json({ error: "MCP_AUTH_TOKEN not configured" });
+
+    res.json({
+      access_token: token,
+      token_type: "Bearer",
+      scope: "mcp",
+    });
+  });
+
+  return router;
+}
+
 // ── Express Router ───────────────────────────────────────────────────────────
 
 const activeSessions = new Map<string, SSEServerTransport>();
