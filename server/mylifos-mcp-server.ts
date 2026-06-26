@@ -4,7 +4,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Router, Request, Response, NextFunction } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import nodemailer from "nodemailer";
 import { storage } from "./storage";
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -30,15 +29,6 @@ function getExternalUserId(): number {
   return parseInt(process.env.EXTERNAL_USER_ID || "1", 10);
 }
 
-function getMailTransporter() {
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  });
-}
 
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
@@ -131,27 +121,37 @@ function buildMcpServer() {
 
   server.tool(
     "send_email",
-    "Send an email from the configured Gmail account",
+    "Send an email via Resend to jamisonpence@gmail.com",
     {
-      to: z.string().describe("Recipient email address"),
       subject: z.string().describe("Email subject"),
       body: z.string().describe("Plain-text email body"),
     },
-    async ({ to, subject, body }) => {
-      if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    async ({ subject, body }) => {
+      if (!process.env.RESEND_API_KEY) {
         return {
-          content: [{ type: "text", text: "Gmail not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD." }],
+          content: [{ type: "text", text: "Resend not configured. Set RESEND_API_KEY." }],
           isError: true,
         };
       }
-      const transporter = getMailTransporter();
-      await transporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to,
-        subject,
-        text: body,
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Daily Planner <planner@mylifos.com>",
+          to: ["jamisonpence@gmail.com"],
+          subject,
+          text: body,
+        }),
       });
-      return { content: [{ type: "text", text: `Email sent to ${to}` }] };
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Resend error ${response.status}: ${err}`);
+      }
+      const data = await response.json() as { id: string };
+      return { content: [{ type: "text", text: JSON.stringify({ sent: true, id: data.id, subject }) }] };
     },
   );
 
