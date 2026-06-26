@@ -662,10 +662,12 @@ Return exactly this structure:
 
   /** GET /api/v1/health — unauthenticated, confirms env vars are present */
   app.get("/api/v1/health", (_req, res) => {
+    const k = process.env.EXTERNAL_API_KEY?.trim() ?? "";
     res.json({
       ok: true,
-      keyConfigured: !!process.env.EXTERNAL_API_KEY,
-      keyLength: process.env.EXTERNAL_API_KEY?.trim().length ?? 0,
+      keyConfigured: !!k,
+      keyLength: k.length,
+      keyPrefix: k.slice(0, 8),
       userIdConfigured: !!process.env.EXTERNAL_USER_ID,
     });
   });

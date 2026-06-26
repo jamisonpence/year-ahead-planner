@@ -253,23 +253,30 @@ export function createMcpRouter() {
   router.post("/", requireMcpAuth, async (req: Request, res: Response) => {
     res.setHeader("X-Accel-Buffering", "no");
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let transport = sessionId ? httpSessions.get(sessionId) : undefined;
 
-    if (!transport) {
-      // New session — create transport + server
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          httpSessions.set(sid, transport!);
-        },
-      });
-      transport.onclose = () => {
-        if (transport!.sessionId) httpSessions.delete(transport!.sessionId);
-      };
-      const server = buildMcpServer();
-      await server.connect(transport);
+    if (sessionId) {
+      // Existing session — look it up
+      const existing = httpSessions.get(sessionId);
+      if (!existing) {
+        // Session expired (e.g. server restarted) — client must reinitialize
+        return res.status(404).json({ error: "Session expired, please reinitialize" });
+      }
+      await existing.handleRequest(req, res, req.body);
+      return;
     }
 
+    // No session ID → new connection, expect initialize
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid) => {
+        httpSessions.set(sid, transport);
+      },
+    });
+    transport.onclose = () => {
+      if (transport.sessionId) httpSessions.delete(transport.sessionId);
+    };
+    const server = buildMcpServer();
+    await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   });
 
@@ -278,7 +285,7 @@ export function createMcpRouter() {
     res.setHeader("Cache-Control", "no-cache");
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const transport = sessionId ? httpSessions.get(sessionId) : undefined;
-    if (!transport) return res.status(400).json({ error: "No active session" });
+    if (!transport) return res.status(404).json({ error: "Session expired, please reinitialize" });
     await transport.handleRequest(req, res);
   });
 
