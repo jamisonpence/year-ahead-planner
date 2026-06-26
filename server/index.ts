@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
 import { initializeStorage, seedSystemRecipes } from "./storage";
+import { createMcpRouter } from "./mylifos-mcp-server";
 
 const app = express();
 const httpServer = createServer(app);
@@ -78,6 +79,9 @@ app.use((req, res, next) => {
     log("System recipes seeded — registering routes…");
     await registerRoutes(httpServer, app);
     log("Routes registered.");
+
+    // MCP server (AI tool access)
+    app.use("/mcp", createMcpRouter());
 
     app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
