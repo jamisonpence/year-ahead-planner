@@ -648,17 +648,27 @@ Return exactly this structure:
   //   or:       x-api-key: <your-key>
 
   function requireApiKey(req: Request, res: Response, next: NextFunction) {
-    const key = process.env.EXTERNAL_API_KEY;
+    const key = process.env.EXTERNAL_API_KEY?.trim();
     if (!key) return res.status(503).json({ error: "External API not configured. Set EXTERNAL_API_KEY env var." });
     const authHeader = req.headers.authorization;
     const provided = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : (req.headers["x-api-key"] as string | undefined);
+      ? authHeader.slice(7).trim()
+      : (req.headers["x-api-key"] as string | undefined)?.trim();
     if (!provided || provided !== key) {
       return res.status(401).json({ error: "Invalid or missing API key" });
     }
     next();
   }
+
+  /** GET /api/v1/health — unauthenticated, confirms env vars are present */
+  app.get("/api/v1/health", (_req, res) => {
+    res.json({
+      ok: true,
+      keyConfigured: !!process.env.EXTERNAL_API_KEY,
+      keyLength: process.env.EXTERNAL_API_KEY?.trim().length ?? 0,
+      userIdConfigured: !!process.env.EXTERNAL_USER_ID,
+    });
+  });
 
   async function externalUserId(res: Response): Promise<number | null> {
     const raw = process.env.EXTERNAL_USER_ID;
