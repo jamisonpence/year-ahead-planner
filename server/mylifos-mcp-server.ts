@@ -1,9 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Router, Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import nodemailer from "nodemailer";
-import { storage } from "./storage.js";
+import { storage } from "./storage";
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -237,38 +239,75 @@ export function createOAuthEndpoints() {
 
 // ── Express Router ───────────────────────────────────────────────────────────
 
-const activeSessions = new Map<string, SSEServerTransport>();
+// Legacy SSE sessions
+const sseSessions = new Map<string, SSEServerTransport>();
+// Streamable HTTP sessions (newer MCP spec, used by Cowork after OAuth)
+const httpSessions = new Map<string, StreamableHTTPServerTransport>();
 
 export function createMcpRouter() {
   const router = Router();
 
-  /** GET /mcp/sse — open an SSE connection */
+  // ── Streamable HTTP transport (POST /mcp or GET /mcp with MCP-Session-Id) ──
+  // This is what Cowork uses after OAuth.
+
+  router.post("/", requireMcpAuth, async (req: Request, res: Response) => {
+    res.setHeader("X-Accel-Buffering", "no");
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let transport = sessionId ? httpSessions.get(sessionId) : undefined;
+
+    if (!transport) {
+      // New session — create transport + server
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          httpSessions.set(sid, transport!);
+        },
+      });
+      transport.onclose = () => {
+        if (transport!.sessionId) httpSessions.delete(transport!.sessionId);
+      };
+      const server = buildMcpServer();
+      await server.connect(transport);
+    }
+
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  router.get("/", requireMcpAuth, async (req: Request, res: Response) => {
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Cache-Control", "no-cache");
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    const transport = sessionId ? httpSessions.get(sessionId) : undefined;
+    if (!transport) return res.status(400).json({ error: "No active session" });
+    await transport.handleRequest(req, res);
+  });
+
+  router.delete("/", requireMcpAuth, async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (sessionId) {
+      const transport = httpSessions.get(sessionId);
+      if (transport) { await transport.close(); httpSessions.delete(sessionId); }
+    }
+    res.status(204).end();
+  });
+
+  // ── Legacy SSE transport (GET /mcp/sse) ──────────────────────────────────
+
   router.get("/sse", requireMcpAuth, async (req: Request, res: Response) => {
-    // Disable proxy buffering so SSE events flow through Railway's CDN immediately
     res.setHeader("X-Accel-Buffering", "no");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-
     const transport = new SSEServerTransport("/mcp/message", res);
-    activeSessions.set(transport.sessionId, transport);
-
-    res.on("close", () => {
-      activeSessions.delete(transport.sessionId);
-    });
-
+    sseSessions.set(transport.sessionId, transport);
+    res.on("close", () => sseSessions.delete(transport.sessionId));
     const server = buildMcpServer();
     await server.connect(transport);
   });
 
-  /** POST /mcp/message?sessionId=<id> — send a message to an active session.
-   *  No auth header needed here — the sessionId UUID is only known to clients
-   *  that already authenticated via /sse. */
   router.post("/message", async (req: Request, res: Response) => {
     const sessionId = req.query.sessionId as string;
-    const transport = activeSessions.get(sessionId);
-    if (!transport) {
-      return res.status(400).json({ error: "No active session with that id" });
-    }
+    const transport = sseSessions.get(sessionId);
+    if (!transport) return res.status(400).json({ error: "No active SSE session" });
     await transport.handlePostMessage(req, res);
   });
 
