@@ -13,9 +13,9 @@ function requireMcpAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(503).json({ error: "MCP_AUTH_TOKEN not configured" });
   }
   const header = req.headers.authorization;
-  const provided = header?.startsWith("Bearer ")
-    ? header.slice(7).trim()
-    : (req.headers["x-mcp-auth"] as string | undefined)?.trim();
+  const provided = (header?.startsWith("Bearer ") ? header.slice(7).trim() : null)
+    ?? (req.headers["x-mcp-auth"] as string | undefined)?.trim()
+    ?? (req.query.token as string | undefined)?.trim();
   if (!provided || provided !== token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
