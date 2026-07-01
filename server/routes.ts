@@ -72,9 +72,13 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Unauthorized" });
 }
 
-/** Fire-and-forget notification creator — never throws or blocks the main request. */
+import { initWebPush, getVapidPublicKey, saveSubscription, removeSubscription, sendPushToUser } from "./push";
+
+/** Fire-and-forget notification creator — never throws or blocks the main request.
+ *  Persists an in-app notification AND pushes it to the user's devices. */
 function notify(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null }) {
   storage.createNotification(n).catch(() => {});
+  sendPushToUser(n.userId, { title: n.title, body: n.body, href: n.href }).catch(() => {});
 }
 
 /** Fire-and-forget activity logger — never throws or blocks the main request. */
@@ -150,6 +154,100 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     try {
       await storage.markAllNotificationsRead((req.user as User).id);
       res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Web push ─────────────────────────────────────────────────────────────────
+  initWebPush().catch((e) => console.error("initWebPush:", e));
+
+  app.get("/api/push/public-key", requireAuth, (_req, res) => {
+    const key = getVapidPublicKey();
+    if (!key) return res.status(503).json({ error: "Push not configured" });
+    res.json({ key });
+  });
+
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    try {
+      const sub = req.body?.subscription ?? req.body;
+      if (!sub?.endpoint || !sub?.keys) return res.status(400).json({ error: "subscription with endpoint and keys required" });
+      await saveSubscription((req.user as User).id, sub);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
+    try {
+      const { endpoint } = req.body ?? {};
+      if (!endpoint) return res.status(400).json({ error: "endpoint required" });
+      await removeSubscription((req.user as User).id, endpoint);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Data export ──────────────────────────────────────────────────────────────
+  // Full JSON dump of everything the user owns. A life repository people trust
+  // is one they know they can leave with.
+  app.get("/api/export", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const directTables = [
+        "events", "books", "workout_templates", "workout_logs", "workout_plans",
+        "goals", "projects", "general_tasks", "purchase_items", "recipes",
+        "meal_bundles", "week_plan", "grocery_checks", "custom_grocery_items",
+        "timeline_entries", "relationship_groups", "people", "google_contacts",
+        "facebook_friends", "linkedin_contacts", "movies", "movie_lists",
+        "music_artists", "music_songs", "music_collections", "budget_categories",
+        "transactions", "subscriptions", "receipts", "plants", "chores",
+        "house_projects", "appliances", "spots", "spot_folders", "trips",
+        "visited_cities", "family_members", "children", "pets", "quotes",
+        "mantras", "hobbies", "art_pieces", "equipment", "journal_entries",
+        "sacred_texts", "faith_practices", "sermons", "prayer_items",
+        "medications", "health_metrics", "sleep_logs", "care_providers",
+        "political_officials", "political_issues", "political_elections",
+        "civic_actions", "political_news_sources", "activity_feed",
+        "body_comp_plans", "food_log_entries", "water_logs", "nutrition_goals",
+        "reading_goals", "habits", "notifications",
+      ];
+      const childTables: Array<[string, string, string]> = [
+        ["tasks", "events", "event_id"],
+        ["reading_sessions", "books", "book_id"],
+        ["project_tasks", "projects", "project_id"],
+        ["house_project_tasks", "house_projects", "house_project_id"],
+        ["child_milestones", "children", "child_id"],
+        ["child_memories", "children", "child_id"],
+        ["child_prep_items", "children", "child_id"],
+        ["pet_vet_visits", "pets", "pet_id"],
+        ["music_collection_items", "music_collections", "collection_id"],
+        ["trip_items", "trips", "trip_id"],
+        ["body_comp_check_ins", "body_comp_plans", "plan_id"],
+      ];
+      const shareTables = [
+        "recipe_shares", "quote_shares", "art_shares", "spot_shares",
+        "movie_shares", "workout_shares", "book_recommendations", "music_recommendations",
+      ];
+
+      const data: Record<string, unknown[]> = {};
+      for (const t of directTables) {
+        try { data[t] = (await pool.query(`SELECT * FROM ${t} WHERE user_id = $1`, [uid])).rows; } catch {}
+      }
+      for (const [child, parent, fk] of childTables) {
+        try {
+          data[child] = (await pool.query(
+            `SELECT c.* FROM ${child} c JOIN ${parent} p ON p.id = c.${fk} WHERE p.user_id = $1`, [uid]
+          )).rows;
+        } catch {}
+      }
+      for (const t of shareTables) {
+        try { data[t] = (await pool.query(`SELECT * FROM ${t} WHERE from_user_id = $1 OR to_user_id = $1`, [uid])).rows; } catch {}
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Disposition", `attachment; filename="mylifos-export-${date}.json"`);
+      res.json({
+        exportedAt: new Date().toISOString(),
+        user: sanitizeUser(req.user as User),
+        data,
+      });
     } catch (e) { handleError(res, e); }
   });
 

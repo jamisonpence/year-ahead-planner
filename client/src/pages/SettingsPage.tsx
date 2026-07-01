@@ -14,6 +14,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
+import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } from "@/lib/push";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -546,6 +547,77 @@ function TimezoneSection() {
   );
 }
 
+// ── Push Notifications Section ────────────────────────────────────────────────
+
+function PushNotificationsSection() {
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const supported = pushSupported();
+
+  useEffect(() => { isPushEnabled().then(setEnabled); }, []);
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      if (enabled) {
+        await unsubscribeFromPush();
+        setEnabled(false);
+        toast({ title: "Push notifications disabled" });
+      } else {
+        const ok = await subscribeToPush();
+        setEnabled(ok);
+        toast(ok
+          ? { title: "Push notifications enabled!", description: "You'll get your daily digest and social updates on this device." }
+          : { title: "Permission not granted", description: "Allow notifications in your browser settings to enable push.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Couldn't update push settings", variant: "destructive" });
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-3">
+      <h2 className="font-semibold text-base">Push notifications</h2>
+      <p className="text-sm text-muted-foreground">
+        Get your morning "day ahead" digest, friend requests, shares, and buddy nudges
+        delivered to this device — even when the app is closed.
+      </p>
+      {supported ? (
+        <Button variant={enabled ? "secondary" : "default"} size="sm" onClick={toggle} disabled={busy} className="gap-1.5">
+          {enabled ? "Disable on this device" : "Enable push notifications"}
+        </Button>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          This browser doesn't support push notifications. On iOS, add MyLifos to your Home Screen first.
+        </p>
+      )}
+    </section>
+  );
+}
+
+// ── Export Data Section ───────────────────────────────────────────────────────
+
+function ExportDataSection() {
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-3">
+      <h2 className="font-semibold text-base">Export your data</h2>
+      <p className="text-sm text-muted-foreground">
+        Download everything you've tracked — goals, tasks, books, recipes, journal entries,
+        and all other modules — as a single JSON file. Your data is always yours.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => { window.location.href = "/api/export"; }}
+      >
+        Download my data (JSON)
+      </Button>
+    </section>
+  );
+}
+
 // ── Delete Account Section ────────────────────────────────────────────────────
 
 function DeleteAccountSection() {
@@ -904,6 +976,8 @@ export default function SettingsPage() {
       </section>
 
       {/* Danger Zone */}
+      <PushNotificationsSection />
+      <ExportDataSection />
       <DeleteAccountSection />
     </div>
   );

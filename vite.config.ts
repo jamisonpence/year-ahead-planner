@@ -8,6 +8,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // Custom SW (client/src/sw.ts) — same Workbox caching as before, plus Web Push handlers
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Only precache static assets — NOT HTML (auth-dependent, always from network)
+        globPatterns: ["**/*.{js,css,ico,png,svg,woff,woff2}"],
+      },
       includeAssets: [
         "icons/apple-touch-icon.png",
         "icons/icon-192x192.png",
@@ -70,38 +79,6 @@ export default defineConfig({
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
-          },
-        ],
-      },
-      workbox: {
-        // Bundle grew past 2 MB after hobby features — raise Workbox precache limit to 5 MB
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        // Only precache static assets — NOT HTML pages.
-        // HTML is server-rendered with auth state so it must always come from the network.
-        globPatterns: ["**/*.{js,css,ico,png,svg,woff,woff2}"],
-        // Never serve a cached fallback for navigation requests — the server decides
-        // what HTML to show based on the user's session.
-        navigateFallback: null,
-        runtimeCaching: [
-          // API calls: network-first, fall back to cache when offline
-          {
-            urlPattern: /^\/api\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 10,
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Google Fonts: cache indefinitely
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts",
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
           },
         ],
       },

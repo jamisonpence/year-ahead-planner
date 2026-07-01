@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
+import { syncPushSubscription } from "@/lib/push";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
@@ -670,6 +671,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const unreadMessengerCount = messengerCountData?.count ?? 0;
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // Keep this device's push subscription registered with the server
+  useEffect(() => { syncPushSubscription(); }, []);
 
   // Global search palette (Cmd/Ctrl+K)
   const [searchOpen, setSearchOpen] = useState(false);
