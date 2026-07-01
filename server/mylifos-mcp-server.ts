@@ -225,6 +225,94 @@ function buildMcpServer() {
     },
   );
 
+  // ── Chores ───────────────────────────────────────────────────────────────
+
+  server.tool(
+    "list_chores",
+    "Get chores from MyLifos. Returns active chores by default. Use dueOnly=true to return only overdue or due-today chores.",
+    {
+      dueOnly: z
+        .boolean()
+        .optional()
+        .describe("Set true to return only chores that are overdue or due today (default: false)"),
+    },
+    async ({ dueOnly }) => {
+      const all = await storage.getAllChores(uid);
+      const active = all.filter((c) => c.isActive);
+      if (!dueOnly) {
+        return { content: [{ type: "text", text: JSON.stringify(active, null, 2) }] };
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const due = active.filter((c) => c.nextDue && c.nextDue <= today);
+      return { content: [{ type: "text", text: JSON.stringify(due, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "create_chore",
+    "Create a new chore in MyLifos",
+    {
+      title: z.string().describe("Chore title"),
+      category: z
+        .enum(["cleaning", "yard", "maintenance", "laundry", "cooking", "other"])
+        .optional()
+        .describe("Category (default: cleaning)"),
+      frequency: z
+        .enum(["daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "as_needed"])
+        .optional()
+        .describe("How often the chore recurs (default: weekly)"),
+      priority: z.enum(["low", "medium", "high"]).optional().describe("Priority (default: medium)"),
+      assignee: z.string().optional().describe("Household member name"),
+      notes: z.string().optional().describe("Optional notes"),
+      nextDue: z.string().optional().describe("Next due date in YYYY-MM-DD format"),
+    },
+    async ({ title, category, frequency, priority, assignee, notes, nextDue }) => {
+      const chore = await storage.createChore(
+        {
+          title,
+          category: category ?? "cleaning",
+          frequency: frequency ?? "weekly",
+          priority: priority ?? "medium",
+          assignee: assignee ?? null,
+          notes: notes ?? null,
+          nextDue: nextDue ?? null,
+          lastCompleted: null,
+          isActive: true,
+          sortOrder: 0,
+          tags: null,
+          customFrequencyDays: null,
+          applianceId: null,
+        },
+        uid,
+      );
+      return { content: [{ type: "text", text: JSON.stringify(chore, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "complete_chore",
+    "Mark a chore as completed and set its next due date. Use this after finishing a chore.",
+    {
+      id: z.number().describe("Chore ID"),
+      lastCompleted: z
+        .string()
+        .optional()
+        .describe("Completion date in YYYY-MM-DD format (defaults to today)"),
+      nextDue: z.string().optional().describe("Next due date in YYYY-MM-DD format"),
+    },
+    async ({ id, lastCompleted, nextDue }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const chore = await storage.updateChore(id, {
+        lastCompleted: lastCompleted ?? today,
+        ...(nextDue ? { nextDue } : {}),
+      });
+      if (!chore) {
+        return { content: [{ type: "text", text: `Chore ${id} not found` }], isError: true };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(chore, null, 2) }] };
+    },
+  );
+
   // ── Email ────────────────────────────────────────────────────────────────
 
   server.tool(
