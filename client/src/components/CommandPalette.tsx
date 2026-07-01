@@ -1,11 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import {
-  Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
-} from "@/components/ui/command";
+import { Search, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2 } from "lucide-react";
 
 type SearchHit = {
   type: string;
@@ -36,6 +32,7 @@ const TYPE_META: Record<string, { label: string; emoji: string }> = {
   art:     { label: "Art",            emoji: "🖼️" },
   plant:   { label: "Plants",         emoji: "🪴" },
 };
+const TYPE_ORDER = Object.keys(TYPE_META);
 
 export default function CommandPalette({ open, onOpenChange }: {
   open: boolean;
@@ -45,16 +42,19 @@ export default function CommandPalette({ open, onOpenChange }: {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqRef = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Reset on close
+  // Reset when opened/closed
   useEffect(() => {
-    if (!open) { setQuery(""); setHits([]); }
+    if (!open) { setQuery(""); setHits([]); setActiveIdx(0); setLoading(false); }
   }, [open]);
 
   function handleChange(q: string) {
     setQuery(q);
+    setActiveIdx(0);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (q.trim().length < 2) { setHits([]); setLoading(false); return; }
     setLoading(true);
@@ -63,69 +63,102 @@ export default function CommandPalette({ open, onOpenChange }: {
       try {
         const r = await apiRequest("GET", `/api/search?q=${encodeURIComponent(q.trim())}`);
         const data: SearchHit[] = await r.json();
-        if (seq === seqRef.current) setHits(data);
+        if (seq === seqRef.current) { setHits(data); setLoading(false); }
       } catch {
-        if (seq === seqRef.current) setHits([]);
-      } finally {
-        if (seq === seqRef.current) setLoading(false);
+        if (seq === seqRef.current) { setHits([]); setLoading(false); }
       }
     }, 250);
   }
+
+  // Sorted flat list (grouped by type) — index-addressable for keyboard nav
+  const sorted = TYPE_ORDER.flatMap((t) => hits.filter((h) => h.type === t));
 
   function go(href: string) {
     onOpenChange(false);
     navigate(href);
   }
 
-  // Group hits by type, keeping TYPE_META ordering
-  const groups = Object.keys(TYPE_META)
-    .map((type) => ({ type, items: hits.filter((h) => h.type === type) }))
-    .filter((g) => g.items.length > 0);
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") { onOpenChange(false); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, sorted.length - 1)); }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+    if (e.key === "Enter" && sorted[activeIdx]) { e.preventDefault(); go(sorted[activeIdx].href); }
+  }
+
+  // Keep the active item visible while arrowing
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-idx="${activeIdx}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIdx]);
+
+  if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 gap-0 overflow-hidden max-w-lg top-[20%] translate-y-0">
-        <Command shouldFilter={false} className="rounded-xl">
-          <div className="relative">
-            <CommandInput
-              value={query}
-              onValueChange={handleChange}
-              placeholder="Search everything — goals, books, recipes, people…"
-            />
-            {loading && (
-              <Loader2 size={14} className="absolute right-10 top-3.5 animate-spin text-muted-foreground" />
-            )}
-          </div>
-          <CommandList className="max-h-[50vh]">
-            {query.trim().length >= 2 && !loading && hits.length === 0 && (
-              <CommandEmpty>No results for “{query}”</CommandEmpty>
-            )}
-            {query.trim().length < 2 && (
-              <p className="py-6 text-center text-xs text-muted-foreground">
-                Type at least 2 characters to search your entire life OS
-              </p>
-            )}
-            {groups.map((g) => (
-              <CommandGroup key={g.type} heading={TYPE_META[g.type].label}>
-                {g.items.map((h) => (
-                  <CommandItem
-                    key={`${h.type}-${h.id}`}
-                    value={`${h.type}-${h.id}`}
-                    onSelect={() => go(h.href)}
-                    className="gap-2.5 cursor-pointer"
-                  >
-                    <span className="text-base leading-none">{TYPE_META[h.type].emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{h.title}</p>
-                      {h.sub && <p className="text-xs text-muted-foreground truncate">{h.sub}</p>}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
+    <div
+      className="fixed inset-0 z-[100] bg-background/70 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
+    >
+      <div className="w-full max-w-lg bg-popover border rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 border-b">
+          <Search size={15} className="text-muted-foreground shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Search everything — goals, books, recipes, people…"
+            className="flex-1 py-3.5 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+          />
+          {loading
+            ? <Loader2 size={14} className="animate-spin text-muted-foreground shrink-0" />
+            : <kbd className="text-[9px] font-mono border rounded px-1 py-0.5 bg-secondary/60 text-muted-foreground shrink-0">esc</kbd>}
+        </div>
+
+        <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
+          {query.trim().length < 2 && (
+            <p className="py-8 text-center text-xs text-muted-foreground">
+              Type at least 2 characters to search your entire life OS
+            </p>
+          )}
+          {query.trim().length >= 2 && !loading && sorted.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">No results for “{query}”</p>
+          )}
+          {(() => {
+            let idx = -1;
+            return TYPE_ORDER.map((type) => {
+              const items = hits.filter((h) => h.type === type);
+              if (!items.length) return null;
+              return (
+                <div key={type}>
+                  <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                    {TYPE_META[type].label}
+                  </p>
+                  {items.map((h) => {
+                    idx++;
+                    const i = idx;
+                    return (
+                      <button
+                        key={`${h.type}-${h.id}`}
+                        data-idx={i}
+                        onClick={() => go(h.href)}
+                        onMouseMove={() => setActiveIdx(i)}
+                        className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${
+                          i === activeIdx ? "bg-secondary/80" : "hover:bg-secondary/50"
+                        }`}
+                      >
+                        <span className="text-base leading-none shrink-0">{TYPE_META[h.type].emoji}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm truncate">{h.title}</span>
+                          {h.sub && <span className="block text-xs text-muted-foreground truncate">{h.sub}</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()}
+        </div>
+      </div>
+    </div>
   );
 }
