@@ -108,13 +108,31 @@ function PageLoading() {
 function AuthenticatedApp() {
   const { user } = useAuth();
 
-  // Prefetch all page chunks in the background shortly after first paint,
-  // so tab switches are instant instead of showing a loading state.
+  // Prefetch page chunks in the background so tab switches are instant.
+  // Waits for the window load event (so it never delays initial page load),
+  // then trickles the imports in small batches.
   useEffect(() => {
-    const t = setTimeout(() => {
-      for (const load of pageLoaders) load().catch(() => {});
-    }, 2500);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function start() {
+      const queue = [...pageLoaders];
+      function next() {
+        if (cancelled || queue.length === 0) return;
+        for (const load of queue.splice(0, 4)) load().catch(() => {});
+        timer = setTimeout(next, 300);
+      }
+      timer = setTimeout(next, 2000);
+    }
+
+    if (document.readyState === "complete") start();
+    else window.addEventListener("load", start, { once: true });
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("load", start);
+    };
   }, []);
 
   return (
