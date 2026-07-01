@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ComponentType } from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -5,57 +6,73 @@ import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AppShell from "@/components/AppShell";
+// Eagerly loaded: the two screens users hit first.
 import DashboardPage from "@/pages/DashboardPage";
-import FeedPage from "@/pages/FeedPage";
-import DiscoverPage from "@/pages/DiscoverPage";
-import CalendarPage from "@/pages/CalendarPage";
-import GoalsPage from "@/pages/GoalsPage";
-import TasksPage from "@/pages/TasksPage";
-import ReadingPage from "@/pages/ReadingPage";
-import WorkoutsPage from "@/pages/WorkoutsPage";
-import RelationshipsPage from "@/pages/RelationshipsPage";
-import RecipesPage from "@/pages/RecipesPage";
-import MoviesPage from "@/pages/MoviesPage";
-import MusicPage from "@/pages/MusicPage";
-import BudgetPage from "@/pages/BudgetPage";
-import PlantsPage from "@/pages/PlantsPage";
-import HousekeepingPage from "@/pages/HousekeepingPage";
-import SpotsPage from "@/pages/SpotsPage";
-import EventsPage from "@/pages/EventsPage";
-import KidsPage from "@/pages/KidsPage";
-import QuotesPage from "@/pages/QuotesPage";
-import ArtPage from "@/pages/ArtPage";
-import JournalPage from "@/pages/JournalPage";
-import HobbiesPage from "@/pages/HobbiesPage";
-import HobbyDetailPage from "@/pages/HobbyDetailPage";
-import HobbyPlanDetailPage from "@/pages/HobbyPlanDetailPage";
-import HabitsPage from "@/pages/HabitsPage";
-import FaithPage from "@/pages/FaithPage";
-import HealthPage from "@/pages/HealthPage";
-import NutritionPage from "@/pages/NutritionPage";
-import PoliticsPage from "@/pages/PoliticsPage";
 import LoginPage from "@/pages/LoginPage";
-import SettingsPage from "@/pages/SettingsPage";
-import ProfilePage from "@/pages/ProfilePage";
-import MessengerPage from "@/pages/MessengerPage";
-import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 import OnboardingModal from "@/components/OnboardingModal";
 import InstallPrompt from "@/components/InstallPrompt";
 import { PlannerProvider } from "@/state/PlannerContext";
-import PlannerHome from "@/pages/planner/Home";
-import PlannerSetup from "@/pages/planner/Setup";
-import PlannerPreferences from "@/pages/planner/Preferences";
-import PlannerPlan from "@/pages/planner/Plan";
-import PlannerLibrary from "@/pages/planner/Library";
-import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
-import PlannerShopping from "@/pages/planner/Shopping";
+// Everything else is code-split into per-page chunks. Pages take assorted
+// optional props (embedded, onClose, …), so widen to ComponentType<any> for
+// compatibility with wouter's Route component prop.
+function lazyPage(loader: () => Promise<{ default: ComponentType<any> }>) {
+  return lazy(loader);
+}
+const FeedPage = lazyPage(() => import("@/pages/FeedPage"));
+const DiscoverPage = lazyPage(() => import("@/pages/DiscoverPage"));
+const CalendarPage = lazyPage(() => import("@/pages/CalendarPage"));
+const GoalsPage = lazyPage(() => import("@/pages/GoalsPage"));
+const TasksPage = lazyPage(() => import("@/pages/TasksPage"));
+const ReadingPage = lazyPage(() => import("@/pages/ReadingPage"));
+const WorkoutsPage = lazyPage(() => import("@/pages/WorkoutsPage"));
+const RelationshipsPage = lazyPage(() => import("@/pages/RelationshipsPage"));
+const RecipesPage = lazyPage(() => import("@/pages/RecipesPage"));
+const MoviesPage = lazyPage(() => import("@/pages/MoviesPage"));
+const MusicPage = lazyPage(() => import("@/pages/MusicPage"));
+const BudgetPage = lazyPage(() => import("@/pages/BudgetPage"));
+const PlantsPage = lazyPage(() => import("@/pages/PlantsPage"));
+const HousekeepingPage = lazyPage(() => import("@/pages/HousekeepingPage"));
+const SpotsPage = lazyPage(() => import("@/pages/SpotsPage"));
+const EventsPage = lazyPage(() => import("@/pages/EventsPage"));
+const KidsPage = lazyPage(() => import("@/pages/KidsPage"));
+const QuotesPage = lazyPage(() => import("@/pages/QuotesPage"));
+const ArtPage = lazyPage(() => import("@/pages/ArtPage"));
+const JournalPage = lazyPage(() => import("@/pages/JournalPage"));
+const HobbiesPage = lazyPage(() => import("@/pages/HobbiesPage"));
+const HobbyDetailPage = lazyPage(() => import("@/pages/HobbyDetailPage"));
+const HobbyPlanDetailPage = lazyPage(() => import("@/pages/HobbyPlanDetailPage"));
+const HabitsPage = lazyPage(() => import("@/pages/HabitsPage"));
+const FaithPage = lazyPage(() => import("@/pages/FaithPage"));
+const HealthPage = lazyPage(() => import("@/pages/HealthPage"));
+const NutritionPage = lazyPage(() => import("@/pages/NutritionPage"));
+const PoliticsPage = lazyPage(() => import("@/pages/PoliticsPage"));
+const SettingsPage = lazyPage(() => import("@/pages/SettingsPage"));
+const ProfilePage = lazyPage(() => import("@/pages/ProfilePage"));
+const MessengerPage = lazyPage(() => import("@/pages/MessengerPage"));
+const NotFound = lazyPage(() => import("@/pages/not-found"));
+const PlannerHome = lazyPage(() => import("@/pages/planner/Home"));
+const PlannerSetup = lazyPage(() => import("@/pages/planner/Setup"));
+const PlannerPreferences = lazyPage(() => import("@/pages/planner/Preferences"));
+const PlannerPlan = lazyPage(() => import("@/pages/planner/Plan"));
+const PlannerLibrary = lazyPage(() => import("@/pages/planner/Library"));
+const PlannerRecipeDetail = lazyPage(() => import("@/pages/planner/RecipeDetail"));
+const PlannerShopping = lazyPage(() => import("@/pages/planner/Shopping"));
+
+function PageLoading() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="text-muted-foreground text-sm">Loading…</div>
+    </div>
+  );
+}
 
 function AuthenticatedApp() {
   const { user } = useAuth();
   return (
     <PlannerProvider>
     <AppShell>
+      <Suspense fallback={<PageLoading />}>
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
@@ -99,6 +116,7 @@ function AuthenticatedApp() {
         <Route path="/meal-planner" component={PlannerHome} />
         <Route component={NotFound} />
       </Switch>
+      </Suspense>
       {user && !user.onboarded && <OnboardingModal userName={user.name} />}
       <InstallPrompt />
     </AppShell>

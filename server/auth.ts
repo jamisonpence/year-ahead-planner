@@ -7,13 +7,23 @@ import type { User } from "@shared/schema";
 
 const PgSession = connectPgSimple(session);
 
+const isProduction = process.env.NODE_ENV === "production";
+
+// In production a real session secret is mandatory — a guessable secret lets
+// anyone forge session cookies for any user.
+if (isProduction && !process.env.SESSION_SECRET) {
+  throw new Error("FATAL: SESSION_SECRET env var must be set in production");
+}
+
 export const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || "dev-secret-please-change",
   resave: false,
   saveUninitialized: false,
   store: new PgSession({ pool, createTableIfMissing: true }),
+  proxy: true, // Railway terminates TLS at its proxy; trust X-Forwarded-Proto
   cookie: {
-    secure: false, // Railway handles TLS at proxy level; keep false to avoid cookie rejection
+    secure: isProduction, // HTTPS-only cookies in production
+    httpOnly: true,
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },

@@ -87,8 +87,33 @@ function logActivity(
 }
 
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
+import rateLimit from "express-rate-limit";
+
+/** Strip secrets before sending a user row to the client. */
+function sanitizeUser(user: User) {
+  const {
+    passwordHash,
+    anthropicApiKeyEnc,
+    gcalAccessToken, gcalRefreshToken,
+    stravaAccessToken, stravaRefreshToken,
+    linkedinAccessToken,
+    facebookAccessToken,
+    googleContactsAccessToken, googleContactsRefreshToken,
+    ...safe
+  } = user;
+  return safe;
+}
 
 export async function registerRoutes(_httpServer: ReturnType<typeof createServer>, app: Express) {
+
+  // Throttle credential endpoints — blocks password brute-forcing.
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20, // 20 attempts per IP per 15 min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again in a few minutes." },
+  });
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
@@ -119,7 +144,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   }
 
   // POST /auth/register
-  app.post("/auth/register", async (req, res) => {
+  app.post("/auth/register", authLimiter, async (req, res) => {
     const { email, name, password } = req.body ?? {};
     if (!email || !name || !password) return res.status(400).json({ error: "email, name, and password required" });
     if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
@@ -141,7 +166,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
   });
 
   // POST /auth/login
-  app.post("/auth/login", async (req, res) => {
+  app.post("/auth/login", authLimiter, async (req, res) => {
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: "email and password required" });
     try {
@@ -318,8 +343,9 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Not authenticated" });
     const user = req.user as User;
     const enc = await storage.getAnthropicApiKeyEnc(user.id);
-    // Never expose the raw key — only indicate whether one is saved
-    res.json({ ...user, anthropicApiKeyEnc: undefined, hasAnthropicKey: !!enc });
+    // Never expose secrets (password hash, OAuth tokens, encrypted API key) —
+    // only indicate whether an Anthropic key is saved
+    res.json({ ...sanitizeUser(user), hasAnthropicKey: !!enc });
   });
 
   // ── Google Calendar Integration ───────────────────────────────────────────────

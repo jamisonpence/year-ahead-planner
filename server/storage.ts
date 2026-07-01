@@ -69,6 +69,31 @@ import { eq, asc, desc, and, inArray, or, isNull } from "drizzle-orm";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || "postgresql://localhost/planner" });
 const db = drizzle(pool);
 
+// ── OAuth token encryption ────────────────────────────────────────────────────
+// Third-party OAuth tokens (Google, Strava, Facebook, LinkedIn) are encrypted
+// at rest with AES-256-GCM. Legacy plaintext rows are handled transparently:
+// decToken falls back to the raw value if it isn't in encrypted format.
+import { encrypt as _encryptToken, decrypt as _decryptToken, hasEncryptionKey } from "./encryption";
+
+function encToken(value: string): string;
+function encToken(value: string | null | undefined): string | null;
+function encToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (!hasEncryptionKey()) return value;
+  try { return _encryptToken(value); } catch { return value; }
+}
+
+function decToken(value: string): string;
+function decToken(value: string | null | undefined): string | null;
+function decToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+  // Encrypted values are "iv:authTag:ciphertext" (3 base64 parts)
+  if (value.split(":").length === 3) {
+    try { return _decryptToken(value); } catch { return value; }
+  }
+  return value;
+}
+
 // ── DDL ────────────────────────────────────────────────────────────────────────
 export async function initializeStorage() {
   await pool.query(`
@@ -1702,6 +1727,120 @@ export async function initializeStorage() {
 
   // Link chores to appliances
   await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
+
+  // ── INDEXES ─────────────────────────────────────────────────────────────────
+  // Nearly every query filters by user_id (or a parent FK). Without these,
+  // every request is a sequential scan. Idempotent; each wrapped in try/catch
+  // so a missing table can never block startup.
+  const indexes: Array<[string, string]> = [
+    ["users", "email"],
+    ["events", "user_id"], ["events", "date"],
+    ["tasks", "event_id"],
+    ["books", "user_id"],
+    ["reading_sessions", "book_id"],
+    ["workout_templates", "user_id"],
+    ["workout_logs", "user_id"], ["workout_logs", "template_id"],
+    ["workout_plans", "user_id"],
+    ["workout_shares", "to_user_id"], ["workout_shares", "from_user_id"],
+    ["goals", "user_id"], ["goals", "parent_goal_id"],
+    ["projects", "user_id"], ["projects", "goal_id"],
+    ["project_tasks", "project_id"],
+    ["general_tasks", "user_id"],
+    ["goal_tasks", "goal_id"],
+    ["purchase_items", "user_id"],
+    ["recipes", "user_id"],
+    ["meal_bundles", "user_id"],
+    ["week_plan", "user_id, week_start"],
+    ["grocery_checks", "user_id, week_start"],
+    ["custom_grocery_items", "user_id, week_start"],
+    ["timeline_entries", "user_id"],
+    ["relationship_groups", "user_id"],
+    ["people", "user_id"], ["people", "group_id"],
+    ["google_contacts", "user_id"],
+    ["facebook_friends", "user_id"],
+    ["linkedin_contacts", "user_id"],
+    ["movies", "user_id"],
+    ["movie_lists", "user_id"],
+    ["movie_list_members", "list_id"], ["movie_list_members", "user_id"],
+    ["music_artists", "user_id"],
+    ["music_songs", "user_id"], ["music_songs", "artist_id"],
+    ["music_collections", "user_id"],
+    ["music_collection_items", "collection_id"],
+    ["budget_categories", "user_id"],
+    ["transactions", "user_id"], ["transactions", "category_id"],
+    ["subscriptions", "user_id"],
+    ["receipts", "user_id"],
+    ["plants", "user_id"],
+    ["chores", "user_id"],
+    ["house_projects", "user_id"],
+    ["house_project_tasks", "house_project_id"],
+    ["appliances", "user_id"],
+    ["spots", "user_id"], ["spots", "folder_id"],
+    ["spot_folders", "user_id"],
+    ["spot_shares", "to_user_id"], ["spot_shares", "from_user_id"],
+    ["nav_prefs", "user_id"],
+    ["trips", "user_id"],
+    ["trip_items", "trip_id"],
+    ["visited_cities", "user_id"],
+    ["family_members", "user_id"],
+    ["children", "user_id"],
+    ["child_milestones", "child_id"],
+    ["child_memories", "child_id"],
+    ["child_prep_items", "child_id"],
+    ["pets", "user_id"],
+    ["pet_vet_visits", "pet_id"],
+    ["quotes", "user_id"],
+    ["mantras", "user_id"],
+    ["quote_shares", "to_user_id"],
+    ["hobbies", "user_id"],
+    ["art_pieces", "user_id"],
+    ["art_shares", "to_user_id"],
+    ["equipment", "user_id"],
+    ["journal_entries", "user_id"],
+    ["book_recommendations", "to_user_id"],
+    ["movie_shares", "to_user_id"],
+    ["recipe_shares", "to_user_id"],
+    ["music_recommendations", "to_user_id"],
+    ["tab_collaborations", "owner_user_id"], ["tab_collaborations", "collaborator_user_id"],
+    ["friend_requests", "from_user_id"], ["friend_requests", "to_user_id"],
+    ["sacred_texts", "user_id"],
+    ["faith_practices", "user_id"],
+    ["sermons", "user_id"],
+    ["prayer_items", "user_id"],
+    ["medications", "user_id"],
+    ["health_metrics", "user_id"],
+    ["sleep_logs", "user_id"],
+    ["care_providers", "user_id"],
+    ["political_officials", "user_id"],
+    ["political_issues", "user_id"],
+    ["political_elections", "user_id"],
+    ["civic_actions", "user_id"],
+    ["political_news_sources", "user_id"],
+    ["political_debates", "user_id"],
+    ["political_debate_posts", "debate_id"],
+    ["political_debate_upvotes", "post_id"],
+    ["political_debate_members", "debate_id"],
+    ["activity_feed", "user_id, created_at"],
+    ["activity_reactions", "feed_item_id"],
+    ["activity_comments", "feed_item_id"],
+    ["body_comp_plans", "user_id"],
+    ["body_comp_check_ins", "plan_id"],
+    ["food_log_entries", "user_id, date"],
+    ["water_logs", "user_id, date"],
+    ["reading_goals", "user_id"],
+    ["habits", "user_id"],
+    ["conversation_participants", "conversation_id"], ["conversation_participants", "user_id"],
+    ["messages", "conversation_id, created_at"],
+    ["bud_bets", "creator_id"], ["bud_bets", "opponent_id"],
+  ];
+  for (const [table, cols] of indexes) {
+    const name = `idx_${table}_${cols.replace(/[^a-z_]/g, "_").replace(/__+/g, "_")}`;
+    try {
+      await pool.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${cols})`);
+    } catch (e) {
+      console.warn(`Index skipped: ${name} — ${String(e).slice(0, 120)}`);
+    }
+  }
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -3052,19 +3191,19 @@ export const storage: IStorage = {
     await db.update(users).set({ onboarded: true }).where(eq(users.id, userId));
   },
   async saveStravaTokens(userId: number, accessToken: string, refreshToken: string, expiry: string, athleteId: string) {
-    await db.update(users).set({ stravaAccessToken: accessToken, stravaRefreshToken: refreshToken, stravaTokenExpiry: expiry, stravaAthleteId: athleteId }).where(eq(users.id, userId));
+    await db.update(users).set({ stravaAccessToken: encToken(accessToken), stravaRefreshToken: encToken(refreshToken), stravaTokenExpiry: expiry, stravaAthleteId: athleteId }).where(eq(users.id, userId));
   },
   async getStravaTokens(userId: number) {
     const result = await db.select({ a: users.stravaAccessToken, r: users.stravaRefreshToken, e: users.stravaTokenExpiry, ai: users.stravaAthleteId }).from(users).where(eq(users.id, userId)).limit(1);
     if (!result[0]?.a) return null;
-    return { accessToken: result[0].a, refreshToken: result[0].r!, expiry: result[0].e!, athleteId: result[0].ai! };
+    return { accessToken: decToken(result[0].a), refreshToken: decToken(result[0].r!), expiry: result[0].e!, athleteId: result[0].ai! };
   },
   async clearStravaTokens(userId: number) {
     await db.update(users).set({ stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null, stravaAthleteId: null }).where(eq(users.id, userId));
   },
   async saveFacebookProfile(userId: number, data: { accessToken: string; fbUserId: string; name: string; email: string | null; avatarUrl: string | null; birthday: string | null; location?: string | null }) {
     await db.update(users).set({
-      facebookAccessToken: data.accessToken, facebookUserId: data.fbUserId,
+      facebookAccessToken: encToken(data.accessToken), facebookUserId: data.fbUserId,
       facebookName: data.name, facebookEmail: data.email,
       facebookAvatarUrl: data.avatarUrl, facebookBirthday: data.birthday,
       facebookLocation: data.location ?? null,
@@ -3076,7 +3215,7 @@ export const storage: IStorage = {
       e: users.facebookEmail, av: users.facebookAvatarUrl, b: users.facebookBirthday, ls: users.facebookLastSync,
     }).from(users).where(eq(users.id, userId)).limit(1);
     if (!r[0]?.u) return null;
-    return { accessToken: r[0].a!, fbUserId: r[0].u, name: r[0].n ?? "", email: r[0].e ?? null, avatarUrl: r[0].av ?? null, birthday: r[0].b ?? null, lastSync: r[0].ls ?? null };
+    return { accessToken: decToken(r[0].a!), fbUserId: r[0].u, name: r[0].n ?? "", email: r[0].e ?? null, avatarUrl: r[0].av ?? null, birthday: r[0].b ?? null, lastSync: r[0].ls ?? null };
   },
   async clearFacebookProfile(userId: number) {
     await db.update(users).set({ facebookAccessToken: null, facebookUserId: null, facebookName: null, facebookEmail: null, facebookAvatarUrl: null, facebookBirthday: null, facebookLastSync: null }).where(eq(users.id, userId));
@@ -3118,7 +3257,7 @@ export const storage: IStorage = {
   },
   async saveLinkedinProfile(userId: number, data: { accessToken: string; profileId: string; name: string; headline: string | null; avatarUrl: string | null; email: string | null }) {
     await db.update(users).set({
-      linkedinAccessToken: data.accessToken,
+      linkedinAccessToken: encToken(data.accessToken),
       linkedinProfileId: data.profileId,
       linkedinName: data.name,
       linkedinHeadline: data.headline,
@@ -3133,7 +3272,7 @@ export const storage: IStorage = {
       av: users.linkedinAvatarUrl, e: users.linkedinEmail,
     }).from(users).where(eq(users.id, userId)).limit(1);
     if (!r[0]?.p) return null;
-    return { accessToken: r[0].a!, profileId: r[0].p, name: r[0].n ?? "", headline: r[0].h ?? null, avatarUrl: r[0].av ?? null, email: r[0].e ?? null };
+    return { accessToken: decToken(r[0].a!), profileId: r[0].p, name: r[0].n ?? "", headline: r[0].h ?? null, avatarUrl: r[0].av ?? null, email: r[0].e ?? null };
   },
   async clearLinkedinProfile(userId: number) {
     await db.update(users).set({ linkedinAccessToken: null, linkedinProfileId: null, linkedinName: null, linkedinHeadline: null, linkedinAvatarUrl: null, linkedinEmail: null }).where(eq(users.id, userId));
@@ -3159,7 +3298,7 @@ export const storage: IStorage = {
   async saveGoogleContactsTokens(userId: number, data: { accessToken: string; refreshToken: string | null; expiry: string }) {
     await pool.query(
       `UPDATE users SET google_contacts_access_token=$1, google_contacts_refresh_token=$2, google_contacts_token_expiry=$3 WHERE id=$4`,
-      [data.accessToken, data.refreshToken, data.expiry, userId]
+      [encToken(data.accessToken), encToken(data.refreshToken), data.expiry, userId]
     );
   },
   async getGoogleContactsTokens(userId: number) {
@@ -3169,7 +3308,7 @@ export const storage: IStorage = {
     );
     const row = r.rows[0];
     if (!row?.google_contacts_access_token) return null;
-    return { accessToken: row.google_contacts_access_token, refreshToken: row.google_contacts_refresh_token ?? null, expiry: row.google_contacts_token_expiry ?? new Date().toISOString() };
+    return { accessToken: decToken(row.google_contacts_access_token as string), refreshToken: decToken(row.google_contacts_refresh_token ?? null), expiry: row.google_contacts_token_expiry ?? new Date().toISOString() };
   },
   async clearGoogleContactsTokens(userId: number) {
     await pool.query(
@@ -3217,13 +3356,13 @@ export const storage: IStorage = {
     await pool.query(`UPDATE users SET google_contacts_last_sync=$1 WHERE id=$2`, [ts, userId]);
   },
   async saveGcalTokens(userId: number, accessToken: string, refreshToken: string | null, expiry: string) {
-    await db.update(users).set({ gcalAccessToken: accessToken, gcalRefreshToken: refreshToken, gcalTokenExpiry: expiry }).where(eq(users.id, userId));
+    await db.update(users).set({ gcalAccessToken: encToken(accessToken), gcalRefreshToken: encToken(refreshToken), gcalTokenExpiry: expiry }).where(eq(users.id, userId));
   },
   async getGcalTokens(userId: number) {
     const result = await db.select({ a: users.gcalAccessToken, r: users.gcalRefreshToken, e: users.gcalTokenExpiry }).from(users).where(eq(users.id, userId)).limit(1);
     const row = result[0];
     if (!row?.a) return null;
-    return { accessToken: row.a, refreshToken: row.r ?? null, expiry: row.e ?? new Date().toISOString() };
+    return { accessToken: decToken(row.a), refreshToken: decToken(row.r ?? null), expiry: row.e ?? new Date().toISOString() };
   },
   async clearGcalTokens(userId: number) {
     await db.update(users).set({ gcalAccessToken: null, gcalRefreshToken: null, gcalTokenExpiry: null, gcalLastSync: null }).where(eq(users.id, userId));
