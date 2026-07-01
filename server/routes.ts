@@ -72,6 +72,11 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Unauthorized" });
 }
 
+/** Fire-and-forget notification creator — never throws or blocks the main request. */
+function notify(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null }) {
+  storage.createNotification(n).catch(() => {});
+}
+
 /** Fire-and-forget activity logger — never throws or blocks the main request. */
 function logActivity(
   userId: number,
@@ -114,6 +119,73 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again in a few minutes." },
   });
+
+  // ── Today (unified agenda) ───────────────────────────────────────────────────
+  // Everything actionable today across all modules in one call:
+  // tasks, project tasks, house tasks, chores, habits, events, plant watering.
+  app.get("/api/today", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const today = (req.query.date as string) || new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      res.json(await storage.getTodayItems(userId, today));
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Notifications ────────────────────────────────────────────────────────────
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const limit = Math.min(+(req.query.limit ?? 20), 50);
+      res.json(await storage.getNotifications(userId, limit));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+    try {
+      res.json({ count: await storage.getUnreadNotificationCount((req.user as User).id) });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/notifications/mark-read", requireAuth, async (req, res) => {
+    try {
+      await storage.markAllNotificationsRead((req.user as User).id);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Daily digest ─────────────────────────────────────────────────────────────
+  // Every 30 min, after 7am (America/Chicago) create one "Your day ahead"
+  // notification per user summarizing today's agenda. Guarded to once per day.
+  const DIGEST_HOUR = 7;
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const hour = +now.toLocaleString("en-US", { timeZone: "America/Chicago", hour: "2-digit", hour12: false });
+      if (hour < DIGEST_HOUR) return;
+      const today = now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const usersRes = await pool.query(`SELECT id FROM users`);
+      for (const u of usersRes.rows) {
+        if (await storage.hasNotificationToday(u.id, "daily_digest", today)) continue;
+        const agenda = await storage.getTodayItems(u.id, today);
+        const open = agenda.counts.total - agenda.counts.done;
+        if (open === 0) continue;
+        const parts: string[] = [];
+        const by = (t: string) => agenda.items.filter(i => i.type === t && !i.done).length;
+        const tasks = by("task") + by("project_task") + by("house_task");
+        if (tasks) parts.push(`${tasks} task${tasks === 1 ? "" : "s"}`);
+        const chores = by("chore"); if (chores) parts.push(`${chores} chore${chores === 1 ? "" : "s"}`);
+        const habits = by("habit"); if (habits) parts.push(`${habits} habit${habits === 1 ? "" : "s"}`);
+        const events = by("event"); if (events) parts.push(`${events} event${events === 1 ? "" : "s"}`);
+        const plants = by("plant"); if (plants) parts.push(`${plants} plant${plants === 1 ? "" : "s"} to water`);
+        notify({
+          userId: u.id, type: "daily_digest",
+          title: "Your day ahead",
+          body: parts.join(" · ") + (agenda.counts.overdue ? ` · ${agenda.counts.overdue} overdue` : ""),
+          href: "/dashboard",
+        });
+      }
+    } catch (e) { console.error("daily digest error:", e); }
+  }, 30 * 60 * 1000);
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
@@ -3441,6 +3513,11 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const fromUserId = (req.user as User).id;
       if (fromUserId === toUserId) return res.status(400).json({ error: "Cannot friend yourself" });
       const req_ = await storage.sendFriendRequest(fromUserId, Number(toUserId));
+      notify({
+        userId: Number(toUserId), type: "friend_request", actorId: fromUserId,
+        title: `${(req.user as User).name} sent you a friend request`,
+        href: "/relationships",
+      });
       res.status(201).json(req_);
     } catch (e) { handleError(res, e); }
   });
@@ -3451,6 +3528,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       if (status !== "accepted" && status !== "declined") return res.status(400).json({ error: "status must be accepted or declined" });
       const updated = await storage.respondFriendRequest(+req.params.id, status, (req.user as User).id);
       if (!updated) return res.status(404).json({ error: "Not found or not authorized" });
+      if (status === "accepted") {
+        notify({
+          userId: updated.fromUserId, type: "friend_request", actorId: (req.user as User).id,
+          title: `${(req.user as User).name} accepted your friend request`,
+          href: "/relationships",
+        });
+      }
       res.json(updated);
     } catch (e) { handleError(res, e); }
   });
@@ -3518,6 +3602,12 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const friends = await storage.getFriends(fromUserId);
       if (!friends.find(f => f.id === toUserId)) return res.status(403).json({ error: "Not friends" });
       const result = await storage.sendUnifiedRecommendation(fromUserId, toUserId, type, { title, subtitle, imageUrl, note });
+      notify({
+        userId: toUserId, type: "recommendation", actorId: fromUserId,
+        title: `${(req.user as User).name} recommended a ${type}`,
+        body: title,
+        href: "/discover",
+      });
       res.status(201).json(result);
     } catch (e) { handleError(res, e); }
   });
@@ -7491,6 +7581,19 @@ Rules:
       const { emoji } = req.body as { emoji: string };
       if (!emoji) return res.status(400).json({ error: "emoji is required" });
       await storage.toggleReaction(feedItemId, user.id, emoji);
+      // Notify the feed item's owner if a reaction now exists (not on un-react)
+      pool.query(
+        `SELECT af.user_id, af.item_title,
+                (SELECT COUNT(*) FROM activity_reactions ar WHERE ar.feed_item_id=af.id AND ar.user_id=$2) AS mine
+         FROM activity_feed af WHERE af.id=$1`, [feedItemId, user.id]
+      ).then(r => {
+        const row = r.rows[0];
+        if (row && row.user_id !== user.id && +row.mine > 0) notify({
+          userId: row.user_id, type: "reaction", actorId: user.id,
+          title: `${user.name} reacted ${emoji} to ${row.item_title ?? "your activity"}`,
+          href: "/discover",
+        });
+      }).catch(() => {});
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
@@ -7502,6 +7605,17 @@ Rules:
       const { content } = req.body as { content: string };
       if (!content?.trim()) return res.status(400).json({ error: "content is required" });
       const comment = await storage.addComment(feedItemId, user.id, content.trim());
+      // Notify the feed item's owner (unless commenting on your own activity)
+      pool.query(`SELECT user_id, item_title FROM activity_feed WHERE id=$1`, [feedItemId])
+        .then(r => {
+          const owner = r.rows[0];
+          if (owner && owner.user_id !== user.id) notify({
+            userId: owner.user_id, type: "comment", actorId: user.id,
+            title: `${user.name} commented on ${owner.item_title ?? "your activity"}`,
+            body: content.trim().slice(0, 120),
+            href: "/discover",
+          });
+        }).catch(() => {});
       res.status(201).json(comment);
     } catch (e) { handleError(res, e); }
   });

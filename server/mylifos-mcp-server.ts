@@ -351,6 +351,19 @@ function buildMcpServer() {
     },
   );
 
+  server.tool(
+    "get_today",
+    "Get the unified agenda for today: tasks, project tasks, chores, habits, events, and plants to water, with overdue flags. Optionally pass a date (YYYY-MM-DD).",
+    {
+      date: z.string().optional().describe("ISO date YYYY-MM-DD (default: today, America/Chicago)"),
+    },
+    async ({ date }) => {
+      const today = date || new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const agenda = await storage.getTodayItems(uid, today);
+      return { content: [{ type: "text", text: JSON.stringify(agenda, null, 2) }] };
+    },
+  );
+
   return server;
 }
 

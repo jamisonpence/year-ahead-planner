@@ -1728,6 +1728,21 @@ export async function initializeStorage() {
   // Link chores to appliances
   await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 
+  // Persistent in-app notifications
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      href TEXT,
+      actor_id INTEGER,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TEXT NOT NULL
+    )
+  `);
+
   // ── INDEXES ─────────────────────────────────────────────────────────────────
   // Nearly every query filters by user_id (or a parent FK). Without these,
   // every request is a sequential scan. Idempotent; each wrapped in try/catch
@@ -1832,6 +1847,8 @@ export async function initializeStorage() {
     ["conversation_participants", "conversation_id"], ["conversation_participants", "user_id"],
     ["messages", "conversation_id, created_at"],
     ["bud_bets", "creator_id"], ["bud_bets", "opponent_id"],
+    ["notifications", "user_id, is_read"],
+    ["notifications", "user_id, created_at"],
   ];
   for (const [table, cols] of indexes) {
     const name = `idx_${table}_${cols.replace(/[^a-z_]/g, "_").replace(/__+/g, "_")}`;
@@ -2255,6 +2272,18 @@ export interface IStorage {
   updateHabit(id: number, userId: number, data: Partial<InsertHabit>): Promise<Habit>;
   deleteHabit(id: number, userId: number): Promise<void>;
   toggleHabitCompletion(id: number, userId: number, date: string, note?: string): Promise<Habit>;
+  // Notifications
+  createNotification(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null }): Promise<any>;
+  getNotifications(userId: number, limit?: number): Promise<any[]>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  hasNotificationToday(userId: number, type: string, todayISO: string): Promise<boolean>;
+  // Today (unified agenda)
+  getTodayItems(userId: number, today: string): Promise<{
+    date: string;
+    items: Array<{ type: string; id: number; title: string; sub: string | null; href: string; dueDate: string | null; overdue: boolean; done: boolean }>;
+    counts: { total: number; overdue: number; done: number };
+  }>;
 }
 
 // ── Habit streak helpers ─────────────────────────────────────────────────────
@@ -6389,6 +6418,143 @@ export const storage: IStorage = {
     if (!row) throw new Error("Bet not found");
     if (row.creatorId !== userId) throw new Error("Only creator can delete");
     await db.delete(budBets).where(eq(budBets.id, id));
+  },
+
+  // ── Notifications ────────────────────────────────────────────────────────────
+  async createNotification(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null }) {
+    const r = await pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, href, actor_id, is_read, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,false,$7) RETURNING *`,
+      [n.userId, n.type, n.title, n.body ?? null, n.href ?? null, n.actorId ?? null, new Date().toISOString()]
+    );
+    return r.rows[0];
+  },
+  async getNotifications(userId: number, limit = 20) {
+    const r = await pool.query(
+      `SELECT n.*, u.name AS actor_name, u.avatar_url AS actor_avatar
+       FROM notifications n LEFT JOIN users u ON u.id = n.actor_id
+       WHERE n.user_id = $1
+       ORDER BY n.created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return r.rows.map((row: any) => ({
+      id: row.id, userId: row.user_id, type: row.type, title: row.title,
+      body: row.body, href: row.href, actorId: row.actor_id,
+      isRead: row.is_read, createdAt: row.created_at,
+      actor: row.actor_id ? { id: row.actor_id, name: row.actor_name, avatarUrl: row.actor_avatar } : null,
+    }));
+  },
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const r = await pool.query(`SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND is_read=false`, [userId]);
+    return parseInt(r.rows[0].count, 10);
+  },
+  async markAllNotificationsRead(userId: number) {
+    await pool.query(`UPDATE notifications SET is_read=true WHERE user_id=$1 AND is_read=false`, [userId]);
+  },
+  async hasNotificationToday(userId: number, type: string, todayISO: string): Promise<boolean> {
+    const r = await pool.query(
+      `SELECT 1 FROM notifications WHERE user_id=$1 AND type=$2 AND created_at >= $3 LIMIT 1`,
+      [userId, type, todayISO]
+    );
+    return r.rows.length > 0;
+  },
+
+  // ── Today (unified agenda) ───────────────────────────────────────────────────
+  // One aggregated view of everything actionable today, across all modules.
+  async getTodayItems(userId: number, today: string) {
+    type Item = {
+      type: string; id: number; title: string; sub: string | null;
+      href: string; dueDate: string | null; overdue: boolean; done: boolean;
+    };
+    const items: Item[] = [];
+
+    const [genTasks, projTasks, houseTasks, choresDue, eventsToday, habitsRows, plantsRows] = await Promise.all([
+      pool.query(
+        `SELECT id, title, due_date FROM general_tasks
+         WHERE user_id=$1 AND completed=false AND due_date IS NOT NULL AND due_date <= $2
+         ORDER BY due_date LIMIT 50`, [userId, today]),
+      pool.query(
+        `SELECT pt.id, pt.title, pt.due_date, p.title AS project_title
+         FROM project_tasks pt JOIN projects p ON p.id = pt.project_id
+         WHERE p.user_id=$1 AND pt.completed=false AND pt.due_date IS NOT NULL AND pt.due_date <= $2
+         ORDER BY pt.due_date LIMIT 50`, [userId, today]),
+      pool.query(
+        `SELECT ht.id, ht.title, ht.due_date, hp.title AS project_title
+         FROM house_project_tasks ht JOIN house_projects hp ON hp.id = ht.house_project_id
+         WHERE hp.user_id=$1 AND ht.completed=false AND ht.due_date IS NOT NULL AND ht.due_date <= $2
+         ORDER BY ht.due_date LIMIT 50`, [userId, today]),
+      pool.query(
+        `SELECT id, title, next_due FROM chores
+         WHERE user_id=$1 AND is_active=true AND next_due IS NOT NULL AND next_due <= $2
+         ORDER BY next_due LIMIT 50`, [userId, today]),
+      pool.query(
+        `SELECT id, title, date, category FROM events
+         WHERE user_id=$1 AND date=$2 LIMIT 50`, [userId, today]),
+      pool.query(
+        `SELECT id, title, completions_json FROM habits
+         WHERE user_id=$1 AND is_archived=false LIMIT 50`, [userId]),
+      pool.query(
+        `SELECT id, name, last_watered, water_frequency_days FROM plants
+         WHERE user_id=$1 LIMIT 100`, [userId]),
+    ]);
+
+    for (const t of genTasks.rows) items.push({
+      type: "task", id: t.id, title: t.title, sub: null, href: "/tasks",
+      dueDate: t.due_date, overdue: t.due_date < today, done: false,
+    });
+    for (const t of projTasks.rows) items.push({
+      type: "project_task", id: t.id, title: t.title, sub: t.project_title, href: "/tasks",
+      dueDate: t.due_date, overdue: t.due_date < today, done: false,
+    });
+    for (const t of houseTasks.rows) items.push({
+      type: "house_task", id: t.id, title: t.title, sub: t.project_title, href: "/housekeeping",
+      dueDate: t.due_date, overdue: t.due_date < today, done: false,
+    });
+    for (const c of choresDue.rows) items.push({
+      type: "chore", id: c.id, title: c.title, sub: null, href: "/housekeeping",
+      dueDate: c.next_due, overdue: c.next_due < today, done: false,
+    });
+    for (const e of eventsToday.rows) items.push({
+      type: "event", id: e.id, title: e.title, sub: e.category, href: "/calendar",
+      dueDate: e.date, overdue: false, done: false,
+    });
+    for (const h of habitsRows.rows) {
+      let completions: Array<{ date: string }> = [];
+      try { completions = JSON.parse(h.completions_json || "[]"); } catch {}
+      const doneToday = completions.some((c) => c.date === today);
+      items.push({
+        type: "habit", id: h.id, title: h.title, sub: "Daily habit", href: "/habits",
+        dueDate: today, overdue: false, done: doneToday,
+      });
+    }
+    for (const p of plantsRows.rows) {
+      if (!p.last_watered) continue;
+      const freq = p.water_frequency_days ?? 7;
+      const next = new Date(new Date(p.last_watered + "T00:00:00Z").getTime() + freq * 86400_000)
+        .toISOString().slice(0, 10);
+      if (next <= today) items.push({
+        type: "plant", id: p.id, title: `Water ${p.name}`, sub: null, href: "/plants",
+        dueDate: next, overdue: next < today, done: false,
+      });
+    }
+
+    // Overdue first, then by due date; done items last
+    items.sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      return (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
+    });
+
+    return {
+      date: today,
+      items,
+      counts: {
+        total: items.length,
+        overdue: items.filter((i) => i.overdue).length,
+        done: items.filter((i) => i.done).length,
+      },
+    };
   },
 
 };

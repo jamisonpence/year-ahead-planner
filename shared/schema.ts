@@ -1992,6 +1992,47 @@ export type ConversationWithDetails = Conversation & {
   unreadCount: number;
 };
 
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+// Persistent in-app notifications (friend requests, shares, reactions,
+// comments, daily digests). Rendered in the bell menu.
+export const notifications = pgTable("notifications", {
+  id:        serial("id").primaryKey(),
+  userId:    integer("user_id").notNull(),          // recipient
+  type:      text("type").notNull(),                // friend_request | share | recommendation | comment | reaction | daily_digest | system
+  title:     text("title").notNull(),
+  body:      text("body"),
+  href:      text("href"),                          // in-app link e.g. "/relationships"
+  actorId:   integer("actor_id"),                   // user who triggered it (null for system)
+  isRead:    boolean("is_read").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+export type NotificationWithActor = Notification & {
+  actor?: { id: number; name: string; avatarUrl: string | null } | null;
+};
+
+// ── TODAY (aggregated agenda item) ────────────────────────────────────────────
+export type TodayItem = {
+  type: "task" | "project_task" | "house_task" | "chore" | "habit" | "event" | "plant";
+  id: number;
+  title: string;
+  sub: string | null;     // context, e.g. project name
+  href: string;           // in-app link
+  dueDate: string | null; // ISO date
+  overdue: boolean;
+  done: boolean;
+};
+
+export type TodayResponse = {
+  date: string;
+  items: TodayItem[];
+  counts: { total: number; overdue: number; done: number };
+};
+
 // ── BUD BETS ───────────────────────────────────────────────────────────────────
 export const budBets = pgTable("bud_bets", {
   id:               serial("id").primaryKey(),

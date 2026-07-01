@@ -41,6 +41,69 @@ const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
 
 const PRIVACY_PATHS = new Set(Object.keys(TAB_SHARED_DESCRIPTIONS));
 
+// ── Notification feed (persistent, itemized) ─────────────────────────────────
+type NotificationItem = {
+  id: number; type: string; title: string; body: string | null;
+  href: string | null; isRead: boolean; createdAt: string;
+  actor: { id: number; name: string; avatarUrl: string | null } | null;
+};
+
+const NOTIF_EMOJI: Record<string, string> = {
+  friend_request: "👋", recommendation: "⭐", share: "🎁",
+  comment: "💬", reaction: "❤️", daily_digest: "☀️", system: "🔔",
+};
+
+function timeAgo(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function NotificationFeed({ onNavigate }: { onNavigate: () => void }) {
+  const qc = useQueryClient();
+  const { data: notifs = [] } = useQuery<NotificationItem[]>({
+    queryKey: ["/api/notifications"],
+    queryFn: () => apiRequest("GET", "/api/notifications?limit=15").then(r => r.json()),
+  });
+
+  // Opening the feed marks everything read
+  useEffect(() => {
+    apiRequest("POST", "/api/notifications/mark-read")
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] }))
+      .catch(() => {});
+  }, [qc]);
+
+  if (notifs.length === 0) return null;
+  return (
+    <>
+      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-4 pt-3 pb-1">Recent</p>
+      {notifs.map((n) => {
+        const inner = (
+          <div onClick={onNavigate}
+            className={`flex items-start gap-3 px-4 py-2.5 hover:bg-secondary/60 cursor-pointer transition-colors ${n.isRead ? "" : "bg-primary/5"}`}>
+            {n.actor?.avatarUrl ? (
+              <img src={n.actor.avatarUrl} alt="" className="w-7 h-7 rounded-full shrink-0 mt-0.5" />
+            ) : (
+              <span className="text-lg leading-none mt-0.5">{NOTIF_EMOJI[n.type] ?? "🔔"}</span>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs leading-snug ${n.isRead ? "" : "font-medium"}`}>{n.title}</p>
+              {n.body && <p className="text-[11px] text-muted-foreground truncate">{n.body}</p>}
+              <p className="text-[10px] text-muted-foreground/60 mt-0.5">{timeAgo(n.createdAt)}</p>
+            </div>
+            {!n.isRead && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />}
+          </div>
+        );
+        return n.href
+          ? <Link key={n.id} href={n.href}>{inner}</Link>
+          : <div key={n.id}>{inner}</div>;
+      })}
+    </>
+  );
+}
+
 function PrivacyBanner({ path }: { path: string }) {
   const { data: settings = [] } = useQuery<{ path: string; visibility: string }[]>({
     queryKey: ["/api/tab-privacy"],
@@ -585,7 +648,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     enabled: !!user,
   });
   const unreadSharesTotal = sharesCountData?.total ?? 0;
-  const totalNotifCount = unreadSharesTotal + pendingFriendCount + pendingCollabCount;
+
+  // Unread persistent notifications
+  const { data: notifCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread-count"],
+    queryFn: async () => (await apiRequest("GET", "/api/notifications/unread-count")).json(),
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const unreadNotifCount = notifCountData?.count ?? 0;
+  const totalNotifCount = unreadSharesTotal + pendingFriendCount + pendingCollabCount + unreadNotifCount;
 
   // Unread messenger count
   const { data: messengerCountData } = useQuery<{ count: number }>({
@@ -814,6 +886,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         </div>
                       </Link>
                     ))}
+                  <NotificationFeed onNavigate={() => setNotifOpen(false)} />
                   {totalNotifCount === 0 && (
                     <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                       Nothing new to see here
@@ -1035,6 +1108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </Link>
                 ))}
+              <NotificationFeed onNavigate={() => setNotifOpen(false)} />
               {totalNotifCount === 0 && (
                 <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                   Nothing new to see here
