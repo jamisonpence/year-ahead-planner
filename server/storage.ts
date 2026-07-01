@@ -1728,6 +1728,17 @@ export async function initializeStorage() {
   // Link chores to appliances
   await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 
+  // Invite links (one permanent code per user; auto-friends on signup)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invites (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      from_user_id INTEGER NOT NULL,
+      uses INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `);
+
   // Persistent in-app notifications
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (

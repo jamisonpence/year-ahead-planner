@@ -153,6 +153,153 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Invite links ─────────────────────────────────────────────────────────────
+  // Each user gets one permanent invite code. Visiting /invite/:code stores the
+  // code in the session; after signup or login the two users are auto-friended.
+  async function applyPendingInvite(req: Request, userId: number) {
+    try {
+      const code = (req.session as any)?.inviteCode;
+      if (!code) return;
+      delete (req.session as any).inviteCode;
+      const inv = await pool.query(`SELECT from_user_id FROM invites WHERE code=$1`, [code]);
+      const inviterId: number | undefined = inv.rows[0]?.from_user_id;
+      if (!inviterId || inviterId === userId) return;
+      const existing = await pool.query(
+        `SELECT 1 FROM friend_requests
+         WHERE ((from_user_id=$1 AND to_user_id=$2) OR (from_user_id=$2 AND to_user_id=$1))
+           AND status IN ('pending','accepted') LIMIT 1`,
+        [inviterId, userId]
+      );
+      if (existing.rows.length) return;
+      await pool.query(
+        `INSERT INTO friend_requests (from_user_id, to_user_id, status, created_at) VALUES ($1,$2,'accepted',$3)`,
+        [inviterId, userId, new Date().toISOString()]
+      );
+      await pool.query(`UPDATE invites SET uses = uses + 1 WHERE code=$1`, [code]);
+      const inviter = await storage.getUserById(inviterId);
+      const invitee = await storage.getUserById(userId);
+      notify({
+        userId: inviterId, type: "friend_request", actorId: userId,
+        title: `${invitee?.name ?? "Someone"} joined from your invite — you're now friends`,
+        href: "/relationships",
+      });
+      notify({
+        userId, type: "friend_request", actorId: inviterId,
+        title: `You're now friends with ${inviter?.name ?? "your inviter"}`,
+        href: "/relationships",
+      });
+    } catch (e) { console.error("invite apply error:", e); }
+  }
+
+  /** GET /invite/:code — public landing for invite links */
+  app.get("/invite/:code", async (req, res) => {
+    const code = req.params.code?.trim();
+    if (code) {
+      const inv = await pool.query(`SELECT from_user_id FROM invites WHERE code=$1`, [code]).catch(() => ({ rows: [] as any[] }));
+      if (inv.rows.length) {
+        (req.session as any).inviteCode = code;
+        if (req.isAuthenticated()) await applyPendingInvite(req, (req.user as User).id);
+      }
+    }
+    res.redirect("/");
+  });
+
+  /** POST /api/invites — get (or create) my permanent invite link */
+  app.post("/api/invites", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      let r = await pool.query(`SELECT code FROM invites WHERE from_user_id=$1 LIMIT 1`, [userId]);
+      if (!r.rows.length) {
+        const code = randomBytes(6).toString("base64url");
+        r = await pool.query(
+          `INSERT INTO invites (code, from_user_id, uses, created_at) VALUES ($1,$2,0,$3) RETURNING code`,
+          [code, userId, new Date().toISOString()]
+        );
+      }
+      const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
+      res.json({ code: r.rows[0].code, url: `${proto}://${req.get("host")}/invite/${r.rows[0].code}` });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Contact matching ─────────────────────────────────────────────────────────
+  // Match imported Google/LinkedIn contacts (by email) against MyLifos users.
+  app.get("/api/friends/contact-matches", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const matches = await pool.query(
+        `SELECT DISTINCT ON (u.id) u.id, u.name, u.email, u.avatar_url,
+                src.source, src.contact_name
+         FROM (
+           SELECT LOWER(email) AS email, 'google' AS source,
+                  TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS contact_name
+           FROM google_contacts WHERE user_id=$1 AND email IS NOT NULL
+           UNION ALL
+           SELECT LOWER(email), 'linkedin',
+                  TRIM(first_name || ' ' || COALESCE(last_name,''))
+           FROM linkedin_contacts WHERE user_id=$1 AND email IS NOT NULL
+         ) src
+         JOIN users u ON LOWER(u.email) = src.email
+         WHERE u.id != $1
+         ORDER BY u.id`,
+        [userId]
+      );
+      if (!matches.rows.length) return res.json([]);
+      const ids = matches.rows.map((m: any) => m.id);
+      const rel = await pool.query(
+        `SELECT id, from_user_id, to_user_id, status FROM friend_requests
+         WHERE (from_user_id=$1 AND to_user_id = ANY($2)) OR (to_user_id=$1 AND from_user_id = ANY($2))`,
+        [userId, ids]
+      );
+      const relByUser = new Map<number, { status: string; incomingRequestId?: number }>();
+      for (const fr of rel.rows) {
+        const otherId = fr.from_user_id === userId ? fr.to_user_id : fr.from_user_id;
+        if (fr.status === "accepted") relByUser.set(otherId, { status: "friends" });
+        else if (fr.status === "pending" && fr.from_user_id === userId) relByUser.set(otherId, { status: "outgoing_pending" });
+        else if (fr.status === "pending") relByUser.set(otherId, { status: "incoming", incomingRequestId: fr.id });
+      }
+      res.json(matches.rows.map((m: any) => ({
+        id: m.id, name: m.name, email: m.email, avatarUrl: m.avatar_url,
+        source: m.source, contactName: m.contact_name || null,
+        relationshipStatus: relByUser.get(m.id)?.status ?? "none",
+        incomingRequestId: relByUser.get(m.id)?.incomingRequestId ?? null,
+      })));
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Global search ────────────────────────────────────────────────────────────
+  // One query across every module the user tracks. Powers the Cmd-K palette.
+  app.get("/api/search", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const q = String(req.query.q ?? "").trim();
+      if (q.length < 2) return res.json([]);
+      const pat = `%${q.replace(/[%_]/g, "\\$&")}%`;
+      const sql = `
+        (SELECT 'goal' AS type, id, title, category AS sub, '/goals' AS href FROM goals WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'project', id, title, status, '/tasks' FROM projects WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'task', id, title, NULL, '/tasks' FROM general_tasks WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'book', id, title, author, '/reading' FROM books WHERE user_id=$1 AND (title ILIKE $2 OR author ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'movie', id, title, director, '/movies' FROM movies WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'artist', id, name, genres, '/music' FROM music_artists WHERE user_id=$1 AND name ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'song', id, title, album, '/music' FROM music_songs WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'recipe', id, name, category, '/recipes' FROM recipes WHERE user_id=$1 AND name ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'spot', id, name, city, '/spots' FROM spots WHERE user_id=$1 AND name ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'person', id, TRIM(first_name || ' ' || COALESCE(last_name,'')), notes, '/relationships' FROM people WHERE user_id=$1 AND (first_name ILIKE $2 OR last_name ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'quote', id, LEFT(text, 80), author, '/quotes' FROM quotes WHERE user_id=$1 AND (text ILIKE $2 OR author ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'journal', id, COALESCE(title, LEFT(content, 60)), date, '/journal' FROM journal_entries WHERE user_id=$1 AND (title ILIKE $2 OR content ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'event', id, title, date, '/calendar' FROM events WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'chore', id, title, category, '/housekeeping' FROM chores WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'hobby', id, name, category, '/hobbies' FROM hobbies WHERE user_id=$1 AND name ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'habit', id, title, category, '/habits' FROM habits WHERE user_id=$1 AND title ILIKE $2 LIMIT 5)
+        UNION ALL (SELECT 'trip', id, name, destination, '/spots' FROM trips WHERE user_id=$1 AND (name ILIKE $2 OR destination ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'art', id, title, artist_name, '/art' FROM art_pieces WHERE user_id=$1 AND (title ILIKE $2 OR artist_name ILIKE $2) LIMIT 5)
+        UNION ALL (SELECT 'plant', id, name, species, '/plants' FROM plants WHERE user_id=$1 AND name ILIKE $2 LIMIT 5)
+        LIMIT 60`;
+      const r = await pool.query(sql, [userId, pat]);
+      res.json(r.rows);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Daily digest ─────────────────────────────────────────────────────────────
   // Every 30 min, after 7am (America/Chicago) create one "Your day ahead"
   // notification per user summarizing today's agenda. Guarded to once per day.
@@ -228,8 +375,10 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         name: name.trim(),
         passwordHash: hashPassword(password),
       });
-      req.logIn(user, (err) => {
+      // keepSessionInfo preserves the pending inviteCode across login's session regeneration
+      req.logIn(user, { keepSessionInfo: true }, (err) => {
         if (err) return res.status(500).json({ error: "Login failed after registration" });
+        applyPendingInvite(req, user.id).catch(() => {});
         res.json({ ok: true });
       });
     } catch (e: any) {
@@ -245,8 +394,9 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       const user = await storage.getUserByEmail(email.toLowerCase().trim());
       if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
       if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: "Invalid email or password" });
-      req.logIn(user, (err) => {
+      req.logIn(user, { keepSessionInfo: true }, (err) => {
         if (err) return res.status(500).json({ error: "Login failed" });
+        applyPendingInvite(req, user.id).catch(() => {});
         res.json({ ok: true });
       });
     } catch {
@@ -292,8 +442,9 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch {
       return res.redirect("/?gcal=error#/calendar");
     }
-  }, passport.authenticate("google", { failureRedirect: "/" }),
+  }, passport.authenticate("google", { failureRedirect: "/", keepSessionInfo: true }),
   (req, res) => {
+    if (req.user) applyPendingInvite(req, (req.user as User).id).catch(() => {});
     // After login, honour any pending OAuth connect redirect (e.g. LinkedIn, Facebook)
     const dest = (req.session as any).postLoginRedirect;
     if (dest) {
@@ -402,8 +553,9 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       });
 
       await new Promise<void>((resolve, reject) => {
-        req.login(user!, (err) => (err ? reject(err) : resolve()));
+        req.login(user!, { keepSessionInfo: true }, (err) => (err ? reject(err) : resolve()));
       });
+      applyPendingInvite(req, user!.id).catch(() => {});
 
       res.json({ redirect: "/" });
     } catch (e) {

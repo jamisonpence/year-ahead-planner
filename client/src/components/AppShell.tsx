@@ -7,6 +7,7 @@ import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal from "@/components/QuickAddModal";
+import CommandPalette from "@/components/CommandPalette";
 import {
   LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
@@ -669,6 +670,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const unreadMessengerCount = messengerCountData?.count ?? 0;
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // Global search palette (Cmd/Ctrl+K)
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     if (!notifOpen) return;
     function handleClick(e: MouseEvent) {
@@ -740,6 +754,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Plus size={13} />
             Quick Add
+          </button>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="w-full flex items-center gap-2 border rounded-lg py-2 px-3 text-xs text-muted-foreground hover:bg-secondary/60 transition-colors"
+          >
+            <Search size={13} />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="text-[9px] font-mono border rounded px-1 py-0.5 bg-secondary/60">⌘K</kbd>
           </button>
         </div>
 
@@ -945,6 +967,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <Search size={16} />
+          </button>
+          <button
             onClick={() => setNotifOpen(!notifOpen)}
             className="relative p-2 rounded-lg hover:bg-secondary transition-colors"
           >
@@ -1031,6 +1059,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Quick-add modal ──────────────────────────────────────────────────── */}
       <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+
+      {/* ── Global search palette (Cmd/Ctrl+K) ──────────────────────────────── */}
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
 
       {/* Mobile notifications panel */}
       {notifOpen && (

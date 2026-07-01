@@ -5,7 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Search, Loader2, UserPlus, UserCheck, Clock, X, Check, Send,
   Plus, BookOpen, Film, Music, ChefHat, MapPin, Palette, Quote,
-  UserX, ChevronDown, ChevronUp, Sparkles,
+  UserX, ChevronDown, ChevronUp, Sparkles, Link2, Contact,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -195,6 +195,93 @@ function RecModal({ friend, onClose }: { friend: EnrichedFriend; onClose: () => 
           Send Recommendation
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Contact Matches + Invite Link ─────────────────────────────────────────────
+
+interface ContactMatch extends SearchResult {
+  source: "google" | "linkedin";
+  contactName: string | null;
+}
+
+function ContactMatchesSection({ onSendRequest, onAccept, sendPending }: {
+  onSendRequest: (id: number) => void;
+  onAccept: (reqId: number) => void;
+  sendPending: boolean;
+}) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const { data: matches = [] } = useQuery<ContactMatch[]>({
+    queryKey: ["/api/friends/contact-matches"],
+    queryFn: () => apiRequest("GET", "/api/friends/contact-matches").then(r => r.json()),
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/invites").then(r => r.json()),
+    onSuccess: (data: { url: string }) => {
+      navigator.clipboard.writeText(data.url)
+        .then(() => toast({ title: "Invite link copied!", description: "Anyone who joins through it becomes your friend automatically." }))
+        .catch(() => toast({ title: "Your invite link", description: data.url }));
+    },
+    onError: () => toast({ title: "Couldn't create invite link", variant: "destructive" }),
+  });
+
+  const pending = matches.filter(m => m.relationshipStatus !== "friends");
+
+  return (
+    <div className="space-y-2">
+      {pending.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <Contact size={12} /> From your contacts
+          </div>
+          {pending.map(m => (
+            <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+              <Avatar user={m} size={40} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{m.name}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {m.source === "google" ? "Google contact" : "LinkedIn connection"}
+                  {m.contactName && m.contactName !== m.name ? ` · ${m.contactName}` : ""}
+                </p>
+              </div>
+              <div className="shrink-0">
+                {m.relationshipStatus === "incoming" ? (
+                  <button
+                    onClick={() => onAccept(m.incomingRequestId!)}
+                    className="text-xs font-medium flex items-center gap-1 bg-blue-500 text-white px-2.5 py-1.5 rounded-full hover:bg-blue-600 transition-colors"
+                  >
+                    <Check size={11} />Accept
+                  </button>
+                ) : m.relationshipStatus === "outgoing_pending" ? (
+                  <span className="text-xs text-amber-600 font-medium flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-full">
+                    <Clock size={11} />Pending
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => onSendRequest(m.id)}
+                    disabled={sendPending}
+                    className="text-xs font-medium flex items-center gap-1 bg-violet-500 text-white px-2.5 py-1.5 rounded-full hover:bg-violet-600 disabled:opacity-50 transition-colors"
+                  >
+                    <UserPlus size={11} />Add
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+      <button
+        onClick={() => inviteMut.mutate()}
+        disabled={inviteMut.isPending}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-violet-400/40 text-violet-500 text-sm font-medium hover:bg-violet-500/5 disabled:opacity-50 transition-colors"
+      >
+        {inviteMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+        Copy my invite link
+      </button>
     </div>
   );
 }
@@ -729,6 +816,13 @@ export default function FriendsSocialHub() {
         onAccept={(reqId) => respondMut.mutate({ id: reqId, status: "accepted" })}
         friends={friendsData}
         requests={requests}
+        sendPending={sendMut.isPending}
+      />
+
+      {/* Contact matches + invite link */}
+      <ContactMatchesSection
+        onSendRequest={(id) => sendMut.mutate(id)}
+        onAccept={(reqId) => respondMut.mutate({ id: reqId, status: "accepted" })}
         sendPending={sendMut.isPending}
       />
 
