@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from "react";
+import { useEffect, useReducer, type ComponentType } from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -13,11 +13,49 @@ import { useAuth } from "@/hooks/useAuth";
 import OnboardingModal from "@/components/OnboardingModal";
 import InstallPrompt from "@/components/InstallPrompt";
 import { PlannerProvider } from "@/state/PlannerContext";
-// Everything else is code-split into per-page chunks. Pages take assorted
-// optional props (embedded, onClose, …), so widen to ComponentType<any> for
-// compatibility with wouter's Route component prop.
+// Everything else is code-split into per-page chunks.
+//
+// NOTE: we deliberately do NOT use React.lazy/Suspense here. wouter drives
+// navigation through useSyncExternalStore, whose updates are always
+// synchronous — and when a sync update suspends, React can get stuck showing
+// the Suspense fallback even after the chunk has loaded (the page sat on
+// "Loading…" until you navigated away and back). This state-driven loader
+// can't get stuck: it re-renders itself the moment the module arrives.
+const pageLoaders: Array<() => Promise<unknown>> = [];
+
 function lazyPage(loader: () => Promise<{ default: ComponentType<any> }>) {
-  return lazy(loader);
+  let Loaded: ComponentType<any> | null = null;
+  const load = () =>
+    loader().then((m) => {
+      Loaded = m.default;
+      return m;
+    });
+  pageLoaders.push(load);
+
+  return function LazyPage(props: any) {
+    const [, rerender] = useReducer((c: number) => c + 1, 0);
+    useEffect(() => {
+      if (Loaded) return;
+      let mounted = true;
+      load().then(
+        () => { if (mounted) rerender(); },
+        () => {
+          // Chunk failed (usually a stale deploy: old HTML referencing chunks
+          // that no longer exist). Reload once to pick up the new build.
+          if (!sessionStorage.getItem("chunk-reload")) {
+            sessionStorage.setItem("chunk-reload", "1");
+            window.location.reload();
+          }
+        },
+      );
+      return () => { mounted = false; };
+    }, []);
+    if (Loaded) {
+      sessionStorage.removeItem("chunk-reload");
+      return <Loaded {...props} />;
+    }
+    return <PageLoading />;
+  };
 }
 const FeedPage = lazyPage(() => import("@/pages/FeedPage"));
 const DiscoverPage = lazyPage(() => import("@/pages/DiscoverPage"));
@@ -69,10 +107,19 @@ function PageLoading() {
 
 function AuthenticatedApp() {
   const { user } = useAuth();
+
+  // Prefetch all page chunks in the background shortly after first paint,
+  // so tab switches are instant instead of showing a loading state.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      for (const load of pageLoaders) load().catch(() => {});
+    }, 2500);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <PlannerProvider>
     <AppShell>
-      <Suspense fallback={<PageLoading />}>
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
@@ -116,7 +163,6 @@ function AuthenticatedApp() {
         <Route path="/meal-planner" component={PlannerHome} />
         <Route component={NotFound} />
       </Switch>
-      </Suspense>
       {user && !user.onboarded && <OnboardingModal userName={user.name} />}
       <InstallPrompt />
     </AppShell>
