@@ -716,6 +716,41 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  /** GET /api/v1/chores — list chores
+   *  ?due=1   returns only chores due today or overdue (nextDue <= today)
+   *  ?active=0 includes inactive chores (default: active only)
+   */
+  app.get("/api/v1/chores", requireApiKey, async (req, res) => {
+    try {
+      const uid = await externalUserId(res); if (!uid) return;
+      let chores = await storage.getAllChores(uid);
+      if (req.query.active !== "0") chores = chores.filter(c => c.isActive);
+      if (req.query.due === "1") {
+        const today = new Date().toISOString().slice(0, 10);
+        chores = chores.filter(c => c.nextDue && c.nextDue <= today);
+      }
+      res.json(chores);
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** POST /api/v1/chores — create a chore
+   *  Body: { title, category?, frequency?, priority?, assignee?, notes?, nextDue? }
+   */
+  app.post("/api/v1/chores", requireApiKey, async (req, res) => {
+    try {
+      const uid = await externalUserId(res); if (!uid) return;
+      res.status(201).json(await storage.createChore(insertChoreSchema.parse(req.body), uid));
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** PATCH /api/v1/chores/:id — update a chore (e.g. mark lastCompleted, update nextDue) */
+  app.patch("/api/v1/chores/:id", requireApiKey, async (req, res) => {
+    try {
+      const r = await storage.updateChore(+req.params.id, insertChoreSchema.partial().parse(req.body));
+      r ? res.json(r) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // Protect all remaining /api routes — except OAuth connect/callback endpoints
   // which handle auth themselves (the callback arrives from an external redirect
   // and may not have a session cookie present)
