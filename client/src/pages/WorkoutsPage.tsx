@@ -20,11 +20,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { workoutStreak, weeklyWorkoutStats, getRecentPRs, WORKOUT_TYPE_LABELS, WORKOUT_TYPES } from "@/lib/plannerUtils";
+import { workoutStreak, weeklyWorkoutStats, getRecentPRs, WORKOUT_TYPE_LABELS, WORKOUT_TYPES, todayStr } from "@/lib/plannerUtils";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import WorkoutTemplateModal from "@/components/modals/WorkoutTemplateModal";
 import GeneralFitnessWizard from "@/components/modals/GeneralFitnessWizard";
-import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser, WorkoutPlanMilestone } from "@shared/schema";
+import type { WorkoutLog, WorkoutTemplate, Equipment, GoalWithProjects, WorkoutPlan, WorkoutShareWithUser, WorkoutPlanMilestone, InsertWorkoutLog } from "@shared/schema";
 
 // Legacy flat format (kept for backward compat reading)
 type PlanDayEntry = { dayOfWeek: string; templateId?: number | null; templateName?: string; label?: string; notes?: string };
@@ -2327,6 +2327,10 @@ export default function WorkoutsPage() {
   const { completed: wkCompleted, planned: wkPlanned } = weeklyWorkoutStats(logs, templates);
   const recentPRs = getRecentPRs(logs);
 
+  const createLog = useMutation({
+    mutationFn: (d: InsertWorkoutLog) => apiRequest("POST", "/api/workout-logs", d),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-logs"] }); toast({ title: "Workout logged!" }); },
+  });
   const deleteLog = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/workout-logs/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-logs"] }); toast({ title: "Log deleted" }); }
@@ -3648,15 +3652,19 @@ export default function WorkoutsPage() {
         open={templateModal}
         onClose={() => { setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); }}
         editTemplate={editTemplate}
-        onLog={templateModalFromPlan ? () => {
-          const target = workoutActionTarget;
-          setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false);
-          if (target) {
-            setLogPrefillName(target.entry.label);
-            if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
-            setWorkoutActionTarget(null);
-          }
-          setEditLog(null); setLogModal(true);
+        onLog={templateModalFromPlan ? (logData) => {
+          setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); setWorkoutActionTarget(null);
+          createLog.mutate({
+            templateId: logData.templateId,
+            date: todayStr(),
+            name: logData.name,
+            workoutType: logData.workoutType,
+            durationMinutes: null,
+            notes: null,
+            completed: true,
+            exercisesJson: logData.exercisesJson,
+            linkedGoalId: null,
+          });
         } : undefined}
         onDeleteFromPlan={templateModalFromPlan ? () => {
           const target = workoutActionTarget;

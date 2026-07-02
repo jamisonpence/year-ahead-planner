@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Copy, ClipboardList } from "lucide-react";
-import { WORKOUT_TYPES, WORKOUT_TYPE_LABELS, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
+import { WORKOUT_TYPES, WORKOUT_TYPE_LABELS, RECURRENCE_OPTIONS, todayStr } from "@/lib/plannerUtils";
 import type { WorkoutTemplate, InsertWorkoutTemplate, TemplateExercise, TemplateSet, GoalWithProjects } from "@shared/schema";
 
 // Exercise activity types
@@ -45,9 +45,11 @@ const blankExercise = (): EditableExercise => ({
   notes: "",
 });
 
+type LogPayload = { name: string; workoutType: string; exercisesJson: string; templateId: number | null };
+
 export default function WorkoutTemplateModal({ open, onClose, editTemplate, onLog, onDeleteFromPlan }: {
   open: boolean; onClose: () => void; editTemplate: WorkoutTemplate | null;
-  onLog?: () => void;
+  onLog?: (data: LogPayload) => void;
   onDeleteFromPlan?: () => void;
 }) {
   const { toast } = useToast();
@@ -138,15 +140,26 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate, onLo
     }));
 
   const saveAndLogRef = useRef(false);
+  const pendingLogRef = useRef<LogPayload | null>(null);
   const inv = () => queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] });
   const createMut = useMutation({
     mutationFn: (d: InsertWorkoutTemplate) => apiRequest("POST", "/api/workout-templates", d),
-    onSuccess: () => { inv(); toast({ title: "Template created" }); if (saveAndLogRef.current && onLog) { saveAndLogRef.current = false; onLog(); } else onClose(); },
+    onSuccess: (_, vars) => {
+      inv(); toast({ title: "Template created" });
+      if (saveAndLogRef.current && onLog && pendingLogRef.current) {
+        saveAndLogRef.current = false; onLog(pendingLogRef.current); pendingLogRef.current = null;
+      } else onClose();
+    },
     onError: () => toast({ title: "Error saving template", variant: "destructive" }),
   });
   const updateMut = useMutation({
     mutationFn: (d: Partial<InsertWorkoutTemplate>) => apiRequest("PATCH", `/api/workout-templates/${editTemplate?.id}`, d),
-    onSuccess: () => { inv(); toast({ title: "Template updated" }); if (saveAndLogRef.current && onLog) { saveAndLogRef.current = false; onLog(); } else onClose(); },
+    onSuccess: () => {
+      inv(); toast({ title: "Template updated" });
+      if (saveAndLogRef.current && onLog && pendingLogRef.current) {
+        saveAndLogRef.current = false; onLog(pendingLogRef.current); pendingLogRef.current = null;
+      } else onClose();
+    },
     onError: () => toast({ title: "Error saving template", variant: "destructive" }),
   });
 
@@ -170,6 +183,15 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate, onLo
       linkedGoalId: linkedGoalId !== "__none__" ? parseInt(linkedGoalId) : null,
       exercisesJson: JSON.stringify(normalizedExercises),
     };
+    // If saving-and-logging, stash the log payload so onSuccess can hand it to the caller
+    if (saveAndLogRef.current && onLog) {
+      pendingLogRef.current = {
+        name: name.trim(),
+        workoutType: wType,
+        exercisesJson: JSON.stringify(normalizedExercises),
+        templateId: editTemplate?.id ?? null,
+      };
+    }
     editTemplate ? updateMut.mutate(p) : createMut.mutate(p);
   };
 
