@@ -943,7 +943,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className={`sidebar-item w-full ${manageMode ? "active" : ""}`}
           >
             <Settings size={15} />
-            <span>{manageMode ? "Done" : "Manage Tabs"}</span>
+            <span>{manageMode ? "Done" : "Customize Sidebar"}</span>
           </button>
           <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} />
           <button onClick={toggle} className="sidebar-item w-full">
