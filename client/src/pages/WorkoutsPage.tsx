@@ -2342,6 +2342,7 @@ export default function WorkoutsPage() {
     mutationFn: (id: number) => apiRequest("POST", `/api/workout-plans/${id}/activate`),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
       const plan = plans.find(p => p.id === id);
       toast({ title: plan?.isActive ? "Plan deactivated" : "Plan activated!" });
     },

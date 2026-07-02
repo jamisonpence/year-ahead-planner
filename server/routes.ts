@@ -1793,7 +1793,14 @@ Return exactly this structure:
     try {
       const uid = (req.user as User).id;
       const updated = await storage.setActivePlan(+req.params.id, uid);
-      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      // When deactivating, remove the linked goal so it disappears from Goals page
+      if (!updated.isActive) {
+        const allGoals = await storage.getAllGoalsWithProjects(uid);
+        const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
+        if (linked) await storage.deleteGoal(linked.id);
+      }
+      res.json(updated);
     } catch (e) { handleError(res, e); }
   });
 
