@@ -42,7 +42,7 @@ const QUICK_ACTIONS: Array<{ label: string; emoji: string; href: string; keyword
   { label: "Log a workout",       emoji: "💪", href: "/workouts", keywords: "log workout exercise gym" },
   { label: "New event",           emoji: "📅", href: "/calendar", keywords: "add event calendar schedule" },
   { label: "Weekly review",       emoji: "🪞", href: "/review",   keywords: "review week reflect plan ai" },
-  { label: "Check today's agenda",emoji: "☀️", href: "/dashboard",keywords: "today agenda home dashboard" },
+  { label: "Check Today",         emoji: "☀️", href: "/dashboard",keywords: "today agenda home dashboard" },
   { label: "Settings",            emoji: "⚙️", href: "/settings", keywords: "settings preferences push api key export" },
 ];
 

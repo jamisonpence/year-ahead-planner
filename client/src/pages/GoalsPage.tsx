@@ -2168,7 +2168,7 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan, onOpenHobbyForm }: { 
               </div>
               <div><Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Water (glasses/day)</Label><Input className="mt-1.5" type="number" min="1" max="20" value={nWater} onChange={e => setNWater(e.target.value)} /></div>
               <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-3">
-                <p className="text-xs text-green-700 dark:text-green-300">🥗 These targets will appear in your Nutrition page and Dashboard.</p>
+                <p className="text-xs text-green-700 dark:text-green-300">🥗 These targets will appear in your Nutrition page and Today.</p>
               </div>
             </div>
           )}

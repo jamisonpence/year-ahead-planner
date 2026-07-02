@@ -33,29 +33,37 @@ import { History } from "lucide-react";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "today" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories";
+type SectionId = "today" | "focus" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories" | "quote";
 
 const SECTION_LABELS: Record<SectionId, string> = {
   today:            "Today",
+  focus:            "Focus",
   up_next:          "Up Next",
   needs_attention:  "Needs Attention",
   progress:         "Progress",
-  social_feed:      "Friends' Activity",
+  social_feed:      "Friend Highlights",
   events:           "Later This Month",
   recent_activity:  "Recent Activity",
   quick_jump:       "Quick Jump",
   day_planner:      "AI Day Planner",
   memories:         "On This Day",
+  quote:            "Quote",
 };
 // (the "events" section shows only items beyond the Up Next 7-day window,
 // so the two sections never duplicate each other)
 
-const SECTION_ORDER: SectionId[] = ["today", "up_next", "needs_attention", "progress", "social_feed", "events", "recent_activity", "quick_jump", "day_planner", "memories"];
+const SECTION_ORDER: SectionId[] = ["today", "focus", "up_next", "progress", "social_feed", "needs_attention", "events", "recent_activity", "quick_jump", "day_planner", "memories", "quote"];
 
 const ALL_ON: Record<SectionId, boolean> = {
   today: true, up_next: true, needs_attention: true, progress: true,
   social_feed: true, events: true, recent_activity: true, quick_jump: true, day_planner: false,
-  memories: true,
+  memories: true, focus: true, quote: true,
+};
+
+const DEFAULT_VISIBLE: Record<SectionId, boolean> = {
+  today: true, focus: true, up_next: true, progress: true, social_feed: true,
+  needs_attention: false, events: false, recent_activity: false, quick_jump: false,
+  day_planner: false, memories: false, quote: false,
 };
 
 // ── On This Day (memories resurfacing) ────────────────────────────────────────
@@ -95,10 +103,16 @@ function loadVisibility(): Record<SectionId, boolean> {
     const raw = localStorage.getItem("dashboard_sections_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...ALL_ON, ...parsed };
+      const wasOldDefault =
+        parsed &&
+        typeof parsed === "object" &&
+        !("focus" in parsed) &&
+        Object.entries(parsed).every(([key, value]) => ALL_ON[key as SectionId] === value);
+      if (wasOldDefault) return { ...DEFAULT_VISIBLE };
+      return { ...DEFAULT_VISIBLE, ...parsed };
     }
   } catch {}
-  return { ...ALL_ON };
+  return { ...DEFAULT_VISIBLE };
 }
 
 function saveVisibility(v: Record<SectionId, boolean>) {
@@ -586,13 +600,6 @@ export default function DashboardPage() {
         <div>
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
           <h1 className="text-2xl font-bold leading-tight">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
-          {focusData?.focus && (
-            <Link href="/review">
-              <a className="inline-flex items-center gap-1.5 mt-1 text-sm text-violet-500 hover:text-violet-400 transition-colors">
-                🎯 This week: <span className="font-medium">{focusData.focus}</span>
-              </a>
-            </Link>
-          )}
           {streakChips.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {streakChips.map((c) => (
@@ -703,6 +710,30 @@ export default function DashboardPage() {
               {visible.day_planner && (
                 <div className="mt-4 pt-4 border-t">
                   <AIDayPlanner />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── FOCUS ─────────────────────────────────────────────────────── */}
+          {visible.focus && (
+            <div className="bg-card border rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <Target size={14} className="text-violet-500" />
+                  <span className="text-sm font-semibold">Focus</span>
+                </div>
+                <Link href="/review"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Weekly Review <ChevronRight size={12} /></a></Link>
+              </div>
+              {focusData?.focus ? (
+                <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 px-3 py-3">
+                  <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wide mb-1">This week</p>
+                  <p className="text-sm font-medium leading-snug">{focusData.focus}</p>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-secondary/30 px-3 py-3">
+                  <p className="text-sm font-medium">Pick one thing to move forward this week.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Set your focus in Weekly Review so Today can keep it visible.</p>
                 </div>
               )}
             </div>
@@ -944,7 +975,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── FRIENDS ACTIVITY ───────────────────────────────────────────── */}
+          {/* ── FRIEND HIGHLIGHTS ──────────────────────────────────────────── */}
           {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
 
           {/* ── UPCOMING EVENTS (compact) ──────────────────────────────────── */}
@@ -999,7 +1030,7 @@ export default function DashboardPage() {
           )}
 
           {/* Featured quote */}
-          {featuredQuote && (
+          {visible.quote && featuredQuote && (
             <div className="bg-card border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -1256,7 +1287,7 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
       <div className="bg-card border rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Users size={14} className="text-primary" />
-          <span className="text-sm font-semibold">Friends' Activity</span>
+          <span className="text-sm font-semibold">Friend Highlights</span>
         </div>
         <p className="text-xs text-muted-foreground">Loading...</p>
       </div>
@@ -1268,18 +1299,18 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
       <div className="bg-card border rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Users size={14} className="text-primary" />
-          <span className="text-sm font-semibold">Friends' Activity</span>
+          <span className="text-sm font-semibold">Friend Highlights</span>
         </div>
         <div className="text-center py-4 text-muted-foreground">
           <Users size={24} className="opacity-20 mx-auto mb-2" />
           <p className="text-xs mb-2">Add friends to see their activity</p>
-          <Link href="/social"><a className="text-xs text-primary hover:underline">Go to Friends</a></Link>
+          <Link href="/relationships"><a className="text-xs text-primary hover:underline">Go to Friends</a></Link>
         </div>
       </div>
     );
   }
 
-  // "Friends' Activity" should show friends — not yourself
+  // Friend Highlights should show friends — not yourself
   const items = ((data as any).items as FeedItem[]).filter((it: any) => (it.user?.id ?? it.userId) !== currentUserId);
   const total: number = (data as any).total ?? 0;
   const pageSize = 20;
@@ -1291,7 +1322,7 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
       <div className="bg-card border rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Users size={14} className="text-primary" />
-          <span className="text-sm font-semibold">Friends' Activity</span>
+          <span className="text-sm font-semibold">Friend Highlights</span>
         </div>
         <p className="text-xs text-muted-foreground text-center pt-2 pb-3">
           Your feed is quiet — activity from friends shows up here.
@@ -1305,7 +1336,7 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
     <div className="bg-card border rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <Users size={14} className="text-primary" />
-        <span className="text-sm font-semibold">Friends' Activity</span>
+        <span className="text-sm font-semibold">Friend Highlights</span>
       </div>
       <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
         {items.map((item) => (

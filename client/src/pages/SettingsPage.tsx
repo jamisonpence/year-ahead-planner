@@ -21,7 +21,7 @@ import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } fr
 type ApiKeyStatus = { hasKey: boolean; encryptionConfigured: boolean };
 
 const PRIVACY_TABS = [
-  { path: "/",              label: "Dashboard",               icon: LayoutDashboard },
+  { path: "/",              label: "Today",                   icon: LayoutDashboard },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },

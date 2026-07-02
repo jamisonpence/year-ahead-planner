@@ -20,7 +20,7 @@ import {
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
 const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
-  "/":              "Your dashboard summary is visible to friends",
+  "/":              "Your Today summary is visible to friends",
   "/calendar":      "Your calendar events are visible to friends",
   "/goals":         "Your goals are visible to friends",
   "/tasks":         "Your projects and tasks are visible to friends",
@@ -147,7 +147,7 @@ function PrivacyBanner({ path }: { path: string }) {
 const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean }[] = [
   // ── Top-level ──
   { path: "/discover",      label: "Discover",                icon: Search          },
-  { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
+  { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   // ── Plan ──
@@ -1024,11 +1024,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
           </button>
 
-          {/* Dashboard */}
+          {/* Today */}
           <Link href="/dashboard">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
               <LayoutDashboard size={22} className={location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Dashboard</span>
+              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Today</span>
             </button>
           </Link>
 

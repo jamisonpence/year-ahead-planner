@@ -6325,7 +6325,7 @@ export function PlanWizard({
                     {activateNow ? "Activate this plan now" : "Save as inactive"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {activateNow ? "Will appear in Goals & Dashboard" : "Activate later when ready"}
+                    {activateNow ? "Will appear in Goals & Today" : "Activate later when ready"}
                   </p>
                 </div>
                 <div className={`ml-auto w-9 h-5 rounded-full transition-colors shrink-0 ${activateNow ? "bg-blue-500" : "bg-secondary border border-border"}`}>
