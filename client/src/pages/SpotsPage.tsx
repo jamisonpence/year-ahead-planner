@@ -1066,7 +1066,7 @@ function TripPlannerModal({ open, onClose, spots }: { open: boolean; onClose: ()
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function SpotsPage() {
+export default function SpotsPage({ activeView }: { activeView?: "places" | "trips" } = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -1079,7 +1079,10 @@ export default function SpotsPage() {
   const [editing, setEditing] = useState<Spot | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   // Route-locked: /spots = Places only, /travel = Trips only
-  const isTravelRoute = window.location.hash === "#/travel" || window.location.pathname === "/travel";
+  // activeView prop overrides URL-based detection (used by PlacesTripsPage)
+  const isTravelRoute = activeView != null
+    ? activeView === "trips"
+    : (window.location.hash === "#/travel" || window.location.pathname === "/travel");
   const [travelSubTab, setTravelSubTab] = useState<"upcoming" | "past" | "visited">("upcoming");
   const [placesSubTab, setPlacesSubTab] = useState("saved");
   const [createTripSpot, setCreateTripSpot] = useState<Spot | null>(null);

@@ -73,6 +73,7 @@ const BudgetPage = lazyPage(() => import("@/pages/BudgetPage"));
 const PlantsPage = lazyPage(() => import("@/pages/PlantsPage"));
 const HousekeepingPage = lazyPage(() => import("@/pages/HousekeepingPage"));
 const SpotsPage = lazyPage(() => import("@/pages/SpotsPage"));
+const PlacesTripsPage = lazyPage(() => import("@/pages/PlacesTripsPage"));
 const EventsPage = lazyPage(() => import("@/pages/EventsPage"));
 const KidsPage = lazyPage(() => import("@/pages/KidsPage"));
 const QuotesPage = lazyPage(() => import("@/pages/QuotesPage"));
@@ -171,6 +172,7 @@ function AuthenticatedApp() {
         <Route path="/budget" component={BudgetPage} />
         <Route path="/plants" component={PlantsPage} />
         <Route path="/housekeeping" component={HousekeepingPage} />
+        <Route path="/places" component={PlacesTripsPage} />
         <Route path="/spots" component={SpotsPage} />
         <Route path="/travel" component={SpotsPage} />
         <Route path="/events" component={EventsPage} />

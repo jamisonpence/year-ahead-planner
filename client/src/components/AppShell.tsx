@@ -168,9 +168,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places ──
-  { path: "/spots",         label: "Places",                  icon: MapPin,         beta: true },
-  { path: "/travel",        label: "Trips",                   icon: Plane           },
-  { path: "/events",        label: "Events",                  icon: Calendar        },
+  { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet          },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
@@ -189,7 +187,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
   { key: "culture",   label: "Culture",           paths: ["/library", "/recipes", "/hobbies"] },
-  { key: "places",    label: "Places",            paths: ["/spots", "/travel", "/events"] },
+  { key: "places",    label: "Places",            paths: ["/places"] },
   { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
 ];
@@ -412,11 +410,10 @@ const COLLECTION_GROUPS = [
   {
     key: "places",
     label: "Places",
-    subtitle: "Spots, trips, and events",
+    subtitle: "Saved spots and trips",
     tiles: [
-      { path: "/spots",   emoji: "📍", label: "Places" },
-      { path: "/travel",  emoji: "✈️", label: "Trips"  },
-      { path: "/events",  emoji: "🎟️", label: "Events" },
+      { path: "/places",          emoji: "📍", label: "Places" },
+      { path: "/places?tab=trips", emoji: "✈️", label: "Trips"  },
     ],
   },
   {
