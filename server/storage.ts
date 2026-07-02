@@ -1799,7 +1799,6 @@ export async function initializeStorage() {
   const indexes: Array<[string, string]> = [
     ["users", "email"],
     ["events", "user_id"], ["events", "date"],
-    ["tasks", "event_id"],
     ["books", "user_id"],
     ["reading_sessions", "book_id"],
     ["workout_templates", "user_id"],
@@ -1808,9 +1807,6 @@ export async function initializeStorage() {
     ["workout_shares", "to_user_id"], ["workout_shares", "from_user_id"],
     ["goals", "user_id"], ["goals", "parent_goal_id"],
     ["projects", "user_id"], ["projects", "goal_id"],
-    ["project_tasks", "project_id"],
-    ["general_tasks", "user_id"],
-    ["goal_tasks", "goal_id"],
     ["purchase_items", "user_id"],
     ["recipes", "user_id"],
     ["meal_bundles", "user_id"],
@@ -1909,6 +1905,10 @@ export async function initializeStorage() {
       console.warn(`Index skipped: ${name} — ${String(e).slice(0, 120)}`);
     }
   }
+
+  // Merge the four task tables into unified_tasks (one-time; legacy names
+  // become writable views so all existing queries keep working).
+  await migrateUnifiedTasks();
 }
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
@@ -6689,6 +6689,81 @@ function snakeToCamelKeys(obj: Record<string, unknown>): Record<string, unknown>
 
 function parseContent(json: string | null): Record<string, unknown> {
   try { return JSON.parse(json || "{}"); } catch { return {}; }
+}
+
+/**
+ * One-time merge of the four task tables (tasks, general_tasks, project_tasks,
+ * goal_tasks) into a single unified_tasks table. The four legacy names live on
+ * as auto-updatable SQL VIEWS over unified_tasks, so every existing query —
+ * Drizzle and raw SQL, reads and writes — keeps working unchanged.
+ * General task ids are preserved (purchase_items.linked_task_id and
+ * events.linked_task_id reference them); other tables get fresh ids.
+ * Original tables are renamed to *_legacy as a backup.
+ */
+export async function migrateUnifiedTasks() {
+  const exists = await pool.query(`SELECT to_regclass('unified_tasks') AS r`);
+  if (exists.rows[0].r) return;
+  console.log("Merging task tables into unified_tasks…");
+  await pool.query(`
+    BEGIN;
+
+    CREATE TABLE unified_tasks (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      event_id INTEGER,
+      project_id INTEGER,
+      goal_id INTEGER,
+      title TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      due_date TEXT,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    -- General tasks first, ids preserved
+    INSERT INTO unified_tasks (id, user_id, title, completed, due_date, priority, notes, sort_order)
+      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order FROM general_tasks;
+
+    -- Bump the sequence past preserved ids before the others take fresh ones
+    SELECT setval('unified_tasks_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM unified_tasks), 1));
+
+    INSERT INTO unified_tasks (event_id, title, completed, due_date, notes, sort_order)
+      SELECT event_id, title, completed, due_date, notes, sort_order FROM tasks;
+    INSERT INTO unified_tasks (project_id, title, completed, due_date, priority, notes, sort_order)
+      SELECT project_id, title, completed, due_date, priority, notes, sort_order FROM project_tasks;
+    INSERT INTO unified_tasks (goal_id, title, completed, due_date, notes, sort_order)
+      SELECT goal_id, title, completed, due_date, notes, sort_order FROM goal_tasks;
+
+    SELECT setval('unified_tasks_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM unified_tasks), 1));
+
+    CREATE INDEX idx_unified_tasks_user ON unified_tasks (user_id) WHERE user_id IS NOT NULL;
+    CREATE INDEX idx_unified_tasks_event ON unified_tasks (event_id) WHERE event_id IS NOT NULL;
+    CREATE INDEX idx_unified_tasks_project ON unified_tasks (project_id) WHERE project_id IS NOT NULL;
+    CREATE INDEX idx_unified_tasks_goal ON unified_tasks (goal_id) WHERE goal_id IS NOT NULL;
+
+    ALTER TABLE general_tasks RENAME TO general_tasks_legacy;
+    ALTER TABLE tasks RENAME TO tasks_legacy;
+    ALTER TABLE project_tasks RENAME TO project_tasks_legacy;
+    ALTER TABLE goal_tasks RENAME TO goal_tasks_legacy;
+
+    CREATE VIEW general_tasks AS
+      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order
+      FROM unified_tasks
+      WHERE event_id IS NULL AND project_id IS NULL AND goal_id IS NULL;
+    CREATE VIEW tasks AS
+      SELECT id, event_id, title, completed, due_date, notes, sort_order
+      FROM unified_tasks WHERE event_id IS NOT NULL;
+    CREATE VIEW project_tasks AS
+      SELECT id, project_id, title, completed, due_date, priority, notes, sort_order
+      FROM unified_tasks WHERE project_id IS NOT NULL;
+    CREATE VIEW goal_tasks AS
+      SELECT id, goal_id, title, completed, due_date, notes, sort_order
+      FROM unified_tasks WHERE goal_id IS NOT NULL;
+
+    COMMIT;
+  `);
+  console.log("unified_tasks migration complete.");
 }
 
 /** One-time copy of legacy share rows into the unified table. */
