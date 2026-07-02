@@ -311,7 +311,7 @@ export default function DashboardPage() {
   const { data: subs = [] }             = useQuery<Subscription[]>({ queryKey: ["/api/budget/subscriptions"] });
   const { data: generalTasks = [] }     = useQuery<any[]>({ queryKey: ["/api/general-tasks"] });
   const { data: habits = [] }           = useQuery<any[]>({ queryKey: ["/api/habits"] });
-  const { data: habitLogs = [] }        = useQuery<any[]>({ queryKey: ["/api/habit-logs"] });
+  // (habit done-state comes from /api/habits completions — there is no habit-logs endpoint)
   const { data: standaloneProjects = [] } = useQuery<any[]>({ queryKey: ["/api/projects/standalone"] });
 
   const today = todayStr();
@@ -358,7 +358,7 @@ export default function DashboardPage() {
       throw new Error("unknown");
     },
     onSuccess: (_r, action) => {
-      for (const key of ["/api/habits", "/api/habit-logs", "/api/general-tasks", "/api/chores", "/api/goals", "/api/projects/standalone"]) {
+      for (const key of ["/api/habits", "/api/general-tasks", "/api/chores", "/api/goals", "/api/projects/standalone"]) {
         qcToday.invalidateQueries({ queryKey: [key] });
       }
       confettiBurst({ particles: 28, originY: 0.3 });
@@ -461,20 +461,17 @@ export default function DashboardPage() {
   });
 
   // ── Habits ─────────────────────────────────────────────────────────────────
-  const todayHabitLogIds = new Set(
-    habitLogs.filter((l: any) => l.date === today && l.completed).map((l: any) => l.habitId)
-  );
-  const habitsActiveToday = habits.filter((h: any) => h.isActive !== false);
-  const habitsDueToday    = habitsActiveToday.filter((h: any) => !todayHabitLogIds.has(h.id));
-  const habitsCompletedToday = habitsActiveToday.filter((h: any) => todayHabitLogIds.has(h.id));
+  // Habit done-state derived from the habits' own completions
+  const habitDoneOn = (h: any, dateISO: string) =>
+    Array.isArray(h.completions) && h.completions.some((c: any) => c.date === dateISO);
+  const habitsActiveToday = habits.filter((h: any) => h.isArchived !== true && h.isActive !== false);
+  const habitsDueToday    = habitsActiveToday.filter((h: any) => !habitDoneOn(h, today));
+  const habitsCompletedToday = habitsActiveToday.filter((h: any) => habitDoneOn(h, today));
 
   // Yesterday's missed habits
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-  const yesterdayLogIds = new Set(
-    habitLogs.filter((l: any) => l.date === yesterdayStr && l.completed).map((l: any) => l.habitId)
-  );
-  const habitsMissedYesterday = habitsActiveToday.filter((h: any) => !yesterdayLogIds.has(h.id));
+  const yesterdayStr = yesterday.toLocaleDateString("en-CA");
+  const habitsMissedYesterday = habitsActiveToday.filter((h: any) => !habitDoneOn(h, yesterdayStr));
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   const dueSubs = (subs as Subscription[])
