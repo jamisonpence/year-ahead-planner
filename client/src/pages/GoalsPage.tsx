@@ -175,6 +175,12 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   const [targetDate, setTargetDate] = useState(goal.targetDate ?? "");
   const [buddyUserId, setBuddyUserId] = useState<number | null>((goal as any).buddyUserId ?? null);
 
+  type Milestone = { title: string; targetDate?: string | null; done: boolean };
+  const parseMilestones = (): Milestone[] => {
+    try { return JSON.parse((goal as any).milestonesJson || "[]"); } catch { return []; }
+  };
+  const [milestones, setMilestones] = useState<Milestone[]>(parseMilestones);
+
   const reset = useCallback(() => {
     setTitle(goal.title);
     setPriority(goal.priority);
@@ -182,6 +188,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
     setTarget(goal.progressTarget.toString());
     setTargetDate(goal.targetDate ?? "");
     setBuddyUserId((goal as any).buddyUserId ?? null);
+    setMilestones(parseMilestones());
   }, [goal]);
 
   useEffect(() => { reset(); setExpanded(true); }, [goal.id]);
@@ -192,7 +199,8 @@ function InlineGoalEditor({ goal, friends, onSave }: {
     parseFloat(current) !== goal.progressCurrent ||
     parseFloat(target) !== goal.progressTarget ||
     (targetDate || null) !== (goal.targetDate ?? null) ||
-    (buddyUserId ?? null) !== ((goal as any).buddyUserId ?? null);
+    (buddyUserId ?? null) !== ((goal as any).buddyUserId ?? null) ||
+    JSON.stringify(milestones) !== JSON.stringify(parseMilestones());
 
   const handleSave = () => {
     onSave({
@@ -203,7 +211,8 @@ function InlineGoalEditor({ goal, friends, onSave }: {
       progressTarget: parseFloat(target) || goal.progressTarget,
       targetDate: targetDate || null,
       buddyUserId: buddyUserId ?? null,
-    });
+      milestonesJson: JSON.stringify(milestones.filter(m => m.title.trim())),
+    } as any);
     setExpanded(false);
   };
 
@@ -218,6 +227,11 @@ function InlineGoalEditor({ goal, friends, onSave }: {
             <p className="text-xs text-muted-foreground capitalize mt-0.5">
               {goal.category} · <span className={PRIORITY_COLORS[goal.priority]}>{goal.priority}</span>
             </p>
+            {milestones.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                🌟 {milestones.filter(m => m.done).length}/{milestones.length} milestones
+              </p>
+            )}
             {buddy && (
               <div className="flex items-center gap-1.5 mt-1.5">
                 <BuddyAvatarSm user={buddy} size={16} />
@@ -278,6 +292,38 @@ function InlineGoalEditor({ goal, friends, onSave }: {
         <div className="space-y-1">
           <Label className="text-xs">Target</Label>
           <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} step="0.1" className="h-8 text-xs" />
+        </div>
+      </div>
+
+      {/* Milestones */}
+      <div className="space-y-1">
+        <Label className="text-xs">Milestones</Label>
+        <div className="space-y-1.5">
+          {milestones.map((m, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={m.done}
+                onChange={() => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, done: !x.done } : x))}
+                className="accent-violet-500 shrink-0"
+              />
+              <Input
+                value={m.title}
+                onChange={(e) => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+                placeholder="Milestone…"
+                className={`h-7 text-xs flex-1 ${m.done ? "line-through opacity-60" : ""}`}
+              />
+              <button
+                onClick={() => setMilestones(ms => ms.filter((_, j) => j !== i))}
+                className="text-muted-foreground hover:text-destructive text-xs px-1 shrink-0"
+                title="Remove"
+              >✕</button>
+            </div>
+          ))}
+          <button
+            onClick={() => setMilestones(ms => [...ms, { title: "", done: false }])}
+            className="text-xs text-violet-500 hover:text-violet-600 font-medium"
+          >+ Add milestone</button>
         </div>
       </div>
 

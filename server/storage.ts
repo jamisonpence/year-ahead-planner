@@ -1728,6 +1728,9 @@ export async function initializeStorage() {
   // Link chores to appliances
   await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 
+  // Goal milestones
+  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
+
   // Time-blocking: events can carry a time of day and link back to a task
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS time TEXT`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_id INTEGER`);

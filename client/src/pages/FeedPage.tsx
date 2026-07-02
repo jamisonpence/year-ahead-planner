@@ -6,6 +6,7 @@ import {
   Heart, Flame, ThumbsUp, MessageCircle, Send, BookOpen,
   Film, Music, UtensilsCrossed, MapPin, Quote as QuoteIcon,
   Plus, RefreshCw, Users, ChevronRight, X, Sparkles,
+  Target, Zap, Dumbbell,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +28,10 @@ const ACTIVITY_LABELS: Record<string, string> = {
   spot_added:               "saved a spot",
   quote_added:              "saved a quote",
   recommendation_received:  "recommended something to you",
+  goal_completed:           "completed a goal 🎉",
+  goal_milestone:           "hit a milestone 🌟",
+  habit_streak:             "is on a streak 🔥",
+  workout_pr:               "set a new PR 💪",
 };
 
 const ITEM_TYPE_ICONS: Record<string, React.ElementType> = {
@@ -36,6 +41,9 @@ const ITEM_TYPE_ICONS: Record<string, React.ElementType> = {
   recipe:  UtensilsCrossed,
   spot:    MapPin,
   quote:   QuoteIcon,
+  goal:    Target,
+  habit:   Zap,
+  workout: Dumbbell,
 };
 
 const REACTION_EMOJIS = ["❤️", "🔥", "👍"] as const;

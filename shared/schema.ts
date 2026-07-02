@@ -216,7 +216,11 @@ export const goals = pgTable("goals", {
   linkedTemplateId: integer("linked_template_id"),
   linkedWorkoutPlanId: integer("linked_workout_plan_id"),
   buddyUserId: integer("buddy_user_id"),
+  // JSON: [{ title: string, targetDate?: string, done: boolean }]
+  milestonesJson: text("milestones_json").notNull().default("[]"),
 });
+
+export type GoalMilestone = { title: string; targetDate?: string | null; done: boolean };
 
 // ── PROJECTS (optionally linked to a Goal) ──────────────────────────────────
 // status: "not_started" | "in_progress" | "done" | "blocked"

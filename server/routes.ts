@@ -1822,6 +1822,14 @@ Return exactly this structure:
     try {
       const uid = (req.user as User).id;
       const log = await storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid);
+      // Feed: new personal records
+      try {
+        const exercises: Array<{ name: string; isPR?: boolean }> = JSON.parse(log.exercisesJson || "[]");
+        const prs = exercises.filter(e => e.isPR).map(e => e.name);
+        if (log.completed && prs.length > 0) {
+          logActivity(uid, "workout_pr", log.id, "workout", prs.join(", "), null, `New PR 💪 · ${log.name}`);
+        }
+      } catch {}
       // Buddy visibility: a completed workout pings the buddy on any active plan
       // (at most once per day).
       if (log.completed) {
@@ -1874,26 +1882,61 @@ Return exactly this structure:
   app.patch("/api/goals/:id", async (req, res) => {
     try {
       const parsed = insertGoalSchema.partial().parse(req.body);
+      // Snapshot the previous state so we can detect crossings (completion,
+      // newly-done milestones) instead of firing on every save.
+      const beforeRow = (parsed.progressCurrent !== undefined || parsed.milestonesJson !== undefined)
+        ? (await pool.query(`SELECT progress_current, progress_target, milestones_json FROM goals WHERE id=$1`, [+req.params.id])).rows[0]
+        : null;
+
       const r = await storage.updateGoal(+req.params.id, parsed);
       if (!r) return res.status(404).json({ error: "Not found" });
-      // Buddy visibility: tell the buddy about progress (at most once/day/goal),
-      // and always announce completion.
+
+      const target = r.progressTarget || 100;
+      const wasComplete = beforeRow ? +beforeRow.progress_current >= (+beforeRow.progress_target || 100) : true;
+      const nowComplete = r.progressCurrent >= target && target > 0;
+
+      // Feed: goal completed (only when crossing the line)
+      if (r.userId && parsed.progressCurrent !== undefined && nowComplete && !wasComplete) {
+        logActivity(r.userId, "goal_completed", r.id, "goal", r.title, null, r.category ?? null);
+      }
+
+      // Feed + buddy: newly completed milestones
+      if (r.userId && parsed.milestonesJson !== undefined && beforeRow) {
+        try {
+          const before: Array<{ title: string; done?: boolean }> = JSON.parse(beforeRow.milestones_json || "[]");
+          const after: Array<{ title: string; done?: boolean }> = JSON.parse(r.milestonesJson || "[]");
+          const doneBefore = new Set(before.filter(m => m.done).map(m => m.title));
+          for (const m of after.filter(m => m.done && !doneBefore.has(m.title))) {
+            logActivity(r.userId, "goal_milestone", r.id, "goal", m.title, null, `Milestone · ${r.title}`);
+            if (r.buddyUserId) {
+              const owner = await storage.getUserById(r.userId);
+              notify({
+                userId: r.buddyUserId, type: "buddy_progress", actorId: r.userId,
+                title: `🌟 ${owner?.name ?? "Your buddy"} hit a milestone: "${m.title}"`,
+                body: r.title,
+                href: "/relationships",
+              });
+            }
+          }
+        } catch {}
+      }
+
+      // Buddy visibility: progress updates (at most once/day/goal) and completion
       if (r.buddyUserId && r.userId && parsed.progressCurrent !== undefined) {
         const owner = await storage.getUserById(r.userId);
-        const completed = r.progressCurrent >= r.progressTarget && r.progressTarget > 0;
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
         const dedupeType = `buddy_progress:${r.id}`;
-        if (completed) {
+        if (nowComplete && !wasComplete) {
           notify({
             userId: r.buddyUserId, type: "buddy_progress", actorId: r.userId,
             title: `🎉 ${owner?.name ?? "Your buddy"} completed "${r.title}"!`,
             href: "/relationships",
           });
-        } else if (!(await storage.hasNotificationToday(r.buddyUserId, dedupeType, today))) {
+        } else if (!nowComplete && !(await storage.hasNotificationToday(r.buddyUserId, dedupeType, today))) {
           notify({
             userId: r.buddyUserId, type: dedupeType, actorId: r.userId,
             title: `${owner?.name ?? "Your buddy"} made progress on "${r.title}"`,
-            body: `Now at ${Math.round((r.progressCurrent / (r.progressTarget || 1)) * 100)}%`,
+            body: `Now at ${Math.round((r.progressCurrent / target) * 100)}%`,
             href: "/relationships",
           });
         }
@@ -1939,18 +1982,68 @@ Return exactly this structure:
   });
 
   // ── Project Tasks ─────────────────────────────────────────────────────────────
+  // ── Auto-progress: project tasks drive their goal's % ────────────────────────
+  // Whenever a project task changes under a goal with progressType "percent",
+  // the goal's progress is recomputed as completed/total across all its
+  // projects' tasks. Crossing 100% fires the celebration + buddy notification.
+  async function recomputeGoalProgress(goalId: number | null | undefined) {
+    if (!goalId) return;
+    try {
+      const stats = await pool.query(
+        `SELECT COUNT(*) FILTER (WHERE pt.completed)::int AS done, COUNT(*)::int AS total
+         FROM project_tasks pt JOIN projects p ON p.id = pt.project_id
+         WHERE p.goal_id = $1`, [goalId]);
+      const { done, total } = stats.rows[0];
+      if (!total) return;
+      const goalRow = await pool.query(`SELECT * FROM goals WHERE id=$1 AND progress_type='percent'`, [goalId]);
+      const g = goalRow.rows[0];
+      if (!g) return;
+      const target = +g.progress_target || 100;
+      const newCurrent = Math.round((done / total) * target);
+      if (newCurrent === +g.progress_current) return;
+      const wasComplete = +g.progress_current >= target;
+      await pool.query(`UPDATE goals SET progress_current=$1 WHERE id=$2`, [newCurrent, goalId]);
+      const nowComplete = newCurrent >= target;
+      if (nowComplete && !wasComplete && g.user_id) {
+        logActivity(g.user_id, "goal_completed", g.id, "goal", g.title, null, "All project tasks done");
+        if (g.buddy_user_id) {
+          const owner = await storage.getUserById(g.user_id);
+          notify({
+            userId: g.buddy_user_id, type: "buddy_progress", actorId: g.user_id,
+            title: `🎉 ${owner?.name ?? "Your buddy"} completed "${g.title}"!`,
+            href: "/relationships",
+          });
+        }
+      }
+    } catch (e) { console.error("recomputeGoalProgress:", e); }
+  }
+
+  async function goalIdOfProject(projectId: number): Promise<number | null> {
+    const r = await pool.query(`SELECT goal_id FROM projects WHERE id=$1`, [projectId]);
+    return r.rows[0]?.goal_id ?? null;
+  }
+
   app.post("/api/projects/:projectId/tasks", async (req, res) => {
-    try { res.status(201).json(await storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }))); }
+    try {
+      const task = await storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }));
+      goalIdOfProject(+req.params.projectId).then(recomputeGoalProgress).catch(() => {});
+      res.status(201).json(task);
+    }
     catch (e) { handleError(res, e); }
   });
   app.patch("/api/project-tasks/:id", async (req, res) => {
     try {
       const r = await storage.updateProjectTask(+req.params.id, insertProjectTaskSchema.partial().parse(req.body));
-      r ? res.json(r) : res.status(404).json({ error: "Not found" });
+      if (!r) return res.status(404).json({ error: "Not found" });
+      goalIdOfProject(r.projectId).then(recomputeGoalProgress).catch(() => {});
+      res.json(r);
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/project-tasks/:id", async (req, res) => {
-    (await storage.deleteProjectTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    const pid = await pool.query(`SELECT project_id FROM project_tasks WHERE id=$1`, [+req.params.id]).then(r => r.rows[0]?.project_id).catch(() => null);
+    const ok = await storage.deleteProjectTask(+req.params.id);
+    if (ok && pid) goalIdOfProject(pid).then(recomputeGoalProgress).catch(() => {});
+    ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Standalone Projects (no goal) ────────────────────────────────────────────
@@ -9183,6 +9276,23 @@ Rules:
       const { date } = req.params;
       const { note } = req.body ?? {};
       const habit = await storage.toggleHabitCompletion(id, uid, date, note);
+      // Feed: streak milestones (7/30/100 days) — only when today's toggle
+      // completed the habit and the streak lands exactly on a milestone.
+      try {
+        const completions: Array<{ date: string }> = JSON.parse((habit as any).completionsJson || "[]");
+        const days = new Set(completions.map(c => c.date));
+        if (days.has(date)) {
+          let streak = 0;
+          const cursor = new Date(date + "T00:00:00Z");
+          while (days.has(cursor.toISOString().slice(0, 10))) {
+            streak++;
+            cursor.setUTCDate(cursor.getUTCDate() - 1);
+          }
+          if ([7, 30, 100].includes(streak)) {
+            logActivity(uid, "habit_streak", id, "habit", habit.title, null, `${streak}-day streak 🔥`);
+          }
+        }
+      } catch {}
       res.json(habit);
     } catch (e) { handleError(res, e); }
   });
