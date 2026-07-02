@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { Plus, Trash2, Copy, ClipboardList } from "lucide-react";
 import { WORKOUT_TYPES, WORKOUT_TYPE_LABELS, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
 import type { WorkoutTemplate, InsertWorkoutTemplate, TemplateExercise, TemplateSet, GoalWithProjects } from "@shared/schema";
 
@@ -45,8 +45,10 @@ const blankExercise = (): EditableExercise => ({
   notes: "",
 });
 
-export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
+export default function WorkoutTemplateModal({ open, onClose, editTemplate, onLog, onDeleteFromPlan }: {
   open: boolean; onClose: () => void; editTemplate: WorkoutTemplate | null;
+  onLog?: () => void;
+  onDeleteFromPlan?: () => void;
 }) {
   const { toast } = useToast();
   const [name, setName] = useState("");
@@ -135,15 +137,16 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
       return { ...ex, sets: newSets };
     }));
 
+  const saveAndLogRef = useRef(false);
   const inv = () => queryClient.invalidateQueries({ queryKey: ["/api/workout-templates"] });
   const createMut = useMutation({
     mutationFn: (d: InsertWorkoutTemplate) => apiRequest("POST", "/api/workout-templates", d),
-    onSuccess: () => { inv(); toast({ title: "Template created" }); onClose(); },
+    onSuccess: () => { inv(); toast({ title: "Template created" }); if (saveAndLogRef.current && onLog) { saveAndLogRef.current = false; onLog(); } else onClose(); },
     onError: () => toast({ title: "Error saving template", variant: "destructive" }),
   });
   const updateMut = useMutation({
     mutationFn: (d: Partial<InsertWorkoutTemplate>) => apiRequest("PATCH", `/api/workout-templates/${editTemplate?.id}`, d),
-    onSuccess: () => { inv(); toast({ title: "Template updated" }); onClose(); },
+    onSuccess: () => { inv(); toast({ title: "Template updated" }); if (saveAndLogRef.current && onLog) { saveAndLogRef.current = false; onLog(); } else onClose(); },
     onError: () => toast({ title: "Error saving template", variant: "destructive" }),
   });
 
@@ -375,12 +378,26 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate }: {
           </div>
 
           </div>
-          <div className="flex gap-2 px-5 py-4 border-t shrink-0">
-            <Button type="submit" disabled={isPending} className="flex-1">
-              {isPending ? "Saving..." : editTemplate ? "Save Template" : "Create Template"}
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          </div>
+          {onLog ? (
+            <div className="flex flex-col gap-2 px-5 py-4 border-t shrink-0">
+              <Button type="submit" disabled={isPending} onClick={() => { saveAndLogRef.current = true; }} className="w-full gap-2 justify-start">
+                <ClipboardList size={14} /> {isPending ? "Saving..." : "Log Workout with Saved Changes"}
+              </Button>
+              <Button type="button" variant="outline" onClick={onLog} className="w-full gap-2 justify-start">
+                <ClipboardList size={14} /> Log Workout
+              </Button>
+              <Button type="button" variant="outline" onClick={onDeleteFromPlan} className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30">
+                <Trash2 size={14} /> Delete from Plan
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2 px-5 py-4 border-t shrink-0">
+              <Button type="submit" disabled={isPending} className="flex-1">
+                {isPending ? "Saving..." : editTemplate ? "Save Template" : "Create Template"}
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            </div>
+          )}
         </form>
       </DialogContent>
     </Dialog>

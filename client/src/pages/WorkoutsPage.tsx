@@ -2253,6 +2253,7 @@ export default function WorkoutsPage() {
   const [tab, setTab] = useState<"active" | "logs" | "templates" | "plans" | "shared" | "equipment">("plans");
   const [logModal, setLogModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
+  const [templateModalFromPlan, setTemplateModalFromPlan] = useState(false);
   const [editLog, setEditLog] = useState<WorkoutLog | null>(null);
   const [editTemplate, setEditTemplate] = useState<WorkoutTemplate | null>(null);
   const [exerciseSearchOpen, setExerciseSearchOpen] = useState(false);
@@ -2659,13 +2660,18 @@ export default function WorkoutsPage() {
                                   const m = planMetas.find(pm => pm.plan.name === planName);
                                   if (!m) return;
                                   setWorkoutActionTarget({ planId: m.plan.id, week: m.currentWeek, dayOfWeek: day, entry });
-                                  if (entry.wizardSession) {
+                                  if (entry.templateId) {
+                                    // Template entry: open the full template editor
+                                    const tmpl = templates.find(t => t.id === entry.templateId);
+                                    if (tmpl) { setEditTemplate(tmpl); setTemplateModalFromPlan(true); setTemplateModal(true); }
+                                  } else if (entry.wizardSession) {
                                     setEditWizardSession(JSON.parse(JSON.stringify(entry.wizardSession)));
+                                    setWorkoutActionMode("edit");
                                   } else {
                                     setEditEntryLabel(entry.label);
                                     setEditEntryNotes(entry.notes ?? "");
+                                    setWorkoutActionMode("edit");
                                   }
-                                  setWorkoutActionMode("edit");
                                 }}
                               >
                                 {activePlans.length > 1 && (
@@ -3638,7 +3644,41 @@ export default function WorkoutsPage() {
           )}
         </DialogContent>
       </Dialog>
-      <WorkoutTemplateModal open={templateModal} onClose={() => { setTemplateModal(false); setEditTemplate(null); }} editTemplate={editTemplate} />
+      <WorkoutTemplateModal
+        open={templateModal}
+        onClose={() => { setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); }}
+        editTemplate={editTemplate}
+        onLog={templateModalFromPlan ? () => {
+          const target = workoutActionTarget;
+          setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false);
+          if (target) {
+            setLogPrefillName(target.entry.label);
+            if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
+            setWorkoutActionTarget(null);
+          }
+          setEditLog(null); setLogModal(true);
+        } : undefined}
+        onDeleteFromPlan={templateModalFromPlan ? () => {
+          const target = workoutActionTarget;
+          setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); setWorkoutActionTarget(null);
+          if (!target) return;
+          const plan = plans.find(p => p.id === target.planId);
+          if (!plan) return;
+          const parsed = parseSchedule(plan.scheduleJson ?? "[]");
+          let newWeeks: WeekScheduleV2[];
+          if (parsed.isV2) {
+            newWeeks = parsed.weeks.map(w =>
+              w.week === target.week
+                ? { ...w, days: w.days.filter(d => d.dayOfWeek !== target.dayOfWeek) }
+                : w
+            );
+          } else {
+            newWeeks = [{ week: 1, days: parsed.flatDays.filter(d => d.dayOfWeek !== target.dayOfWeek) }];
+          }
+          patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
+          toast({ title: "Workout removed from plan" });
+        } : undefined}
+      />
       <ExerciseSearchModal open={exerciseSearchOpen} onClose={() => setExerciseSearchOpen(false)} templates={templates} />
       <GenerateWorkoutPlanModal open={generateOpen} onClose={() => setGenerateOpen(false)} userEquipment={equipmentList} goals={goals} />
       <EquipmentModal open={equipmentModal} onClose={() => { setEquipmentModal(false); setEditEquipment(null); }} editing={editEquipment} />
