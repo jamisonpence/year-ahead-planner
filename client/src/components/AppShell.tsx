@@ -157,8 +157,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
   { path: "/review",        label: "Weekly Review",           icon: History         },
   // ── People ──
-  { path: "/relationships", label: "Friends",                 icon: Users           },
-  { path: "/kids",          label: "Family",                  icon: Baby            },
+  { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids"] },
   // ── Wellness ──
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/health",        label: "Health",                  icon: Activity,       beta: true },
@@ -184,7 +183,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
   { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger", "/discover"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
-  { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
+  { key: "people",    label: "People",            paths: ["/people"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
   { key: "culture",   label: "Culture",           paths: ["/library", "/recipes", "/hobbies"] },
   { key: "places",    label: "Places",            paths: ["/places"] },
@@ -380,8 +379,8 @@ const COLLECTION_GROUPS = [
     label: "People",
     subtitle: "Friends and family",
     tiles: [
-      { path: "/relationships", emoji: "👥", label: "Friends" },
-      { path: "/kids",          emoji: "👨‍👩‍👧", label: "Family" },
+      { path: "/people",              emoji: "👥", label: "Friends" },
+      { path: "/people?tab=family",   emoji: "👨‍👩‍👧", label: "Family"  },
     ],
   },
   {
@@ -816,7 +815,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           label={tab.label}
                           icon={tab.icon}
                           active={location === tab.path || (tab.matchPaths?.includes(location) ?? false)}
-                          badge={tab.path === "/relationships" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
+                          badge={tab.path === "/people" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
                           beta={tab.beta}
                         />
                       ))}

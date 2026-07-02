@@ -66,6 +66,7 @@ const TasksPage = lazyPage(() => import("@/pages/TasksPage"));
 const ReadingPage = lazyPage(() => import("@/pages/ReadingPage"));
 const WorkoutsPage = lazyPage(() => import("@/pages/WorkoutsPage"));
 const RelationshipsPage = lazyPage(() => import("@/pages/RelationshipsPage"));
+const PeoplePage = lazyPage(() => import("@/pages/PeoplePage"));
 const RecipesPage = lazyPage(() => import("@/pages/RecipesPage"));
 const MoviesPage = lazyPage(() => import("@/pages/MoviesPage"));
 const MusicPage = lazyPage(() => import("@/pages/MusicPage"));
@@ -165,6 +166,7 @@ function AuthenticatedApp() {
         <Route path="/library" component={LibraryPage} />
         <Route path="/reading" component={ReadingPage} />
         <Route path="/workouts" component={WorkoutsPage} />
+        <Route path="/people" component={PeoplePage} />
         <Route path="/relationships" component={RelationshipsPage} />
         <Route path="/recipes" component={RecipesPage} />
         <Route path="/movies" component={MoviesPage} />
