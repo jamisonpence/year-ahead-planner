@@ -144,7 +144,7 @@ function PrivacyBanner({ path }: { path: string }) {
   );
 }
 
-const ALL_TABS = [
+const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean }[] = [
   // ── Top-level ──
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Dashboard",               icon: LayoutDashboard },
@@ -161,25 +161,25 @@ const ALL_TABS = [
   { path: "/kids",          label: "Family",                  icon: Baby            },
   // ── Wellness ──
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
-  { path: "/health",        label: "Health",                  icon: Activity        },
+  { path: "/health",        label: "Health",                  icon: Activity,       beta: true },
   { path: "/nutrition",     label: "Nutrition",               icon: UtensilsCrossed },
   // ── Culture ──
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/movies",        label: "Movies & Shows",          icon: Film            },
-  { path: "/music",         label: "Music",                   icon: Music2          },
-  { path: "/art",           label: "Art",                     icon: Palette         },
+  { path: "/music",         label: "Music",                   icon: Music2,         beta: true },
+  { path: "/art",           label: "Art",                     icon: Palette,        beta: true },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places ──
-  { path: "/spots",         label: "Places",                  icon: MapPin          },
+  { path: "/spots",         label: "Places",                  icon: MapPin,         beta: true },
   { path: "/travel",        label: "Trips",                   icon: Plane           },
   { path: "/events",        label: "Events",                  icon: Calendar        },
   // ── Home ──
-  { path: "/budget",        label: "Finance",                  icon: Wallet          },
+  { path: "/budget",        label: "Finance",                 icon: Wallet          },
   { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
   // ── Beliefs & Society ──
   { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
-  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark        },
+  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
   // ── Hidden / legacy ──
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
   { path: "/quotes",        label: "Quotes",                  icon: Quote           },
@@ -212,9 +212,10 @@ function useNavPrefs() {
   });
 
   // Merge saved prefs with ALL_TABS (handles new tabs added later)
+  // Beta tabs default to hidden unless the user has explicitly saved a pref for them.
   const prefs: NavPref[] = ALL_TABS.map((tab) => {
     const saved = savedPrefs.find((p) => p.path === tab.path);
-    return { path: tab.path, hidden: saved?.hidden ?? false };
+    return { path: tab.path, hidden: saved?.hidden ?? tab.beta ?? false };
   });
   // Re-order by saved order
   if (savedPrefs.length > 0) {
@@ -233,9 +234,9 @@ function useNavPrefs() {
 
 // ── Extracted nav components (must be top-level, not inside render) ───────────
 
-function NavLink({ path, label, icon: Icon, active, onClick, badge }: {
+function NavLink({ path, label, icon: Icon, active, onClick, badge, beta }: {
   path: string; label: string; icon: React.ElementType;
-  active: boolean; onClick?: () => void; badge?: number;
+  active: boolean; onClick?: () => void; badge?: number; beta?: boolean;
 }) {
   return (
     <Link href={path}>
@@ -251,9 +252,18 @@ function NavLink({ path, label, icon: Icon, active, onClick, badge }: {
             </span>
           )}
         </div>
-        <span>{label}</span>
+        <span className="flex-1">{label}</span>
+        {beta && <BetaBadge />}
       </div>
     </Link>
+  );
+}
+
+function BetaBadge() {
+  return (
+    <span className="text-[9px] font-bold uppercase tracking-wide bg-violet-500/15 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full leading-none">
+      Beta
+    </span>
   );
 }
 
@@ -280,6 +290,7 @@ function ManageItem({ pref, tab, index, onDragStart, onDragOver, onDragEnd, onTo
       <span className={`text-sm flex-1 ${pref.hidden ? "text-muted-foreground/40 line-through" : ""}`}>
         {tab.label}
       </span>
+      {tab.beta && <BetaBadge />}
       <button
         type="button"
         onClick={() => onToggle(pref.path)}
@@ -812,6 +823,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           icon={tab.icon}
                           active={location === tab.path}
                           badge={tab.path === "/relationships" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
+                          beta={tab.beta}
                         />
                       ))}
                     </div>
