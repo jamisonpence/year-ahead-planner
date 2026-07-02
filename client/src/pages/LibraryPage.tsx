@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
 import { BookOpen, Film, Music2, Palette } from "lucide-react";
 import ReadingPage from "./ReadingPage";
 import MoviesPage from "./MoviesPage";
@@ -15,25 +14,16 @@ const TABS: { id: LibraryTab; label: string; icon: React.ElementType }[] = [
   { id: "art",      label: "Art",      icon: Palette  },
 ];
 
-function getTabFromSearch(): LibraryTab {
+function getInitialTab(): LibraryTab {
   const p = new URLSearchParams(window.location.search).get("tab") as LibraryTab | null;
   return TABS.find((t) => t.id === p) ? p! : "books";
 }
 
 export default function LibraryPage() {
-  const [active, setActive] = useState<LibraryTab>(getTabFromSearch);
-  const [, navigate] = useLocation();
-
-  // Re-sync if the URL changes externally (e.g. back/forward navigation)
-  useEffect(() => {
-    function onPop() { setActive(getTabFromSearch()); }
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  const [active, setActive] = useState<LibraryTab>(getInitialTab);
 
   function switchTab(tab: LibraryTab) {
     setActive(tab);
-    navigate(`/library?tab=${tab}`, { replace: true });
   }
 
   return (

@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
 import { MapPin, Plane } from "lucide-react";
 import SpotsPage from "./SpotsPage";
 
@@ -10,25 +9,16 @@ const TABS: { id: PlacesTab; label: string; icon: React.ElementType }[] = [
   { id: "trips",  label: "Trips",  icon: Plane  },
 ];
 
-function getTabFromSearch(): PlacesTab {
+function getInitialTab(): PlacesTab {
   const p = new URLSearchParams(window.location.search).get("tab") as PlacesTab | null;
   return p === "trips" ? "trips" : "places";
 }
 
 export default function PlacesTripsPage() {
-  const [active, setActive] = useState<PlacesTab>(getTabFromSearch);
-  const [, navigate] = useLocation();
-
-  // Re-sync if the URL changes externally (e.g. back/forward navigation)
-  useEffect(() => {
-    function onPop() { setActive(getTabFromSearch()); }
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  const [active, setActive] = useState<PlacesTab>(getInitialTab);
 
   function switchTab(tab: PlacesTab) {
     setActive(tab);
-    navigate(`/places?tab=${tab}`, { replace: true });
   }
 
   return (

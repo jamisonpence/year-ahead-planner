@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
 import { Users, Baby, Sparkles } from "lucide-react";
 import RelationshipsPage from "./RelationshipsPage";
 import KidsPage from "./KidsPage";
@@ -13,7 +12,7 @@ const TABS: { id: PeopleTab; label: string; icon: React.ElementType }[] = [
   { id: "taste",   label: "Taste Match", icon: Sparkles },
 ];
 
-function getTabFromSearch(): PeopleTab {
+function getInitialTab(): PeopleTab {
   const p = new URLSearchParams(window.location.search).get("tab") as PeopleTab | null;
   if (p === "family") return "family";
   if (p === "taste")  return "taste";
@@ -21,19 +20,10 @@ function getTabFromSearch(): PeopleTab {
 }
 
 export default function PeoplePage() {
-  const [active, setActive] = useState<PeopleTab>(getTabFromSearch);
-  const [, navigate] = useLocation();
-
-  // Re-sync if the URL changes externally (e.g. back/forward navigation)
-  useEffect(() => {
-    function onPop() { setActive(getTabFromSearch()); }
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  const [active, setActive] = useState<PeopleTab>(getInitialTab);
 
   function switchTab(tab: PeopleTab) {
     setActive(tab);
-    navigate(`/people?tab=${tab}`, { replace: true });
   }
 
   return (
@@ -58,10 +48,10 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* ── Pages — Friends stays mounted (complex hub state); others conditional ── */}
+      {/* ── All pages mounted; inactive hidden so state is preserved ────────── */}
       <div className={active === "friends" ? "" : "hidden"}><RelationshipsPage /></div>
-      {active === "family" && <KidsPage />}
-      {active === "taste"  && <DiscoverPage />}
+      <div className={active === "family"  ? "" : "hidden"}><KidsPage /></div>
+      <div className={active === "taste"   ? "" : "hidden"}><DiscoverPage /></div>
     </div>
   );
 }
