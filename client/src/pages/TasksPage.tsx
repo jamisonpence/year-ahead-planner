@@ -328,10 +328,11 @@ function ProjectCard({
           </div>
         )}
 
-        {/* Next task preview — visible only when collapsed */}
+        {/* Next action preview - visible only when collapsed */}
         {!expanded && nextTask && (
           <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 rounded-lg bg-background/70 border border-border/50">
             <ArrowRight size={11} className="text-muted-foreground shrink-0" />
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Next Action</span>
             <span className="text-xs text-muted-foreground truncate">{nextTask.title}</span>
             {nextTask.priority === "high" && <Flag size={9} className="text-red-500 shrink-0 ml-auto" />}
           </div>
@@ -346,7 +347,7 @@ function ProjectCard({
           {expanded
             ? "Hide tasks"
             : project.tasks.length === 0
-              ? "Add tasks"
+              ? "Add next action"
               : `${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""} open`}
         </button>
       </div>
@@ -749,16 +750,18 @@ function NewChoreModal({
 
 // ── Project Edit Modal ────────────────────────────────────────────────────────
 
-function ProjectEditModal({ open, onClose, project, onSave }: {
+function ProjectEditModal({ open, onClose, project, onSave, goals }: {
   open: boolean;
   onClose: () => void;
   project: DisplayProject | null;
   onSave: (id: number, data: Partial<InsertProject>) => void;
+  goals: GoalWithProjects[];
 }) {
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("not_started");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
+  const [goalId, setGoalId] = useState<string>("none");
 
   useEffect(() => {
     if (open && project) {
@@ -766,15 +769,25 @@ function ProjectEditModal({ open, onClose, project, onSave }: {
       setStatus(project.status);
       setDueDate(project.dueDate ?? "");
       setDescription(project.description ?? "");
+      setGoalId(project.goalId != null ? String(project.goalId) : "none");
     }
   }, [open, project]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!project || !title.trim()) return;
-    onSave(project.id, { title: title.trim(), status, dueDate: dueDate || null, description: description.trim() || null });
+    const linkedGoalId = goalId !== "none" ? Number(goalId) : null;
+    onSave(project.id, {
+      title: title.trim(),
+      status,
+      dueDate: dueDate || null,
+      description: description.trim() || null,
+      goalId: linkedGoalId,
+    });
     onClose();
   };
+
+  const isStandalone = project?.source === "standalone";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -805,6 +818,23 @@ function ProjectEditModal({ open, onClose, project, onSave }: {
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
+          {isStandalone && goals.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Link to Goal <span className="text-xs text-muted-foreground">(opt)</span></Label>
+              <Select value={goalId} onValueChange={setGoalId}>
+                <SelectTrigger><SelectValue placeholder="No goal" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No goal</SelectItem>
+                  {goals.map(g => (
+                    <SelectItem key={g.id} value={String(g.id)}>{g.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {goalId !== "none" && (
+                <p className="text-xs text-muted-foreground">This project will move under the selected goal.</p>
+              )}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Description <span className="text-xs text-muted-foreground">(opt)</span></Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
@@ -1841,6 +1871,7 @@ export default function TasksPage() {
         onClose={() => { setProjectEditModal(false); setEditingDisplayProject(null); }}
         project={editingDisplayProject}
         onSave={handleUpdateProject}
+        goals={goals}
       />
       <ChoreEditModal
         open={choreEditModal}
