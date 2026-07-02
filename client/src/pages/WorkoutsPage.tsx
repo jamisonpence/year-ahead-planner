@@ -2659,7 +2659,13 @@ export default function WorkoutsPage() {
                                   const m = planMetas.find(pm => pm.plan.name === planName);
                                   if (!m) return;
                                   setWorkoutActionTarget({ planId: m.plan.id, week: m.currentWeek, dayOfWeek: day, entry });
-                                  setWorkoutActionMode("menu");
+                                  if (entry.wizardSession) {
+                                    setEditWizardSession(JSON.parse(JSON.stringify(entry.wizardSession)));
+                                  } else {
+                                    setEditEntryLabel(entry.label);
+                                    setEditEntryNotes(entry.notes ?? "");
+                                  }
+                                  setWorkoutActionMode("edit");
                                 }}
                               >
                                 {activePlans.length > 1 && (
@@ -3446,71 +3452,9 @@ export default function WorkoutsPage() {
         <DialogContent className={workoutActionMode === "edit" && workoutActionTarget?.entry.wizardSession ? "max-w-lg" : "max-w-sm"}>
           <DialogHeader>
             <DialogTitle className="text-base">
-              {workoutActionMode === "edit" ? "Edit Workout" : workoutActionTarget?.entry.label ?? "Workout"}
+              {workoutActionTarget?.entry.label ?? "Workout"}
             </DialogTitle>
           </DialogHeader>
-
-          {workoutActionMode === "menu" && workoutActionTarget && (
-            <div className="space-y-3">
-              {workoutActionTarget.entry.notes && (
-                <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">{workoutActionTarget.entry.notes}</p>
-              )}
-              <div className="space-y-2">
-                {/* Log */}
-                <Button className="w-full gap-2 justify-start" onClick={() => {
-                  setLogPrefillName(workoutActionTarget.entry.label);
-                  if (workoutActionTarget.entry.templateId) setLogPrefillTemplateId(workoutActionTarget.entry.templateId);
-                  setWorkoutActionTarget(null);
-                  setEditLog(null);
-                  setLogModal(true);
-                }}>
-                  <ClipboardList size={14} /> Log This Workout
-                </Button>
-                {/* Edit — for template entries open full log modal; for custom show label/notes editor */}
-                <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
-                  if (workoutActionTarget.entry.wizardSession) {
-                    setEditWizardSession(JSON.parse(JSON.stringify(workoutActionTarget.entry.wizardSession)));
-                    setWorkoutActionMode("edit");
-                  } else if (workoutActionTarget.entry.templateId) {
-                    // Template-linked: open the full workout log modal pre-populated
-                    setLogPrefillName(workoutActionTarget.entry.label);
-                    setLogPrefillTemplateId(workoutActionTarget.entry.templateId);
-                    setWorkoutActionTarget(null);
-                    setEditLog(null);
-                    setLogModal(true);
-                  } else {
-                    // Custom entry: edit label + notes inline
-                    setEditEntryLabel(workoutActionTarget.entry.label);
-                    setEditEntryNotes(workoutActionTarget.entry.notes ?? "");
-                    setWorkoutActionMode("edit");
-                  }
-                }}>
-                  <Pencil size={14} /> Edit Workout
-                </Button>
-                {/* Delete */}
-                <Button variant="outline" className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30" onClick={() => {
-                  const target = workoutActionTarget;
-                  const plan = plans.find(p => p.id === target.planId);
-                  if (!plan) return;
-                  const parsed = parseSchedule(plan.scheduleJson ?? "[]");
-                  let newWeeks: WeekScheduleV2[];
-                  if (parsed.isV2) {
-                    newWeeks = parsed.weeks.map(w =>
-                      w.week === target.week
-                        ? { ...w, days: w.days.filter(d => d.dayOfWeek !== target.dayOfWeek) }
-                        : w
-                    );
-                  } else {
-                    newWeeks = [{ week: 1, days: parsed.flatDays.filter(d => d.dayOfWeek !== target.dayOfWeek) }];
-                  }
-                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
-                  toast({ title: "Workout removed from plan" });
-                }}>
-                  <Trash2 size={14} /> Delete from Plan
-                </Button>
-              </div>
-            </div>
-          )}
 
           {workoutActionMode === "edit" && workoutActionTarget && workoutActionTarget.entry.wizardSession && editWizardSession && (
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
@@ -3556,29 +3500,65 @@ export default function WorkoutsPage() {
                   ))}
                 </div>
               ))}
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1" onClick={() => { setWorkoutActionMode("menu"); setEditWizardSession(null); }}>Cancel</Button>
-                <Button className="flex-1" disabled={patchPlanSchedule.isPending} onClick={() => {
+              <div className="flex flex-col gap-2 pt-1">
+                {/* Log with Saved Changes */}
+                <Button className="w-full gap-2 justify-start" disabled={patchPlanSchedule.isPending} onClick={() => {
                   const target = workoutActionTarget;
                   const plan = plans.find(p => p.id === target.planId);
                   if (!plan) return;
                   let raw: any = {};
                   try { raw = JSON.parse(plan.scheduleJson ?? "{}"); } catch {}
                   const wizardPlan = raw.plan ?? raw;
-                  if (!wizardPlan?.weeks) return;
-                  // Update the session in whichever week contains this day
-                  ["A","B"].forEach(wl => {
-                    if (!wizardPlan.weeks[wl]) return;
-                    wizardPlan.weeks[wl] = wizardPlan.weeks[wl].map((s: any) =>
-                      s.day.toLowerCase() === target.dayOfWeek ? { ...s, ...editWizardSession } : s
-                    );
-                  });
-                  const newJson = JSON.stringify(raw.plan ? { ...raw, plan: wizardPlan } : wizardPlan);
-                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: newJson });
+                  if (wizardPlan?.weeks) {
+                    ["A","B"].forEach(wl => {
+                      if (!wizardPlan.weeks[wl]) return;
+                      wizardPlan.weeks[wl] = wizardPlan.weeks[wl].map((s: any) =>
+                        s.day.toLowerCase() === target.dayOfWeek ? { ...s, ...editWizardSession } : s
+                      );
+                    });
+                    const newJson = JSON.stringify(raw.plan ? { ...raw, plan: wizardPlan } : wizardPlan);
+                    patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: newJson });
+                  }
                   setEditWizardSession(null);
-                  toast({ title: "Workout updated" });
+                  setLogPrefillName(target.entry.label);
+                  if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
+                  setWorkoutActionTarget(null);
+                  setEditLog(null);
+                  setLogModal(true);
                 }}>
-                  Save Changes
+                  <ClipboardList size={14} /> Log Workout with Saved Changes
+                </Button>
+                {/* Log without saving */}
+                <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
+                  const target = workoutActionTarget;
+                  setLogPrefillName(target.entry.label);
+                  if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
+                  setWorkoutActionTarget(null);
+                  setEditLog(null);
+                  setLogModal(true);
+                }}>
+                  <ClipboardList size={14} /> Log Workout
+                </Button>
+                {/* Delete */}
+                <Button variant="outline" className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30" onClick={() => {
+                  const target = workoutActionTarget;
+                  const plan = plans.find(p => p.id === target.planId);
+                  if (!plan) return;
+                  const parsed = parseSchedule(plan.scheduleJson ?? "[]");
+                  let newWeeks: WeekScheduleV2[];
+                  if (parsed.isV2) {
+                    newWeeks = parsed.weeks.map(w =>
+                      w.week === target.week
+                        ? { ...w, days: w.days.filter(d => d.dayOfWeek !== target.dayOfWeek) }
+                        : w
+                    );
+                  } else {
+                    newWeeks = [{ week: 1, days: parsed.flatDays.filter(d => d.dayOfWeek !== target.dayOfWeek) }];
+                  }
+                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
+                  toast({ title: "Workout removed from plan" });
+                }}>
+                  <Trash2 size={14} /> Delete from Plan
                 </Button>
               </div>
             </div>
@@ -3594,9 +3574,9 @@ export default function WorkoutsPage() {
                 <label className="text-xs font-medium text-muted-foreground">Notes (distance, sets, focus…)</label>
                 <Textarea value={editEntryNotes} onChange={e => setEditEntryNotes(e.target.value)} placeholder="e.g. 8 miles · long run" rows={2} className="resize-none" />
               </div>
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1" onClick={() => setWorkoutActionMode("menu")}>Cancel</Button>
-                <Button className="flex-1" disabled={!editEntryLabel.trim() || patchPlanSchedule.isPending} onClick={() => {
+              <div className="flex flex-col gap-2 pt-1">
+                {/* Log with Saved Changes */}
+                <Button className="w-full gap-2 justify-start" disabled={!editEntryLabel.trim() || patchPlanSchedule.isPending} onClick={() => {
                   const target = workoutActionTarget;
                   const plan = plans.find(p => p.id === target.planId);
                   if (!plan) return;
@@ -3613,9 +3593,45 @@ export default function WorkoutsPage() {
                     newWeeks = [{ week: 1, days: parsed.flatDays.map(d => d.dayOfWeek === target.dayOfWeek ? { ...updated } : { dayOfWeek: d.dayOfWeek, label: d.label ?? d.templateName ?? "Workout" }) }];
                   }
                   patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
-                  toast({ title: "Workout updated" });
+                  setLogPrefillName(editEntryLabel.trim());
+                  if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
+                  setWorkoutActionTarget(null);
+                  setEditLog(null);
+                  setLogModal(true);
                 }}>
-                  Save Changes
+                  <ClipboardList size={14} /> Log Workout with Saved Changes
+                </Button>
+                {/* Log without saving */}
+                <Button variant="outline" className="w-full gap-2 justify-start" onClick={() => {
+                  const target = workoutActionTarget;
+                  setLogPrefillName(target.entry.label);
+                  if (target.entry.templateId) setLogPrefillTemplateId(target.entry.templateId);
+                  setWorkoutActionTarget(null);
+                  setEditLog(null);
+                  setLogModal(true);
+                }}>
+                  <ClipboardList size={14} /> Log Workout
+                </Button>
+                {/* Delete */}
+                <Button variant="outline" className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30" onClick={() => {
+                  const target = workoutActionTarget;
+                  const plan = plans.find(p => p.id === target.planId);
+                  if (!plan) return;
+                  const parsed = parseSchedule(plan.scheduleJson ?? "[]");
+                  let newWeeks: WeekScheduleV2[];
+                  if (parsed.isV2) {
+                    newWeeks = parsed.weeks.map(w =>
+                      w.week === target.week
+                        ? { ...w, days: w.days.filter(d => d.dayOfWeek !== target.dayOfWeek) }
+                        : w
+                    );
+                  } else {
+                    newWeeks = [{ week: 1, days: parsed.flatDays.filter(d => d.dayOfWeek !== target.dayOfWeek) }];
+                  }
+                  patchPlanSchedule.mutate({ planId: target.planId, scheduleJson: JSON.stringify(newWeeks) });
+                  toast({ title: "Workout removed from plan" });
+                }}>
+                  <Trash2 size={14} /> Delete from Plan
                 </Button>
               </div>
             </div>
