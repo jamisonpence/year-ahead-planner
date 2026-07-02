@@ -199,6 +199,86 @@ function RecModal({ friend, onClose }: { friend: EnrichedFriend; onClose: () => 
   );
 }
 
+// ── Accountability Buddies ────────────────────────────────────────────────────
+
+type BuddyOwner = { id: number; name: string; avatarUrl: string | null };
+type BuddiesData = {
+  goals: Array<{ id: number; title: string; progressCurrent: number; progressTarget: number; targetDate: string | null; owner: BuddyOwner }>;
+  readingGoals: Array<{ id: number; label: string | null; year: number; booksTarget: number; booksFinished: number; owner: BuddyOwner }>;
+  nutritionGoals: Array<{ id: number; calories: number; caloriesToday: number; owner: BuddyOwner }>;
+  workoutPlans: Array<{ id: number; name: string; workoutsThisWeek: number; owner: BuddyOwner }>;
+};
+
+function BuddiesSection() {
+  const { toast } = useToast();
+  const { data } = useQuery<BuddiesData>({
+    queryKey: ["/api/buddies/mine"],
+    queryFn: () => apiRequest("GET", "/api/buddies/mine").then(r => r.json()),
+  });
+
+  const nudgeMut = useMutation({
+    mutationFn: ({ toUserId, itemTitle }: { toUserId: number; itemTitle: string }) =>
+      apiRequest("POST", "/api/buddies/nudge", { toUserId, itemTitle }),
+    onSuccess: () => toast({ title: "Nudge sent! 👊" }),
+    onError: () => toast({ title: "Couldn't send nudge", variant: "destructive" }),
+  });
+
+  if (!data) return null;
+  const rows: Array<{ key: string; emoji: string; title: string; progress: string; pct: number | null; owner: BuddyOwner }> = [
+    ...data.goals.map(g => ({
+      key: `g-${g.id}`, emoji: "🎯", title: g.title, owner: g.owner,
+      progress: `${Math.round((g.progressCurrent / (g.progressTarget || 1)) * 100)}% complete`,
+      pct: Math.min(100, Math.round((g.progressCurrent / (g.progressTarget || 1)) * 100)),
+    })),
+    ...data.readingGoals.map(r => ({
+      key: `r-${r.id}`, emoji: "📚", title: r.label || `${r.year} Reading`, owner: r.owner,
+      progress: `${r.booksFinished}/${r.booksTarget} books`,
+      pct: Math.min(100, Math.round((r.booksFinished / (r.booksTarget || 1)) * 100)),
+    })),
+    ...data.nutritionGoals.map(n => ({
+      key: `n-${n.id}`, emoji: "🥗", title: "Nutrition goal", owner: n.owner,
+      progress: `${n.caloriesToday}/${n.calories} cal today`, pct: null,
+    })),
+    ...data.workoutPlans.map(w => ({
+      key: `w-${w.id}`, emoji: "💪", title: w.name, owner: w.owner,
+      progress: `${w.workoutsThisWeek} workout${w.workoutsThisWeek === 1 ? "" : "s"} this week`, pct: null,
+    })),
+  ];
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <Sparkles size={12} /> Accountability buddies
+      </div>
+      <p className="text-xs text-muted-foreground -mt-1">
+        You're the buddy on these — cheer them on or give them a push.
+      </p>
+      {rows.map(row => (
+        <div key={row.key} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+          <Avatar user={row.owner} size={40} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate">{row.emoji} {row.title}</p>
+            <p className="text-xs text-muted-foreground truncate">{row.owner.name} · {row.progress}</p>
+            {row.pct !== null && (
+              <div className="mt-1.5 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${row.pct}%` }} />
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => nudgeMut.mutate({ toUserId: row.owner.id, itemTitle: row.title })}
+            disabled={nudgeMut.isPending}
+            className="shrink-0 text-xs font-medium bg-violet-500 text-white px-2.5 py-1.5 rounded-full hover:bg-violet-600 disabled:opacity-50 transition-colors"
+          >
+            👊 Nudge
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Contact Matches + Invite Link ─────────────────────────────────────────────
 
 interface ContactMatch extends SearchResult {
@@ -818,6 +898,9 @@ export default function FriendsSocialHub() {
         requests={requests}
         sendPending={sendMut.isPending}
       />
+
+      {/* Accountability buddies */}
+      <BuddiesSection />
 
       {/* Contact matches + invite link */}
       <ContactMatchesSection

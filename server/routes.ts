@@ -364,6 +364,84 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Accountability buddies ───────────────────────────────────────────────────
+  // Items where I'm someone's buddy: their goals, reading goals, nutrition
+  // goals, and workout plans, with owner info and live progress.
+  app.get("/api/buddies/mine", requireAuth, async (req, res) => {
+    try {
+      const me = (req.user as User).id;
+      const [goals, reading, nutrition, plans] = await Promise.all([
+        pool.query(
+          `SELECT g.id, g.title, g.progress_current, g.progress_target, g.progress_type, g.target_date,
+                  u.id AS owner_id, u.name AS owner_name, u.avatar_url AS owner_avatar
+           FROM goals g JOIN users u ON u.id = g.user_id
+           WHERE g.buddy_user_id = $1`, [me]),
+        pool.query(
+          `SELECT rg.id, rg.books_target, rg.year, rg.label,
+                  u.id AS owner_id, u.name AS owner_name, u.avatar_url AS owner_avatar,
+                  (SELECT COUNT(*) FROM books b WHERE b.user_id = rg.user_id AND b.status = 'finished'
+                    AND b.finish_date >= (rg.year || '-01-01') AND b.finish_date <= (rg.year || '-12-31'))::int AS books_finished
+           FROM reading_goals rg JOIN users u ON u.id = rg.user_id
+           WHERE rg.buddy_user_id = $1`, [me]),
+        pool.query(
+          `SELECT ng.id, ng.calories,
+                  u.id AS owner_id, u.name AS owner_name, u.avatar_url AS owner_avatar,
+                  COALESCE((SELECT SUM(f.calories * f.quantity) FROM food_log_entries f
+                    WHERE f.user_id = ng.user_id AND f.date = $2), 0)::int AS calories_today
+           FROM nutrition_goals ng JOIN users u ON u.id = ng.user_id
+           WHERE ng.buddy_user_id = $1`,
+          [me, new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" })]),
+        pool.query(
+          `SELECT wp.id, wp.name, wp.goal_type, wp.start_date, wp.duration_weeks, wp.is_active,
+                  u.id AS owner_id, u.name AS owner_name, u.avatar_url AS owner_avatar,
+                  (SELECT COUNT(*) FROM workout_logs wl WHERE wl.user_id = wp.user_id AND wl.completed = true
+                    AND wl.date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYY-MM-DD'))::int AS workouts_this_week
+           FROM workout_plans wp JOIN users u ON u.id = wp.user_id
+           WHERE wp.buddy_user_id = $1 AND wp.is_active = true`, [me]),
+      ]);
+      const owner = (r: any) => ({ id: r.owner_id, name: r.owner_name, avatarUrl: r.owner_avatar });
+      res.json({
+        goals: goals.rows.map((r: any) => ({
+          id: r.id, title: r.title, progressCurrent: +r.progress_current, progressTarget: +r.progress_target,
+          progressType: r.progress_type, targetDate: r.target_date, owner: owner(r),
+        })),
+        readingGoals: reading.rows.map((r: any) => ({
+          id: r.id, label: r.label, year: r.year, booksTarget: r.books_target, booksFinished: r.books_finished, owner: owner(r),
+        })),
+        nutritionGoals: nutrition.rows.map((r: any) => ({
+          id: r.id, calories: r.calories, caloriesToday: r.calories_today, owner: owner(r),
+        })),
+        workoutPlans: plans.rows.map((r: any) => ({
+          id: r.id, name: r.name, goalType: r.goal_type, workoutsThisWeek: r.workouts_this_week, owner: owner(r),
+        })),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** POST /api/buddies/nudge — send an encouraging poke to someone you're a buddy for */
+  app.post("/api/buddies/nudge", requireAuth, async (req, res) => {
+    try {
+      const me = req.user as User;
+      const { toUserId, itemTitle } = req.body ?? {};
+      if (!toUserId) return res.status(400).json({ error: "toUserId required" });
+      // Verify I'm actually a buddy on something of theirs
+      const check = await pool.query(
+        `SELECT 1 FROM goals WHERE user_id=$1 AND buddy_user_id=$2
+         UNION SELECT 1 FROM reading_goals WHERE user_id=$1 AND buddy_user_id=$2
+         UNION SELECT 1 FROM nutrition_goals WHERE user_id=$1 AND buddy_user_id=$2
+         UNION SELECT 1 FROM workout_plans WHERE user_id=$1 AND buddy_user_id=$2
+         LIMIT 1`, [toUserId, me.id]);
+      if (!check.rows.length) return res.status(403).json({ error: "You're not a buddy on anything of theirs" });
+      notify({
+        userId: +toUserId, type: "buddy_nudge", actorId: me.id,
+        title: `👊 ${me.name} is checking in${itemTitle ? ` on "${itemTitle}"` : ""}`,
+        body: "Your accountability buddy wants to see some progress!",
+        href: "/goals",
+      });
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Global search ────────────────────────────────────────────────────────────
   // One query across every module the user tracks. Powers the Cmd-K palette.
   app.get("/api/search", requireAuth, async (req, res) => {
@@ -1231,6 +1309,22 @@ Return exactly this structure:
         if (book && book.status !== "finished") {
           const r = await storage.updateBook(+req.params.id, body);
           if (r) {
+            // Buddy visibility: finished book pings the reading-goal buddy
+            const uid = (req.user as User).id;
+            pool.query(
+              `SELECT rg.buddy_user_id, u.name AS owner_name FROM reading_goals rg
+               JOIN users u ON u.id = rg.user_id
+               WHERE rg.user_id = $1 AND rg.buddy_user_id IS NOT NULL`, [uid]
+            ).then((rows) => {
+              for (const rg of rows.rows) {
+                notify({
+                  userId: rg.buddy_user_id, type: "buddy_progress", actorId: uid,
+                  title: `📚 ${rg.owner_name} finished "${r.title}"`,
+                  body: r.author ?? undefined,
+                  href: "/relationships",
+                });
+              }
+            }).catch(() => {});
             logActivity((req.user as User).id, "book_finished", r.id, "book", r.title, r.coverUrl ?? null, r.author ?? null);
             return res.json(r);
           }
@@ -1435,7 +1529,29 @@ Return exactly this structure:
   app.post("/api/workout-logs", async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.status(201).json(await storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid));
+      const log = await storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid);
+      // Buddy visibility: a completed workout pings the buddy on any active plan
+      // (at most once per day).
+      if (log.completed) {
+        pool.query(
+          `SELECT wp.id, wp.name, wp.buddy_user_id, u.name AS owner_name
+           FROM workout_plans wp JOIN users u ON u.id = wp.user_id
+           WHERE wp.user_id = $1 AND wp.is_active = true AND wp.buddy_user_id IS NOT NULL`, [uid]
+        ).then(async (r) => {
+          const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+          for (const plan of r.rows) {
+            const dedupeType = `buddy_workout:${plan.id}`;
+            if (await storage.hasNotificationToday(plan.buddy_user_id, dedupeType, today)) continue;
+            notify({
+              userId: plan.buddy_user_id, type: dedupeType, actorId: uid,
+              title: `💪 ${plan.owner_name} logged a workout`,
+              body: `${log.name} — plan: ${plan.name}`,
+              href: "/relationships",
+            });
+          }
+        }).catch(() => {});
+      }
+      res.status(201).json(log);
     }
     catch (e) { handleError(res, e); }
   });
@@ -1465,8 +1581,32 @@ Return exactly this structure:
   });
   app.patch("/api/goals/:id", async (req, res) => {
     try {
-      const r = await storage.updateGoal(+req.params.id, insertGoalSchema.partial().parse(req.body));
-      r ? res.json(r) : res.status(404).json({ error: "Not found" });
+      const parsed = insertGoalSchema.partial().parse(req.body);
+      const r = await storage.updateGoal(+req.params.id, parsed);
+      if (!r) return res.status(404).json({ error: "Not found" });
+      // Buddy visibility: tell the buddy about progress (at most once/day/goal),
+      // and always announce completion.
+      if (r.buddyUserId && r.userId && parsed.progressCurrent !== undefined) {
+        const owner = await storage.getUserById(r.userId);
+        const completed = r.progressCurrent >= r.progressTarget && r.progressTarget > 0;
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+        const dedupeType = `buddy_progress:${r.id}`;
+        if (completed) {
+          notify({
+            userId: r.buddyUserId, type: "buddy_progress", actorId: r.userId,
+            title: `🎉 ${owner?.name ?? "Your buddy"} completed "${r.title}"!`,
+            href: "/relationships",
+          });
+        } else if (!(await storage.hasNotificationToday(r.buddyUserId, dedupeType, today))) {
+          notify({
+            userId: r.buddyUserId, type: dedupeType, actorId: r.userId,
+            title: `${owner?.name ?? "Your buddy"} made progress on "${r.title}"`,
+            body: `Now at ${Math.round((r.progressCurrent / (r.progressTarget || 1)) * 100)}%`,
+            href: "/relationships",
+          });
+        }
+      }
+      res.json(r);
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/goals/:id", async (req, res) => {
