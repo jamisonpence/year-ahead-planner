@@ -10,12 +10,12 @@ import QuickAddModal from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
 import {
-  LayoutDashboard, Calendar, Target, BookOpen, Dumbbell,
+  LayoutDashboard, Calendar, Target, Library, Dumbbell,
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, User, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
-  History,
+  History, BookOpen,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -144,7 +144,7 @@ function PrivacyBanner({ path }: { path: string }) {
   );
 }
 
-const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean }[] = [
+const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
@@ -164,11 +164,8 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/health",        label: "Health",                  icon: Activity,       beta: true },
   { path: "/nutrition",     label: "Nutrition",               icon: UtensilsCrossed },
   // ── Culture ──
-  { path: "/reading",       label: "Reading",                 icon: BookOpen        },
+  { path: "/library",       label: "Library",                 icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
   { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
-  { path: "/movies",        label: "Movies & Shows",          icon: Film            },
-  { path: "/music",         label: "Music",                   icon: Music2,         beta: true },
-  { path: "/art",           label: "Art",                     icon: Palette,        beta: true },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places ──
   { path: "/spots",         label: "Places",                  icon: MapPin,         beta: true },
@@ -191,7 +188,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
-  { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies"] },
+  { key: "culture",   label: "Culture",           paths: ["/library", "/recipes", "/hobbies"] },
   { key: "places",    label: "Places",            paths: ["/spots", "/travel", "/events"] },
   { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
@@ -404,12 +401,12 @@ const COLLECTION_GROUPS = [
     label: "Culture",
     subtitle: "Entertainment and creative pursuits",
     tiles: [
-      { path: "/reading",  emoji: "📚", label: "Reading"        },
-      { path: "/recipes",  emoji: "🍽️", label: "Recipes"       },
-      { path: "/movies",   emoji: "🎬", label: "Movies & Shows" },
-      { path: "/music",    emoji: "🎵", label: "Music"          },
-      { path: "/art",      emoji: "🎨", label: "Art"            },
-      { path: "/hobbies",  emoji: "✨", label: "Hobbies"        },
+      { path: "/library",           emoji: "📚", label: "Books"    },
+      { path: "/library?tab=watching", emoji: "🎬", label: "Watching" },
+      { path: "/library?tab=music", emoji: "🎵", label: "Music"    },
+      { path: "/library?tab=art",   emoji: "🎨", label: "Art"      },
+      { path: "/recipes",           emoji: "🍽️", label: "Recipes"  },
+      { path: "/hobbies",           emoji: "✨", label: "Hobbies"  },
     ],
   },
   {
@@ -821,7 +818,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           path={tab.path}
                           label={tab.label}
                           icon={tab.icon}
-                          active={location === tab.path}
+                          active={location === tab.path || (tab.matchPaths?.includes(location) ?? false)}
                           badge={tab.path === "/relationships" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
                           beta={tab.beta}
                         />
