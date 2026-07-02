@@ -386,6 +386,21 @@ export default function DashboardPage() {
     queryKey: ["/api/review/focus"],
     queryFn: () => apiRequest("GET", "/api/review/focus").then(r => r.json()),
   });
+  const [focusDraft, setFocusDraft] = useState("");
+  const [editingFocus, setEditingFocus] = useState(false);
+  useEffect(() => {
+    setFocusDraft(focusData?.focus ?? "");
+  }, [focusData?.focus]);
+  const saveFocus = useMutation({
+    mutationFn: (focus: string) => apiRequest("PUT", "/api/review/focus", { focus }),
+    onSuccess: () => {
+      qcToday.invalidateQueries({ queryKey: ["/api/review/focus"] });
+      qcToday.invalidateQueries({ queryKey: ["/api/review/weekly"] });
+      setEditingFocus(false);
+      todayToast({ title: "Focus saved 🎯" });
+    },
+    onError: () => todayToast({ title: "Couldn't save focus", variant: "destructive" }),
+  });
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "Up late" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = authUser?.name?.split(" ")[0] ?? "";
@@ -725,15 +740,55 @@ export default function DashboardPage() {
                 </div>
                 <Link href="/review"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Weekly Review <ChevronRight size={12} /></a></Link>
               </div>
-              {focusData?.focus ? (
+              {focusData?.focus && !editingFocus ? (
                 <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 px-3 py-3">
-                  <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wide mb-1">This week</p>
-                  <p className="text-sm font-medium leading-snug">{focusData.focus}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wide mb-1">This week</p>
+                      <p className="text-sm font-medium leading-snug">{focusData.focus}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingFocus(true)}
+                      className="text-xs font-medium text-violet-600 dark:text-violet-300 hover:underline shrink-0"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="rounded-xl bg-secondary/30 px-3 py-3">
-                  <p className="text-sm font-medium">Pick one thing to move forward this week.</p>
-                  <p className="text-xs text-muted-foreground mt-1">Set your focus in Weekly Review so Today can keep it visible.</p>
+                <div className="rounded-xl bg-secondary/30 px-3 py-3 space-y-2.5">
+                  <div>
+                    <p className="text-sm font-medium">Pick one thing to move forward this week.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Today will keep it visible while you plan and work.</p>
+                  </div>
+                  <textarea
+                    value={focusDraft}
+                    onChange={(e) => setFocusDraft(e.target.value)}
+                    rows={2}
+                    placeholder="e.g. Finish the first version of my workout plan"
+                    className="w-full text-sm border rounded-lg bg-background p-2.5 focus:outline-none focus:ring-2 focus:ring-violet-400/30 resize-none"
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    {editingFocus && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setEditingFocus(false); setFocusDraft(focusData?.focus ?? ""); }}
+                        className="h-8 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => saveFocus.mutate(focusDraft)}
+                      disabled={saveFocus.isPending || !focusDraft.trim()}
+                      className="gap-1.5 h-8 text-xs"
+                    >
+                      <Check size={12} /> {saveFocus.isPending ? "Saving..." : "Save Focus"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

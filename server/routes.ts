@@ -632,6 +632,25 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  /** PUT /api/review/focus - save just this week's focus from Today */
+  app.put("/api/review/focus", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const focus = typeof req.body?.focus === "string" ? req.body.focus.trim() : "";
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const weekStart = mondayOf(today);
+      const r = await pool.query(
+        `INSERT INTO weekly_reviews (user_id, week_start, focus, stats_json, created_at)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (user_id, week_start)
+         DO UPDATE SET focus=$3
+         RETURNING focus`,
+        [uid, weekStart, focus || null, "{}", new Date().toISOString()]
+      );
+      res.json({ focus: r.rows[0]?.focus || null });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Time-blocking ────────────────────────────────────────────────────────────
   // Put a task on the calendar: sets its due date and creates (or moves) a
   // linked calendar block, optionally at a specific time.
