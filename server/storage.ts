@@ -1728,6 +1728,26 @@ export async function initializeStorage() {
   // Link chores to appliances
   await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 
+  // Time-blocking: events can carry a time of day and link back to a task
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS time TEXT`);
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_id INTEGER`);
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_type TEXT`);
+
+  // Weekly reviews
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS weekly_reviews (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      wins TEXT,
+      challenges TEXT,
+      focus TEXT,
+      stats_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      UNIQUE (user_id, week_start)
+    )
+  `);
+
   // Invite links (one permanent code per user; auto-friends on signup)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invites (

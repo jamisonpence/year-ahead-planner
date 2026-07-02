@@ -493,6 +493,9 @@ export default function DashboardPage() {
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <div className="hidden sm:flex gap-2 items-center">
+            <Link href="/review">
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">🪞 Weekly Review</Button>
+            </Link>
             <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Calendar size={12} />Event</Button>
             <Button size="sm" variant="outline" onClick={() => setAddWorkout(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Dumbbell size={12} />Workout</Button>
             <Button size="sm" variant="outline" onClick={() => setAddSession(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><BookMarked size={12} />Reading</Button>

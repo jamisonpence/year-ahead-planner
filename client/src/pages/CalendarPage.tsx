@@ -24,6 +24,7 @@ interface UnifiedItem {
   title: string;
   date: string;
   type: "event" | "gcal" | "reading" | "workout_done" | "goal" | "trip";
+  time?: string | null;
   category?: string;
   completed?: boolean;
   recurring?: string;
@@ -62,7 +63,7 @@ function buildItems(
   if (filter === "all" || filter === "events") {
     events.filter(e => e.category !== "gcal").forEach((e) => {
       const date = e.recurring !== "none" ? nextOccurrence(e.date, e.recurring) : e.date;
-      items.push({ id: `e:${e.id}`, title: e.title, date, type: "event", category: e.category, recurring: e.recurring, sourceId: e.id });
+      items.push({ id: `e:${e.id}`, title: e.title, date, type: "event", category: e.category, recurring: e.recurring, sourceId: e.id, time: (e as any).time ?? null });
     });
   }
 
@@ -164,7 +165,10 @@ function EventActionRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>{item.title}</p>
+          <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
+            {item.time && <span className="text-xs text-violet-500 font-semibold mr-1.5">{item.time}</span>}
+            {item.title}
+          </p>
           {item.type === "trip" && item.tripTotalDays && item.tripTotalDays > 1 && (
             <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">
               {item.tripTotalDays} days
@@ -512,7 +516,7 @@ export default function CalendarPage() {
                       {dayItems.slice(0, 3).map((item) => (
                         <div key={item.id} className={`text-xs px-1.5 py-0.5 rounded truncate border flex items-center gap-1 ${itemStyle(item)} ${item.completed ? "opacity-50 line-through" : ""}`}>
                           {item.recurring && item.recurring !== "none" && <RefreshCw size={7} className="shrink-0 opacity-60" />}
-                          <span className="truncate">{item.title}</span>
+                          <span className="truncate">{item.time ? `${item.time} ` : ""}{item.title}</span>
                         </div>
                       ))}
                       {dayItems.length > 3 && <div className="text-xs text-muted-foreground px-1">+{dayItems.length - 3}</div>}

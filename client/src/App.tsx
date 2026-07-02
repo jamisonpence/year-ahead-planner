@@ -89,6 +89,7 @@ const SettingsPage = lazyPage(() => import("@/pages/SettingsPage"));
 const ProfilePage = lazyPage(() => import("@/pages/ProfilePage"));
 const MessengerPage = lazyPage(() => import("@/pages/MessengerPage"));
 const NotFound = lazyPage(() => import("@/pages/not-found"));
+const ReviewPage = lazyPage(() => import("@/pages/ReviewPage"));
 const PlannerHome = lazyPage(() => import("@/pages/planner/Home"));
 const PlannerSetup = lazyPage(() => import("@/pages/planner/Setup"));
 const PlannerPreferences = lazyPage(() => import("@/pages/planner/Preferences"));
@@ -169,6 +170,7 @@ function AuthenticatedApp() {
         <Route path="/health" component={HealthPage} />
         <Route path="/nutrition" component={NutritionPage} />
         <Route path="/politics" component={PoliticsPage} />
+        <Route path="/review" component={ReviewPage} />
         <Route path="/messenger" component={MessengerPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/profile/:userId" component={ProfilePage} />

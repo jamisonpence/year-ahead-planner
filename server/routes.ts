@@ -361,6 +361,251 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Weekly review ────────────────────────────────────────────────────────────
+  // Monday-anchored week. Stats are computed live; the reflection is saved.
+  function mondayOf(dateISO: string): string {
+    const d = new Date(dateISO + "T00:00:00Z");
+    const dow = d.getUTCDay(); // 0=Sun
+    d.setUTCDate(d.getUTCDate() - ((dow + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  }
+
+  app.get("/api/review/weekly", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const weekStart = mondayOf(today);
+      const weekAgo = new Date(new Date(today + "T00:00:00Z").getTime() - 7 * 86400_000).toISOString().slice(0, 10);
+      const weekAhead = new Date(new Date(today + "T00:00:00Z").getTime() + 7 * 86400_000).toISOString().slice(0, 10);
+
+      const [workouts, sessions, booksFinished, choresDone, journals, habitsRows, goalsRows, upcomingEvents, dueTasks, savedReview, agenda] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS c FROM workout_logs WHERE user_id=$1 AND completed=true AND date >= $2 AND date <= $3`, [uid, weekAgo, today]),
+        pool.query(`SELECT COALESCE(SUM(rs.pages_read),0)::int AS pages, COUNT(*)::int AS c FROM reading_sessions rs JOIN books b ON b.id = rs.book_id WHERE b.user_id=$1 AND rs.date >= $2 AND rs.date <= $3 AND rs.planned = false`, [uid, weekAgo, today]),
+        pool.query(`SELECT COUNT(*)::int AS c FROM books WHERE user_id=$1 AND status='finished' AND finish_date >= $2 AND finish_date <= $3`, [uid, weekAgo, today]),
+        pool.query(`SELECT COUNT(*)::int AS c FROM chores WHERE user_id=$1 AND last_completed >= $2 AND last_completed <= $3`, [uid, weekAgo, today]),
+        pool.query(`SELECT COUNT(*)::int AS c FROM journal_entries WHERE user_id=$1 AND date >= $2 AND date <= $3`, [uid, weekAgo, today]),
+        pool.query(`SELECT completions_json FROM habits WHERE user_id=$1 AND is_archived=false`, [uid]),
+        pool.query(`SELECT id, title, progress_current, progress_target, target_date, priority FROM goals WHERE user_id=$1 ORDER BY priority DESC`, [uid]),
+        pool.query(`SELECT id, title, date, time FROM events WHERE user_id=$1 AND date > $2 AND date <= $3 ORDER BY date LIMIT 15`, [uid, today, weekAhead]),
+        pool.query(`SELECT id, title, due_date, priority FROM general_tasks WHERE user_id=$1 AND completed=false AND due_date IS NOT NULL AND due_date <= $2 ORDER BY due_date LIMIT 25`, [uid, weekAhead]),
+        pool.query(`SELECT * FROM weekly_reviews WHERE user_id=$1 AND week_start=$2`, [uid, weekStart]),
+        storage.getTodayItems(uid, today),
+      ]);
+
+      // Habit completion rate over the window
+      let habitDone = 0;
+      const habitPossible = habitsRows.rows.length * 7;
+      for (const h of habitsRows.rows) {
+        try {
+          const comps: Array<{ date: string }> = JSON.parse(h.completions_json || "[]");
+          habitDone += comps.filter((c) => c.date > weekAgo && c.date <= today).length;
+        } catch {}
+      }
+
+      const goals = goalsRows.rows.map((g: any) => ({
+        id: g.id, title: g.title,
+        progressPct: Math.min(100, Math.round((+g.progress_current / (+g.progress_target || 1)) * 100)),
+        targetDate: g.target_date, priority: g.priority,
+      }));
+
+      const saved = savedReview.rows[0];
+      res.json({
+        weekStart,
+        stats: {
+          workouts: workouts.rows[0].c,
+          readingSessions: sessions.rows[0].c,
+          pagesRead: sessions.rows[0].pages,
+          booksFinished: booksFinished.rows[0].c,
+          choresDone: choresDone.rows[0].c,
+          journalEntries: journals.rows[0].c,
+          habitCompletions: habitDone,
+          habitPossible,
+          habitRate: habitPossible ? Math.round((habitDone / habitPossible) * 100) : null,
+          overdueNow: agenda.counts.overdue,
+        },
+        goals,
+        upcoming: {
+          events: upcomingEvents.rows.map((e: any) => ({ id: e.id, title: e.title, date: e.date, time: e.time })),
+          tasks: dueTasks.rows.map((t: any) => ({ id: t.id, title: t.title, dueDate: t.due_date, priority: t.priority, overdue: t.due_date < today })),
+        },
+        review: saved ? { wins: saved.wins, challenges: saved.challenges, focus: saved.focus } : null,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/review", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { wins, challenges, focus, stats } = req.body ?? {};
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const weekStart = mondayOf(today);
+      const r = await pool.query(
+        `INSERT INTO weekly_reviews (user_id, week_start, wins, challenges, focus, stats_json, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (user_id, week_start)
+         DO UPDATE SET wins=$3, challenges=$4, focus=$5, stats_json=$6
+         RETURNING *`,
+        [uid, weekStart, wins ?? null, challenges ?? null, focus ?? null, JSON.stringify(stats ?? {}), new Date().toISOString()]
+      );
+      res.json(r.rows[0]);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Time-blocking ────────────────────────────────────────────────────────────
+  // Put a task on the calendar: sets its due date and creates (or moves) a
+  // linked calendar block, optionally at a specific time.
+  app.post("/api/schedule-task", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { taskType = "general", taskId, date, time } = req.body ?? {};
+      if (!taskId || !date) return res.status(400).json({ error: "taskId and date required" });
+
+      let title: string | null = null;
+      if (taskType === "general") {
+        const t = await pool.query(`SELECT title FROM general_tasks WHERE id=$1 AND user_id=$2`, [taskId, uid]);
+        if (!t.rows[0]) return res.status(404).json({ error: "Task not found" });
+        title = t.rows[0].title;
+        await pool.query(`UPDATE general_tasks SET due_date=$1 WHERE id=$2 AND user_id=$3`, [date, taskId, uid]);
+      } else if (taskType === "project") {
+        const t = await pool.query(
+          `SELECT pt.title FROM project_tasks pt JOIN projects p ON p.id = pt.project_id WHERE pt.id=$1 AND p.user_id=$2`,
+          [taskId, uid]);
+        if (!t.rows[0]) return res.status(404).json({ error: "Task not found" });
+        title = t.rows[0].title;
+        await pool.query(`UPDATE project_tasks SET due_date=$1 WHERE id=$2`, [date, taskId]);
+      } else {
+        return res.status(400).json({ error: "taskType must be general or project" });
+      }
+
+      // Upsert the linked calendar block
+      const existing = await pool.query(
+        `SELECT id FROM events WHERE user_id=$1 AND linked_task_id=$2 AND linked_task_type=$3`,
+        [uid, taskId, taskType]);
+      let event;
+      if (existing.rows[0]) {
+        event = (await pool.query(
+          `UPDATE events SET date=$1, time=$2, title=$3 WHERE id=$4 RETURNING *`,
+          [date, time ?? null, title, existing.rows[0].id])).rows[0];
+      } else {
+        event = (await pool.query(
+          `INSERT INTO events (user_id, title, date, category, recurring, time, linked_task_id, linked_task_type)
+           VALUES ($1,$2,$3,'task','none',$4,$5,$6) RETURNING *`,
+          [uid, title, date, time ?? null, taskId, taskType])).rows[0];
+      }
+      res.json({ ok: true, event });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── AI weekly planner ────────────────────────────────────────────────────────
+  // Turns active goals/projects/tasks into a concrete week of scheduled tasks.
+  app.post("/api/ai/plan-week", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const enc = await storage.getAnthropicApiKeyEnc(uid);
+      if (!enc) return res.status(402).json({ error: "no_api_key", message: "Add your Anthropic API key in Settings to use AI features." });
+      const apiKey = decrypt(enc);
+
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const weekAhead = new Date(new Date(today + "T00:00:00Z").getTime() + 7 * 86400_000).toISOString().slice(0, 10);
+      const { focus } = req.body ?? {};
+
+      const [goalsWithProjects, generalTasks, eventsAhead, habitsRows] = await Promise.all([
+        storage.getAllGoalsWithProjects(uid),
+        storage.getAllGeneralTasks(uid),
+        pool.query(`SELECT title, date, time FROM events WHERE user_id=$1 AND date >= $2 AND date <= $3 ORDER BY date`, [uid, today, weekAhead]),
+        pool.query(`SELECT title FROM habits WHERE user_id=$1 AND is_archived=false LIMIT 10`, [uid]),
+      ]);
+
+      const activeGoals = goalsWithProjects.map((g) => ({
+        title: g.title,
+        pct: Math.round((g.progressCurrent / (g.progressTarget || 1)) * 100),
+        targetDate: g.targetDate,
+        projects: (g.projects ?? []).filter((p: any) => p.status !== "done").map((p: any) => ({
+          title: p.title,
+          openTasks: p.tasks.filter((t: any) => !t.completed).map((t: any) => t.title).slice(0, 5),
+        })),
+      }));
+      const openTasks = generalTasks.filter((t) => !t.completed)
+        .map((t) => `${t.title}${t.priority === "high" ? " [HIGH]" : ""}${t.dueDate ? ` (due ${t.dueDate})` : " (no due date)"}`);
+
+      const prompt = `You are a personal productivity coach planning the next 7 days (${today} through ${weekAhead}) for a user.
+
+${focus ? `THE USER'S STATED FOCUS FOR THIS WEEK: ${focus}\n` : ""}
+ACTIVE GOALS (with % progress and open project tasks):
+${activeGoals.length ? JSON.stringify(activeGoals, null, 1) : "none"}
+
+OPEN STANDALONE TASKS:
+${openTasks.length ? openTasks.slice(0, 20).map((t) => `- ${t}`).join("\n") : "none"}
+
+ALREADY ON THE CALENDAR THIS WEEK:
+${eventsAhead.rows.length ? eventsAhead.rows.map((e: any) => `- ${e.date}${e.time ? " " + e.time : ""}: ${e.title}`).join("\n") : "nothing"}
+
+DAILY HABITS: ${habitsRows.rows.map((h: any) => h.title).join(", ") || "none"}
+
+Produce a realistic week plan as pure JSON (no markdown fences, no commentary):
+{
+  "summary": "2-3 sentence encouraging overview of the week's plan and priorities",
+  "suggestions": [
+    { "title": "specific, actionable task", "date": "YYYY-MM-DD", "time": "HH:MM or null",
+      "reason": "one short line tying it to a goal/deadline", "source": "goal|project|task|new" }
+  ]
+}
+Rules:
+- 6 to 12 suggestions total, at most 3 per day, spread across the week
+- Prioritize: overdue and high-priority tasks first, then tasks that advance the goals closest to their target dates or the user's stated focus
+- Existing due dates should be respected; don't schedule on top of calendar events
+- Titles must be concrete next actions (verb-first), not vague themes
+- Dates must be within ${today} to ${weekAhead}`;
+
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 2000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      if (!aiRes.ok) {
+        const detail = await aiRes.text();
+        return res.status(502).json({ error: "AI request failed", detail: detail.slice(0, 200) });
+      }
+      const aiJson = await aiRes.json();
+      const text = aiJson?.content?.[0]?.text ?? "";
+      const parsed = extractJson(text) as { summary?: string; suggestions?: unknown[] } | null;
+      if (!parsed || !Array.isArray(parsed.suggestions)) {
+        return res.status(502).json({ error: "AI returned an unexpected format. Try again." });
+      }
+      res.json({ summary: parsed.summary ?? "", suggestions: parsed.suggestions });
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** Accept AI suggestions: creates general tasks (+ timed calendar blocks). */
+  app.post("/api/ai/plan-week/accept", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const items: Array<{ title: string; date: string; time?: string | null }> = req.body?.items ?? [];
+      if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items required" });
+      if (items.length > 25) return res.status(400).json({ error: "too many items" });
+      const created = [];
+      for (const item of items) {
+        if (!item.title?.trim() || !item.date) continue;
+        const task = (await pool.query(
+          `INSERT INTO general_tasks (user_id, title, completed, due_date, priority, sort_order)
+           VALUES ($1,$2,false,$3,'medium',0) RETURNING *`,
+          [uid, item.title.trim(), item.date])).rows[0];
+        if (item.time) {
+          await pool.query(
+            `INSERT INTO events (user_id, title, date, category, recurring, time, linked_task_id, linked_task_type)
+             VALUES ($1,$2,$3,'task','none',$4,$5,'general')`,
+            [uid, item.title.trim(), item.date, item.time, task.id]);
+        }
+        created.push(task);
+      }
+      res.status(201).json({ created: created.length, tasks: created });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Accountability buddies ───────────────────────────────────────────────────
   // Items where I'm someone's buddy: their goals, reading goals, nutrition
   // goals, and workout plans, with owner info and live progress.
@@ -483,7 +728,22 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       const hour = +now.toLocaleString("en-US", { timeZone: "America/Chicago", hour: "2-digit", hour12: false });
       if (hour < DIGEST_HOUR) return;
       const today = now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const isSunday = new Date(today + "T00:00:00Z").getUTCDay() === 0;
       const usersRes = await pool.query(`SELECT id FROM users`);
+
+      // Sunday afternoon: weekly review reminder (once per Sunday)
+      if (isSunday && hour >= 16) {
+        for (const u of usersRes.rows) {
+          if (await storage.hasNotificationToday(u.id, "weekly_review", today)) continue;
+          notify({
+            userId: u.id, type: "weekly_review",
+            title: "🪞 Time for your weekly review",
+            body: "Look back at the week, celebrate wins, and plan the next one.",
+            href: "/review",
+          });
+        }
+      }
+
       for (const u of usersRes.rows) {
         if (await storage.hasNotificationToday(u.id, "daily_digest", today)) continue;
         const agenda = await storage.getTodayItems(u.id, today);

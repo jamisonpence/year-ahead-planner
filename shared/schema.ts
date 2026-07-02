@@ -107,6 +107,10 @@ export const events = pgTable("events", {
   description: text("description"),
   color: text("color"),
   gcalEventId: text("gcal_event_id"),
+  // Time-blocking: optional time of day + link back to the scheduled task
+  time: text("time"),                          // "09:00", "14:30" — optional
+  linkedTaskId: integer("linked_task_id"),     // general_tasks or project_tasks id
+  linkedTaskType: text("linked_task_type"),    // "general" | "project"
 });
 
 // ── TASKS (existing, unchanged) ────────────────────────────────────────────────
@@ -1991,6 +1995,22 @@ export type ConversationWithDetails = Conversation & {
   lastMessage: MessageWithSender | null;
   unreadCount: number;
 };
+
+// ── WEEKLY REVIEWS ────────────────────────────────────────────────────────────
+// One reflection per user per week (week_start = Monday, ISO date).
+export const weeklyReviews = pgTable("weekly_reviews", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").notNull(),
+  weekStart:  text("week_start").notNull(),
+  wins:       text("wins"),
+  challenges: text("challenges"),
+  focus:      text("focus"),          // top focus for next week
+  statsJson:  text("stats_json").notNull().default("{}"), // snapshot of the week's numbers
+  createdAt:  text("created_at").notNull(),
+});
+export const insertWeeklyReviewSchema = createInsertSchema(weeklyReviews).omit({ id: true });
+export type InsertWeeklyReview = z.infer<typeof insertWeeklyReviewSchema>;
+export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
 // Persistent in-app notifications (friend requests, shares, reactions,
