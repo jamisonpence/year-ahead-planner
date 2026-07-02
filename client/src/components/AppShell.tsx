@@ -158,12 +158,9 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   // ── Wellness ──
-  { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
-  { path: "/health",        label: "Health",                  icon: Activity,       beta: true },
-  { path: "/nutrition",     label: "Nutrition",               icon: UtensilsCrossed },
+  { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
   { path: "/library",       label: "Library",                 icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
-  { path: "/recipes",       label: "Recipes",                 icon: ChefHat         },
   { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
   // ── Places ──
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
@@ -183,8 +180,8 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
-  { key: "culture",   label: "Culture",           paths: ["/library", "/recipes", "/hobbies"] },
+  { key: "wellness",  label: "Wellness",          paths: ["/health"] },
+  { key: "culture",   label: "Culture",           paths: ["/library", "/hobbies"] },
   { key: "places",    label: "Places",            paths: ["/places"] },
   { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
   { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
@@ -387,9 +384,10 @@ const COLLECTION_GROUPS = [
     label: "Wellness",
     subtitle: "Fitness and wellbeing",
     tiles: [
-      { path: "/workouts",   emoji: "💪", label: "Workouts"   },
-      { path: "/health",     emoji: "❤️", label: "Health"     },
-      { path: "/nutrition",  emoji: "🥗", label: "Nutrition"  },
+      { path: "/health",              emoji: "💪", label: "Workouts"  },
+      { path: "/health?tab=nutrition",emoji: "🥗", label: "Nutrition" },
+      { path: "/health?tab=vitals",   emoji: "❤️", label: "Vitals"   },
+      { path: "/health?tab=recipes",  emoji: "🍽️", label: "Recipes"  },
     ],
   },
   {
@@ -397,12 +395,11 @@ const COLLECTION_GROUPS = [
     label: "Culture",
     subtitle: "Entertainment and creative pursuits",
     tiles: [
-      { path: "/library",           emoji: "📚", label: "Books"    },
+      { path: "/library",              emoji: "📚", label: "Books"    },
       { path: "/library?tab=watching", emoji: "🎬", label: "Watching" },
-      { path: "/library?tab=music", emoji: "🎵", label: "Music"    },
-      { path: "/library?tab=art",   emoji: "🎨", label: "Art"      },
-      { path: "/recipes",           emoji: "🍽️", label: "Recipes"  },
-      { path: "/hobbies",           emoji: "✨", label: "Hobbies"  },
+      { path: "/library?tab=music",    emoji: "🎵", label: "Music"    },
+      { path: "/library?tab=art",      emoji: "🎨", label: "Art"      },
+      { path: "/hobbies",              emoji: "✨", label: "Hobbies"  },
     ],
   },
   {
@@ -893,12 +890,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   {[
                     { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
                     { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
-                    { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes?shared=1", emoji: "🍽️" },
+                    { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/health?tab=recipes&shared=1", emoji: "🍽️" },
                     { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies?shared=1", emoji: "🎬" },
                     { label: "Places", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
                     { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
                     { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
-                    { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/workouts?shared=1", emoji: "🏋️" },
+                    { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/health?shared=1", emoji: "🏋️" },
                   ]
                     .filter((item) => item.count > 0)
                     .map((item) => (
@@ -1126,12 +1123,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {[
                 { label: "Books", count: sharesCountData?.books ?? 0, path: "/reading?shared=1", emoji: "📚" },
                 { label: "Music", count: sharesCountData?.music ?? 0, path: "/music?shared=1", emoji: "🎵" },
-                { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/recipes?shared=1", emoji: "🍽️" },
+                { label: "Recipes", count: sharesCountData?.recipes ?? 0, path: "/health?tab=recipes&shared=1", emoji: "🍽️" },
                 { label: "Movies & Shows", count: sharesCountData?.movies ?? 0, path: "/movies?shared=1", emoji: "🎬" },
                 { label: "Places", count: sharesCountData?.spots ?? 0, path: "/spots?shared=1", emoji: "📍" },
                 { label: "Art", count: sharesCountData?.art ?? 0, path: "/art?shared=1", emoji: "🎨" },
                 { label: "Quotes", count: sharesCountData?.quotes ?? 0, path: "/quotes?shared=1", emoji: "💬" },
-                { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/workouts?shared=1", emoji: "🏋️" },
+                { label: "Workouts", count: sharesCountData?.workouts ?? 0, path: "/health?shared=1", emoji: "🏋️" },
               ]
                 .filter((item) => item.count > 0)
                 .map((item) => (

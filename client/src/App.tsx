@@ -65,6 +65,7 @@ const GoalsPage = lazyPage(() => import("@/pages/GoalsPage"));
 const TasksPage = lazyPage(() => import("@/pages/TasksPage"));
 const ReadingPage = lazyPage(() => import("@/pages/ReadingPage"));
 const WorkoutsPage = lazyPage(() => import("@/pages/WorkoutsPage"));
+const HealthHubPage = lazyPage(() => import("@/pages/HealthHubPage"));
 const RelationshipsPage = lazyPage(() => import("@/pages/RelationshipsPage"));
 const PeoplePage = lazyPage(() => import("@/pages/PeoplePage"));
 const RecipesPage = lazyPage(() => import("@/pages/RecipesPage"));
@@ -165,6 +166,7 @@ function AuthenticatedApp() {
         <Route path="/tasks" component={TasksPage} />
         <Route path="/library" component={LibraryPage} />
         <Route path="/reading" component={ReadingPage} />
+        <Route path="/health" component={HealthHubPage} />
         <Route path="/workouts" component={WorkoutsPage} />
         <Route path="/people" component={PeoplePage} />
         <Route path="/relationships" component={RelationshipsPage} />
@@ -187,7 +189,6 @@ function AuthenticatedApp() {
         <Route path="/hobbies/:id" component={HobbyDetailPage} />
         <Route path="/habits" component={HabitsPage} />
         <Route path="/faith" component={FaithPage} />
-        <Route path="/health" component={HealthPage} />
         <Route path="/nutrition" component={NutritionPage} />
         <Route path="/politics" component={PoliticsPage} />
         <Route path="/review" component={ReviewPage} />
