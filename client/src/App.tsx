@@ -99,9 +99,23 @@ const PlannerRecipeDetail = lazyPage(() => import("@/pages/planner/RecipeDetail"
 const PlannerShopping = lazyPage(() => import("@/pages/planner/Shopping"));
 
 function PageLoading() {
+  // Skeleton layout: reads as "content arriving" instead of a bare spinner
   return (
-    <div className="min-h-[50vh] flex items-center justify-center">
-      <div className="text-muted-foreground text-sm">Loading…</div>
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4 animate-pulse" aria-label="Loading page">
+      <div className="space-y-2">
+        <div className="h-3 w-32 rounded bg-secondary/70" />
+        <div className="h-7 w-56 rounded bg-secondary" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="h-40 rounded-2xl bg-secondary/60" />
+          <div className="h-28 rounded-2xl bg-secondary/40" />
+        </div>
+        <div className="space-y-4">
+          <div className="h-32 rounded-2xl bg-secondary/50" />
+          <div className="h-24 rounded-2xl bg-secondary/30" />
+        </div>
+      </div>
     </div>
   );
 }

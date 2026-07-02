@@ -34,6 +34,18 @@ const TYPE_META: Record<string, { label: string; emoji: string }> = {
 };
 const TYPE_ORDER = Object.keys(TYPE_META);
 
+// Quick actions: shown when the palette opens and matched against the query,
+// so ⌘K is the fastest way to *do* things, not just find them.
+const QUICK_ACTIONS: Array<{ label: string; emoji: string; href: string; keywords: string }> = [
+  { label: "New task",            emoji: "✅", href: "/tasks",    keywords: "add create task todo" },
+  { label: "New journal entry",   emoji: "✍️", href: "/journal",  keywords: "write journal entry" },
+  { label: "Log a workout",       emoji: "💪", href: "/workouts", keywords: "log workout exercise gym" },
+  { label: "New event",           emoji: "📅", href: "/calendar", keywords: "add event calendar schedule" },
+  { label: "Weekly review",       emoji: "🪞", href: "/review",   keywords: "review week reflect plan ai" },
+  { label: "Check today's agenda",emoji: "☀️", href: "/dashboard",keywords: "today agenda home dashboard" },
+  { label: "Settings",            emoji: "⚙️", href: "/settings", keywords: "settings preferences push api key export" },
+];
+
 export default function CommandPalette({ open, onOpenChange }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -70,8 +82,17 @@ export default function CommandPalette({ open, onOpenChange }: {
     }, 250);
   }
 
-  // Sorted flat list (grouped by type) — index-addressable for keyboard nav
-  const sorted = TYPE_ORDER.flatMap((t) => hits.filter((h) => h.type === t));
+  // Matching quick actions (all of them when the query is empty)
+  const q = query.trim().toLowerCase();
+  const actions = q.length === 0
+    ? QUICK_ACTIONS
+    : QUICK_ACTIONS.filter((a) => a.label.toLowerCase().includes(q) || a.keywords.includes(q));
+
+  // Flat, index-addressable list for keyboard nav: actions first, then results
+  const sorted: Array<{ href: string }> = [
+    ...actions,
+    ...TYPE_ORDER.flatMap((t) => hits.filter((h) => h.type === t)),
+  ];
 
   function go(href: string) {
     onOpenChange(false);
@@ -114,16 +135,32 @@ export default function CommandPalette({ open, onOpenChange }: {
         </div>
 
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
-          {query.trim().length < 2 && (
-            <p className="py-8 text-center text-xs text-muted-foreground">
-              Type at least 2 characters to search your entire life OS
-            </p>
-          )}
           {query.trim().length >= 2 && !loading && sorted.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">No results for “{query}”</p>
           )}
+          {actions.length > 0 && (
+            <div>
+              <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                Quick actions
+              </p>
+              {actions.map((a, i) => (
+                <button
+                  key={a.label}
+                  data-idx={i}
+                  onClick={() => go(a.href)}
+                  onMouseMove={() => setActiveIdx(i)}
+                  className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors ${
+                    i === activeIdx ? "bg-secondary/80" : "hover:bg-secondary/50"
+                  }`}
+                >
+                  <span className="text-base leading-none shrink-0">{a.emoji}</span>
+                  <span className="text-sm">{a.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {(() => {
-            let idx = -1;
+            let idx = actions.length - 1;
             return TYPE_ORDER.map((type) => {
               const items = hits.filter((h) => h.type === type);
               if (!items.length) return null;

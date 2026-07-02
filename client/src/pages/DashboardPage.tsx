@@ -28,6 +28,8 @@ import BookFormModal from "@/components/modals/BookFormModal";
 import ReadingSessionModal from "@/components/modals/ReadingSessionModal";
 import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import { useAuth } from "@/hooks/useAuth";
+import { confettiBurst } from "@/lib/confetti";
+import { History } from "lucide-react";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
@@ -39,12 +41,14 @@ const SECTION_LABELS: Record<SectionId, string> = {
   needs_attention:  "Needs Attention",
   progress:         "Progress",
   social_feed:      "Friends' Activity",
-  events:           "Upcoming Events",
+  events:           "Later This Month",
   recent_activity:  "Recent Activity",
   quick_jump:       "Quick Jump",
   day_planner:      "AI Day Planner",
   memories:         "On This Day",
 };
+// (the "events" section shows only items beyond the Up Next 7-day window,
+// so the two sections never duplicate each other)
 
 const SECTION_ORDER: SectionId[] = ["today", "up_next", "needs_attention", "progress", "social_feed", "events", "recent_activity", "quick_jump", "day_planner", "memories"];
 
@@ -64,7 +68,7 @@ function OnThisDay() {
   return (
     <div className="bg-card border rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm">🕰️</span>
+        <History size={14} className="text-amber-500" />
         <span className="text-sm font-semibold">On This Day</span>
       </div>
       <div className="space-y-2">
@@ -357,6 +361,7 @@ export default function DashboardPage() {
       for (const key of ["/api/habits", "/api/habit-logs", "/api/general-tasks", "/api/chores", "/api/goals", "/api/projects/standalone"]) {
         qcToday.invalidateQueries({ queryKey: [key] });
       }
+      confettiBurst({ particles: 28, originY: 0.3 });
       todayToast({ title: action.type === "habit" ? "Habit done ⚡" : "Done ✓" });
     },
     onError: () => todayToast({ title: "Couldn't complete that", variant: "destructive" }),
@@ -577,7 +582,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-5">
 
       {/* ── 1. Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -820,30 +825,38 @@ export default function DashboardPage() {
                 <Link href="/goals"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Goals <ChevronRight size={12} /></a></Link>
               </div>
               <div className="space-y-3">
-                {/* Goals summary */}
-                {activeGoals.length > 0 && (
-                  <Link href="/goals">
-                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Target size={13} className="text-amber-500 shrink-0" />
-                        <span className="text-xs font-medium">{activeGoals.length} active goal{activeGoals.length !== 1 ? "s" : ""}</span>
-                      </div>
-                      <span className="text-xs font-semibold text-muted-foreground">{avgGoalPct}% avg</span>
-                    </a>
-                  </Link>
-                )}
-                {/* Projects */}
-                {totalActiveProjects > 0 && (
-                  <Link href="/tasks">
-                    <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 size={13} className="text-blue-500 shrink-0" />
-                        <span className="text-xs font-medium">{totalActiveProjects} active project{totalActiveProjects !== 1 ? "s" : ""}</span>
-                      </div>
-                      <ChevronRight size={12} className="text-muted-foreground" />
-                    </a>
-                  </Link>
-                )}
+                {/* Goals summary — momentum framing, not an average-shame stat */}
+                {activeGoals.length > 0 && (() => {
+                  const moving = activeGoals.filter((g: any) => (g.progressCurrent ?? 0) > 0).length;
+                  return (
+                    <Link href="/goals">
+                      <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Target size={13} className="text-amber-500 shrink-0" />
+                          <span className="text-xs font-medium">{activeGoals.length} goal{activeGoals.length !== 1 ? "s" : ""}</span>
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {moving > 0 ? `${moving} moving` : "pick one to start"}
+                        </span>
+                      </a>
+                    </Link>
+                  );
+                })()}
+                {/* Projects — surface the ones actually in motion */}
+                {totalActiveProjects > 0 && (() => {
+                  const inMotion = [...activeProjects, ...goalProjects].filter((p: any) => p.status === "in_progress").length;
+                  return (
+                    <Link href="/tasks">
+                      <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={13} className="text-blue-500 shrink-0" />
+                          <span className="text-xs font-medium">{inMotion > 0 ? `${inMotion} project${inMotion !== 1 ? "s" : ""} in progress` : `${totalActiveProjects} project${totalActiveProjects !== 1 ? "s" : ""}`}</span>
+                        </div>
+                        <ChevronRight size={12} className="text-muted-foreground" />
+                      </a>
+                    </Link>
+                  );
+                })()}
                 {/* Workout streak */}
                 <Link href="/workouts">
                   <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
@@ -938,17 +951,17 @@ export default function DashboardPage() {
           {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
 
           {/* ── UPCOMING EVENTS (compact) ──────────────────────────────────── */}
-          {visible.events && upcomingEvents.length > 0 && (
+          {visible.events && upcomingEvents.filter((e) => daysUntil(e.displayDate) > 7).length > 0 && (
             <div className="bg-card border rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Calendar size={14} className="text-violet-500" />
-                  <span className="text-sm font-semibold">Upcoming Events</span>
+                  <span className="text-sm font-semibold">Later This Month</span>
                 </div>
                 <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">All <ChevronRight size={12} /></a></Link>
               </div>
               <div className="space-y-1.5">
-                {upcomingEvents.slice(0, 4).map((e) => {
+                {upcomingEvents.filter((ev) => daysUntil(ev.displayDate) > 7).slice(0, 4).map((e) => {
                   const d = daysUntil(e.displayDate);
                   return (
                     <div key={e.id} className="flex items-center justify-between gap-2">
@@ -1210,17 +1223,36 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
 
 // ── SocialFeed component ──────────────────────────────────────────────────────
 
+function InviteFriendCTA() {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const { url } = await apiRequest("POST", "/api/invites").then((r) => r.json());
+          await navigator.clipboard.writeText(url);
+          toast({ title: "Invite link copied!", description: "Anyone who joins through it becomes your friend automatically." });
+        } catch {
+          toast({ title: "Couldn't create invite link", variant: "destructive" });
+        } finally { setBusy(false); }
+      }}
+      disabled={busy}
+      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-violet-400/40 text-violet-500 text-xs font-medium hover:bg-violet-500/5 disabled:opacity-50 transition-colors"
+    >
+      🔗 Invite a friend — copy your link
+    </button>
+  );
+}
+
 function SocialFeed({ currentUserId }: { currentUserId?: number }) {
   const [page, setPage] = useState(1);
   const { data, isLoading } = useQuery<{ items: FeedItem[]; hasFriends: boolean; page: number; total: number } | { items: never[]; hasFriends: false }>({
     queryKey: ["/api/feed", page],
     queryFn: () => fetch(`/api/feed?page=${page}`).then((r) => r.json()),
   });
-  const { data: mine } = useQuery<FeedItem[]>({
-    queryKey: ["/api/feed/mine"],
-    queryFn: () => fetch("/api/feed/mine").then((r) => r.json()),
-    enabled: data != null && (data as any).hasFriends === true && (data as any).items?.length === 0,
-  });
+  void 0; // (own-activity fallback removed — friends' feed stays friends-only)
 
   if (isLoading) {
     return (
@@ -1250,7 +1282,8 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
     );
   }
 
-  const items = (data as any).items as FeedItem[];
+  // "Friends' Activity" should show friends — not yourself
+  const items = ((data as any).items as FeedItem[]).filter((it: any) => (it.user?.id ?? it.userId) !== currentUserId);
   const total: number = (data as any).total ?? 0;
   const pageSize = 20;
   const hasMore = page * pageSize < total;
@@ -1263,16 +1296,10 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
           <Users size={14} className="text-primary" />
           <span className="text-sm font-semibold">Friends' Activity</span>
         </div>
-        {mine && mine.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground mb-2">No friends' activity yet. Here's your recent activity:</p>
-            {mine.map((item) => (
-              <FeedCard key={item.id} item={item} currentUserId={currentUserId} />
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground text-center py-4">No activity yet. Start adding books, movies, and more!</p>
-        )}
+        <p className="text-xs text-muted-foreground text-center pt-2 pb-3">
+          Your feed is quiet — activity from friends shows up here.
+        </p>
+        <InviteFriendCTA />
       </div>
     );
   }

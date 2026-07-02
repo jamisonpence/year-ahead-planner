@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { JournalEntry } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -673,9 +674,33 @@ export default function JournalPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/journal/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/journal"] });
-      toast({ title: "Entry deleted" });
     },
   });
+  // Delete with a 5s undo window instead of permanence
+  function deleteEntryWithUndo(entry: JournalEntry) {
+    deleteMut.mutate(entry.id, {
+      onSuccess: () => {
+        toast({
+          title: "Entry deleted",
+          description: entry.title || entry.content.slice(0, 40),
+          action: (
+            <ToastAction
+              altText="Undo delete"
+              onClick={() =>
+                apiRequest("POST", "/api/journal", {
+                  date: entry.date, title: entry.title ?? null, content: entry.content,
+                  mood: entry.mood ?? null, tags: entry.tags ?? null,
+                  isFavorite: entry.isFavorite ?? false,
+                }).then(() => qc.invalidateQueries({ queryKey: ["/api/journal"] }))
+              }
+            >
+              Undo
+            </ToastAction>
+          ),
+        });
+      },
+    });
+  }
 
   const toggleFav = useMutation({
     mutationFn: ({ id, isFavorite }: { id: number; isFavorite: boolean }) =>
@@ -912,7 +937,7 @@ export default function JournalPage() {
               key={entry.id}
               entry={entry}
               onEdit={() => openEdit(entry)}
-              onDelete={() => deleteMut.mutate(entry.id)}
+              onDelete={() => deleteEntryWithUndo(entry)}
               onToggleFav={() => toggleFav.mutate({ id: entry.id, isFavorite: !entry.isFavorite })}
             />
           ))}

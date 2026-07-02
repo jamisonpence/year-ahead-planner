@@ -15,6 +15,7 @@ import {
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, User, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
+  History,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -154,6 +155,7 @@ const ALL_TABS = [
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  { path: "/review",        label: "Weekly Review",           icon: History         },
   // ── People ──
   { path: "/relationships", label: "Friends",                 icon: Users           },
   { path: "/kids",          label: "Family",                  icon: Baby            },
@@ -185,8 +187,8 @@ const ALL_TABS = [
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",      label: null,                paths: ["/discover", "/dashboard", "/messenger", "/calendar"] },
-  { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal"] },
+  { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger", "/discover"] },
+  { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/relationships", "/kids"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
   { key: "culture",   label: "Culture",           paths: ["/reading", "/recipes", "/movies", "/music", "/art", "/hobbies"] },

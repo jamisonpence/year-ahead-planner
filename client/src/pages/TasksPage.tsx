@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { daysUntil } from "@/lib/plannerUtils";
 import type {
   GoalWithProjects, ProjectWithTasks,
@@ -1061,6 +1062,34 @@ export default function TasksPage() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/general-tasks/${id}`),
     onSuccess: inv,
   });
+  // Delete with a 5s undo window instead of permanence
+  function deleteGeneralTaskWithUndo(id: number) {
+    const t = generalTasksData.find((x: any) => x.id === id);
+    deleteGeneralTask.mutate(id, {
+      onSuccess: () => {
+        inv();
+        if (!t) return;
+        toast({
+          title: "Task deleted",
+          description: t.title,
+          action: (
+            <ToastAction
+              altText="Undo delete"
+              onClick={() =>
+                apiRequest("POST", "/api/general-tasks", {
+                  title: t.title, priority: t.priority ?? "medium",
+                  dueDate: (t as any).dueDate ?? null, notes: (t as any).notes ?? null,
+                  completed: t.completed ?? false, sortOrder: (t as any).sortOrder ?? 0,
+                }).then(inv)
+              }
+            >
+              Undo
+            </ToastAction>
+          ),
+        });
+      },
+    });
+  }
 
   // Chores
   const createChore = useMutation({
@@ -1453,7 +1482,7 @@ export default function TasksPage() {
                       key={t.id}
                       task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
                       onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
-                      onDelete={(id) => deleteGeneralTask.mutate(id)}
+                      onDelete={(id) => deleteGeneralTaskWithUndo(id)}
                       onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
                     />
                   ))}
@@ -1758,7 +1787,7 @@ export default function TasksPage() {
                       <TaskRow
                         task={{ id: t.id, title: t.title, completed: t.completed, priority: t.priority, dueDate: (t as any).dueDate, notes: (t as any).notes }}
                         onToggle={(id, v) => toggleGeneralTask.mutate({ id, completed: v })}
-                        onDelete={(id) => deleteGeneralTask.mutate(id)}
+                        onDelete={(id) => deleteGeneralTaskWithUndo(id)}
                         onUpdate={(id, data) => updateGeneralTask.mutate({ id, data: data as any })}
                       />
                       {/* Context row */}

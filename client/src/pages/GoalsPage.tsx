@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { confettiBurst } from "@/lib/confetti";
 import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
@@ -346,6 +347,49 @@ function InlineGoalEditor({ goal, friends, onSave }: {
       <Button size="sm" className="w-full h-8 text-xs" onClick={handleSave} disabled={!isDirty}>
         Save Changes
       </Button>
+    </div>
+  );
+}
+
+// ── Goal milestones (read view — checkable without entering edit mode) ────────
+function GoalMilestones({ goal, onSave }: {
+  goal: GoalWithProjects;
+  onSave: (milestonesJson: string) => void;
+}) {
+  type Milestone = { title: string; targetDate?: string | null; done: boolean };
+  let milestones: Milestone[] = [];
+  try { milestones = JSON.parse((goal as any).milestonesJson || "[]"); } catch {}
+  if (milestones.length === 0) return null;
+  const doneCount = milestones.filter((m) => m.done).length;
+
+  function toggle(idx: number) {
+    const next = milestones.map((m, i) => (i === idx ? { ...m, done: !m.done } : m));
+    if (next[idx].done) confettiBurst({ particles: 40, originY: 0.35 });
+    onSave(JSON.stringify(next));
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">🌟 Milestones</p>
+        <span className="text-xs text-muted-foreground">{doneCount}/{milestones.length}</span>
+      </div>
+      <div className="space-y-1">
+        {milestones.map((m, i) => (
+          <button
+            key={`${m.title}-${i}`}
+            onClick={() => toggle(i)}
+            aria-label={`Mark milestone "${m.title}" ${m.done ? "not done" : "done"}`}
+            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors text-left"
+          >
+            <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${m.done ? "bg-violet-500 border-violet-500" : "border-muted-foreground/40"}`}>
+              {m.done && <Check size={10} className="text-white" />}
+            </span>
+            <span className={`text-sm flex-1 min-w-0 truncate ${m.done ? "line-through text-muted-foreground" : ""}`}>{m.title}</span>
+            {m.targetDate && <span className="text-xs text-muted-foreground shrink-0">{m.targetDate}</span>}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1179,6 +1223,11 @@ export default function GoalsPage() {
                   goal={selectedGoal}
                   friends={friends}
                   onSave={(data) => updateGoal.mutate(data)}
+                />
+
+                <GoalMilestones
+                  goal={selectedGoal}
+                  onSave={(milestonesJson) => updateGoal.mutate({ id: selectedGoal.id, milestonesJson } as any)}
                 />
 
                 {/* ── Horizon & parent goal ──────────────────────────── */}
