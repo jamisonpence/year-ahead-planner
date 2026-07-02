@@ -146,7 +146,6 @@ function PrivacyBanner({ path }: { path: string }) {
 
 const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
-  { path: "/discover",      label: "Discover",                icon: Search          },
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
@@ -157,7 +156,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
   { path: "/review",        label: "Weekly Review",           icon: History         },
   // ── People ──
-  { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids"] },
+  { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   // ── Wellness ──
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
   { path: "/health",        label: "Health",                  icon: Activity,       beta: true },
@@ -181,7 +180,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger", "/discover"] },
+  { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
   { key: "wellness",  label: "Wellness",          paths: ["/workouts", "/health", "/nutrition"] },
@@ -1049,11 +1048,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </Link>
 
-          {/* Discover */}
-          <Link href="/discover">
+          {/* People */}
+          <Link href="/people">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Search size={22} className={location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/discover" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Discovery</span>
+              <Users size={22} className={["/people", "/relationships", "/kids", "/discover"].includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${["/people", "/relationships", "/kids", "/discover"].includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>People</span>
             </button>
           </Link>
         </div>

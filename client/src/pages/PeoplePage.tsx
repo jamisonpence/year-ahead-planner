@@ -1,19 +1,23 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Users, Baby } from "lucide-react";
+import { Users, Baby, Sparkles } from "lucide-react";
 import RelationshipsPage from "./RelationshipsPage";
 import KidsPage from "./KidsPage";
+import DiscoverPage from "./DiscoverPage";
 
-type PeopleTab = "friends" | "family";
+type PeopleTab = "friends" | "family" | "taste";
 
 const TABS: { id: PeopleTab; label: string; icon: React.ElementType }[] = [
-  { id: "friends", label: "Friends", icon: Users },
-  { id: "family",  label: "Family",  icon: Baby  },
+  { id: "friends", label: "Friends",     icon: Users    },
+  { id: "family",  label: "Family",      icon: Baby     },
+  { id: "taste",   label: "Taste Match", icon: Sparkles },
 ];
 
 function getTabFromSearch(): PeopleTab {
   const p = new URLSearchParams(window.location.search).get("tab") as PeopleTab | null;
-  return p === "family" ? "family" : "friends";
+  if (p === "family") return "family";
+  if (p === "taste")  return "taste";
+  return "friends";
 }
 
 export default function PeoplePage() {
@@ -54,9 +58,10 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* ── Both pages kept mounted so state is preserved on tab switch ─────── */}
+      {/* ── All pages kept mounted so state is preserved on tab switch ──────── */}
       <div className={active === "friends" ? "" : "hidden"}><RelationshipsPage /></div>
       <div className={active === "family"  ? "" : "hidden"}><KidsPage /></div>
+      <div className={active === "taste"   ? "" : "hidden"}><DiscoverPage /></div>
     </div>
   );
 }
