@@ -3650,7 +3650,7 @@ export default function WorkoutsPage() {
       </Dialog>
       <WorkoutTemplateModal
         open={templateModal}
-        onClose={() => { setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); }}
+        onClose={() => { setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); setWorkoutActionTarget(null); }}
         editTemplate={editTemplate}
         onLog={templateModalFromPlan ? (logData) => {
           setTemplateModal(false); setEditTemplate(null); setTemplateModalFromPlan(false); setWorkoutActionTarget(null);
