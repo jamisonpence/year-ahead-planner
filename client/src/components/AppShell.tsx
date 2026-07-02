@@ -161,14 +161,14 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
   { path: "/library",       label: "Library",                 icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
-  { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles        },
+  { path: "/hobbies",       label: "Interests",               icon: Sparkles        },
   // ── Places ──
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet          },
-  { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
+  { path: "/housekeeping",  label: "House",                   icon: Home            },
   // ── Beliefs & Society ──
-  { path: "/faith",         label: "Faith & Spirituality",    icon: Flame           },
+  { path: "/faith",         label: "Faith",                   icon: Flame           },
   { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
   // ── Hidden / legacy ──
   { path: "/plants",        label: "Plants",                  icon: Leaf            },
@@ -399,7 +399,7 @@ const COLLECTION_GROUPS = [
       { path: "/library?tab=watching", emoji: "🎬", label: "Watching" },
       { path: "/library?tab=music",    emoji: "🎵", label: "Music"    },
       { path: "/library?tab=art",      emoji: "🎨", label: "Art"      },
-      { path: "/hobbies",              emoji: "✨", label: "Hobbies"  },
+      { path: "/hobbies",              emoji: "✨", label: "Interests" },
     ],
   },
   {
@@ -417,7 +417,7 @@ const COLLECTION_GROUPS = [
     subtitle: "Budget and household",
     tiles: [
       { path: "/budget",       emoji: "💰", label: "Finance"       },
-      { path: "/housekeeping", emoji: "🏠", label: "Housekeeping" },
+      { path: "/housekeeping", emoji: "🏠", label: "House" },
     ],
   },
   {
