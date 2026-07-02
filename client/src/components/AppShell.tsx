@@ -855,7 +855,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="divide-y max-h-80 overflow-y-auto">
                   {/* Friend requests */}
                   {pendingFriendCount > 0 && (
-                    <Link href="/relationships">
+                    <Link href="/people">
                       <div onClick={() => setNotifOpen(false)}
                         className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
                         <span className="text-lg leading-none">👋</span>
@@ -1088,7 +1088,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="divide-y max-h-80 overflow-y-auto">
               {/* Friend requests */}
               {pendingFriendCount > 0 && (
-                <Link href="/relationships">
+                <Link href="/people">
                   <div onClick={() => setNotifOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 cursor-pointer transition-colors">
                     <span className="text-lg leading-none">👋</span>
