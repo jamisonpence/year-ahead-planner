@@ -11,8 +11,10 @@ import { format, parseISO, isToday, isYesterday } from "date-fns";
 import {
   MessageSquare, Plus, Search, Users, X, Send, ChevronLeft,
   Pencil, Trash2, Check, CheckCheck, MoreHorizontal, Gift,
-  MapPin, Film, ChefHat, BookOpen, Dumbbell,
+  MapPin, Film, ChefHat, BookOpen, Dumbbell, Trophy, Megaphone, Scale,
 } from "lucide-react";
+import { BudBetsSection } from "@/components/BudBetsSection";
+import { DebatesSection } from "@/components/DebatesSection";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -146,14 +148,14 @@ function NewGroupDialog({ friends, onCreate, onClose }: {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users size={16} /> New Group
+            <Users size={16} /> New Channel
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <Input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Group name…"
+            placeholder="Channel name — e.g. Fantasy Football, Book Club…"
             className="h-9"
             autoFocus
           />
@@ -1001,6 +1003,7 @@ export default function MessengerPage() {
   const myId = (user as any)?.id as number;
 
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
+  const [view, setView] = useState<"chats" | "channels" | "bets" | "debates">("chats");
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
   const [showDMDialog, setShowDMDialog] = useState(false);
@@ -1147,6 +1150,8 @@ export default function MessengerPage() {
   // ── Filtered conversations ───────────────────────────────────────────────────
 
   const filteredConvs = conversations.filter(c => {
+    // Chats = DMs, Channels = named group conversations
+    if (view === "channels" ? !c.isGroup : c.isGroup) return false;
     if (!search) return true;
     const name = convName(c, myId).toLowerCase();
     return name.includes(search.toLowerCase());
@@ -1156,8 +1161,43 @@ export default function MessengerPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  const VIEWS = [
+    { id: "chats",    label: "Chats",    icon: <MessageSquare size={14} /> },
+    { id: "channels", label: "Channels", icon: <Megaphone size={14} /> },
+    { id: "bets",     label: "Bud Bets", icon: <Trophy size={14} /> },
+    { id: "debates",  label: "Debates",  icon: <Scale size={14} /> },
+  ] as const;
+
   return (
-    <div className="fixed inset-x-0 top-14 bottom-24 flex lg:static lg:inset-auto lg:h-screen">
+    <div className="fixed inset-x-0 top-14 bottom-24 flex flex-col lg:static lg:inset-auto lg:h-screen">
+
+      {/* ── Section tabs: Chats · Channels · Bud Bets · Debates ─────────────── */}
+      <div className="flex items-center gap-1 px-3 py-2 border-b bg-card shrink-0 overflow-x-auto">
+        {VIEWS.map(v => (
+          <button
+            key={v.id}
+            onClick={() => { setView(v.id); setMobileView("list"); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+              view === v.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            {v.icon} {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Bud Bets / Debates views ─────────────────────────────────────────── */}
+      {(view === "bets" || view === "debates") && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="max-w-3xl mx-auto p-4">
+            {view === "bets" ? <BudBetsSection friends={friends} /> : <DebatesSection />}
+          </div>
+        </div>
+      )}
+
+      {/* ── Chats / Channels: two-pane messenger ─────────────────────────────── */}
+      {(view === "chats" || view === "channels") && (
+      <div className="flex flex-1 min-h-0">
 
       {/* ── Left: Conversation List ──────────────────────────────────────────── */}
       <div className={`flex flex-col border-r bg-card ${
@@ -1171,12 +1211,20 @@ export default function MessengerPage() {
               <MessageSquare size={18} className="text-primary" /> Messenger
             </h1>
             <div className="flex gap-1">
-              <Button size="sm" variant="outline" className="h-8 w-8 p-0" title="New Group" onClick={() => setShowGroupDialog(true)}>
-                <Users size={14} />
-              </Button>
-              <Button size="sm" className="h-8 w-8 p-0" title="New Message" onClick={() => setShowDMDialog(true)}>
-                <Plus size={15} />
-              </Button>
+              {view === "channels" ? (
+                <Button size="sm" className="h-8 gap-1.5 px-2.5 text-xs" onClick={() => setShowGroupDialog(true)}>
+                  <Plus size={13} /> New Channel
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="outline" className="h-8 w-8 p-0" title="New Channel" aria-label="New channel" onClick={() => setShowGroupDialog(true)}>
+                    <Megaphone size={14} />
+                  </Button>
+                  <Button size="sm" className="h-8 w-8 p-0" title="New Message" aria-label="New message" onClick={() => setShowDMDialog(true)}>
+                    <Plus size={15} />
+                  </Button>
+                </>
+              )}
             </div>
           </div>
           <div className="relative">
@@ -1194,12 +1242,19 @@ export default function MessengerPage() {
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {filteredConvs.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
-              <MessageSquare size={32} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm font-medium">{search ? "No conversations found" : "No messages yet"}</p>
+              {view === "channels"
+                ? <Megaphone size={32} className="mx-auto mb-3 opacity-20" />
+                : <MessageSquare size={32} className="mx-auto mb-3 opacity-20" />}
+              <p className="text-sm font-medium">
+                {search ? "Nothing found" : view === "channels" ? "No channels yet" : "No messages yet"}
+              </p>
               {!search && (
                 <p className="text-xs mt-1">
-                  <button className="text-primary hover:underline" onClick={() => setShowDMDialog(true)}>
-                    Start a conversation
+                  <button
+                    className="text-primary hover:underline"
+                    onClick={() => (view === "channels" ? setShowGroupDialog(true) : setShowDMDialog(true))}
+                  >
+                    {view === "channels" ? "Create a channel for your crew" : "Start a conversation"}
                   </button>
                 </p>
               )}
@@ -1339,12 +1394,14 @@ export default function MessengerPage() {
                 <MessageSquare size={14} /> New Message
               </Button>
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowGroupDialog(true)}>
-                <Users size={14} /> New Group
+                <Megaphone size={14} /> New Channel
               </Button>
             </div>
           </div>
         )}
       </div>
+      </div>
+      )}
 
       {/* ── Dialogs ──────────────────────────────────────────────────────────── */}
       {showDMDialog && (
