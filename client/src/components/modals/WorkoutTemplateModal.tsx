@@ -405,7 +405,22 @@ export default function WorkoutTemplateModal({ open, onClose, editTemplate, onLo
               <Button type="submit" disabled={isPending} onClick={() => { saveAndLogRef.current = true; }} className="w-full gap-2 justify-start">
                 <ClipboardList size={14} /> {isPending ? "Saving..." : "Log Workout with Saved Changes"}
               </Button>
-              <Button type="button" variant="outline" onClick={onLog} className="w-full gap-2 justify-start">
+              <Button type="button" variant="outline" onClick={() => {
+                if (!onLog) return;
+                const normalizedExercises = exercises.map((ex) => ({
+                  ...ex,
+                  sets: ex.sets.map((s) => ({
+                    reps: s.reps,
+                    weight: typeof s.weight === "string" ? (parseFloat(s.weight) || 0) : s.weight,
+                  })),
+                }));
+                onLog({
+                  name: name.trim() || (editTemplate?.name ?? "Workout"),
+                  workoutType: wType,
+                  exercisesJson: JSON.stringify(normalizedExercises),
+                  templateId: editTemplate?.id ?? null,
+                });
+              }} className="w-full gap-2 justify-start">
                 <ClipboardList size={14} /> Log Workout
               </Button>
               <Button type="button" variant="outline" onClick={onDeleteFromPlan} className="w-full gap-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30">
