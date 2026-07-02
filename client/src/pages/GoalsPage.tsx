@@ -310,6 +310,12 @@ function InlineGoalEditor({ goal, friends, onSave }: {
               <Input
                 value={m.title}
                 onChange={(e) => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (m.title.trim()) setMilestones(ms => [...ms, { title: "", done: false }]);
+                  }
+                }}
                 placeholder="Milestone…"
                 className={`h-7 text-xs flex-1 ${m.done ? "line-through opacity-60" : ""}`}
               />
