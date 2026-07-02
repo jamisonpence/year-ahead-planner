@@ -269,8 +269,36 @@ function saveNotes(folders: NoteFolder[]) {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 function NotesSection() {
+  // Server-backed notes (localStorage kept as a warm cache + offline fallback).
+  // On first load after this change, any existing local-only notes are
+  // migrated up to the server automatically.
   const [folders, setFolders] = useState<NoteFolder[]>(loadNotes);
-  const persist = (next: NoteFolder[]) => { setFolders(next); saveNotes(next); };
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    apiRequest("GET", "/api/notes-data")
+      .then(r => r.json())
+      .then((server: NoteFolder[]) => {
+        if (hydratedRef.current) return;
+        hydratedRef.current = true;
+        const local = loadNotes();
+        if ((!Array.isArray(server) || server.length === 0) && local.length > 0) {
+          // One-time migration of local-only notes to the server
+          apiRequest("PUT", "/api/notes-data", { data: local }).catch(() => {});
+          setFolders(local);
+        } else if (Array.isArray(server)) {
+          setFolders(server);
+          saveNotes(server);
+        }
+      })
+      .catch(() => { hydratedRef.current = true; }); // offline: keep local copy
+  }, []);
+
+  const persist = (next: NoteFolder[]) => {
+    setFolders(next);
+    saveNotes(next);
+    apiRequest("PUT", "/api/notes-data", { data: next }).catch(() => {});
+  };
   const [mobileNotesView, setMobileNotesView] = useState<"folders" | "note">("folders");
 
   // UI state

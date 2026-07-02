@@ -972,13 +972,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setSearchOpen(true)}
-            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+            aria-label="Search"
+            className="p-2.5 rounded-lg hover:bg-secondary transition-colors"
           >
             <Search size={16} />
           </button>
           <button
             onClick={() => setNotifOpen(!notifOpen)}
-            className="relative p-2 rounded-lg hover:bg-secondary transition-colors"
+            aria-label="Notifications"
+            className="relative p-2.5 rounded-lg hover:bg-secondary transition-colors"
           >
             <Bell size={16} />
             {totalNotifCount > 0 && (
@@ -988,7 +990,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </button>
           <Link href="/settings">
-            <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
+            <button aria-label="Settings" className="p-2.5 rounded-lg hover:bg-secondary transition-colors">
               <Settings size={16} />
             </button>
           </Link>

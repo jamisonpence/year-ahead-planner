@@ -438,6 +438,37 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Journal notes (folders/notes) ────────────────────────────────────────────
+  // Previously localStorage-only; now server-backed so notes survive devices
+  // and browser resets. Stored as one JSON document per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notes_data (
+      user_id INTEGER PRIMARY KEY,
+      data_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  app.get("/api/notes-data", requireAuth, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT data_json FROM notes_data WHERE user_id=$1`, [(req.user as User).id]);
+      try { res.json(JSON.parse(r.rows[0]?.data_json ?? "[]")); }
+      catch { res.json([]); }
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/notes-data", requireAuth, async (req, res) => {
+    try {
+      const data = Array.isArray(req.body?.data) ? req.body.data : [];
+      await pool.query(
+        `INSERT INTO notes_data (user_id, data_json, updated_at) VALUES ($1,$2,$3)
+         ON CONFLICT (user_id) DO UPDATE SET data_json=$2, updated_at=$3`,
+        [(req.user as User).id, JSON.stringify(data), new Date().toISOString()]
+      );
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── On this day (memories resurfacing) ───────────────────────────────────────
   // Entries from this same calendar date in previous years, plus 1/3/6 months ago.
   app.get("/api/on-this-day", requireAuth, async (req, res) => {
@@ -588,6 +619,16 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         [uid, weekStart, wins ?? null, challenges ?? null, focus ?? null, JSON.stringify(stats ?? {}), new Date().toISOString()]
       );
       res.json(r.rows[0]);
+    } catch (e) { handleError(res, e); }
+  });
+
+  /** GET /api/review/focus — this week's saved focus (lightweight, for the dashboard header) */
+  app.get("/api/review/focus", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const r = await pool.query(`SELECT focus FROM weekly_reviews WHERE user_id=$1 AND week_start=$2`, [uid, mondayOf(today)]);
+      res.json({ focus: r.rows[0]?.focus || null });
     } catch (e) { handleError(res, e); }
   });
 
@@ -1057,9 +1098,12 @@ Rules:
     res.redirect("/");
   });
 
-  // ── Privacy Policy ────────────────────────────────────────────────────────
+  // ── Privacy Policy & Terms ────────────────────────────────────────────────
   app.get("/privacy", (req, res) => {
     res.sendFile(path.resolve(process.cwd(), "privacy.html"));
+  });
+  app.get("/terms", (req, res) => {
+    res.sendFile(path.resolve(process.cwd(), "terms.html"));
   });
 
   // ── Digital Asset Links (required for TWA Android packaging) ─────────────
@@ -2023,10 +2067,42 @@ Return exactly this structure:
     return r.rows[0]?.goal_id ?? null;
   }
 
+  /** Derive project status from its tasks: all done → done, any done →
+   *  in_progress, none done → not_started. "blocked" is never overridden. */
+  async function deriveProjectStatus(projectId: number) {
+    try {
+      const r = await pool.query(
+        `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE completed)::int AS done FROM project_tasks WHERE project_id=$1`,
+        [projectId]);
+      const { total, done } = r.rows[0];
+      if (!total) return;
+      const status = done === total ? "done" : done > 0 ? "in_progress" : "not_started";
+      await pool.query(`UPDATE projects SET status=$1 WHERE id=$2 AND status != 'blocked' AND status != $1`, [status, projectId]);
+    } catch (e) { console.error("deriveProjectStatus:", e); }
+  }
+
+  function afterProjectTaskChange(projectId: number) {
+    deriveProjectStatus(projectId).catch(() => {});
+    goalIdOfProject(projectId).then(recomputeGoalProgress).catch(() => {});
+  }
+
+  // One-shot backfill: bring existing project statuses in line with their tasks
+  pool.query(`
+    UPDATE projects p SET status = sub.derived
+    FROM (
+      SELECT project_id,
+             CASE WHEN COUNT(*) FILTER (WHERE completed) = COUNT(*) THEN 'done'
+                  WHEN COUNT(*) FILTER (WHERE completed) > 0 THEN 'in_progress'
+                  ELSE 'not_started' END AS derived
+      FROM project_tasks GROUP BY project_id
+    ) sub
+    WHERE p.id = sub.project_id AND p.status != 'blocked' AND p.status != sub.derived
+  `).then(r => { if (r.rowCount) console.log(`Backfilled status on ${r.rowCount} projects.`); }).catch(() => {});
+
   app.post("/api/projects/:projectId/tasks", async (req, res) => {
     try {
       const task = await storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }));
-      goalIdOfProject(+req.params.projectId).then(recomputeGoalProgress).catch(() => {});
+      afterProjectTaskChange(+req.params.projectId);
       res.status(201).json(task);
     }
     catch (e) { handleError(res, e); }
@@ -2035,14 +2111,14 @@ Return exactly this structure:
     try {
       const r = await storage.updateProjectTask(+req.params.id, insertProjectTaskSchema.partial().parse(req.body));
       if (!r) return res.status(404).json({ error: "Not found" });
-      goalIdOfProject(r.projectId).then(recomputeGoalProgress).catch(() => {});
+      afterProjectTaskChange(r.projectId);
       res.json(r);
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/project-tasks/:id", async (req, res) => {
     const pid = await pool.query(`SELECT project_id FROM project_tasks WHERE id=$1`, [+req.params.id]).then(r => r.rows[0]?.project_id).catch(() => null);
     const ok = await storage.deleteProjectTask(+req.params.id);
-    if (ok && pid) goalIdOfProject(pid).then(recomputeGoalProgress).catch(() => {});
+    if (ok && pid) afterProjectTaskChange(pid);
     ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 

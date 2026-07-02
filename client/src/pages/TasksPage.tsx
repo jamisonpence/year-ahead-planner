@@ -921,6 +921,8 @@ export default function TasksPage() {
 
   // ── View state ──────────────────────────────────────────────────────────────
   const [activeView, setActiveView] = useState<ActiveView>("projects");
+  // Per-group manual expand/collapse overrides (defaults are computed)
+  const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null); // "source:id"
   const [newProjectModal, setNewProjectModal] = useState(false);
   const [newTaskModal, setNewTaskModal] = useState(false);
@@ -1303,28 +1305,74 @@ export default function TasksPage() {
                 </Button>
               </div>
             ) : (
-              <>
-                {/* Desktop: 2-col grid; mobile: single col */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {sortedActiveProjects.map(p => {
-                    const key = projKey(p);
-                    return (
-                      <ProjectCard
-                        key={key}
-                        project={p}
-                        expanded={expandedProjectId === key}
-                        onToggleExpand={() => setExpandedProjectId(expandedProjectId === key ? null : key)}
-                        onToggleTask={(taskId, done) => handleToggleProjectTask(p, taskId, done)}
-                        onDeleteTask={(taskId) => handleDeleteProjectTask(p, taskId)}
-                        onUpdateTask={(taskId, data) => handleUpdateProjectTask(p, taskId, data)}
-                        onAddTask={(title) => handleAddProjectTask(p, title)}
-                        onEdit={() => { setEditingDisplayProject(p); setProjectEditModal(true); }}
-                        onDelete={() => handleDeleteProject(p)}
-                      />
-                    );
-                  })}
-                </div>
-              </>
+              (() => {
+                // Group projects by their parent goal (standalone and house
+                // projects get their own groups) so 50 job-application shells
+                // don't bury the one project that matters.
+                const groups = new Map<string, typeof sortedActiveProjects>();
+                for (const p of sortedActiveProjects) {
+                  const label = (p as any).goalTitle
+                    ? `🎯 ${(p as any).goalTitle}`
+                    : (p as any).source === "house" ? "🏠 House Projects" : "📁 Standalone";
+                  if (!groups.has(label)) groups.set(label, [] as any);
+                  groups.get(label)!.push(p);
+                }
+                const groupList = [...groups.entries()];
+                const single = groupList.length === 1;
+
+                const renderGrid = (items: typeof sortedActiveProjects) => (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {items.map(p => {
+                      const key = projKey(p);
+                      return (
+                        <ProjectCard
+                          key={key}
+                          project={p}
+                          expanded={expandedProjectId === key}
+                          onToggleExpand={() => setExpandedProjectId(expandedProjectId === key ? null : key)}
+                          onToggleTask={(taskId, done) => handleToggleProjectTask(p, taskId, done)}
+                          onDeleteTask={(taskId) => handleDeleteProjectTask(p, taskId)}
+                          onUpdateTask={(taskId, data) => handleUpdateProjectTask(p, taskId, data)}
+                          onAddTask={(title) => handleAddProjectTask(p, title)}
+                          onEdit={() => { setEditingDisplayProject(p); setProjectEditModal(true); }}
+                          onDelete={() => handleDeleteProject(p)}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+
+                if (single) return renderGrid(groupList[0][1]);
+
+                return (
+                  <div className="space-y-4">
+                    {groupList.map(([label, items]) => {
+                      const inProgress = items.filter(p => p.status === "in_progress").length;
+                      // Big, untouched groups start collapsed
+                      const defaultCollapsed = items.length > 6 && inProgress === 0;
+                      const collapsed = toggledGroups[label] ?? defaultCollapsed;
+                      return (
+                        <div key={label}>
+                          <button
+                            onClick={() => setToggledGroups(g => ({ ...g, [label]: !collapsed }))}
+                            aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+                            className="w-full flex items-center gap-2 py-1.5 px-1 text-left"
+                          >
+                            {collapsed ? <ChevronDown size={14} className="text-muted-foreground shrink-0" /> : <ChevronUp size={14} className="text-muted-foreground shrink-0" />}
+                            <span className="text-sm font-semibold">{label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {items.length} project{items.length === 1 ? "" : "s"}
+                              {inProgress > 0 ? ` · ${inProgress} in progress` : ""}
+                            </span>
+                            <span className="flex-1 border-t border-border/60 ml-2" />
+                          </button>
+                          {!collapsed && <div className="mt-2">{renderGrid(items)}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
           </div>
         )}
