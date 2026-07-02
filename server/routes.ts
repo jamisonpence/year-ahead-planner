@@ -361,6 +361,145 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Attachments (photos/files on any item) ───────────────────────────────────
+  // Generic: attach files to journal entries, kid memories, hobbies, etc.
+  // Stored on local disk like receipts; served behind auth.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_attachments_item ON attachments (user_id, item_type, item_id)`).catch(() => {});
+
+  const ATTACH_DIR = path.resolve("uploads/attachments");
+  if (!fs.existsSync(ATTACH_DIR)) fs.mkdirSync(ATTACH_DIR, { recursive: true });
+
+  const attachUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, ATTACH_DIR),
+      filename: (_req, file, cb) => {
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        cb(null, `${unique}${path.extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/gif", "application/pdf"];
+      cb(null, allowed.includes(file.mimetype));
+    },
+  });
+
+  // Serve behind auth — attachments are personal photos
+  app.use("/uploads/attachments", requireAuth, express.static(ATTACH_DIR));
+
+  app.post("/api/attachments", requireAuth, attachUpload.single("file"), async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { itemType, itemId } = req.body ?? {};
+      if (!req.file) return res.status(400).json({ error: "file required (jpeg/png/webp/heic/gif/pdf, max 15MB)" });
+      if (!itemType || !itemId) return res.status(400).json({ error: "itemType and itemId required" });
+      const r = await pool.query(
+        `INSERT INTO attachments (user_id, item_type, item_id, filename, original_name, mime_type, size_bytes, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [uid, itemType, +itemId, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, new Date().toISOString()]
+      );
+      const a = r.rows[0];
+      res.status(201).json({ id: a.id, itemType: a.item_type, itemId: a.item_id, url: `/uploads/attachments/${a.filename}`, originalName: a.original_name, mimeType: a.mime_type, sizeBytes: a.size_bytes, createdAt: a.created_at });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/attachments", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { itemType, itemId } = req.query as Record<string, string>;
+      const r = itemType && itemId
+        ? await pool.query(`SELECT * FROM attachments WHERE user_id=$1 AND item_type=$2 AND item_id=$3 ORDER BY created_at`, [uid, itemType, +itemId])
+        : await pool.query(`SELECT * FROM attachments WHERE user_id=$1 AND item_type=$2 ORDER BY created_at`, [uid, itemType ?? ""]);
+      res.json(r.rows.map((a: any) => ({ id: a.id, itemType: a.item_type, itemId: a.item_id, url: `/uploads/attachments/${a.filename}`, originalName: a.original_name, mimeType: a.mime_type, sizeBytes: a.size_bytes, createdAt: a.created_at })));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/attachments/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const r = await pool.query(`DELETE FROM attachments WHERE id=$1 AND user_id=$2 RETURNING filename`, [+req.params.id, uid]);
+      if (!r.rows[0]) return res.status(404).json({ error: "Not found" });
+      fs.unlink(path.join(ATTACH_DIR, r.rows[0].filename), () => {});
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── On this day (memories resurfacing) ───────────────────────────────────────
+  // Entries from this same calendar date in previous years, plus 1/3/6 months ago.
+  app.get("/api/on-this-day", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const [y, m, d] = today.split("-").map(Number);
+      const mmdd = today.slice(5); // "MM-DD"
+
+      const monthsAgo = (n: number) => {
+        const dt = new Date(Date.UTC(y, m - 1 - n, Math.min(d, 28)));
+        return dt.toISOString().slice(0, 10);
+      };
+      const recentDates = [monthsAgo(1), monthsAgo(3), monthsAgo(6)];
+
+      const label = (dateISO: string): string => {
+        const yearsAgo = y - +dateISO.slice(0, 4);
+        if (dateISO.slice(5) === mmdd && yearsAgo > 0) return `${yearsAgo} year${yearsAgo === 1 ? "" : "s"} ago today`;
+        const months = (y - +dateISO.slice(0, 4)) * 12 + (m - +dateISO.slice(5, 7));
+        return `${months} month${months === 1 ? "" : "s"} ago`;
+      };
+
+      // Same MM-DD in a previous year, or one of the months-ago dates
+      const dateMatch = `(
+        (SUBSTRING(%COL% FROM 6 FOR 5) = $2 AND %COL% < $3)
+        OR %COL% = ANY($4)
+      )`;
+      const q = (table: string, col: string, select: string) =>
+        pool.query(
+          `SELECT ${select}, ${col} AS mem_date FROM ${table}
+           WHERE user_id = $1 AND ${col} IS NOT NULL AND ${dateMatch.replace(/%COL%/g, col)}
+           ORDER BY ${col} DESC LIMIT 5`,
+          [uid, mmdd, today, recentDates]
+        ).catch(() => ({ rows: [] as any[] }));
+
+      const [journal, memories, milestones, timeline, cities, booksRows] = await Promise.all([
+        q("journal_entries", "date", `id, COALESCE(title, LEFT(content, 70)) AS title, mood AS sub`),
+        q("child_memories", "date", `id, title, description AS sub`),
+        q("child_milestones", "date", `id, title, category AS sub`),
+        q("timeline_entries", "date", `id, COALESCE(note, interaction_type) AS title, interaction_type AS sub`),
+        q("visited_cities", "visited_date", `id, city AS title, country AS sub`),
+        q("books", "finish_date", `id, title, author AS sub`),
+      ]);
+
+      const items = [
+        ...journal.rows.map((r: any) => ({ type: "journal", emoji: "✍️", href: "/journal", ...r })),
+        ...memories.rows.map((r: any) => ({ type: "memory", emoji: "💛", href: "/kids", ...r })),
+        ...milestones.rows.map((r: any) => ({ type: "milestone", emoji: "🌟", href: "/kids", ...r })),
+        ...timeline.rows.map((r: any) => ({ type: "moment", emoji: "👥", href: "/relationships", ...r })),
+        ...cities.rows.map((r: any) => ({ type: "travel", emoji: "🌍", href: "/spots", ...r })),
+        ...booksRows.rows.map((r: any) => ({ type: "book", emoji: "📚", href: "/reading", ...r })),
+      ]
+        .map((it: any) => ({
+          type: it.type, emoji: it.emoji, href: it.href, id: it.id,
+          title: it.title, sub: it.sub ?? null, date: it.mem_date, when: label(it.mem_date),
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 8);
+
+      res.json({ date: today, items });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Weekly review ────────────────────────────────────────────────────────────
   // Monday-anchored week. Stats are computed live; the reflection is saved.
   function mondayOf(dateISO: string): string {

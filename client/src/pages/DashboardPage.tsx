@@ -31,7 +31,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "today" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner";
+type SectionId = "today" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories";
 
 const SECTION_LABELS: Record<SectionId, string> = {
   today:            "Today",
@@ -43,14 +43,48 @@ const SECTION_LABELS: Record<SectionId, string> = {
   recent_activity:  "Recent Activity",
   quick_jump:       "Quick Jump",
   day_planner:      "AI Day Planner",
+  memories:         "On This Day",
 };
 
-const SECTION_ORDER: SectionId[] = ["today", "up_next", "needs_attention", "progress", "social_feed", "events", "recent_activity", "quick_jump", "day_planner"];
+const SECTION_ORDER: SectionId[] = ["today", "up_next", "needs_attention", "progress", "social_feed", "events", "recent_activity", "quick_jump", "day_planner", "memories"];
 
 const ALL_ON: Record<SectionId, boolean> = {
   today: true, up_next: true, needs_attention: true, progress: true,
   social_feed: true, events: true, recent_activity: true, quick_jump: true, day_planner: false,
+  memories: true,
 };
+
+// ── On This Day (memories resurfacing) ────────────────────────────────────────
+function OnThisDay() {
+  const { data } = useQuery<{ items: Array<{ type: string; emoji: string; href: string; id: number; title: string; sub: string | null; date: string; when: string }> }>({
+    queryKey: ["/api/on-this-day"],
+    queryFn: () => apiRequest("GET", "/api/on-this-day").then(r => r.json()),
+  });
+  if (!data || data.items.length === 0) return null;
+  return (
+    <div className="bg-card border rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm">🕰️</span>
+        <span className="text-sm font-semibold">On This Day</span>
+      </div>
+      <div className="space-y-2">
+        {data.items.map((it) => (
+          <Link key={`${it.type}-${it.id}`} href={it.href}>
+            <a className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-secondary/50 transition-colors">
+              <span className="text-base leading-none mt-0.5">{it.emoji}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm truncate">{it.title}</span>
+                <span className="block text-[11px] text-muted-foreground truncate">
+                  {it.when}{it.sub ? ` · ${it.sub}` : ""}
+                </span>
+              </span>
+            </a>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function loadVisibility(): Record<SectionId, boolean> {
   try {
@@ -828,6 +862,8 @@ export default function DashboardPage() {
           )}
 
           {/* ── RECENT ACTIVITY ────────────────────────────────────────────── */}
+          {visible.memories && <OnThisDay />}
+
           {visible.recent_activity && <MyRecentActivity />}
 
           {/* ── QUICK JUMP ─────────────────────────────────────────────────── */}

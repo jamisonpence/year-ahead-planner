@@ -64,6 +64,76 @@ const EMPTY_FORM = {
 
 // ── Entry Card ────────────────────────────────────────────────────────────────
 
+// ── Entry photos (attachments) ────────────────────────────────────────────────
+
+type Attachment = { id: number; url: string; originalName: string; mimeType: string };
+
+function EntryPhotos({ entryId }: { entryId: number }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const key = ["/api/attachments", "journal", entryId];
+  const { data: photos = [] } = useQuery<Attachment[]>({
+    queryKey: key,
+    queryFn: () => apiRequest("GET", `/api/attachments?itemType=journal&itemId=${entryId}`).then(r => r.json()),
+  });
+  const [uploading, setUploading] = useState(false);
+  const [viewing, setViewing] = useState<Attachment | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("itemType", "journal");
+      fd.append("itemId", String(entryId));
+      const r = await fetch("/api/attachments", { method: "POST", body: fd });
+      if (!r.ok) throw new Error();
+      qc.invalidateQueries({ queryKey: key });
+    } catch {
+      toast({ title: "Upload failed", description: "Images or PDF, max 15MB.", variant: "destructive" });
+    } finally { setUploading(false); }
+  }
+
+  const removeMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/attachments/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+  });
+
+  return (
+    <div className="px-5 pb-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {photos.map((p) => (
+          <div key={p.id} className="relative group">
+            {p.mimeType.startsWith("image/") ? (
+              <img src={p.url} alt={p.originalName} onClick={() => setViewing(p)}
+                className="w-16 h-16 object-cover rounded-lg border cursor-pointer hover:opacity-90" />
+            ) : (
+              <a href={p.url} target="_blank" rel="noreferrer"
+                className="w-16 h-16 rounded-lg border flex items-center justify-center text-xl bg-secondary/50">📄</a>
+            )}
+            <button
+              onClick={() => removeMut.mutate(p.id)}
+              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-white text-[9px] leading-none items-center justify-center hidden group-hover:flex"
+              title="Remove"
+            >✕</button>
+          </div>
+        ))}
+        <label className={`w-16 h-16 rounded-lg border border-dashed flex flex-col items-center justify-center text-muted-foreground cursor-pointer hover:bg-secondary/40 transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+          <span className="text-lg leading-none">{uploading ? "…" : "📷"}</span>
+          <span className="text-[9px] mt-0.5">{uploading ? "" : "Add"}</span>
+          <input type="file" accept="image/*,application/pdf" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+        </label>
+      </div>
+      {viewing && (
+        <div className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setViewing(null)}>
+          <img src={viewing.url} alt={viewing.originalName} className="max-w-full max-h-full rounded-xl shadow-2xl" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EntryCard({
   entry,
   onEdit,
@@ -146,6 +216,9 @@ function EntryCard({
           )}
         </div>
       </div>
+
+      {/* Photos */}
+      <EntryPhotos entryId={entry.id} />
 
       {/* Footer row */}
       {(entry.mood || tags.length > 0) && (
