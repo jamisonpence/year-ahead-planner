@@ -58,10 +58,10 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* ── All pages kept mounted so state is preserved on tab switch ──────── */}
+      {/* ── Pages — Friends stays mounted (complex hub state); others conditional ── */}
       <div className={active === "friends" ? "" : "hidden"}><RelationshipsPage /></div>
-      <div className={active === "family"  ? "" : "hidden"}><KidsPage /></div>
-      <div className={active === "taste"   ? "" : "hidden"}><DiscoverPage /></div>
+      {active === "family" && <KidsPage />}
+      {active === "taste"  && <DiscoverPage />}
     </div>
   );
 }
