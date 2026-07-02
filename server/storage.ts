@@ -1739,6 +1739,24 @@ export async function initializeStorage() {
     )
   `);
 
+  // Unified shares — replaces the 8 per-type share/recommendation tables.
+  // content_json holds the type-specific fields (camelCase, same names the
+  // client already expects). Legacy rows are migrated on first boot.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shares (
+      id SERIAL PRIMARY KEY,
+      share_type TEXT NOT NULL,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      content_json TEXT NOT NULL DEFAULT '{}',
+      notes TEXT,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      is_dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await migrateLegacyShares();
+
   // Persistent in-app notifications
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
@@ -1860,6 +1878,8 @@ export async function initializeStorage() {
     ["bud_bets", "creator_id"], ["bud_bets", "opponent_id"],
     ["notifications", "user_id, is_read"],
     ["notifications", "user_id, created_at"],
+    ["shares", "to_user_id, share_type"],
+    ["shares", "from_user_id"],
   ];
   for (const [table, cols] of indexes) {
     const name = `idx_${table}_${cols.replace(/[^a-z_]/g, "_").replace(/__+/g, "_")}`;
@@ -3433,6 +3453,10 @@ export const storage: IStorage = {
   async deleteAccount(userId: number) {
     const uid = userId;
     // Delete in dependency order — children before parents, social tables included
+    await pool.query(`DELETE FROM shares WHERE from_user_id = $1 OR to_user_id = $1`, [uid]);
+    await pool.query(`DELETE FROM notifications WHERE user_id = $1 OR actor_id = $1`, [uid]);
+    await pool.query(`DELETE FROM push_subscriptions WHERE user_id = $1`, [uid]).catch(() => {});
+    await pool.query(`DELETE FROM invites WHERE from_user_id = $1`, [uid]).catch(() => {});
     await pool.query(`DELETE FROM political_debate_upvotes WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM political_debate_members WHERE user_id = $1`, [uid]);
     await pool.query(`DELETE FROM political_debate_posts WHERE user_id = $1`, [uid]);
@@ -6625,3 +6649,269 @@ export async function seedSystemRecipes() {
 
 
 export { pool };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIFIED SHARES
+// One `shares` table replaces: recipe_shares, quote_shares, art_shares,
+// spot_shares, movie_shares, workout_shares, book_recommendations,
+// music_recommendations. The legacy storage methods below are overridden at
+// runtime (Object.assign) so every route and client keeps its exact shape.
+// Legacy tables are kept as a read-only backup after one-time migration.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function snakeToCamelKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(obj)) {
+    out[k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())] = obj[k];
+  }
+  return out;
+}
+
+function parseContent(json: string | null): Record<string, unknown> {
+  try { return JSON.parse(json || "{}"); } catch { return {}; }
+}
+
+/** One-time copy of legacy share rows into the unified table. */
+export async function migrateLegacyShares() {
+  const existing = await pool.query(`SELECT COUNT(*)::int AS c FROM shares`);
+  if (existing.rows[0].c > 0) return;
+  const sources: Array<[string, string]> = [
+    ["book", "book_recommendations"], ["music", "music_recommendations"],
+    ["recipe", "recipe_shares"], ["quote", "quote_shares"], ["art", "art_shares"],
+    ["spot", "spot_shares"], ["movie", "movie_shares"], ["workout", "workout_shares"],
+  ];
+  let total = 0;
+  for (const [type, table] of sources) {
+    try {
+      const rows = await pool.query(`SELECT * FROM ${table} ORDER BY id`);
+      for (const row of rows.rows) {
+        const { id: _id, from_user_id, to_user_id, notes, created_at, is_dismissed, is_read, ...rest } = row;
+        await pool.query(
+          `INSERT INTO shares (share_type, from_user_id, to_user_id, content_json, notes, is_read, is_dismissed, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [type, from_user_id, to_user_id, JSON.stringify(snakeToCamelKeys(rest)),
+           notes ?? null, is_read ?? false, is_dismissed ?? false, created_at ?? new Date().toISOString()]
+        );
+        total++;
+      }
+    } catch (e) { console.warn(`Share migration skipped for ${table}: ${String(e).slice(0, 120)}`); }
+  }
+  if (total > 0) console.log(`Migrated ${total} legacy share rows into unified shares table.`);
+}
+
+async function sendShareUnified(shareType: string, data: Record<string, any>): Promise<any> {
+  const {
+    id: _drop, fromUserId, toUserId,
+    notes = null, createdAt = new Date().toISOString(),
+    isDismissed = false, isRead = false,
+    ...content
+  } = data;
+  const r = await pool.query(
+    `INSERT INTO shares (share_type, from_user_id, to_user_id, content_json, notes, is_read, is_dismissed, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [shareType, fromUserId, toUserId, JSON.stringify(content), notes, isRead, isDismissed, createdAt]
+  );
+  return { id: r.rows[0].id, fromUserId, toUserId, ...content, notes, createdAt, isDismissed, isRead };
+}
+
+async function getSharesUnified(shareType: string, userId: number): Promise<{ received: any[]; sent: any[] }> {
+  const rows = await pool.query(
+    `SELECT s.*, fu.name AS from_name, fu.avatar_url AS from_avatar,
+            tu.name AS to_name, tu.avatar_url AS to_avatar
+     FROM shares s
+     JOIN users fu ON fu.id = s.from_user_id
+     JOIN users tu ON tu.id = s.to_user_id
+     WHERE s.share_type = $1 AND (s.from_user_id = $2 OR s.to_user_id = $2)
+     ORDER BY s.created_at DESC`,
+    [shareType, userId]
+  );
+  const map = (r: any) => ({
+    id: r.id, fromUserId: r.from_user_id, toUserId: r.to_user_id,
+    ...parseContent(r.content_json),
+    notes: r.notes, createdAt: r.created_at, isDismissed: r.is_dismissed, isRead: r.is_read,
+    fromUser: { id: r.from_user_id, name: r.from_name, avatarUrl: r.from_avatar },
+    toUser: { id: r.to_user_id, name: r.to_name, avatarUrl: r.to_avatar },
+  });
+  return {
+    received: rows.rows.filter((r: any) => r.to_user_id === userId && !r.is_dismissed).map(map),
+    sent: rows.rows.filter((r: any) => r.from_user_id === userId).map(map),
+  };
+}
+
+async function dismissShareUnified(shareType: string, id: number, userId: number): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE shares SET is_dismissed = true WHERE id = $1 AND to_user_id = $2 AND share_type = $3`,
+    [id, userId, shareType]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+async function deleteShareUnified(shareType: string, id: number, userId: number): Promise<boolean> {
+  const r = await pool.query(
+    `DELETE FROM shares WHERE id = $1 AND from_user_id = $2 AND share_type = $3`,
+    [id, userId, shareType]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+// How each type maps its content fields to the generic inbox card
+const INBOX_FIELDS: Record<string, (c: any) => { title: string; subtitle: string | null; imageUrl: string | null }> = {
+  book:   (c) => ({ title: c.bookTitle,  subtitle: c.bookAuthor ?? null,     imageUrl: c.coverUrl ?? null }),
+  movie:  (c) => ({ title: c.title,      subtitle: c.director ?? null,       imageUrl: c.posterUrl ?? null }),
+  music:  (c) => ({ title: c.artistName, subtitle: c.songTitle ?? null,      imageUrl: null }),
+  recipe: (c) => ({ title: c.recipeName, subtitle: c.recipeCategory ?? null, imageUrl: c.recipeImageUrl ?? null }),
+  spot:   (c) => ({ title: c.name,       subtitle: c.city ?? null,           imageUrl: null }),
+  art:    (c) => ({ title: c.title,      subtitle: c.artistName ?? null,     imageUrl: c.imageUrl ?? null }),
+  quote:  (c) => ({ title: c.text,       subtitle: c.author ?? null,         imageUrl: null }),
+};
+
+const PLURAL_TO_TYPE: Record<string, string> = {
+  books: "book", music: "music", recipes: "recipe", movies: "movie",
+  spots: "spot", art: "art", quotes: "quote", workouts: "workout",
+};
+
+Object.assign(storage as any, {
+  // Per-type send/get/dismiss/delete — same signatures and return shapes
+  sendRecipeShare: (d: any) => sendShareUnified("recipe", d),
+  getRecipeShares: (u: number) => getSharesUnified("recipe", u),
+  dismissRecipeShare: (id: number, u: number) => dismissShareUnified("recipe", id, u),
+  deleteRecipeShare: (id: number, u: number) => deleteShareUnified("recipe", id, u),
+
+  sendMusicRecommendation: (d: any) => sendShareUnified("music", d),
+  getMusicRecommendations: (u: number) => getSharesUnified("music", u),
+  dismissMusicRecommendation: (id: number, u: number) => dismissShareUnified("music", id, u),
+  deleteMusicRecommendation: (id: number, u: number) => deleteShareUnified("music", id, u),
+
+  sendBookRecommendation: (d: any) => sendShareUnified("book", d),
+  getBookRecommendations: (u: number) => getSharesUnified("book", u),
+  dismissBookRecommendation: (id: number, u: number) => dismissShareUnified("book", id, u),
+  deleteBookRecommendation: (id: number, u: number) => deleteShareUnified("book", id, u),
+
+  sendQuoteShare: (d: any) => sendShareUnified("quote", d),
+  getQuoteShares: (u: number) => getSharesUnified("quote", u),
+  dismissQuoteShare: (id: number, u: number) => dismissShareUnified("quote", id, u),
+  deleteQuoteShare: (id: number, u: number) => deleteShareUnified("quote", id, u),
+
+  sendArtShare: (d: any) => sendShareUnified("art", d),
+  getArtShares: (u: number) => getSharesUnified("art", u),
+  dismissArtShare: (id: number, u: number) => dismissShareUnified("art", id, u),
+  deleteArtShare: (id: number, u: number) => deleteShareUnified("art", id, u),
+
+  sendSpotShare: (d: any) => sendShareUnified("spot", d),
+  getSpotShares: (u: number) => getSharesUnified("spot", u),
+  dismissSpotShare: (id: number, u: number) => dismissShareUnified("spot", id, u),
+  deleteSpotShare: (id: number, u: number) => deleteShareUnified("spot", id, u),
+
+  sendMovieShare: (d: any) => sendShareUnified("movie", d),
+  getMovieShares: (u: number) => getSharesUnified("movie", u),
+  dismissMovieShare: (id: number, u: number) => dismissShareUnified("movie", id, u),
+  deleteMovieShare: (id: number, u: number) => deleteShareUnified("movie", id, u),
+
+  createWorkoutShare: (d: any) => sendShareUnified("workout", d),
+  getWorkoutShares: async (u: number) => (await getSharesUnified("workout", u)).received,
+  dismissWorkoutShare: (id: number, u: number) => dismissShareUnified("workout", id, u),
+
+  // Aggregates
+  async getUnreadSharesCount(userId: number) {
+    const r = await pool.query(
+      `SELECT share_type, COUNT(*)::int AS c FROM shares
+       WHERE to_user_id = $1 AND is_dismissed = false AND is_read = false
+       GROUP BY share_type`,
+      [userId]
+    );
+    const byType: Record<string, number> = Object.fromEntries(r.rows.map((x: any) => [x.share_type, x.c]));
+    const counts = {
+      books: byType.book ?? 0, music: byType.music ?? 0, recipes: byType.recipe ?? 0,
+      movies: byType.movie ?? 0, spots: byType.spot ?? 0, art: byType.art ?? 0,
+      quotes: byType.quote ?? 0, workouts: byType.workout ?? 0,
+    };
+    return { total: Object.values(counts).reduce((a, b) => a + b, 0), ...counts };
+  },
+
+  async markSharesRead(type: string, userId: number) {
+    const shareType = PLURAL_TO_TYPE[type];
+    if (!shareType) return;
+    await pool.query(
+      `UPDATE shares SET is_read = true WHERE to_user_id = $1 AND share_type = $2 AND is_read = false`,
+      [userId, shareType]
+    );
+  },
+
+  async getRecommendationsInbox(userId: number, filterType?: string) {
+    const types = filterType && filterType !== "all" ? [filterType] : Object.keys(INBOX_FIELDS);
+    const r = await pool.query(
+      `SELECT s.*, u.name AS from_name, u.avatar_url AS from_avatar
+       FROM shares s JOIN users u ON u.id = s.from_user_id
+       WHERE s.to_user_id = $1 AND s.is_dismissed = false AND s.share_type = ANY($2)
+       ORDER BY s.created_at DESC`,
+      [userId, types]
+    );
+    return r.rows.map((row: any) => {
+      const fields = INBOX_FIELDS[row.share_type]?.(parseContent(row.content_json))
+        ?? { title: "", subtitle: null, imageUrl: null };
+      return {
+        id: row.id, recType: row.share_type,
+        fromUser: { id: row.from_user_id, name: row.from_name, avatarUrl: row.from_avatar },
+        ...fields,
+        note: row.notes, createdAt: row.created_at, isRead: row.is_read,
+      };
+    });
+  },
+
+  async markRecommendationRead(userId: number, _type: string, id: number) {
+    await pool.query(`UPDATE shares SET is_read = true WHERE id = $1 AND to_user_id = $2`, [id, userId]);
+  },
+
+  async addRecommendationToCollection(userId: number, type: string, recId: number) {
+    const row = await pool.query(`SELECT * FROM shares WHERE id = $1 AND to_user_id = $2`, [recId, userId]);
+    if (!row.rows[0]) throw new Error("Recommendation not found");
+    const c: any = parseContent(row.rows[0].content_json);
+    await pool.query(`UPDATE shares SET is_read = true WHERE id = $1`, [recId]);
+
+    switch (type) {
+      case "book":
+        return db.insert(books).values({ userId, title: c.bookTitle, author: c.bookAuthor ?? null, coverUrl: c.coverUrl ?? null, status: "want_to_read" }).returning().then(x => x[0]);
+      case "movie":
+        return db.insert(movies).values({ userId, title: c.title, mediaType: c.mediaType ?? "movie", posterUrl: c.posterUrl ?? null, posterColor: c.posterColor ?? null, status: "backlog", isFavorite: false }).returning().then(x => x[0]);
+      case "music": {
+        const artist = await db.insert(musicArtists).values({ userId, name: c.artistName, genres: null, isFavorite: false }).returning().then(x => x[0]);
+        if (c.songTitle) {
+          await db.insert(musicSongs).values({ userId, artistId: artist.id, title: c.songTitle, isFavorite: false }).catch(() => {});
+        }
+        return artist;
+      }
+      case "recipe":
+        return db.insert(recipes).values({ userId, name: c.recipeName, emoji: c.recipeEmoji ?? "🍽️", category: c.recipeCategory ?? null, tags: null }).returning().then(x => x[0]);
+      case "spot":
+        return db.insert(spots).values({ userId, name: c.name, type: c.type ?? "restaurant", city: c.city ?? null, neighborhood: c.neighborhood ?? null, status: "want_to_visit", isFavorite: false }).returning().then(x => x[0]);
+      case "art":
+        return db.insert(artPieces).values({ userId, title: c.title, artistName: c.artistName ?? null, medium: c.medium ?? "other", imageUrl: c.imageUrl ?? null, accentColor: c.accentColor ?? null, whereViewed: c.whereViewed ?? null, status: "want_to_see", isFavorite: false }).returning().then(x => x[0]);
+      case "quote":
+        return db.insert(quotes).values({ userId, text: c.text, author: c.author ?? null, category: c.category ?? "other", isFavorite: false }).returning().then(x => x[0]);
+      default:
+        throw new Error(`Cannot add type: ${type}`);
+    }
+  },
+
+  async sendUnifiedRecommendation(fromUserId: number, toUserId: number, type: string, data: { title: string; subtitle?: string; imageUrl?: string; note?: string }) {
+    const base = { fromUserId, toUserId, notes: data.note ?? null };
+    switch (type) {
+      case "book":
+        return sendShareUnified("book", { ...base, bookTitle: data.title, bookAuthor: data.subtitle ?? null, coverUrl: data.imageUrl ?? null });
+      case "movie":
+        return sendShareUnified("movie", { ...base, title: data.title, mediaType: "movie", posterUrl: data.imageUrl ?? null });
+      case "music":
+        return sendShareUnified("music", { ...base, type: data.subtitle ? "song" : "artist", artistName: data.title, songTitle: data.subtitle ?? null });
+      case "recipe":
+        return sendShareUnified("recipe", { ...base, recipeName: data.title, recipeEmoji: "🍽️", recipeIngredients: "[]", recipeImageUrl: data.imageUrl ?? null });
+      case "spot":
+        return sendShareUnified("spot", { ...base, name: data.title, type: "restaurant", city: data.subtitle ?? null });
+      case "art":
+        return sendShareUnified("art", { ...base, title: data.title, artistName: data.subtitle ?? null, imageUrl: data.imageUrl ?? null });
+      case "quote":
+        return sendShareUnified("quote", { ...base, text: data.title, author: data.subtitle ?? null });
+      default:
+        throw new Error(`Unknown rec type: ${type}`);
+    }
+  },
+});

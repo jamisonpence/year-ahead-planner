@@ -221,10 +221,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         ["trip_items", "trips", "trip_id"],
         ["body_comp_check_ins", "body_comp_plans", "plan_id"],
       ];
-      const shareTables = [
-        "recipe_shares", "quote_shares", "art_shares", "spot_shares",
-        "movie_shares", "workout_shares", "book_recommendations", "music_recommendations",
-      ];
+      const shareTables = ["shares"];
 
       const data: Record<string, unknown[]> = {};
       for (const t of directTables) {
