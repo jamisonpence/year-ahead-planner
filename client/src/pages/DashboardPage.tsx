@@ -1229,10 +1229,126 @@ const ITEM_TYPE_ICONS: Record<string, React.ReactNode> = {
   book:   <BookOpen size={14} />,
   movie:  <Film size={14} />,
   song:   <Music size={14} />,
+  artist: <Music size={14} />,
   recipe: <ChefHat size={14} />,
   spot:   <MapPin size={14} />,
   quote:  <QuoteIcon size={14} />,
+  workout:<Dumbbell size={14} />,
+  goal:   <Target size={14} />,
 };
+
+const ITEM_TYPE_HREFS: Record<string, string> = {
+  book: "/library",
+  movie: "/library?tab=watching",
+  song: "/library?tab=music",
+  artist: "/library?tab=music",
+  recipe: "/health?tab=recipes",
+  spot: "/places",
+  workout: "/health",
+  goal: "/goals",
+  quote: "/quotes",
+};
+
+function friendFirstName(name: string) {
+  return name.split(" ")[0] || name;
+}
+
+function highlightContext(item: FeedItem): { badge: string; headline: string; prompt: string } {
+  const friend = friendFirstName(item.user.name);
+  const title = item.itemTitle ?? "something new";
+  const type = item.itemType ?? "";
+
+  if (item.activityType === "book_finished") {
+    return {
+      badge: "Progress",
+      headline: `${friend} finished ${title}`,
+      prompt: "A good moment to cheer them on or ask if it is worth saving.",
+    };
+  }
+  if (item.activityType === "recommendation_received") {
+    return {
+      badge: "For you",
+      headline: `${friend} recommended ${title}`,
+      prompt: "Save it, ask why they picked it, or recommend something back.",
+    };
+  }
+  if (type === "spot") {
+    return {
+      badge: "Shared place",
+      headline: `${friend} saved ${title}`,
+      prompt: "Places are better with context. Ask what they liked or save it for later.",
+    };
+  }
+  if (type === "recipe") {
+    return {
+      badge: "Food idea",
+      headline: `${friend} saved ${title}`,
+      prompt: "Useful if it fits your meals. Save it or send a recipe back.",
+    };
+  }
+  if (type === "song" || type === "artist") {
+    return {
+      badge: "Shared taste",
+      headline: `${friend} likes ${title}`,
+      prompt: "A light way to reconnect around music you may both enjoy.",
+    };
+  }
+  if (type === "workout" || item.activityType.includes("workout")) {
+    return {
+      badge: "Healthy nudge",
+      headline: `${friend} logged ${title}`,
+      prompt: "Cheer the effort or ask what helped them get it done.",
+    };
+  }
+  if (type === "goal" || item.activityType.includes("goal")) {
+    return {
+      badge: "Goal progress",
+      headline: `${friend} made progress on ${title}`,
+      prompt: "Support beats scrolling. Send a quick cheer or ask about the next step.",
+    };
+  }
+  if (type === "book" || type === "movie") {
+    return {
+      badge: "Shared interest",
+      headline: `${friend} saved ${title}`,
+      prompt: "See if your taste overlaps, then save it or ask about it.",
+    };
+  }
+  return {
+    badge: "Friend update",
+    headline: `${friend} added ${title}`,
+    prompt: "Keep it lightweight: cheer, ask, save, or recommend something back.",
+  };
+}
+
+function askPromptFor(item: FeedItem) {
+  const type = item.itemType ?? "";
+  if (type === "book") return "How was it?";
+  if (type === "recipe") return "Would you make this again?";
+  if (type === "spot") return "What did you like about this place?";
+  if (type === "song" || type === "artist") return "What should I listen to first?";
+  if (type === "workout" || item.activityType.includes("workout")) return "What helped you get this done?";
+  if (type === "goal" || item.activityType.includes("goal")) return "What is your next step?";
+  return "Tell me more about this.";
+}
+
+function isSupportiveHighlight(item: FeedItem) {
+  const type = item.itemType ?? "";
+  return [
+    "book",
+    "movie",
+    "song",
+    "artist",
+    "recipe",
+    "spot",
+    "workout",
+    "goal",
+  ].includes(type)
+    || item.activityType === "book_finished"
+    || item.activityType === "recommendation_received"
+    || item.activityType.includes("workout")
+    || item.activityType.includes("goal");
+}
 
 // ── FeedCard ─────────────────────────────────────────────────────────────────
 
@@ -1266,13 +1382,16 @@ function UserAvatar({ user }: { user: FeedItemUser }) {
   );
 }
 
-const REACTION_EMOJIS = ["👍", "❤️", "🔥"];
+const REACTION_EMOJIS = ["🎉", "❤️"];
 
 function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: number }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [showCommentBox, setShowCommentBox] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const context = highlightContext(item);
+  const saveHref = ITEM_TYPE_HREFS[item.itemType ?? ""] ?? "/discover";
 
   const reactionCounts = REACTION_EMOJIS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = item.reactions.filter((r) => r.emoji === e).length;
@@ -1299,60 +1418,75 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
     },
   });
 
+  const handleAsk = () => {
+    const prompt = askPromptFor(item);
+    commentMutation.mutate(prompt);
+    toast({ title: "Asked about it" });
+  };
+
   const visibleComments = showAllComments ? item.comments : item.comments.slice(-2);
 
   return (
-    <div className="bg-card border rounded-xl p-3 space-y-2">
-      {/* Header */}
+    <div className="bg-background border rounded-xl p-3 space-y-3">
       <div className="flex items-start gap-2">
         <UserAvatar user={item.user} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-semibold">{item.user.name}</span>
-            <span className="text-xs text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType}</span>
-            {item.activityType === "recommendation_received" && (
-              <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 rounded px-1 py-0.5 font-medium">Recommended to you</span>
-            )}
+            <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 rounded px-1.5 py-0.5 font-medium">
+              {context.badge}
+            </span>
           </div>
           <p className="text-[10px] text-muted-foreground">{timeAgo(item.createdAt)}</p>
         </div>
       </div>
 
-      {/* Item info */}
-      {item.itemTitle && (
-        <div className="flex items-center gap-2 pl-10">
-          {item.itemImageUrl && (
-            <img src={item.itemImageUrl} alt={item.itemTitle} className="w-12 h-12 rounded object-cover shrink-0" />
+      <div className="pl-10 space-y-2">
+        <div className="flex items-center gap-2">
+          {item.itemImageUrl ? (
+            <img src={item.itemImageUrl} alt={item.itemTitle ?? context.headline} className="w-12 h-12 rounded-md object-cover shrink-0" />
+          ) : (
+            <div className="w-12 h-12 rounded-md bg-secondary flex items-center justify-center text-muted-foreground shrink-0">
+              {item.itemType ? ITEM_TYPE_ICONS[item.itemType] ?? <Star size={14} /> : <Star size={14} />}
+            </div>
           )}
           <div className="min-w-0">
-            <div className="flex items-center gap-1">
-              {item.itemType && <span className="text-muted-foreground">{ITEM_TYPE_ICONS[item.itemType]}</span>}
-              <p className="text-xs font-medium truncate">{item.itemTitle}</p>
-            </div>
-            {item.itemSubtitle && <p className="text-[10px] text-muted-foreground truncate">{item.itemSubtitle}</p>}
+            <p className="text-sm font-medium truncate">{context.headline}</p>
+            <p className="text-[11px] text-muted-foreground line-clamp-2">{context.prompt}</p>
+            {item.itemSubtitle && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{item.itemSubtitle}</p>}
           </div>
         </div>
-      )}
 
-      {/* Reactions */}
-      <div className="flex items-center gap-1 pl-10">
-        {REACTION_EMOJIS.map((emoji) => (
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
-            key={emoji}
-            onClick={() => reactMutation.mutate(emoji)}
-            className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border transition-colors ${myReactions.has(emoji) ? "bg-primary/10 border-primary/30 text-primary" : "border-border hover:bg-secondary"}`}
+            onClick={() => reactMutation.mutate("🎉")}
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${myReactions.has("🎉") ? "bg-primary/10 border-primary/30 text-primary" : "border-border hover:bg-secondary"}`}
           >
-            <span>{emoji}</span>
-            {reactionCounts[emoji] > 0 && <span className="font-medium">{reactionCounts[emoji]}</span>}
+            <span>🎉</span>
+            <span>Cheer</span>
+            {reactionCounts["🎉"] > 0 && <span className="font-medium">{reactionCounts["🎉"]}</span>}
           </button>
-        ))}
-        <button
-          onClick={() => setShowCommentBox((v) => !v)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded-full border border-border hover:bg-secondary transition-colors"
-        >
-          <MessageCircle size={11} />
-          {item.comments.length > 0 && <span>{item.comments.length}</span>}
-        </button>
+          <button
+            onClick={handleAsk}
+            disabled={commentMutation.isPending}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary disabled:opacity-50 transition-colors"
+          >
+            <MessageCircle size={11} />
+            Ask about it
+          </button>
+          <Link href={saveHref}>
+            <a className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary transition-colors">
+              <BookMarked size={11} />
+              Save this
+            </a>
+          </Link>
+          <Link href={`/profile/${item.user.id}`}>
+            <a className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary transition-colors">
+              <Send size={11} />
+              Recommend back
+            </a>
+          </Link>
+        </div>
       </div>
 
       {/* Comments */}
@@ -1423,7 +1557,7 @@ function InviteFriendCTA() {
 }
 
 function SocialFeed({ currentUserId }: { currentUserId?: number }) {
-  const [page, setPage] = useState(1);
+  const page = 1;
   const { data, isLoading } = useQuery<{ items: FeedItem[]; hasFriends: boolean; page: number; total: number } | { items: never[]; hasFriends: false }>({
     queryKey: ["/api/feed", page],
     queryFn: () => fetch(`/api/feed?page=${page}`).then((r) => r.json()),
@@ -1459,10 +1593,10 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
   }
 
   // Friend Highlights should show friends — not yourself
-  const items = ((data as any).items as FeedItem[]).filter((it: any) => (it.user?.id ?? it.userId) !== currentUserId);
-  const total: number = (data as any).total ?? 0;
-  const pageSize = 20;
-  const hasMore = page * pageSize < total;
+  const items = ((data as any).items as FeedItem[])
+    .filter((it: any) => (it.user?.id ?? it.userId) !== currentUserId)
+    .filter(isSupportiveHighlight)
+    .slice(0, 5);
 
   if (items.length === 0) {
     // Show own recent activity as fallback
@@ -1482,22 +1616,22 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
 
   return (
     <div className="bg-card border rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Users size={14} className="text-primary" />
-        <span className="text-sm font-semibold">Friend Highlights</span>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start gap-2">
+          <Users size={14} className="text-primary mt-0.5" />
+          <div>
+            <span className="text-sm font-semibold">Friend Highlights</span>
+            <p className="text-xs text-muted-foreground mt-0.5">Supportive updates based on interests, progress, and recommendations.</p>
+          </div>
+        </div>
+        <Link href="/people?tab=discover">
+          <a className="text-xs text-primary hover:underline shrink-0">Discover</a>
+        </Link>
       </div>
-      <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
+      <div className="space-y-2">
         {items.map((item) => (
           <FeedCard key={item.id} item={item} currentUserId={currentUserId} />
         ))}
-        {hasMore && (
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            className="mt-1 w-full text-xs text-muted-foreground hover:text-foreground border rounded-lg py-1.5 hover:bg-secondary transition-colors"
-          >
-            Load more
-          </button>
-        )}
       </div>
     </div>
   );
