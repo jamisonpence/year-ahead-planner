@@ -197,7 +197,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   friends: PublicUser[];
   onSave: (data: { id: number } & Partial<InsertGoal>) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState(goal.title);
   const [priority, setPriority] = useState(goal.priority);
   const [description, setDescription] = useState(goal.description ?? "");
@@ -223,7 +223,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
     setMilestones(parseMilestones());
   }, [goal]);
 
-  useEffect(() => { reset(); setExpanded(true); }, [goal.id]);
+  useEffect(() => { reset(); setExpanded(false); }, [goal.id]);
 
   const isDirty =
     title.trim() !== goal.title ||
@@ -253,27 +253,18 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   const buddy = friends.find((f) => f.id === ((goal as any).buddyUserId ?? null)) ?? null;
 
   if (!expanded) {
+    const pct = goalPct(goal);
     return (
-      <div className="rounded-xl border bg-secondary/30 p-3 mb-2">
-        <div className="flex items-start justify-between gap-2">
+      <div className="rounded-xl border bg-card p-4 mb-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold leading-tight truncate">{goal.title}</p>
-            <p className="text-xs text-muted-foreground capitalize mt-0.5">
-              {goal.category} · <span className={PRIORITY_COLORS[goal.priority]}>{goal.priority}</span>
-            </p>
-            {milestones.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">
-                🌟 {milestones.filter(m => m.done).length}/{milestones.length} milestones
-              </p>
-            )}
-            {buddy && (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <BuddyAvatarSm user={buddy} size={16} />
-                <span className="text-xs text-muted-foreground">
-                  <span className="text-primary/80 font-medium">{buddy.name.split(" ")[0]}</span> is your buddy
-                </span>
-              </div>
-            )}
+            <p className="text-base font-semibold leading-tight truncate">{goal.title}</p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-muted-foreground capitalize">
+              <span>{goal.category}</span>
+              <span className={PRIORITY_COLORS[goal.priority]}>{goal.priority}</span>
+              {goal.targetDate && <span>Due {format(parseISO(goal.targetDate), "MMM d")}</span>}
+              {milestones.length > 0 && <span>{milestones.filter(m => m.done).length}/{milestones.length} milestones</span>}
+            </div>
           </div>
           <button
             onClick={() => setExpanded(true)}
@@ -282,6 +273,21 @@ function InlineGoalEditor({ goal, friends, onSave }: {
             <Pencil size={10} /> Edit
           </button>
         </div>
+        {goal.description?.trim() && (
+          <p className="text-sm text-foreground/80 leading-relaxed mt-3">{goal.description.trim()}</p>
+        )}
+        <div className="mt-3 flex items-center gap-3">
+          <Progress value={pct} className="h-2 flex-1" />
+          <span className="text-xs font-medium text-muted-foreground shrink-0">{pct}%</span>
+        </div>
+        {buddy && (
+          <div className="flex items-center gap-1.5 mt-3">
+            <BuddyAvatarSm user={buddy} size={18} />
+            <span className="text-xs text-muted-foreground">
+              <span className="text-primary/80 font-medium">{buddy.name.split(" ")[0]}</span> is your buddy
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -305,7 +311,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={3}
+          rows={2}
           placeholder="What makes this goal meaningful?"
           className="text-xs resize-none"
         />
@@ -1289,15 +1295,25 @@ export default function GoalsPage() {
                 {(() => {
                   const currentProject = getCurrentProject(selectedGoal);
                   const nextAction = getGoalNextAction(selectedGoal);
+                  const pct = goalPct(selectedGoal);
                   return (
                     <div className="rounded-xl border bg-card p-4 mb-4 space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Why it matters</p>
-                        <p className="text-sm text-foreground/85 leading-relaxed">
-                          {selectedGoal.description?.trim() || "Add a short why in this goal's description so Today can keep the outcome meaningful."}
-                        </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-foreground">Action plan</p>
+                        <Link href="/tasks">
+                          <a className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline shrink-0">
+                            <ClipboardList size={11} /> Projects & tasks
+                          </a>
+                        </Link>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-secondary/30 px-3 py-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Progress</p>
+                          <div className="flex items-center gap-2">
+                            <Progress value={pct} className="h-1.5 flex-1" />
+                            <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+                          </div>
+                        </div>
                         <div className="rounded-lg bg-secondary/30 px-3 py-2">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Current project</p>
                           {currentProject ? (
@@ -1321,11 +1337,6 @@ export default function GoalsPage() {
                           )}
                         </div>
                       </div>
-                      <Link href="/tasks">
-                        <a className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-                          <ClipboardList size={11} /> Manage projects and next actions
-                        </a>
-                      </Link>
                     </div>
                   );
                 })()}
