@@ -549,18 +549,41 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       const weekAgo = new Date(new Date(today + "T00:00:00Z").getTime() - 7 * 86400_000).toISOString().slice(0, 10);
       const weekAhead = new Date(new Date(today + "T00:00:00Z").getTime() + 7 * 86400_000).toISOString().slice(0, 10);
 
-      const [workouts, sessions, booksFinished, choresDone, journals, habitsRows, goalsRows, upcomingEvents, dueTasks, savedReview, agenda] = await Promise.all([
+      const [workouts, sessions, booksFinished, choresDone, journals, habitsRows, goalsRows, upcomingEvents, dueTasks, savedReview, agenda, completedGeneral, completedProject, nextProjectActions] = await Promise.all([
         pool.query(`SELECT COUNT(*)::int AS c FROM workout_logs WHERE user_id=$1 AND completed=true AND date >= $2 AND date <= $3`, [uid, weekAgo, today]),
         pool.query(`SELECT COALESCE(SUM(rs.pages_read),0)::int AS pages, COUNT(*)::int AS c FROM reading_sessions rs JOIN books b ON b.id = rs.book_id WHERE b.user_id=$1 AND rs.date >= $2 AND rs.date <= $3 AND rs.planned = false`, [uid, weekAgo, today]),
         pool.query(`SELECT COUNT(*)::int AS c FROM books WHERE user_id=$1 AND status='finished' AND finish_date >= $2 AND finish_date <= $3`, [uid, weekAgo, today]),
         pool.query(`SELECT COUNT(*)::int AS c FROM chores WHERE user_id=$1 AND last_completed >= $2 AND last_completed <= $3`, [uid, weekAgo, today]),
         pool.query(`SELECT COUNT(*)::int AS c FROM journal_entries WHERE user_id=$1 AND date >= $2 AND date <= $3`, [uid, weekAgo, today]),
         pool.query(`SELECT completions_json FROM habits WHERE user_id=$1 AND is_archived=false`, [uid]),
-        pool.query(`SELECT id, title, progress_current, progress_target, target_date, priority FROM goals WHERE user_id=$1 ORDER BY priority DESC`, [uid]),
+        pool.query(`SELECT id, title, description, progress_current, progress_target, target_date, priority FROM goals WHERE user_id=$1 ORDER BY priority DESC`, [uid]),
         pool.query(`SELECT id, title, date, time FROM events WHERE user_id=$1 AND date > $2 AND date <= $3 ORDER BY date LIMIT 15`, [uid, today, weekAhead]),
         pool.query(`SELECT id, title, due_date, priority FROM general_tasks WHERE user_id=$1 AND completed=false AND due_date IS NOT NULL AND due_date <= $2 ORDER BY due_date LIMIT 25`, [uid, weekAhead]),
         pool.query(`SELECT * FROM weekly_reviews WHERE user_id=$1 AND week_start=$2`, [uid, weekStart]),
         storage.getTodayItems(uid, today),
+        pool.query(`SELECT id, title, due_date FROM general_tasks WHERE user_id=$1 AND completed=true ORDER BY id DESC LIMIT 12`, [uid]),
+        pool.query(`
+          SELECT pt.id, pt.title, pt.due_date, p.title AS project_title, g.title AS goal_title
+          FROM project_tasks pt
+          JOIN projects p ON p.id = pt.project_id
+          LEFT JOIN goals g ON g.id = p.goal_id
+          WHERE p.user_id=$1 AND pt.completed=true
+          ORDER BY pt.id DESC
+          LIMIT 12
+        `, [uid]),
+        pool.query(`
+          SELECT DISTINCT ON (p.id)
+            pt.id, pt.title, pt.due_date, pt.priority,
+            p.id AS project_id, p.title AS project_title, p.status AS project_status,
+            g.id AS goal_id, g.title AS goal_title, g.description AS goal_description, g.priority AS goal_priority,
+            g.progress_current, g.progress_target
+          FROM projects p
+          JOIN project_tasks pt ON pt.project_id = p.id AND pt.completed = false
+          LEFT JOIN goals g ON g.id = p.goal_id
+          WHERE p.user_id=$1 AND p.status != 'done' AND p.status != 'blocked'
+          ORDER BY p.id, pt.due_date NULLS LAST, pt.id
+          LIMIT 10
+        `, [uid]),
       ]);
 
       // Habit completion rate over the window
@@ -574,10 +597,29 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       }
 
       const goals = goalsRows.rows.map((g: any) => ({
-        id: g.id, title: g.title,
+        id: g.id, title: g.title, description: g.description,
         progressPct: Math.min(100, Math.round((+g.progress_current / (+g.progress_target || 1)) * 100)),
         targetDate: g.target_date, priority: g.priority,
       }));
+      const completedItems = [
+        ...completedGeneral.rows.map((t: any) => ({ type: "task", id: t.id, title: t.title, context: "Task", dueDate: t.due_date ?? null })),
+        ...completedProject.rows.map((t: any) => ({ type: "project", id: t.id, title: t.title, context: [t.goal_title, t.project_title].filter(Boolean).join(" · ") || "Project", dueDate: t.due_date ?? null })),
+      ].slice(0, 10);
+      const nextActions = nextProjectActions.rows.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        dueDate: r.due_date ?? null,
+        priority: r.priority ?? "medium",
+        projectId: r.project_id,
+        projectTitle: r.project_title,
+        goalId: r.goal_id,
+        goalTitle: r.goal_title,
+        goalDescription: r.goal_description,
+        progressPct: Math.min(100, Math.round((+r.progress_current / (+r.progress_target || 1)) * 100)),
+      }));
+      const suggestedFocus = nextActions[0]?.goalTitle
+        ? `Move ${nextActions[0].goalTitle} forward by finishing "${nextActions[0].title}".`
+        : goals[0]?.title ? `Move ${goals[0].title} forward with one concrete next action.` : "";
 
       const saved = savedReview.rows[0];
       res.json({
@@ -599,6 +641,9 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
           events: upcomingEvents.rows.map((e: any) => ({ id: e.id, title: e.title, date: e.date, time: e.time })),
           tasks: dueTasks.rows.map((t: any) => ({ id: t.id, title: t.title, dueDate: t.due_date, priority: t.priority, overdue: t.due_date < today })),
         },
+        completedItems,
+        nextActions,
+        suggestedFocus,
         review: saved ? { wins: saved.wins, challenges: saved.challenges, focus: saved.focus } : null,
       });
     } catch (e) { handleError(res, e); }

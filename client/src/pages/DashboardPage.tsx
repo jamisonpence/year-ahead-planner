@@ -297,6 +297,7 @@ export default function DashboardPage() {
   const [quoteIdx, setQuoteIdx] = useState(() => Math.floor(Math.random() * 1000));
   const [customizing, setCustomizing] = useState(false);
   const [visible, setVisible] = useState<Record<SectionId, boolean>>(loadVisibility);
+  const [completedMoment, setCompletedMoment] = useState<{ title: string; context: string; type: string } | null>(null);
   const customRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -364,7 +365,7 @@ export default function DashboardPage() {
     return d.toLocaleDateString("en-CA");
   }
   const completeItem = useMutation({
-    mutationFn: async (action: { type: string; id: number; frequency?: string; customFrequencyDays?: number | null }) => {
+    mutationFn: async (action: { type: string; id: number; frequency?: string; customFrequencyDays?: number | null; title?: string; context?: string }) => {
       if (action.type === "habit") return apiRequest("POST", `/api/habits/${action.id}/complete/${today}`, {});
       if (action.type === "general") return apiRequest("PATCH", `/api/general-tasks/${action.id}`, { completed: true });
       if (action.type === "project") return apiRequest("PATCH", `/api/project-tasks/${action.id}`, { completed: true });
@@ -381,6 +382,11 @@ export default function DashboardPage() {
         qcToday.invalidateQueries({ queryKey: [key] });
       }
       confettiBurst({ particles: 28, originY: 0.3 });
+      setCompletedMoment({
+        title: action.title ?? (action.type === "habit" ? "Habit" : action.type === "chore" ? "Chore" : "Task"),
+        context: action.context ?? (action.type === "project" ? "Project moved forward" : action.type === "habit" ? "Momentum kept" : "Progress made"),
+        type: action.type,
+      });
       todayToast({ title: action.type === "habit" ? "Habit done ⚡" : "Done ✓" });
     },
     onError: () => todayToast({ title: "Couldn't complete that", variant: "destructive" }),
@@ -553,8 +559,8 @@ export default function DashboardPage() {
 
   // ── TODAY items (aggregated) ────────────────────────────────────────────────
   type TodayAction =
-    | { type: "general" | "project" | "habit"; id: number }
-    | { type: "chore"; id: number; frequency: string; customFrequencyDays?: number | null };
+    | { type: "general" | "project" | "habit"; id: number; title?: string; context?: string }
+    | { type: "chore"; id: number; frequency: string; customFrequencyDays?: number | null; title?: string; context?: string };
   type TodayItem = { key: string; icon: React.ReactNode; label: string; sub?: string; href: string; urgent?: boolean; done?: boolean; action?: TodayAction };
   const todayItems: TodayItem[] = [];
   todayEvents.forEach((e) => todayItems.push({
@@ -564,17 +570,17 @@ export default function DashboardPage() {
   allTasksDueToday.forEach((t) => todayItems.push({
     key: `task-${t.id}`, icon: <CheckCircle2 size={13} className="text-blue-500" />,
     label: t.title, sub: t.source ? `from ${t.source}` : "Task due today", href: "/tasks",
-    action: t.source ? undefined : { type: "general", id: t.id },
+    action: t.source ? undefined : { type: "general", id: t.id, title: t.title, context: "Today task completed" },
   }));
   habitsDueToday.slice(0, 3).forEach((h: any) => todayItems.push({
     key: `habit-${h.id}`, icon: <Zap size={13} className="text-emerald-500" />,
     label: h.name ?? h.title, sub: "Habit — not yet done", href: "/habits",
-    action: { type: "habit", id: h.id },
+    action: { type: "habit", id: h.id, title: h.name ?? h.title, context: "Habit momentum kept" },
   }));
   choresToday.forEach((c) => todayItems.push({
     key: `chore-${c.id}`, icon: <Home size={13} className="text-amber-500" />,
     label: c.title, sub: "Chore due today", href: "/housekeeping",
-    action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays },
+    action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Home moved forward" },
   }));
   if (!todayWorkoutDone && wPlanned > 0) todayItems.push({
     key: "workout", icon: <Dumbbell size={13} className="text-blue-400" />,
@@ -583,12 +589,12 @@ export default function DashboardPage() {
   openProjectTasks.forEach((t) => todayItems.push({
     key: `proj-task-${t.id}`, icon: <CheckCircle2 size={13} className="text-indigo-500" />,
     label: t.title, sub: t.source ? `Project: ${t.source}` : "Project task", href: "/tasks",
-    action: { type: "project", id: t.id },
+    action: { type: "project", id: t.id, title: t.title, context: t.source ? `Project: ${t.source}` : "Project moved forward" },
   }));
   generalTasksNoDueDate.forEach((t: any) => todayItems.push({
     key: `no-date-task-${t.id}`, icon: <CheckCircle2 size={13} className="text-slate-400" />,
     label: t.title, sub: "No due date", href: "/tasks",
-    action: { type: "general", id: t.id },
+    action: { type: "general", id: t.id, title: t.title, context: "Task completed" },
   }));
 
   // ── UP NEXT items ──────────────────────────────────────────────────────────
@@ -599,12 +605,12 @@ export default function DashboardPage() {
   allTasksOverdue.slice(0, 4).forEach((t) => attentionItems.push({
     key: `ov-task-${t.id}`, icon: <AlertTriangle size={13} className="text-red-500" />,
     label: t.title, sub: t.source ? `from ${t.source} · overdue` : "Task overdue", href: "/tasks", urgent: true,
-    action: t.source ? undefined : { type: "general", id: t.id },
+    action: t.source ? undefined : { type: "general", id: t.id, title: t.title, context: "Overdue task cleared" },
   }));
   choresOverdue.slice(0, 3).forEach((c) => attentionItems.push({
     key: `ov-chore-${c.id}`, icon: <RefreshCw size={13} className="text-red-500" />,
     label: c.title, sub: `${Math.abs(c.daysLeft!)}d overdue`, href: "/housekeeping", urgent: true,
-    action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays },
+    action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Overdue chore cleared" },
   }));
   habitsMissedYesterday.slice(0, 2).forEach((h: any) => attentionItems.push({
     key: `miss-habit-${h.id}`, icon: <Zap size={13} className="text-amber-500" />,
@@ -717,7 +723,12 @@ export default function DashboardPage() {
                     <button
                       aria-label={`Mark "${primaryNextAction.task.title}" done`}
                       disabled={completeItem.isPending}
-                      onClick={() => completeItem.mutate({ type: "project", id: primaryNextAction.task.id })}
+                      onClick={() => completeItem.mutate({
+                        type: "project",
+                        id: primaryNextAction.task.id,
+                        title: primaryNextAction.task.title,
+                        context: `${primaryNextAction.goal.title} · ${primaryNextAction.project.title}`,
+                      })}
                       className="mt-0.5 shrink-0 w-7 h-7 rounded-full border-2 border-violet-400/60 hover:border-emerald-500 hover:bg-emerald-500/15 flex items-center justify-center transition-colors group"
                     >
                       <CheckCircle2 size={15} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -731,10 +742,40 @@ export default function DashboardPage() {
                       <p className="text-xs text-muted-foreground mt-1 truncate">
                         {primaryNextAction.goal.title} · {primaryNextAction.project.title}
                       </p>
+                      {primaryNextAction.goal.description?.trim() && (
+                        <p className="text-xs text-violet-700/80 dark:text-violet-200/80 mt-2 line-clamp-2">
+                          Why it matters: {primaryNextAction.goal.description.trim()}
+                        </p>
+                      )}
                     </div>
                     <Link href="/tasks">
                       <a className="shrink-0 text-xs font-medium text-violet-600 dark:text-violet-300 hover:underline">View</a>
                     </Link>
+                  </div>
+                </div>
+              )}
+              {completedMoment && (
+                <div className="mb-3 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60 bg-emerald-50/80 dark:bg-emerald-950/20 p-3">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wide">Progress captured</p>
+                      <p className="text-sm font-medium truncate mt-0.5">{completedMoment.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{completedMoment.context}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Link href="/review"><a className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline">Add to Weekly Review</a></Link>
+                        <Link href="/goals"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">View Progress</a></Link>
+                        <Link href="/messenger"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">Share a win</a></Link>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Dismiss progress card"
+                      onClick={() => setCompletedMoment(null)}
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
               )}

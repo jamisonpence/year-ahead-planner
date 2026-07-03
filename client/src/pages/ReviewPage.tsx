@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   Sparkles, Dumbbell, BookOpen, Zap, Home, PenLine, AlertTriangle,
-  Target, Calendar, RefreshCw, Check, Loader2,
+  Target, Calendar, RefreshCw, Check, Loader2, ArrowRight, CheckCircle2,
 } from "lucide-react";
+import { Link } from "wouter";
 
 type ReviewData = {
   weekStart: string;
@@ -16,11 +17,25 @@ type ReviewData = {
     habitCompletions: number; habitPossible: number; habitRate: number | null;
     overdueNow: number;
   };
-  goals: Array<{ id: number; title: string; progressPct: number; targetDate: string | null; priority: string }>;
+  goals: Array<{ id: number; title: string; description: string | null; progressPct: number; targetDate: string | null; priority: string }>;
   upcoming: {
     events: Array<{ id: number; title: string; date: string; time: string | null }>;
     tasks: Array<{ id: number; title: string; dueDate: string | null; priority: string; overdue: boolean }>;
   };
+  completedItems: Array<{ type: string; id: number; title: string; context: string; dueDate: string | null }>;
+  nextActions: Array<{
+    id: number;
+    title: string;
+    dueDate: string | null;
+    priority: string;
+    projectId: number;
+    projectTitle: string;
+    goalId: number | null;
+    goalTitle: string | null;
+    goalDescription: string | null;
+    progressPct: number;
+  }>;
+  suggestedFocus: string;
   review: { wins: string | null; challenges: string | null; focus: string | null } | null;
 };
 
@@ -56,8 +71,20 @@ export default function ReviewPage() {
       setWins(data.review.wins ?? "");
       setChallenges(data.review.challenges ?? "");
       setFocus(data.review.focus ?? "");
+    } else if (data) {
+      const generatedWins = data.completedItems.length > 0
+        ? data.completedItems.slice(0, 3).map((item) => item.title).join(", ")
+        : data.stats.habitCompletions > 0
+          ? `${data.stats.habitCompletions} habit completion${data.stats.habitCompletions !== 1 ? "s" : ""}`
+          : "";
+      const generatedChallenges = data.stats.overdueNow > 0
+        ? `${data.stats.overdueNow} overdue item${data.stats.overdueNow !== 1 ? "s" : ""} needs a new plan.`
+        : "";
+      setWins((current) => current || generatedWins);
+      setChallenges((current) => current || generatedChallenges);
+      setFocus((current) => current || data.suggestedFocus || "");
     }
-  }, [data?.review]);
+  }, [data]);
 
   const saveMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/review", { wins, challenges, focus, stats: data?.stats }),
@@ -71,11 +98,13 @@ export default function ReviewPage() {
   // ── Task day-assignment (time-blocking lite) ─────────────────────────────
   const days = nextSevenDays();
   const scheduleMut = useMutation({
-    mutationFn: ({ taskId, date }: { taskId: number; date: string }) =>
-      apiRequest("POST", "/api/schedule-task", { taskType: "general", taskId, date }),
+    mutationFn: ({ taskId, date, taskType = "general" }: { taskId: number; date: string; taskType?: "general" | "project" }) =>
+      apiRequest("POST", "/api/schedule-task", { taskType, taskId, date }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/review/weekly"] });
       qc.invalidateQueries({ queryKey: ["/api/general-tasks"] });
+      qc.invalidateQueries({ queryKey: ["/api/goals"] });
+      qc.invalidateQueries({ queryKey: ["/api/projects/standalone"] });
       qc.invalidateQueries({ queryKey: ["/api/events"] });
       toast({ title: "Scheduled 📅" });
     },
@@ -133,6 +162,7 @@ export default function ReviewPage() {
   ];
 
   const unscheduled = data.upcoming.tasks.filter((t) => t.overdue);
+  const topNextAction = data.nextActions[0];
 
   return (
     <div className="p-3 sm:p-6 max-w-3xl mx-auto space-y-6">
@@ -168,6 +198,40 @@ export default function ReviewPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        {(data.completedItems.length > 0 || topNextAction) && (
+          <div className="rounded-xl border bg-card p-3 space-y-3">
+            {data.completedItems.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2"><CheckCircle2 size={13} /> Wins pulled from your activity</div>
+                <div className="space-y-1.5">
+                  {data.completedItems.slice(0, 5).map((item) => (
+                    <div key={`${item.type}-${item.id}`} className="flex items-start gap-2 rounded-lg bg-secondary/30 px-2.5 py-2">
+                      <Check size={12} className="text-emerald-500 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{item.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.context}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {topNextAction && (
+              <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wide mb-1">
+                  <ArrowRight size={12} /> Suggested next action
+                </div>
+                <p className="text-sm font-semibold">{topNextAction.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {[topNextAction.goalTitle, topNextAction.projectTitle].filter(Boolean).join(" · ")}
+                </p>
+                {topNextAction.goalDescription && (
+                  <p className="text-xs text-violet-700/80 dark:text-violet-200/80 mt-2 line-clamp-2">Why it matters: {topNextAction.goalDescription}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -239,6 +303,42 @@ export default function ReviewPage() {
             {data.upcoming.tasks.filter((t) => !t.overdue).slice(0, 6).map((t) => (
               <p key={`t${t.id}`} className="text-sm text-muted-foreground">✅ {t.dueDate} — {t.title}</p>
             ))}
+          </div>
+        )}
+
+        {/* AI planner */}
+        {data.nextActions.length > 0 && (
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold flex items-center gap-1.5">
+                <ArrowRight size={14} className="text-violet-500" /> Pick next week's action
+              </p>
+              <Link href="/tasks"><a className="text-xs text-muted-foreground hover:text-foreground">Manage actions</a></Link>
+            </div>
+            <div className="space-y-2">
+              {data.nextActions.slice(0, 4).map((action) => (
+                <div key={action.id} className="rounded-xl border bg-secondary/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{action.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[action.goalTitle, action.projectTitle].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground shrink-0">{action.priority}</span>
+                  </div>
+                  <div className="flex gap-1 mt-2 overflow-x-auto pb-0.5">
+                    {days.map((d) => (
+                      <button key={d.iso}
+                        onClick={() => scheduleMut.mutate({ taskId: action.id, date: d.iso, taskType: "project" })}
+                        className="text-[10px] font-medium px-2 py-1 rounded border hover:bg-violet-500 hover:text-white hover:border-violet-500 transition-colors shrink-0">
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
