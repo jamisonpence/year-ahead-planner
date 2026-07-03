@@ -149,7 +149,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Plan ──
-  { path: "/calendar",      label: "Schedule",                icon: Calendar        },
+  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },

@@ -9,13 +9,14 @@ import {
   ChevronLeft, ChevronRight, Plus, X, Calendar, BookOpen,
   Dumbbell, Target, RefreshCw, List, LayoutGrid, AlertTriangle,
   Pencil, Trash2, MoreHorizontal, Link2, Link2Off, Loader2, Check, Plane,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { MONTHS, nextOccurrence, daysUntil } from "@/lib/plannerUtils";
+import { MONTHS, nextOccurrence, daysUntil, todayStr } from "@/lib/plannerUtils";
 import EventFormModal from "@/components/modals/EventFormModal";
-import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects, Trip } from "@shared/schema";
+import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects, Trip, GeneralTask } from "@shared/schema";
 
 type ModuleFilter = "all" | "events" | "gcal" | "reading" | "workouts" | "goals" | "trips";
 
@@ -249,6 +250,14 @@ export default function CalendarPage() {
 
   const { events, books, wLogs, goals, trips } = useAllData();
 
+  // ── General tasks (for "Unscheduled Today" panel) ────────────────────────────
+  const { data: generalTasks = [] } = useQuery<GeneralTask[]>({
+    queryKey: ["/api/general-tasks"],
+    queryFn: () => apiRequest("GET", "/api/general-tasks").then(r => r.json()),
+  });
+  const today = todayStr();
+  const unscheduledToday = generalTasks.filter(t => !t.completed && t.dueDate === today);
+
   // ── Google Calendar ──────────────────────────────────────────────────────────
   const { data: gcalStatus, refetch: refetchGcalStatus } = useQuery<{ connected: boolean; lastSync: string | null; callbackUrl?: string }>({
     queryKey: ["/api/gcal/status"],
@@ -375,7 +384,7 @@ export default function CalendarPage() {
     <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Schedule</h1>
+        <h1 className="text-2xl font-bold">Calendar</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center bg-secondary rounded-lg p-0.5">
             <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${view === "calendar" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
@@ -434,6 +443,28 @@ export default function CalendarPage() {
               onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}>
               <Link2Off size={11} /> Disconnect
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unscheduled Today panel ── */}
+      {unscheduledToday.length > 0 && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <ClipboardList size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              Unscheduled Today
+            </p>
+            <span className="text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-700 ml-auto">
+              {unscheduledToday.length} task{unscheduledToday.length !== 1 ? "s" : ""} due
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {unscheduledToday.map(t => (
+              <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs border border-amber-200 dark:border-amber-700">
+                {t.title}
+              </span>
+            ))}
           </div>
         </div>
       )}

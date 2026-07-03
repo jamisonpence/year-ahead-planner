@@ -830,11 +830,20 @@ export default function GoalsPage() {
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
   const [editingHobbyGoalId, setEditingHobbyGoalId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"goals" | "detail">("goals");
-  const [horizon, setHorizon] = useState<string>("this_year");
+  const [quickWinGoalId, setQuickWinGoalId] = useState<number | null>(null);
+  const [quickWinText, setQuickWinText] = useState("");
+  type HorizonTab = "this_year" | "long_term" | "vision";
+  const [horizonTab, setHorizonTab] = useState<HorizonTab>("this_year");
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
-  const filteredGoals = goals.filter(g => ((g as any).horizon ?? "this_year") === horizon);
+  const filteredGoals = goals.filter(g => {
+    const h = (g as any).horizon ?? "this_year";
+    if (horizonTab === "this_year") return h === "this_year";
+    if (horizonTab === "long_term") return h === "next_year" || h === "3_years" || h === "5_years";
+    if (horizonTab === "vision") return h === "someday";
+    return false;
+  });
   const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
   const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
@@ -892,6 +901,38 @@ export default function GoalsPage() {
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/hobbies"] }); toast({ title: "Hobby plan deleted" }); },
   });
+
+  // ── Quick Win mutations ───────────────────────────────────────────────────────
+  const createProjectTask = useMutation({
+    mutationFn: ({ projectId, title }: { projectId: number; title: string }) =>
+      apiRequest("POST", `/api/projects/${projectId}/tasks`, { title, completed: false, priority: "medium", sortOrder: 0 }),
+    onSuccess: () => {
+      inv();
+      setQuickWinGoalId(null);
+      setQuickWinText("");
+      toast({ title: "Task added!" });
+    },
+  });
+  const createGoalProject = useMutation({
+    mutationFn: (goalId: number) =>
+      apiRequest("POST", `/api/goals/${goalId}/projects`, { title: "Quick Tasks", status: "in_progress", sortOrder: 0 })
+        .then(r => r.json()),
+  });
+
+  function handleQuickWin(g: GoalWithProjects) {
+    if (!quickWinText.trim()) return;
+    const title = quickWinText.trim();
+    const activeProject = g.projects.find(p => p.status !== "done") ?? g.projects[0];
+    if (activeProject) {
+      createProjectTask.mutate({ projectId: activeProject.id, title });
+    } else {
+      createGoalProject.mutate(g.id, {
+        onSuccess: (proj: any) => {
+          createProjectTask.mutate({ projectId: proj.id, title });
+        },
+      });
+    }
+  }
 
   // ── Derived state ─────────────────────────────────────────────────────────────
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) ?? null;
@@ -982,16 +1023,14 @@ export default function GoalsPage() {
           <div className="flex overflow-x-auto border-b shrink-0 scrollbar-none">
             {([
               ["this_year", "📅 This Year"],
-              ["next_year", "📆 Next Year"],
-              ["3_years",   "3 Yrs"],
-              ["5_years",   "5 Yrs"],
-              ["someday",   "💭 Vision"],
-            ] as [string, string][]).map(([key, label]) => (
+              ["long_term", "📆 Long-Term"],
+              ["vision",    "💭 Vision"],
+            ] as [HorizonTab, string][]).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => { setHorizon(key); setSelectedGoalId(null); }}
+                onClick={() => { setHorizonTab(key); setSelectedGoalId(null); }}
                 className={`shrink-0 px-3 py-2 text-[11px] font-medium whitespace-nowrap transition-colors ${
-                  horizon === key ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
+                  horizonTab === key ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {label}
@@ -1006,7 +1045,7 @@ export default function GoalsPage() {
             {filteredGoals.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <Target size={28} className="mx-auto mb-3 opacity-20" />
-                <p className="text-xs">No {horizon === "this_year" ? "this year's" : horizon === "next_year" ? "next year's" : horizon === "3_years" ? "3-year" : horizon === "5_years" ? "5-year" : "someday"} goals yet</p>
+                <p className="text-xs">No {horizonTab === "this_year" ? "this year's" : horizonTab === "long_term" ? "long-term" : "vision"} goals yet</p>
                 <p className="text-[10px] mt-1 opacity-60">Add a goal and set its horizon</p>
               </div>
             )}
@@ -1070,18 +1109,30 @@ export default function GoalsPage() {
                     <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
                   </div>
 
-                  {!linkedPlan && (currentProject || nextAction) && (
-                    <div className="mb-2 space-y-1 rounded-lg bg-secondary/30 px-2 py-1.5">
-                      {currentProject && (
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          Project: <span className="font-medium text-foreground/80">{currentProject.title}</span>
-                        </p>
+                  {/* Linked item chips */}
+                  {(linkedPlan || g.projects.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {linkedPlan && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-[10px] border border-blue-200 dark:border-blue-800">
+                          <Dumbbell size={8} className="shrink-0" />{linkedPlan.name}
+                        </span>
                       )}
-                      {nextAction && (
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          Next: <span className="font-medium text-foreground/80">{nextAction.task.title}</span>
-                        </p>
+                      {!linkedPlan && g.projects.slice(0, 2).map(p => (
+                        <span key={p.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground text-[10px] border border-border">
+                          <Folder size={8} className="shrink-0" />{p.title}
+                        </span>
+                      ))}
+                      {!linkedPlan && g.projects.length > 2 && (
+                        <span className="text-[10px] text-muted-foreground px-1 py-0.5">+{g.projects.length - 2} more</span>
                       )}
+                    </div>
+                  )}
+
+                  {!linkedPlan && nextAction && (
+                    <div className="mb-2 rounded-lg bg-secondary/30 px-2 py-1.5">
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        Next: <span className="font-medium text-foreground/80">{nextAction.task.title}</span>
+                      </p>
                     </div>
                   )}
 
@@ -1109,6 +1160,42 @@ export default function GoalsPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Quick Win */}
+                  {quickWinGoalId === g.id ? (
+                    <div className="mt-2 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        value={quickWinText}
+                        onChange={e => setQuickWinText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") handleQuickWin(g);
+                          if (e.key === "Escape") { setQuickWinGoalId(null); setQuickWinText(""); }
+                        }}
+                        placeholder="Quick task…"
+                        className="flex-1 h-7 text-xs bg-background border rounded-lg px-2 outline-none focus:border-primary"
+                      />
+                      <button
+                        onClick={() => handleQuickWin(g)}
+                        className="h-7 w-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90"
+                      >
+                        <Check size={11} />
+                      </button>
+                      <button
+                        onClick={() => { setQuickWinGoalId(null); setQuickWinText(""); }}
+                        className="h-7 w-7 rounded-lg hover:bg-secondary text-muted-foreground flex items-center justify-center"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); setQuickWinGoalId(g.id); }}
+                      className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors w-full"
+                    >
+                      <Plus size={10} /> Quick Win
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1407,7 +1494,7 @@ export default function GoalsPage() {
                               const cpct = goalPct(cg);
                               return (
                                 <div key={cg.id}
-                                  onClick={() => { setSelectedGoalId(cg.id); setHorizon((cg as any).horizon ?? "this_year"); }}
+                                  onClick={() => { setSelectedGoalId(cg.id); const h = (cg as any).horizon ?? "this_year"; setHorizonTab(h === "someday" ? "vision" : h === "this_year" ? "this_year" : "long_term"); }}
                                   className="flex items-center gap-2 py-1.5 cursor-pointer hover:opacity-80 transition-opacity"
                                 >
                                   <span className="text-xs">{cm?.emoji}</span>
