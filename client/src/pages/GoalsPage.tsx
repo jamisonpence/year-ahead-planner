@@ -199,6 +199,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   const [expanded, setExpanded] = useState(true);
   const [title, setTitle] = useState(goal.title);
   const [priority, setPriority] = useState(goal.priority);
+  const [description, setDescription] = useState(goal.description ?? "");
   const [current, setCurrent] = useState(goal.progressCurrent.toString());
   const [target, setTarget] = useState(goal.progressTarget.toString());
   const [targetDate, setTargetDate] = useState(goal.targetDate ?? "");
@@ -213,6 +214,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   const reset = useCallback(() => {
     setTitle(goal.title);
     setPriority(goal.priority);
+    setDescription(goal.description ?? "");
     setCurrent(goal.progressCurrent.toString());
     setTarget(goal.progressTarget.toString());
     setTargetDate(goal.targetDate ?? "");
@@ -225,6 +227,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
   const isDirty =
     title.trim() !== goal.title ||
     priority !== goal.priority ||
+    (description.trim() || null) !== (goal.description ?? null) ||
     parseFloat(current) !== goal.progressCurrent ||
     parseFloat(target) !== goal.progressTarget ||
     (targetDate || null) !== (goal.targetDate ?? null) ||
@@ -236,6 +239,7 @@ function InlineGoalEditor({ goal, friends, onSave }: {
       id: goal.id,
       title: title.trim() || goal.title,
       priority,
+      description: description.trim() || null,
       progressCurrent: parseFloat(current) || 0,
       progressTarget: parseFloat(target) || goal.progressTarget,
       targetDate: targetDate || null,
@@ -293,6 +297,17 @@ function InlineGoalEditor({ goal, friends, onSave }: {
       <div className="space-y-1">
         <Label className="text-xs">Title</Label>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-xs" />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Why it matters</Label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder="What makes this goal meaningful?"
+          className="text-xs resize-none"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
