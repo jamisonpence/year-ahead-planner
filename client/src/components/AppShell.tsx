@@ -11,8 +11,8 @@ import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
 import {
   LayoutDashboard, Calendar, Target, Library, Dumbbell,
-  Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
-  Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
+  Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Music2, Home, MapPin, Plane,
+  Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
   History, BookOpen,
@@ -144,7 +144,7 @@ function PrivacyBanner({ path }: { path: string }) {
   );
 }
 
-const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; hiddenByDefault?: boolean; matchPaths?: string[] }[] = [
+const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
@@ -170,9 +170,6 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── Beliefs & Society ──
   { path: "/faith",         label: "Faith",                   icon: Flame           },
   { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
-  // ── Hidden / legacy ──
-  { path: "/plants",        label: "Plants",                  icon: Leaf,           hiddenByDefault: true },
-  { path: "/quotes",        label: "Quotes",                  icon: Quote,          hiddenByDefault: true },
 ];
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
@@ -180,7 +177,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "today",     label: null,                paths: ["/dashboard", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "MyLifos",           paths: ["/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"] },
+  { key: "mylifos",   label: "MyLifos",           paths: ["/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 
@@ -207,10 +204,10 @@ function useNavPrefs() {
   });
 
   // Merge saved prefs with ALL_TABS (handles new tabs added later)
-  // Beta and repository-deep tabs default to hidden unless the user has explicitly saved a pref for them.
+  // Beta tabs default to hidden unless the user has explicitly saved a pref for them.
   const prefs: NavPref[] = ALL_TABS.map((tab) => {
     const saved = savedPrefs.find((p) => p.path === tab.path);
-    return { path: tab.path, hidden: saved?.hidden ?? tab.hiddenByDefault ?? tab.beta ?? false };
+    return { path: tab.path, hidden: saved?.hidden ?? tab.beta ?? false };
   });
   // Re-order by saved order
   if (savedPrefs.length > 0) {
