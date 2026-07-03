@@ -634,7 +634,7 @@ export default function DashboardPage() {
     { href: "/nutrition",     label: "Nutrition",    icon: <Apple size={15} />,         color: "text-rose-500"  },
     { href: "/spots",         label: "Places",       icon: <MapPin size={15} />,        color: "text-emerald-500"},
     { href: "/calendar",      label: "Events",       icon: <Calendar size={15} />,      color: "text-violet-500"},
-    { href: "/messenger",     label: "Messenger",    icon: <MessageCircle size={15} />, color: "text-sky-500"   },
+    { href: "/messenger",     label: "Messages",     icon: <MessageCircle size={15} />, color: "text-sky-500"   },
     { href: "/relationships", label: "Friends",      icon: <Users size={15} />,         color: "text-pink-500"  },
   ];
 
@@ -659,7 +659,7 @@ export default function DashboardPage() {
         <div className="flex gap-2 flex-wrap items-center">
           <div className="hidden sm:flex gap-2 items-center">
             <Link href="/review">
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">🪞 Weekly Review</Button>
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">🪞 Review</Button>
             </Link>
             <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Calendar size={12} />Event</Button>
             <Button size="sm" variant="outline" onClick={() => setAddWorkout(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Dumbbell size={12} />Workout</Button>
@@ -763,7 +763,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium truncate mt-0.5">{completedMoment.title}</p>
                       <p className="text-xs text-muted-foreground mt-1">{completedMoment.context}</p>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <Link href="/review"><a className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline">Add to Weekly Review</a></Link>
+                        <Link href="/review"><a className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline">Add to Review</a></Link>
                         <Link href="/goals"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">View Progress</a></Link>
                         <Link href="/messenger"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">Share a win</a></Link>
                       </div>
@@ -831,7 +831,7 @@ export default function DashboardPage() {
                   <Target size={14} className="text-violet-500" />
                   <span className="text-sm font-semibold">Focus</span>
                 </div>
-                <Link href="/review"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Weekly Review <ChevronRight size={12} /></a></Link>
+                <Link href="/review"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Review <ChevronRight size={12} /></a></Link>
               </div>
               {focusData?.focus && !editingFocus ? (
                 <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 px-3 py-3">

@@ -154,19 +154,19 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
-  { path: "/review",        label: "Weekly Review",           icon: History         },
+  { path: "/review",        label: "Review",                  icon: History         },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   // ── Wellness ──
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
-  { path: "/library",       label: "Library",                 icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
+  { path: "/library",       label: "Media",                   icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
   { path: "/hobbies",       label: "Interests",               icon: Sparkles        },
   // ── Places ──
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet          },
-  { path: "/housekeeping",  label: "House",                   icon: Home            },
+  { path: "/housekeeping",  label: "Home",                    icon: Home            },
   // ── Beliefs & Society ──
   { path: "/faith",         label: "Faith",                   icon: Flame           },
   { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
@@ -366,7 +366,7 @@ const SECTION_KEY: Record<string, string> = {
 const COLLECTION_GROUPS = [
   {
     key: "library",
-    label: "Library",
+    label: "Media",
     subtitle: "Books, watching, music, and art",
     tiles: [
       { path: "/library",              emoji: "📚", label: "Books"    },
@@ -402,7 +402,7 @@ const COLLECTION_GROUPS = [
     subtitle: "Budget and household",
     tiles: [
       { path: "/budget",       emoji: "💰", label: "Finance"       },
-      { path: "/housekeeping", emoji: "🏠", label: "House" },
+      { path: "/housekeeping", emoji: "🏠", label: "Home" },
     ],
   },
   {
@@ -865,7 +865,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium">Collaboration Requests</span>
                           <p className="text-xs text-muted-foreground">
-                            {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Housekeeping
+                            {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Home
                           </p>
                         </div>
                         <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
@@ -1101,7 +1101,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">Collaboration Requests</span>
                       <p className="text-xs text-muted-foreground">
-                        {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Housekeeping
+                        {pendingCollabCount} pending {pendingCollabCount === 1 ? "invite" : "invites"} — Family or Home
                       </p>
                     </div>
                     <span className="min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">

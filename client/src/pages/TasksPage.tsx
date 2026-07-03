@@ -1372,7 +1372,7 @@ export default function TasksPage() {
                 for (const p of sortedActiveProjects) {
                   const label = (p as any).goalTitle
                     ? `🎯 ${(p as any).goalTitle}`
-                    : (p as any).source === "house" ? "🏠 House Projects" : "📁 Standalone";
+                    : (p as any).source === "house" ? "🏠 Home Projects" : "📁 Standalone";
                   if (!groups.has(label)) groups.set(label, [] as any);
                   groups.get(label)!.push(p);
                 }

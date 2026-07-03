@@ -30,7 +30,7 @@ const PRIVACY_TABS = [
   { path: "/movies",        label: "Movies & Shows",          icon: Film            },
   { path: "/music",         label: "Music",                   icon: Music2          },
   { path: "/budget",        label: "Budget",                  icon: Wallet          },
-  { path: "/housekeeping",  label: "Housekeeping",            icon: Home            },
+  { path: "/housekeeping",  label: "Home",                    icon: Home            },
   { path: "/spots",         label: "Places",                  icon: MapPin          },
   { path: "/travel",        label: "Trips",                   icon: Plane           },
   { path: "/kids",          label: "Family",                  icon: Baby            },
@@ -156,7 +156,7 @@ function TabPrivacySection() {
 
 const COLLAB_TABS = [
   { name: "kids",         label: "Kids",          icon: Baby     },
-  { name: "housekeeping", label: "Housekeeping",  icon: Home     },
+  { name: "housekeeping", label: "Home",          icon: Home     },
   { name: "politics",     label: "Politics",      icon: Landmark },
   { name: "health",       label: "Health",        icon: Flame    },
   { name: "places",       label: "Places",        icon: MapPin   },
@@ -240,7 +240,7 @@ function CollaborationSection() {
 
       <p className="text-sm text-muted-foreground">
         Share a tab with someone so you're both working off the same data.
-        Currently supported for <strong>Kids</strong> and <strong>Housekeeping</strong>.
+        Currently supported for <strong>Kids</strong> and <strong>Home</strong>.
       </p>
 
       {/* Pending incoming invites */}

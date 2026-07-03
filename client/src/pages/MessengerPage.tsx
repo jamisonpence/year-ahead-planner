@@ -1208,7 +1208,7 @@ export default function MessengerPage() {
         <div className="px-4 py-3 border-b">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold flex items-center gap-2">
-              <MessageSquare size={18} className="text-primary" /> Messenger
+              <MessageSquare size={18} className="text-primary" /> Messages
             </h1>
             <div className="flex gap-1">
               {view === "channels" ? (

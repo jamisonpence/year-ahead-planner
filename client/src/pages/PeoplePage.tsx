@@ -9,7 +9,7 @@ type PeopleTab = "friends" | "family" | "taste";
 const TABS: { id: PeopleTab; label: string; icon: React.ElementType }[] = [
   { id: "friends", label: "Friends",     icon: Users    },
   { id: "family",  label: "Family",      icon: Baby     },
-  { id: "taste",   label: "Taste Match", icon: Sparkles },
+  { id: "taste",   label: "Discover", icon: Sparkles },
 ];
 
 function getInitialTab(): PeopleTab {

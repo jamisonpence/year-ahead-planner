@@ -1198,7 +1198,7 @@ export default function HousekeepingPage() {
         size="sm"
         title={
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xl font-semibold tracking-tight">Housekeeping</span>
+            <span className="text-xl font-semibold tracking-tight">Home</span>
             {overdueCount > 0 && <Badge className="bg-red-100 text-red-700">{overdueCount} overdue</Badge>}
             {dueTodayCount > 0 && <Badge className="bg-orange-100 text-orange-700">{dueTodayCount} due today</Badge>}
           </div>
