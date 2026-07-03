@@ -58,6 +58,7 @@ function lazyPage(loader: () => Promise<{ default: ComponentType<any> }>) {
   };
 }
 const LibraryPage = lazyPage(() => import("@/pages/LibraryPage"));
+const MyLifosPage = lazyPage(() => import("@/pages/MyLifosPage"));
 const FeedPage = lazyPage(() => import("@/pages/FeedPage"));
 const DiscoverPage = lazyPage(() => import("@/pages/DiscoverPage"));
 const CalendarPage = lazyPage(() => import("@/pages/CalendarPage"));
@@ -164,6 +165,7 @@ function AuthenticatedApp() {
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/goals" component={GoalsPage} />
         <Route path="/tasks" component={TasksPage} />
+        <Route path="/mylifos" component={MyLifosPage} />
         <Route path="/library" component={LibraryPage} />
         <Route path="/reading" component={ReadingPage} />
         <Route path="/health" component={HealthHubPage} />

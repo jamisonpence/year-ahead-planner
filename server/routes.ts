@@ -963,6 +963,78 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  app.get("/api/mylifos/hub", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const [summary, shared, recent, favorites, notes] = await Promise.all([
+        storage.getUserSummary(userId),
+        storage.getRecommendationsInbox(userId, "all"),
+        pool.query(
+          `SELECT activity_type, item_type, item_title, item_subtitle, item_image_url, created_at
+           FROM activity_feed
+           WHERE user_id=$1 AND item_title IS NOT NULL
+           ORDER BY created_at DESC
+           LIMIT 8`,
+          [userId]
+        ),
+        pool.query(
+          `(SELECT 'movie' AS type, id, title, media_type AS subtitle, '/library?tab=watching' AS href FROM movies WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'artist', id, name, genres, '/library?tab=music' FROM music_artists WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'song', id, title, album, '/library?tab=music' FROM music_songs WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'place', id, name, city, '/places' FROM spots WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'quote', id, LEFT(text, 90), author, '/quotes' FROM quotes WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'interest', id, name, category, '/hobbies' FROM hobbies WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'art', id, title, artist_name, '/library?tab=art' FROM art_pieces WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           UNION ALL (SELECT 'note', id, COALESCE(title, LEFT(content, 80)), date, '/journal' FROM journal_entries WHERE user_id=$1 AND is_favorite=true LIMIT 5)
+           LIMIT 12`,
+          [userId]
+        ),
+        pool.query(
+          `SELECT
+             (SELECT COUNT(*)::int FROM journal_entries WHERE user_id=$1) AS total,
+             COALESCE(json_agg(row_to_json(j)) FILTER (WHERE j.id IS NOT NULL), '[]'::json) AS recent
+           FROM (
+             SELECT id, COALESCE(title, LEFT(content, 80)) AS title, date, mood
+             FROM journal_entries
+             WHERE user_id=$1
+             ORDER BY date DESC, id DESC
+             LIMIT 4
+           ) j`,
+          [userId]
+        ),
+      ]);
+
+      const collections = [
+        { key: "media", label: "Media", href: "/library", count: (summary.counts.reading ?? 0) + (summary.counts.movies ?? 0) + (summary.counts.music ?? 0) + (summary.counts.art ?? 0), items: ["Books", "Watching", "Music", "Art"] },
+        { key: "interests", label: "Interests", href: "/hobbies", count: summary.counts.hobbies ?? 0, items: ["Hobbies", "Plans", "Skills"] },
+        { key: "health", label: "Health", href: "/health", count: (summary.counts.workouts ?? 0) + (summary.counts.health ?? 0) + (summary.counts.recipes ?? 0), items: ["Workouts", "Vitals", "Recipes"] },
+        { key: "places", label: "Places & Trips", href: "/places", count: summary.counts.spots ?? 0, items: ["Places", "Trips", "Memories"] },
+        { key: "home", label: "Home", href: "/housekeeping", count: summary.counts.housekeeping ?? 0, items: ["Chores", "Projects", "Household"] },
+        { key: "finance", label: "Finance", href: "/budget", count: summary.counts.budget ?? 0, items: ["Budget", "Transactions", "Bills"] },
+        { key: "faith", label: "Faith", href: "/faith", count: summary.counts.faith ?? 0, items: ["Texts", "Practices", "Prayer"] },
+        { key: "civic", label: "Civic", href: "/politics", count: summary.counts.politics ?? 0, items: ["Issues", "Officials", "Debates"] },
+      ];
+
+      res.json({
+        recentlySaved: recent.rows.map((row: any) => ({
+          type: row.item_type ?? row.activity_type,
+          title: row.item_title,
+          subtitle: row.item_subtitle,
+          imageUrl: row.item_image_url,
+          createdAt: row.created_at,
+        })),
+        collections,
+        sharedWithMe: shared.slice(0, 6),
+        favorites: favorites.rows,
+        privateNotes: {
+          total: notes.rows[0]?.total ?? 0,
+          recent: notes.rows[0]?.recent ?? [],
+        },
+        lifeStats: summary,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Life Graph ──────────────────────────────────────────────────────────────
   // Generic connection layer for people, places, media, goals, trips, workouts,
   // notes, habits, projects, recommendations, and future life entities.

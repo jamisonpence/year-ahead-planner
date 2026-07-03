@@ -14,7 +14,7 @@ import {
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
+  Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList, Archive,
   History, BookOpen,
 } from "lucide-react";
 
@@ -157,6 +157,8 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/review",        label: "Review",                  icon: History         },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
+  // ── Repository ──
+  { path: "/mylifos",       label: "MyLifos",                 icon: Archive         },
   // ── Wellness ──
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
@@ -177,13 +179,13 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "today",     label: null,                paths: ["/dashboard", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "MyLifos",           paths: ["/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
+  { key: "mylifos",   label: "MyLifos",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
 const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover"];
-const MYLIFOS_PATHS = ["/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"];
+const MYLIFOS_PATHS = ["/mylifos", "/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"];
 
 function basePath(path: string) {
   return path.split("?")[0];
@@ -1011,14 +1013,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </Link>
 
-          {/* MyLifos repository sheet */}
-          <button
-            onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
-          >
-            <Library size={22} className={(myLifosOpen || MYLIFOS_PATHS.includes(location)) ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${(myLifosOpen || MYLIFOS_PATHS.includes(location)) ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
-          </button>
+          {/* MyLifos */}
+          <Link href="/mylifos">
+            <button
+              onClick={() => setMyLifosOpen(false)}
+              className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
+            >
+              <Archive size={22} className={(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
+            </button>
+          </Link>
 
           {/* People */}
           <Link href="/people">
