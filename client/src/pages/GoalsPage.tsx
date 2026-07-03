@@ -84,6 +84,34 @@ function projectPct(p: ProjectWithTasks): number {
   return Math.round((done / p.tasks.length) * 100);
 }
 
+function getGoalNextAction(goal: GoalWithProjects): { project: ProjectWithTasks; task: ProjectWithTasks["tasks"][number] } | null {
+  const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const candidates = goal.projects
+    .filter((p) => p.status !== "done" && p.status !== "blocked")
+    .flatMap((project) =>
+      project.tasks
+        .filter((task) => !task.completed)
+        .map((task) => ({ project, task }))
+    );
+
+  candidates.sort((a, b) => {
+    const ad = a.task.dueDate ? daysUntil(a.task.dueDate) ?? 9999 : 9999;
+    const bd = b.task.dueDate ? daysUntil(b.task.dueDate) ?? 9999 : 9999;
+    if (ad !== bd) return ad - bd;
+    return (priorityRank[a.task.priority] ?? 1) - (priorityRank[b.task.priority] ?? 1);
+  });
+
+  return candidates[0] ?? null;
+}
+
+function getCurrentProject(goal: GoalWithProjects): ProjectWithTasks | null {
+  return goal.projects.find((p) => p.status === "in_progress")
+    ?? goal.projects.find((p) => p.status === "not_started")
+    ?? goal.projects.find((p) => p.status !== "done")
+    ?? goal.projects[0]
+    ?? null;
+}
+
 // ── Buddy helpers ─────────────────────────────────────────────────────────────
 function BuddyAvatarSm({ user, size = 24 }: { user: PublicUser; size?: number }) {
   const initials = user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -977,6 +1005,8 @@ export default function GoalsPage() {
               const d = g.targetDate ? daysUntil(g.targetDate) : null;
               const buddy = g.buddyUserId ? friends.find((f) => f.id === g.buddyUserId) : null;
               const isFitness = !!(g as any).linkedWorkoutPlanId;
+              const currentProject = getCurrentProject(g);
+              const nextAction = getGoalNextAction(g);
               return (
                 <div key={g.id}
                   onClick={() => { setSelectedGoalId(isSelected ? null : g.id); if (!isSelected) setMobileView("detail"); }}
@@ -1017,6 +1047,21 @@ export default function GoalsPage() {
                     <Progress value={pct} className="h-1.5 flex-1" />
                     <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
                   </div>
+
+                  {!linkedPlan && (currentProject || nextAction) && (
+                    <div className="mb-2 space-y-1 rounded-lg bg-secondary/30 px-2 py-1.5">
+                      {currentProject && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          Project: <span className="font-medium text-foreground/80">{currentProject.title}</span>
+                        </p>
+                      )}
+                      {nextAction && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          Next: <span className="font-medium text-foreground/80">{nextAction.task.title}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className={`flex items-center gap-0.5 ${PRIORITY_COLORS[g.priority]}`}>
@@ -1224,6 +1269,50 @@ export default function GoalsPage() {
                   friends={friends}
                   onSave={(data) => updateGoal.mutate(data)}
                 />
+
+                {(() => {
+                  const currentProject = getCurrentProject(selectedGoal);
+                  const nextAction = getGoalNextAction(selectedGoal);
+                  return (
+                    <div className="rounded-xl border bg-card p-4 mb-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Why it matters</p>
+                        <p className="text-sm text-foreground/85 leading-relaxed">
+                          {selectedGoal.description?.trim() || "Add a short why in this goal's description so Today can keep the outcome meaningful."}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="rounded-lg bg-secondary/30 px-3 py-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Current project</p>
+                          {currentProject ? (
+                            <>
+                              <p className="text-sm font-medium truncate">{currentProject.title}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{currentProject.status.replace(/_/g, " ")}</p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No project linked yet.</p>
+                          )}
+                        </div>
+                        <div className="rounded-lg bg-violet-50/70 dark:bg-violet-950/20 border border-violet-200/70 dark:border-violet-800/60 px-3 py-2">
+                          <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wider mb-1">Next action</p>
+                          {nextAction ? (
+                            <>
+                              <p className="text-sm font-medium leading-snug">{nextAction.task.title}</p>
+                              <p className="text-xs text-muted-foreground truncate">{nextAction.project.title}</p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Add one open task to a linked project.</p>
+                          )}
+                        </div>
+                      </div>
+                      <Link href="/tasks">
+                        <a className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+                          <ClipboardList size={11} /> Manage projects and next actions
+                        </a>
+                      </Link>
+                    </div>
+                  );
+                })()}
 
                 <GoalMilestones
                   goal={selectedGoal}

@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import {
   Calendar, BookOpen, Dumbbell, Target, Plus, Flame,
-  CheckCircle2, AlertTriangle, ChevronRight,
+  CheckCircle2, AlertTriangle, ChevronRight, ArrowRight,
   BookMarked, Zap, Home, RefreshCw, MapPin, Quote as QuoteIcon,
   CreditCard, TrendingUp, Heart, Settings2, X,
   Sparkles, Clock, Star, Coffee, Sun, Sunset, Check, BookCopy,
@@ -117,6 +117,11 @@ function loadVisibility(): Record<SectionId, boolean> {
 
 function saveVisibility(v: Record<SectionId, boolean>) {
   try { localStorage.setItem("dashboard_sections_v2", JSON.stringify(v)); } catch {}
+}
+
+function goalProgressPct(g: GoalWithProjects): number {
+  if (g.progressType === "boolean") return g.progressCurrent >= g.progressTarget ? 100 : 0;
+  return g.progressTarget > 0 ? Math.min(100, Math.round((g.progressCurrent / g.progressTarget) * 100)) : 0;
 }
 
 // ── AI Day Planner Component ───────────────────────────────────────────────────
@@ -476,13 +481,33 @@ export default function DashboardPage() {
 
   // Open project tasks (from goals + standalone projects)
   const openProjectTasks: any[] = [];
+  const goalNextActions: Array<{ goal: GoalWithProjects; project: any; task: any; daysLeft: number | null }> = [];
   goals.forEach((g) => {
     (g.projects ?? []).forEach((p: any) => {
-      (p.tasks ?? []).filter((t: any) => !t.completed).forEach((t: any) => {
-        openProjectTasks.push({ ...t, source: p.title ?? g.title });
-      });
+      const openTasks = (p.tasks ?? []).filter((t: any) => !t.completed);
+      openTasks.forEach((t: any) => openProjectTasks.push({ ...t, source: p.title ?? g.title }));
+      const nextTask = [...openTasks].sort((a: any, b: any) => {
+        const ad = a.dueDate ? daysUntil(a.dueDate) ?? 9999 : 9999;
+        const bd = b.dueDate ? daysUntil(b.dueDate) ?? 9999 : 9999;
+        if (ad !== bd) return ad - bd;
+        const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+        return (priorityRank[a.priority] ?? 1) - (priorityRank[b.priority] ?? 1);
+      })[0];
+      if (nextTask && p.status !== "done" && p.status !== "blocked") {
+        goalNextActions.push({ goal: g, project: p, task: nextTask, daysLeft: nextTask.dueDate ? daysUntil(nextTask.dueDate) : null });
+      }
     });
   });
+  const primaryNextAction = [...goalNextActions].sort((a, b) => {
+    const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const ad = a.daysLeft ?? 9999;
+    const bd = b.daysLeft ?? 9999;
+    if (ad !== bd) return ad - bd;
+    const ap = priorityRank[a.goal.priority] ?? 1;
+    const bp = priorityRank[b.goal.priority] ?? 1;
+    if (ap !== bp) return ap - bp;
+    return goalProgressPct(b.goal) - goalProgressPct(a.goal);
+  })[0] ?? null;
   standaloneProjects.forEach((p: any) => {
     (p.tasks ?? []).filter((t: any) => !t.completed).forEach((t: any) => {
       openProjectTasks.push({ ...t, source: p.title });
@@ -686,6 +711,33 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-xs text-muted-foreground">{todayItems.length} item{todayItems.length !== 1 ? "s" : ""}</span>
               </div>
+              {primaryNextAction && (
+                <div className="mb-3 rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 p-3">
+                  <div className="flex items-start gap-3">
+                    <button
+                      aria-label={`Mark "${primaryNextAction.task.title}" done`}
+                      disabled={completeItem.isPending}
+                      onClick={() => completeItem.mutate({ type: "project", id: primaryNextAction.task.id })}
+                      className="mt-0.5 shrink-0 w-7 h-7 rounded-full border-2 border-violet-400/60 hover:border-emerald-500 hover:bg-emerald-500/15 flex items-center justify-center transition-colors group"
+                    >
+                      <CheckCircle2 size={15} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <ArrowRight size={12} className="text-violet-500 shrink-0" />
+                        <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wide">Next Action</p>
+                      </div>
+                      <p className="text-sm font-semibold leading-snug">{primaryNextAction.task.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                        {primaryNextAction.goal.title} · {primaryNextAction.project.title}
+                      </p>
+                    </div>
+                    <Link href="/tasks">
+                      <a className="shrink-0 text-xs font-medium text-violet-600 dark:text-violet-300 hover:underline">View</a>
+                    </Link>
+                  </div>
+                </div>
+              )}
               {todayItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-500 opacity-60" />
