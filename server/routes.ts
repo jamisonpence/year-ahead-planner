@@ -963,6 +963,197 @@ Rules:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Life Graph ──────────────────────────────────────────────────────────────
+  // Generic connection layer for people, places, media, goals, trips, workouts,
+  // notes, habits, projects, recommendations, and future life entities.
+  const LIFE_GRAPH_TYPES = new Set([
+    "person", "place", "book", "music", "recipe", "goal", "trip", "workout",
+    "note", "habit", "project", "recommendation", "movie", "art", "quote",
+  ]);
+  const LIFE_GRAPH_RELATIONS = new Set([
+    "related", "supports", "shared_with", "recommended_by", "visited_with",
+    "planned_for", "inspired_by", "memory", "accountability", "interest",
+  ]);
+  const GRAPH_TYPE_META: Record<string, { label: string; href: string }> = {
+    person: { label: "Person", href: "/people" },
+    place: { label: "Place", href: "/places" },
+    book: { label: "Book", href: "/library" },
+    music: { label: "Music", href: "/library?tab=music" },
+    recipe: { label: "Recipe", href: "/health?tab=recipes" },
+    goal: { label: "Goal", href: "/goals" },
+    trip: { label: "Trip", href: "/places?tab=trips" },
+    workout: { label: "Workout", href: "/health" },
+    note: { label: "Note", href: "/journal" },
+    habit: { label: "Habit", href: "/habits" },
+    project: { label: "Project", href: "/tasks" },
+    recommendation: { label: "Recommendation", href: "/people?tab=discover" },
+    movie: { label: "Movie", href: "/library?tab=watching" },
+    art: { label: "Art", href: "/library?tab=art" },
+    quote: { label: "Quote", href: "/quotes" },
+  };
+
+  function graphType(type: unknown): string | null {
+    const t = String(type ?? "").trim().toLowerCase();
+    return LIFE_GRAPH_TYPES.has(t) ? t : null;
+  }
+  function graphRelation(relation: unknown): string {
+    const r = String(relation ?? "related").trim().toLowerCase();
+    return LIFE_GRAPH_RELATIONS.has(r) ? r : "related";
+  }
+  async function graphEntitySummary(userId: number, type: string, id: number) {
+    const meta = GRAPH_TYPE_META[type] ?? { label: type, href: "/" };
+    let row: any | undefined;
+    switch (type) {
+      case "person":
+        row = (await pool.query(`SELECT TRIM(first_name || ' ' || COALESCE(last_name,'')) AS title, notes AS subtitle FROM people WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "place":
+        row = (await pool.query(`SELECT name AS title, city AS subtitle FROM spots WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "book":
+        row = (await pool.query(`SELECT title, author AS subtitle FROM books WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "music":
+        row = (await pool.query(`SELECT name AS title, genres AS subtitle FROM music_artists WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "recipe":
+        row = (await pool.query(`SELECT name AS title, category AS subtitle FROM recipes WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "goal":
+        row = (await pool.query(`SELECT title, priority AS subtitle FROM goals WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "trip":
+        row = (await pool.query(`SELECT name AS title, destination AS subtitle FROM trips WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "workout":
+        row = (await pool.query(`SELECT name AS title, date AS subtitle FROM workout_logs WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "note":
+        row = (await pool.query(`SELECT COALESCE(title, LEFT(content, 80)) AS title, date AS subtitle FROM journal_entries WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "habit":
+        row = (await pool.query(`SELECT title, category AS subtitle FROM habits WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "project":
+        row = (await pool.query(`SELECT title, status AS subtitle FROM projects WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "movie":
+        row = (await pool.query(`SELECT title, media_type AS subtitle FROM movies WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "art":
+        row = (await pool.query(`SELECT title, artist_name AS subtitle FROM art_pieces WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "quote":
+        row = (await pool.query(`SELECT LEFT(text, 80) AS title, author AS subtitle FROM quotes WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+      case "recommendation":
+        row = (await pool.query(`SELECT item_title AS title, item_subtitle AS subtitle FROM activity_feed WHERE user_id=$1 AND id=$2`, [userId, id])).rows[0];
+        break;
+    }
+    if (!row) return null;
+    return { type, id, typeLabel: meta.label, title: row.title, subtitle: row.subtitle ?? null, href: meta.href };
+  }
+
+  app.get("/api/life-graph/search", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const q = String(req.query.q ?? "").trim();
+      if (q.length < 2) return res.json([]);
+      const pat = `%${q.replace(/[%_]/g, "\\$&")}%`;
+      const sql = `
+        (SELECT 'person' AS type, id, TRIM(first_name || ' ' || COALESCE(last_name,'')) AS title, notes AS subtitle, '/people' AS href FROM people WHERE user_id=$1 AND (first_name ILIKE $2 OR last_name ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'place', id, name, city, '/places' FROM spots WHERE user_id=$1 AND (name ILIKE $2 OR city ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'book', id, title, author, '/library' FROM books WHERE user_id=$1 AND (title ILIKE $2 OR author ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'music', id, name, genres, '/library?tab=music' FROM music_artists WHERE user_id=$1 AND name ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'recipe', id, name, category, '/health?tab=recipes' FROM recipes WHERE user_id=$1 AND name ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'goal', id, title, priority, '/goals' FROM goals WHERE user_id=$1 AND title ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'trip', id, name, destination, '/places?tab=trips' FROM trips WHERE user_id=$1 AND (name ILIKE $2 OR destination ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'workout', id, name, date, '/health' FROM workout_logs WHERE user_id=$1 AND name ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'note', id, COALESCE(title, LEFT(content, 80)), date, '/journal' FROM journal_entries WHERE user_id=$1 AND (title ILIKE $2 OR content ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'habit', id, title, category, '/habits' FROM habits WHERE user_id=$1 AND title ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'project', id, title, status, '/tasks' FROM projects WHERE user_id=$1 AND title ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'movie', id, title, media_type, '/library?tab=watching' FROM movies WHERE user_id=$1 AND title ILIKE $2 LIMIT 6)
+        UNION ALL (SELECT 'art', id, title, artist_name, '/library?tab=art' FROM art_pieces WHERE user_id=$1 AND (title ILIKE $2 OR artist_name ILIKE $2) LIMIT 6)
+        UNION ALL (SELECT 'quote', id, LEFT(text, 80), author, '/quotes' FROM quotes WHERE user_id=$1 AND (text ILIKE $2 OR author ILIKE $2) LIMIT 6)
+        LIMIT 80`;
+      const r = await pool.query(sql, [userId, pat]);
+      res.json(r.rows.map((row: any) => ({ ...row, typeLabel: GRAPH_TYPE_META[row.type]?.label ?? row.type })));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/life-graph/:type/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const type = graphType(req.params.type);
+      const id = Number(req.params.id);
+      if (!type || !Number.isFinite(id)) return res.status(400).json({ error: "Invalid entity" });
+      const entity = await graphEntitySummary(userId, type, id);
+      if (!entity) return res.status(404).json({ error: "Entity not found" });
+
+      const links = await pool.query(
+        `SELECT * FROM life_graph_links
+         WHERE user_id=$1 AND ((source_type=$2 AND source_id=$3) OR (target_type=$2 AND target_id=$3))
+         ORDER BY created_at DESC`,
+        [userId, type, id]
+      );
+      const items = await Promise.all(links.rows.map(async (link: any) => {
+        const isSource = link.source_type === type && link.source_id === id;
+        const otherType = isSource ? link.target_type : link.source_type;
+        const otherId = isSource ? link.target_id : link.source_id;
+        const other = await graphEntitySummary(userId, otherType, otherId);
+        return { ...link, direction: isSource ? "out" : "in", other };
+      }));
+      res.json({ entity, links: items.filter((item) => item.other) });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/life-graph", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const sourceType = graphType(req.body?.sourceType);
+      const targetType = graphType(req.body?.targetType);
+      const sourceId = Number(req.body?.sourceId);
+      const targetId = Number(req.body?.targetId);
+      const relation = graphRelation(req.body?.relation);
+      const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+      if (!sourceType || !targetType || !Number.isFinite(sourceId) || !Number.isFinite(targetId)) {
+        return res.status(400).json({ error: "sourceType, sourceId, targetType, and targetId are required" });
+      }
+      if (sourceType === targetType && sourceId === targetId) return res.status(400).json({ error: "Cannot link an item to itself" });
+      const [source, target] = await Promise.all([
+        graphEntitySummary(userId, sourceType, sourceId),
+        graphEntitySummary(userId, targetType, targetId),
+      ]);
+      if (!source || !target) return res.status(404).json({ error: "Entity not found" });
+
+      const existing = await pool.query(
+        `SELECT * FROM life_graph_links
+         WHERE user_id=$1 AND relation=$6 AND (
+          (source_type=$2 AND source_id=$3 AND target_type=$4 AND target_id=$5)
+          OR (source_type=$4 AND source_id=$5 AND target_type=$2 AND target_id=$3)
+         )`,
+        [userId, sourceType, sourceId, targetType, targetId, relation]
+      );
+      if (existing.rows[0]) return res.json(existing.rows[0]);
+
+      const r = await pool.query(
+        `INSERT INTO life_graph_links (user_id, source_type, source_id, target_type, target_id, relation, notes, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [userId, sourceType, sourceId, targetType, targetId, relation, notes || null, new Date().toISOString()]
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/life-graph/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as User).id;
+      const id = Number(req.params.id);
+      const r = await pool.query(`DELETE FROM life_graph_links WHERE user_id=$1 AND id=$2 RETURNING id`, [userId, id]);
+      r.rows[0] ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Daily digest ─────────────────────────────────────────────────────────────
   // Every 30 min, after 7am (America/Chicago) create one "Your day ahead"
   // notification per user summarizing today's agenda. Guarded to once per day.

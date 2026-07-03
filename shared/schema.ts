@@ -1280,6 +1280,25 @@ export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit(
 export type InsertJournalEntry = z.infer<typeof insertJournalEntrySchema>;
 export type JournalEntry = typeof journalEntries.$inferSelect;
 
+// ── LIFE GRAPH ────────────────────────────────────────────────────────────────
+// Generic links between life entities: people, places, books, music, recipes,
+// goals, trips, workouts, notes, habits, projects, and future repository items.
+export const lifeGraphLinks = pgTable("life_graph_links", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  sourceType: text("source_type").notNull(),
+  sourceId: integer("source_id").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: integer("target_id").notNull(),
+  relation: text("relation").notNull().default("related"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertLifeGraphLinkSchema = createInsertSchema(lifeGraphLinks).omit({ id: true });
+export type InsertLifeGraphLink = z.infer<typeof insertLifeGraphLinkSchema>;
+export type LifeGraphLink = typeof lifeGraphLinks.$inferSelect;
+
 // ── BOOK RECOMMENDATIONS ──────────────────────────────────────────────────────
 export const bookRecommendations = pgTable("book_recommendations", {
   id: serial("id").primaryKey(),

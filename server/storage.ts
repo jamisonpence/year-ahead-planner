@@ -1751,6 +1751,25 @@ export async function initializeStorage() {
     )
   `);
 
+  // Life Graph: generic connections between people, places, books, music,
+  // recipes, goals, trips, workouts, notes, habits, projects, and future items.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS life_graph_links (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      source_type TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      relation TEXT NOT NULL DEFAULT 'related',
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (user_id, source_type, source_id, target_type, target_id, relation)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_life_graph_source ON life_graph_links (user_id, source_type, source_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_life_graph_target ON life_graph_links (user_id, target_type, target_id)`);
+
   // Invite links (one permanent code per user; auto-friends on signup)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invites (

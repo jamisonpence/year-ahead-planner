@@ -25,6 +25,7 @@ import GoalFormModal from "@/components/modals/GoalFormModal";
 import { HobbyFormDialog, EMPTY_FORM, PlanWizard, parsePlans, setPlansInExtra } from "@/pages/HobbiesPage";
 import GoogleBooksModal from "@/components/GoogleBooksModal";
 import PlannerSetup from "@/pages/planner/Setup";
+import LifeGraphPanel from "@/components/LifeGraphPanel";
 import type {
   GoalWithProjects, Goal, ProjectWithTasks,
   InsertGoal,
@@ -1333,6 +1334,8 @@ export default function GoalsPage() {
                   goal={selectedGoal}
                   onSave={(milestonesJson) => updateGoal.mutate({ id: selectedGoal.id, milestonesJson } as any)}
                 />
+
+                <LifeGraphPanel entityType="goal" entityId={selectedGoal.id} />
 
                 {/* ── Horizon & parent goal ──────────────────────────── */}
                 {(() => {
