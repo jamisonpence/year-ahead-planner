@@ -21,7 +21,7 @@ import {
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
 const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/":              "Your Today summary is visible to friends",
-  "/calendar":      "Your calendar events are visible to friends",
+  "/calendar":      "Your schedule events are visible to friends",
   "/goals":         "Your goals are visible to friends",
   "/tasks":         "Your projects and tasks are visible to friends",
   "/reading":       "Your reading list and progress are visible to friends",
@@ -144,12 +144,12 @@ function PrivacyBanner({ path }: { path: string }) {
   );
 }
 
-const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
+const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; hiddenByDefault?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Plan ──
-  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  { path: "/calendar",      label: "Schedule",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
@@ -171,14 +171,14 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/faith",         label: "Faith",                   icon: Flame           },
   { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
   // ── Hidden / legacy ──
-  { path: "/plants",        label: "Plants",                  icon: Leaf            },
-  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
+  { path: "/plants",        label: "Plants",                  icon: Leaf,           hiddenByDefault: true },
+  { path: "/quotes",        label: "Quotes",                  icon: Quote,          hiddenByDefault: true },
 ];
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "today",     label: null,                paths: ["/dashboard"] },
-  { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"] },
+  { key: "today",     label: null,                paths: ["/dashboard", "/habits"] },
+  { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
   { key: "mylifos",   label: "MyLifos",           paths: ["/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
@@ -207,10 +207,10 @@ function useNavPrefs() {
   });
 
   // Merge saved prefs with ALL_TABS (handles new tabs added later)
-  // Beta tabs default to hidden unless the user has explicitly saved a pref for them.
+  // Beta and repository-deep tabs default to hidden unless the user has explicitly saved a pref for them.
   const prefs: NavPref[] = ALL_TABS.map((tab) => {
     const saved = savedPrefs.find((p) => p.path === tab.path);
-    return { path: tab.path, hidden: saved?.hidden ?? tab.beta ?? false };
+    return { path: tab.path, hidden: saved?.hidden ?? tab.hiddenByDefault ?? tab.beta ?? false };
   });
   // Re-order by saved order
   if (savedPrefs.length > 0) {

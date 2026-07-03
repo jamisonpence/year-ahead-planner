@@ -375,7 +375,7 @@ export default function CalendarPage() {
     <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Calendar</h1>
+        <h1 className="text-2xl font-bold">Schedule</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center bg-secondary rounded-lg p-0.5">
             <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${view === "calendar" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>

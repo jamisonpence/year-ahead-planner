@@ -895,7 +895,7 @@ export default function DashboardPage() {
                   <Clock size={14} className="text-blue-500" />
                   <span className="text-sm font-semibold">Up Next</span>
                 </div>
-                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Calendar <ChevronRight size={12} /></a></Link>
+                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Schedule <ChevronRight size={12} /></a></Link>
               </div>
               {upNextEvents.length === 0 && tasksDueThisWeek.length === 0 && choresUpNext.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">Nothing coming up in the next 7 days.</p>

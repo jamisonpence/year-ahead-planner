@@ -22,7 +22,7 @@ type ApiKeyStatus = { hasKey: boolean; encryptionConfigured: boolean };
 
 const PRIVACY_TABS = [
   { path: "/",              label: "Today",                   icon: LayoutDashboard },
-  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  { path: "/calendar",      label: "Schedule",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/reading",       label: "Reading",                 icon: BookOpen        },
   { path: "/workouts",      label: "Workouts",                icon: Dumbbell        },
