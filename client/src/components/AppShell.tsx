@@ -14,7 +14,7 @@ import {
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Leaf, Music2, Home, MapPin, Plane,
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Quote, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
-  Search, User, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
+  Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList,
   History, BookOpen,
 } from "lucide-react";
 
@@ -147,9 +147,9 @@ function PrivacyBanner({ path }: { path: string }) {
 const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
-  { path: "/messenger",     label: "Messenger",               icon: MessageSquare   },
-  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
+  { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Plan ──
+  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
@@ -177,15 +177,20 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "core",      label: null,                paths: ["/dashboard", "/calendar", "/messenger"] },
-  { key: "plan",      label: "Plan",              paths: ["/goals", "/tasks", "/habits", "/journal", "/review"] },
+  { key: "today",     label: null,                paths: ["/dashboard"] },
+  { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "wellness",  label: "Wellness",          paths: ["/health"] },
-  { key: "culture",   label: "Culture",           paths: ["/library", "/hobbies"] },
-  { key: "places",    label: "Places",            paths: ["/places"] },
-  { key: "home",      label: "Home",              paths: ["/budget", "/housekeeping"] },
-  { key: "beliefs",   label: "Beliefs & Society", paths: ["/faith", "/politics"] },
+  { key: "mylifos",   label: "MyLifos",           paths: ["/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"] },
+  { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
+
+const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
+const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover"];
+const MYLIFOS_PATHS = ["/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"];
+
+function basePath(path: string) {
+  return path.split("?")[0];
+}
 
 function useNavPrefs() {
   const qc = useQueryClient();
@@ -360,55 +365,35 @@ const SECTION_KEY: Record<string, string> = {
 
 const COLLECTION_GROUPS = [
   {
-    key: "plan",
-    label: "Plan",
-    subtitle: "Goals, habits, and reflection",
-    tiles: [
-      { path: "/goals",    emoji: "🎯", label: "Goals"   },
-      { path: "/tasks",    emoji: "📋", label: "Projects & Tasks" },
-      { path: "/journal",  emoji: "📓", label: "Journal" },
-      { path: "/habits",   emoji: "✅", label: "Habits"  },
-    ],
-  },
-  {
-    key: "people",
-    label: "People",
-    subtitle: "Friends and family",
-    tiles: [
-      { path: "/people",              emoji: "👥", label: "Friends" },
-      { path: "/people?tab=family",   emoji: "👨‍👩‍👧", label: "Family"  },
-    ],
-  },
-  {
-    key: "wellness",
-    label: "Wellness",
-    subtitle: "Fitness and wellbeing",
-    tiles: [
-      { path: "/health",              emoji: "💪", label: "Workouts"  },
-      { path: "/health?tab=nutrition",emoji: "🥗", label: "Nutrition" },
-      { path: "/health?tab=vitals",   emoji: "❤️", label: "Vitals"   },
-      { path: "/health?tab=recipes",  emoji: "🍽️", label: "Recipes"  },
-    ],
-  },
-  {
-    key: "culture",
-    label: "Culture",
-    subtitle: "Entertainment and creative pursuits",
+    key: "library",
+    label: "Library",
+    subtitle: "Books, watching, music, and art",
     tiles: [
       { path: "/library",              emoji: "📚", label: "Books"    },
       { path: "/library?tab=watching", emoji: "🎬", label: "Watching" },
       { path: "/library?tab=music",    emoji: "🎵", label: "Music"    },
       { path: "/library?tab=art",      emoji: "🎨", label: "Art"      },
-      { path: "/hobbies",              emoji: "✨", label: "Interests" },
     ],
   },
   {
-    key: "places",
-    label: "Places",
-    subtitle: "Saved spots and trips",
+    key: "interests",
+    label: "Interests & Places",
+    subtitle: "Hobbies, saved places, and trips",
     tiles: [
+      { path: "/hobbies",              emoji: "✨", label: "Interests" },
       { path: "/places",          emoji: "📍", label: "Places" },
       { path: "/places?tab=trips", emoji: "✈️", label: "Trips"  },
+    ],
+  },
+  {
+    key: "health",
+    label: "Health",
+    subtitle: "Fitness, nutrition, vitals, and recipes",
+    tiles: [
+      { path: "/health",              emoji: "💪", label: "Fitness"  },
+      { path: "/health?tab=nutrition",emoji: "🥗", label: "Nutrition" },
+      { path: "/health?tab=vitals",   emoji: "❤️", label: "Vitals"   },
+      { path: "/health?tab=recipes",  emoji: "🍽️", label: "Recipes"  },
     ],
   },
   {
@@ -421,12 +406,14 @@ const COLLECTION_GROUPS = [
     ],
   },
   {
-    key: "beliefs",
-    label: "Beliefs & Society",
-    subtitle: "Faith, values, and civic life",
+    key: "keepsakes",
+    label: "Values & Keepsakes",
+    subtitle: "Faith, civic life, plants, and quotes",
     tiles: [
       { path: "/faith",    emoji: "🕊️", label: "Faith"          },
       { path: "/politics", emoji: "🏛️", label: "Politics & Civic" },
+      { path: "/plants",   emoji: "🌿", label: "Plants" },
+      { path: "/quotes",   emoji: "💬", label: "Quotes" },
     ],
   },
 ];
@@ -539,9 +526,10 @@ function MyLifosSheet({
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {group.tiles.map(tile => {
-                    const vis = getVisibility(tile.path);
-                    const count = summary?.counts[SECTION_KEY[tile.path]] ?? 0;
-                    const isActive = location === tile.path;
+                    const pathKey = basePath(tile.path);
+                    const vis = getVisibility(pathKey);
+                    const count = summary?.counts[SECTION_KEY[pathKey]] ?? 0;
+                    const isActive = location === pathKey;
                     return (
                       <Link key={tile.path} href={tile.path}>
                         <button
@@ -553,7 +541,7 @@ function MyLifosSheet({
                             }`}
                         >
                           {/* Privacy indicator — only for sections that have privacy settings */}
-                          {PRIVACY_PATHS.has(tile.path) && (
+                          {PRIVACY_PATHS.has(pathKey) && (
                             <div className="absolute top-1.5 right-1.5">
                               {vis === "friends"
                                 ? <span className="w-2 h-2 rounded-full bg-violet-500 block" />
@@ -810,7 +798,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           path={tab.path}
                           label={tab.label}
                           icon={tab.icon}
-                          active={location === tab.path || (tab.matchPaths?.includes(location) ?? false)}
+                          active={location === tab.path || (tab.path === "/dashboard" && location === "/") || (tab.matchPaths?.includes(location) ?? false)}
                           badge={tab.path === "/people" ? pendingFriendCount : tab.path === "/messenger" ? unreadMessengerCount : undefined}
                           beta={tab.beta}
                         />
@@ -974,6 +962,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setQuickAddOpen(true)}
+            aria-label="Quick Add"
+            className="p-2.5 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+          <button
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
             className="p-2.5 rounded-lg hover:bg-secondary transition-colors"
@@ -1003,36 +998,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-card border-t">
         <div className="flex items-end justify-around px-1 pt-2 pb-3">
+          {/* Today */}
+          <Link href="/dashboard">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <LayoutDashboard size={22} className={(location === "/dashboard" || location === "/") && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${(location === "/dashboard" || location === "/") && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Today</span>
+            </button>
+          </Link>
 
-          {/* MyLifos (profile sheet) */}
+          {/* Plan */}
+          <Link href="/goals">
+            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
+              <Target size={22} className={PLAN_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${PLAN_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Plan</span>
+            </button>
+          </Link>
+
+          {/* MyLifos repository sheet */}
           <button
             onClick={() => { setMyLifosOpen(true); setQuickAddOpen(false); }}
             className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
           >
-            <User size={22} className={myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-            <span className={`text-[10px] font-medium ${myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
+            <Library size={22} className={(myLifosOpen || MYLIFOS_PATHS.includes(location)) ? "text-violet-500" : "text-muted-foreground"} />
+            <span className={`text-[10px] font-medium ${(myLifosOpen || MYLIFOS_PATHS.includes(location)) ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
           </button>
 
-          {/* Today */}
-          <Link href="/dashboard">
+          {/* People */}
+          <Link href="/people">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <LayoutDashboard size={22} className={location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${location === "/dashboard" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Today</span>
+              <Users size={22} className={PEOPLE_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${PEOPLE_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>People</span>
             </button>
           </Link>
 
-          {/* Add — elevated circle */}
-          <button
-            onClick={() => { setQuickAddOpen(true); setMyLifosOpen(false); }}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] -translate-y-3"
-          >
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg flex items-center justify-center">
-              <Plus size={26} className="text-white" strokeWidth={2.5} />
-            </div>
-            <span className="text-[10px] font-medium text-muted-foreground">Add</span>
-          </button>
-
-          {/* Messenger — with unread badge */}
+          {/* Messages — with unread badge */}
           <Link href="/messenger">
             <button className="relative flex flex-col items-center gap-0.5 min-w-[56px] py-1">
               <div className="relative">
@@ -1041,15 +1040,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-card" />
                 )}
               </div>
-              <span className={`text-[10px] font-medium ${location === "/messenger" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Messenger</span>
-            </button>
-          </Link>
-
-          {/* People */}
-          <Link href="/people">
-            <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
-              <Users size={22} className={["/people", "/relationships", "/kids", "/discover"].includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${["/people", "/relationships", "/kids", "/discover"].includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>People</span>
+              <span className={`text-[10px] font-medium ${location === "/messenger" && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Messages</span>
             </button>
           </Link>
         </div>
