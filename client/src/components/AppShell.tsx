@@ -148,7 +148,6 @@ function PrivacyBanner({ path }: { path: string }) {
 const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
-  { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Plan ──
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
@@ -158,8 +157,9 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/review",        label: "Review",                  icon: History         },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
+  { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Repository ──
-  { path: "/mylifos",       label: "Library",                 icon: Archive         },
+  { path: "/mylifos",       label: "Overview",                icon: Archive         },
   // ── Wellness ──
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
@@ -169,7 +169,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet          },
-  { path: "/housekeeping",  label: "Home",                    icon: Home            },
+  { path: "/housekeeping",  label: "House",                   icon: Home            },
   // ── Beliefs ──
   { path: "/beliefs",       label: "Beliefs",                 icon: Flame,          matchPaths: ["/faith", "/politics"] },
 ];
@@ -179,13 +179,12 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "today",     label: null,                paths: ["/dashboard"] },
   { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
-  { key: "people",    label: "People",            paths: ["/people"] },
+  { key: "people",    label: "People",            paths: ["/people", "/messenger"] },
   { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/beliefs"] },
-  { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
-const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover"];
+const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover", "/messenger"];
 const MYLIFOS_PATHS = ["/mylifos", "/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/beliefs", "/faith", "/politics", "/plants", "/quotes"];
 
 function basePath(path: string) {
