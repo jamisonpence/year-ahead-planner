@@ -165,7 +165,7 @@ function build14DayPlan(goal: string, focusRaw: string, experience: string, benc
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function GeneralFitnessWizard({ open, onClose, defaultGoal }: { open: boolean; onClose: () => void; defaultGoal?: string }) {
+export default function GeneralFitnessWizard({ open, onClose, onSaved, defaultGoal }: { open: boolean; onClose: () => void; onSaved?: () => void; defaultGoal?: string }) {
   const { toast } = useToast();
   const [step, setStep] = useState(0);
 
@@ -222,7 +222,7 @@ export default function GeneralFitnessWizard({ open, onClose, defaultGoal }: { o
 
   const createMut = useMutation({
     mutationFn: (d: any) => apiRequest("POST", "/api/workout-plans", d).then(r => r.json()),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan saved!" }); onClose(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan saved!" }); onSaved?.(); onClose(); },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 

@@ -3,6 +3,7 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
+import GeneralFitnessWizard from "@/components/modals/GeneralFitnessWizard";
 
 // ── Persona definitions ───────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 
 type CreateOptionKey =
   | "goal" | "task" | "habit"
-  | "workout_log" | "health_goal" | "fitness_habit"
+  | "workout_log" | "health_goal" | "fitness_habit" | "training_plan"
   | "book" | "place" | "recipe"
   | "person" | "interest" | "book_share";
 
@@ -89,7 +90,7 @@ const CREATE_OPTIONS: Record<PersonaKey, CreateOption[]> = {
     { key: "habit", emoji: "🔥", label: "Build a habit", sub: "A daily action you want to lock in",          href: "/habits" },
   ],
   health: [
-    { key: "workout_log",   emoji: "💪", label: "Log a workout",       sub: "Record your first session",             href: "/health"  },
+    { key: "training_plan", emoji: "🏋️", label: "Build a Training Plan", sub: "Get an AI-generated workout schedule", href: "/health"  },
     { key: "health_goal",   emoji: "🎯", label: "Set a health goal",   sub: "A fitness or wellness target",          href: "/goals"   },
     { key: "fitness_habit", emoji: "🔥", label: "Create a fitness habit", sub: "A daily movement or wellness habit", href: "/habits"  },
   ],
@@ -415,6 +416,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const [selectedOption, setSelectedOption] = useState<CreateOption | null>(null);
   const [createdLabel, setCreatedLabel] = useState<string | null>(null);
   const [createdHref, setCreatedHref] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const completeMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/me/complete-onboarding"),
@@ -468,6 +470,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   return (
+    <>
+    <GeneralFitnessWizard
+      open={wizardOpen}
+      onClose={() => setWizardOpen(false)}
+      onSaved={() => { setCreatedHref("/health"); handleCreated("Training Plan"); }}
+    />
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[92vh]">
 
@@ -609,7 +617,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     {options.map(opt => (
                       <button
                         key={opt.key}
-                        onClick={() => setSelectedOption(opt)}
+                        onClick={() => opt.key === "training_plan" ? setWizardOpen(true) : setSelectedOption(opt)}
                         className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
                       >
                         <span className="text-2xl shrink-0">{opt.emoji}</span>
@@ -685,5 +693,6 @@ export default function OnboardingModal({ userName }: { userName: string }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
