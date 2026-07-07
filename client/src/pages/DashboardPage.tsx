@@ -30,7 +30,10 @@ import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import { useAuth } from "@/hooks/useAuth";
 import { confettiBurst } from "@/lib/confetti";
 import { History } from "lucide-react";
-import { loadIntentions, INTENTIONS, type IntentionKey } from "@/components/OnboardingModal";
+import {
+  loadIntentions, loadChecklist, INTENTIONS,
+  ONBOARDING_PERSONA_KEY, type IntentionKey,
+} from "@/components/OnboardingModal";
 
 // Intention → quick-link config
 const INTENTION_LINKS: Record<IntentionKey, { emoji: string; label: string; href: string }> = {
@@ -109,6 +112,142 @@ const PERSONA_SECTION_DEFAULTS: Record<string, Record<SectionId, boolean>> = {
     needs_attention: false, events: false, memories: false, quote: false, day_planner: false,
   },
 };
+
+// ── Start Here card ───────────────────────────────────────────────────────────
+
+const START_HERE_DISMISSED_KEY = "mylifos_start_here_dismissed";
+const ONBOARDING_COMPLETED_AT_KEY = "mylifos_onboarding_completed_at";
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface StartAction { id: string; emoji: string; label: string; href: string }
+
+const PERSONA_START_ACTIONS: Record<string, StartAction[]> = {
+  momentum: [
+    { id: "add_goal",      emoji: "🎯", label: "Add your first goal",        href: "/goals"   },
+    { id: "add_task",      emoji: "✅", label: "Add today's first task",      href: "/tasks"   },
+    { id: "build_habit",   emoji: "🔥", label: "Build a habit",              href: "/habits"  },
+    { id: "weekly_review", emoji: "🪞", label: "Complete a weekly review",   href: "/review"  },
+    { id: "invite",        emoji: "👋", label: "Invite a friend",            href: "/people"  },
+  ],
+  health: [
+    { id: "log_workout",     emoji: "💪", label: "Log a workout",             href: "/health"               },
+    { id: "health_goal",     emoji: "🎯", label: "Set a health goal",         href: "/goals"                },
+    { id: "fitness_habit",   emoji: "🔥", label: "Build a fitness habit",     href: "/habits"               },
+    { id: "track_nutrition", emoji: "🥗", label: "Track your nutrition",      href: "/health?tab=nutrition"  },
+    { id: "log_vitals",      emoji: "📈", label: "Log body metrics",          href: "/health?tab=vitals"     },
+  ],
+  explore_life: [
+    { id: "save_book",    emoji: "📚", label: "Save a book",                  href: "/library"              },
+    { id: "add_place",    emoji: "📍", label: "Add a place",                  href: "/places"               },
+    { id: "save_recipe",  emoji: "🍽️", label: "Save a recipe",               href: "/health?tab=recipes"   },
+    { id: "add_interest", emoji: "✨", label: "Add an interest",              href: "/hobbies"              },
+    { id: "private_note", emoji: "📝", label: "Write a private note",         href: "/journal"              },
+  ],
+  connect: [
+    { id: "add_person",    emoji: "👤", label: "Add a friend or family member", href: "/people"    },
+    { id: "invite",        emoji: "👋", label: "Invite someone to MyLifos",     href: "/people"    },
+    { id: "save_interest", emoji: "✨", label: "Save a shared interest",        href: "/hobbies"   },
+    { id: "send_rec",      emoji: "💬", label: "Send a recommendation",         href: "/messenger" },
+    { id: "private_note",  emoji: "📝", label: "Write a private note",          href: "/journal"   },
+  ],
+};
+
+const INTENTION_ACTION: Partial<Record<IntentionKey, StartAction>> = {
+  goal:            { id: "add_goal",      emoji: "🎯", label: "Add your first goal",         href: "/goals"   },
+  habit:           { id: "build_habit",   emoji: "🔥", label: "Build a habit",               href: "/habits"  },
+  plan_week:       { id: "weekly_review", emoji: "📅", label: "Plan this week",               href: "/review"  },
+  save_recs:       { id: "save_book",     emoji: "📚", label: "Save something you love",     href: "/library" },
+  track_workouts:  { id: "log_workout",   emoji: "💪", label: "Log a workout",               href: "/health"  },
+  organize_places: { id: "add_place",     emoji: "📍", label: "Add a place",                 href: "/places"  },
+  connect_friends: { id: "add_person",    emoji: "👤", label: "Add a friend",                href: "/people"  },
+  private_notes:   { id: "private_note",  emoji: "📝", label: "Write a private note",         href: "/journal" },
+};
+
+function buildStartActions(persona: string, intentions: IntentionKey[]): StartAction[] {
+  const base = PERSONA_START_ACTIONS[persona] ?? PERSONA_START_ACTIONS.momentum;
+  const seen = new Set<string>();
+  const ordered: StartAction[] = [];
+  // Intention-matched actions first
+  for (const intent of intentions) {
+    const a = INTENTION_ACTION[intent];
+    if (a && !seen.has(a.id)) { seen.add(a.id); ordered.push(a); }
+  }
+  // Fill remaining from persona list
+  for (const a of base) {
+    if (!seen.has(a.id) && ordered.length < 5) { seen.add(a.id); ordered.push(a); }
+  }
+  return ordered.slice(0, 5);
+}
+
+function StartHereCard() {
+  const [dismissed, setDismissed] = useState(() =>
+    localStorage.getItem(START_HERE_DISMISSED_KEY) === "true"
+  );
+
+  const persona     = localStorage.getItem(ONBOARDING_PERSONA_KEY) ?? "";
+  const completedAt = parseInt(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY) ?? "0", 10);
+  const withinWindow = completedAt > 0 && Date.now() - completedAt < SEVEN_DAYS_MS;
+  const checklist    = loadChecklist();
+  const checklistDone = checklist.length > 0 && checklist.every(item => item.done);
+
+  // Only show for users who went through the new onboarding (have completedAt)
+  const shouldShow = !dismissed && !!persona && completedAt > 0 && (withinWindow || !checklistDone);
+  if (!shouldShow) return null;
+
+  const intentions = loadIntentions();
+  const actions    = buildStartActions(persona, intentions);
+
+  function dismiss() {
+    try { localStorage.setItem(START_HERE_DISMISSED_KEY, "true"); } catch {}
+    setDismissed(true);
+  }
+
+  const daysLeft = completedAt > 0
+    ? Math.max(0, Math.ceil((completedAt + SEVEN_DAYS_MS - Date.now()) / 86_400_000))
+    : null;
+
+  return (
+    <div className="bg-gradient-to-br from-violet-50/80 to-indigo-50/60 dark:from-violet-950/20 dark:to-indigo-950/15 border border-violet-200/70 dark:border-violet-800/50 rounded-2xl p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-base leading-none">🚀</span>
+          <span className="text-sm font-bold">Start Here</span>
+          {daysLeft !== null && daysLeft > 0 && (
+            <span className="text-[10px] font-medium text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-full">
+              {daysLeft}d left
+            </span>
+          )}
+        </div>
+        <button
+          onClick={dismiss}
+          aria-label="Dismiss start here card"
+          className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Action list */}
+      <div className="space-y-1.5">
+        {actions.map(action => (
+          <Link key={action.id} href={action.href}>
+            <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 hover:bg-white/90 dark:hover:bg-white/10 border border-transparent hover:border-violet-200/60 dark:hover:border-violet-700/40 transition-all group">
+              <span className="text-base leading-none shrink-0">{action.emoji}</span>
+              <span className="text-sm font-medium flex-1">{action.label}</span>
+              <ChevronRight size={13} className="text-muted-foreground group-hover:text-violet-500 transition-colors shrink-0" />
+            </a>
+          </Link>
+        ))}
+      </div>
+
+      {/* Footer nudge */}
+      <p className="text-[10px] text-muted-foreground mt-3 text-center">
+        Dismiss anytime — your progress is always in the sidebar checklist.
+      </p>
+    </div>
+  );
+}
 
 // ── On This Day (memories resurfacing) ────────────────────────────────────────
 function OnThisDay() {
@@ -786,6 +925,9 @@ export default function DashboardPage() {
 
         {/* ── Left column (primary — 2/3 width on desktop) ───────────────── */}
         <div className="lg:col-span-2 space-y-5">
+
+          {/* ── START HERE (new-user onboarding card) ──────────────────────── */}
+          <StartHereCard />
 
           {/* ── TODAY (most prominent) ─────────────────────────────────────── */}
           {visible.today && (

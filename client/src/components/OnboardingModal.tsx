@@ -458,6 +458,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   function finish() {
     if (persona) saveOnboardingData(persona);
     saveIntentions(intentions);
+    // Timestamp used by the Start Here card to enforce the 7-day display window
+    try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
     // Navigate to the page for what was created, or default to dashboard
