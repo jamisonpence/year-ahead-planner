@@ -851,7 +851,7 @@ export default function HabitsPage() {
                   <Sparkles size={28} className="mx-auto opacity-20 mb-2" />
                   <p className="text-sm font-semibold">No habits yet</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-3">Small habits compound into big results. Start with one that matters.</p>
-                  <Button size="sm" onClick={() => { setEditHabit(null); setHabitModalOpen(true); }}>
+                  <Button size="sm" onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "habit" } }))}>
                     <Plus size={13} className="mr-1" /> Add First Habit
                   </Button>
                 </div>

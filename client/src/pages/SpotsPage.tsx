@@ -1718,12 +1718,20 @@ export default function SpotsPage({ activeView }: { activeView?: "places" | "tri
                   <p className="font-semibold text-foreground mb-1">Build your personal map</p>
                   <p className="text-sm">Save restaurants, hidden gems, and spots to revisit — all in one place.</p>
                 </div>
-                <button
-                  onClick={() => setNominatimOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
-                >
-                  <Search size={15} /> Find a Place
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setNominatimOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+                  >
+                    <Search size={15} /> Find a Place
+                  </button>
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "spots" } }))}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
+                  >
+                    + Add Manually
+                  </button>
+                </div>
               </div>
             ) : displaySpots.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">

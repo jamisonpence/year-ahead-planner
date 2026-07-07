@@ -588,7 +588,13 @@ export default function ReadingPage() {
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen size={40} className="mx-auto mb-4 opacity-20" />
           <p className="font-medium">No books here yet</p>
-          <p className="text-sm mt-1">Use <strong>Find Books</strong> to search Google Books, or add one manually</p>
+          <p className="text-sm mt-1 mb-4">Use <strong>Find Books</strong> to search Google Books, or quick-add below</p>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "reading" } }))}
+            className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            + Save a Book
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

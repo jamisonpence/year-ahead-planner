@@ -6,9 +6,14 @@ import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionKey =
+export type SectionKey =
   | "reading" | "movies" | "music" | "spots" | "recipe"
-  | "task" | "note" | "habit_complete" | "task_complete" | "workout" | "goal" | "person";
+  | "task" | "note" | "habit" | "habit_complete" | "task_complete" | "workout" | "goal" | "person";
+
+/** Dispatch this from any page to open QuickAdd (optionally pre-jumped to a section). */
+export function openQuickAdd(section?: SectionKey): void {
+  window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section } }));
+}
 
 interface ActivityItem {
   id: number;
@@ -24,19 +29,21 @@ interface SectionMeta { key: SectionKey; emoji: string; label: string; sub: stri
 
 const ALL_SECTIONS: SectionMeta[] = [
   // Save / library
-  { key: "reading", emoji: "📚", label: "Reading",    sub: "Add a book"             },
-  { key: "movies",  emoji: "🎬", label: "Movies",     sub: "Add to watch list"      },
+  { key: "reading", emoji: "📚", label: "Book",       sub: "Save a book"            },
+  { key: "movies",  emoji: "🎬", label: "Movie / Show", sub: "Add to watch list"    },
   { key: "music",   emoji: "🎵", label: "Music",      sub: "Add artist or song"     },
-  { key: "spots",   emoji: "📍", label: "Places",     sub: "Add a spot or place"    },
+  { key: "spots",   emoji: "📍", label: "Place",      sub: "Add a spot or place"    },
   { key: "recipe",  emoji: "🍽️", label: "Recipe",     sub: "Save a recipe"          },
-  // Log / create
-  { key: "task",          emoji: "✅", label: "Task",        sub: "Create a new task"       },
+  // Create
+  { key: "task",          emoji: "✅", label: "Task",        sub: "Create a new task"        },
   { key: "goal",          emoji: "🎯", label: "Goal",        sub: "Set a new goal"           },
-  { key: "note",          emoji: "📝", label: "Note",        sub: "Capture a quick thought"  },
+  { key: "habit",         emoji: "🌱", label: "Habit",       sub: "Build a daily habit"      },
+  { key: "note",          emoji: "📝", label: "Private Note", sub: "Write a private thought" },
+  { key: "person",        emoji: "👤", label: "Person",      sub: "Add someone to contacts"  },
+  // Log
   { key: "habit_complete",emoji: "🔥", label: "Log Habit",   sub: "Mark a habit done today"  },
-  { key: "task_complete", emoji: "☑️", label: "Log Task",    sub: "Complete a pending task"  },
+  { key: "task_complete", emoji: "☑️", label: "Complete Task", sub: "Check off a pending task"},
   { key: "workout",       emoji: "💪", label: "Workout",     sub: "Log a session"            },
-  { key: "person",        emoji: "👤", label: "Friend",      sub: "Add someone"              },
 ];
 
 const SECTION_MAP = Object.fromEntries(ALL_SECTIONS.map(s => [s.key, s])) as Record<SectionKey, SectionMeta>;
@@ -50,20 +57,20 @@ const SECTION_EMOJI: Record<string, string> = Object.fromEntries(
 // All 12 sections are always present — just re-prioritized.
 const PERSONA_ORDER: Record<string, SectionKey[]> = {
   momentum: [
-    "task", "goal", "habit_complete", "note", "task_complete",
+    "task", "goal", "habit", "note", "habit_complete", "task_complete",
     "reading", "music", "movies", "spots", "recipe", "workout", "person",
   ],
   health: [
-    "workout", "habit_complete", "goal", "recipe", "task",
-    "note", "task_complete", "reading", "movies", "music", "spots", "person",
+    "workout", "habit", "goal", "recipe", "task",
+    "habit_complete", "note", "task_complete", "reading", "movies", "music", "spots", "person",
   ],
   explore_life: [
     "reading", "recipe", "spots", "music", "movies",
-    "note", "task", "goal", "habit_complete", "workout", "task_complete", "person",
+    "note", "task", "goal", "habit", "habit_complete", "workout", "task_complete", "person",
   ],
   connect: [
     "person", "spots", "reading", "music", "recipe", "movies",
-    "note", "task", "goal", "habit_complete", "task_complete", "workout",
+    "note", "task", "goal", "habit", "habit_complete", "task_complete", "workout",
   ],
 };
 
@@ -77,10 +84,10 @@ function getPersonaOrderedSections(persona: string): SectionMeta[] {
 // ── Intention → suggested sections ───────────────────────────────────────────
 const INTENTION_SECTIONS: Partial<Record<IntentionKey, SectionKey[]>> = {
   goal:            ["goal", "task"],
-  habit:           ["habit_complete", "task"],
+  habit:           ["habit", "habit_complete"],
   plan_week:       ["task", "task_complete"],
   save_recs:       ["reading", "music", "spots", "recipe"],
-  track_workouts:  ["workout", "habit_complete"],
+  track_workouts:  ["workout", "habit"],
   organize_places: ["spots"],
   connect_friends: ["person"],
   private_notes:   ["note"],
@@ -490,6 +497,57 @@ function HobbiesForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ── Create Habit ──────────────────────────────────────────────────────────────
+function HabitCreateForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const today = new Date().toISOString().split("T")[0];
+  const [title, setTitle] = useState("");
+  const [emoji, setEmoji] = useState("✅");
+  const [frequency, setFrequency] = useState<"daily" | "weekly">("daily");
+  const [category, setCategory] = useState<"health" | "mind" | "growth" | "social" | "general">("general");
+  const HABIT_EMOJIS = ["✅","🔥","💪","🧘","📚","💧","🥗","🏃","🛌","🎯","🧠","💡","🌱","🙏","❤️"];
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/habits", {
+      title, emoji, frequency, category,
+      color: "#6366f1",
+      targetDaysPerWeek: frequency === "daily" ? 7 : 3,
+      createdAt: today,
+      completionsJson: "[]",
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/habits"] }); onSuccess(); },
+  });
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
+      <FormInput label="Habit name" value={title} onChange={setTitle} placeholder="e.g. Morning run" required />
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Pick an emoji</label>
+        <div className="flex flex-wrap gap-2">
+          {HABIT_EMOJIS.map(e => (
+            <button key={e} type="button" onClick={() => setEmoji(e)}
+              className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-colors
+                ${emoji === e ? "bg-violet-500/20 ring-2 ring-violet-500/50" : "bg-secondary/50 hover:bg-secondary"}`}>
+              {e}
+            </button>
+          ))}
+        </div>
+      </div>
+      <SegmentPicker label="Frequency"
+        options={[{ value: "daily" as const, label: "Daily" }, { value: "weekly" as const, label: "Weekly" }]}
+        value={frequency} onChange={setFrequency} />
+      <SegmentPicker label="Category"
+        options={[
+          { value: "health"  as const, label: "Health"  },
+          { value: "mind"    as const, label: "Mind"    },
+          { value: "growth"  as const, label: "Growth"  },
+          { value: "social"  as const, label: "Social"  },
+          { value: "general" as const, label: "General" },
+        ]}
+        value={category} onChange={setCategory} />
+      <SubmitButton loading={mut.isPending} disabled={!title.trim()} label="Create Habit" />
+    </form>
+  );
+}
+
 // ── Quick Log: Add Task ───────────────────────────────────────────────────────
 function TaskForm({ onSuccess }: { onSuccess: () => void }) {
   const qc = useQueryClient();
@@ -717,11 +775,12 @@ function SectionForm({ section, onSuccess }: { section: SectionKey; onSuccess: (
     recipe:         <RecipesForm        onSuccess={onSuccess} />,
     task:           <TaskForm           onSuccess={onSuccess} />,
     goal:           <GoalForm           onSuccess={onSuccess} />,
+    habit:          <HabitCreateForm    onSuccess={onSuccess} />,
     note:           <NoteForm           onSuccess={onSuccess} />,
+    person:         <PersonForm         onSuccess={onSuccess} />,
     habit_complete: <HabitCompleteForm  onSuccess={onSuccess} />,
     task_complete:  <TaskCompleteForm   onSuccess={onSuccess} />,
     workout:        <WorkoutsForm       onSuccess={onSuccess} />,
-    person:         <PersonForm         onSuccess={onSuccess} />,
   };
   return <>{forms[section]}</>;
 }
@@ -783,9 +842,10 @@ function SuccessFlash({ section, onDone }: { section: SectionKey; onDone: () => 
 interface QuickAddModalProps {
   open: boolean;
   onClose: () => void;
+  initialSection?: SectionKey | null;
 }
 
-export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
+export default function QuickAddModal({ open, onClose, initialSection }: QuickAddModalProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const intentions = loadIntentions();
@@ -800,11 +860,10 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
   useEffect(() => {
     if (open) {
       setRendered(true);
-      // Tiny delay so the DOM renders first, then we trigger the slide
+      if (initialSection) setActiveSection(initialSection);
       requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
     } else {
       setVisible(false);
-      // Wait for slide-out animation before unmounting
       const t = setTimeout(() => {
         setRendered(false);
         setActiveSection(null);
@@ -812,7 +871,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [open]);
+  }, [open, initialSection]);
 
   // Swipe-down to dismiss
   const touchStartY = useRef<number | null>(null);

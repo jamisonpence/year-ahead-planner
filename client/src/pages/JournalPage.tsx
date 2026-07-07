@@ -547,6 +547,12 @@ function NotesSection() {
                 ? "Create a folder on the left, then add a note inside it."
                 : "Open a folder on the left, then click a note or use Add Note to create one."}
             </p>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "note" } }))}
+              className="mt-4 px-4 py-2 rounded-xl border text-sm font-medium hover:bg-secondary transition-colors"
+            >
+              + Quick Note
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-4 h-full">

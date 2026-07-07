@@ -6,7 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { NavPref } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import GetStartedWidget from "@/components/GetStartedWidget";
-import QuickAddModal from "@/components/QuickAddModal";
+import QuickAddModal, { type SectionKey } from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
 import {
@@ -584,6 +584,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [manageMode, setManageMode] = useState(false);
   const [myLifosOpen, setMyLifosOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddSection, setQuickAddSection] = useState<SectionKey | null>(null);
   const { prefs, save } = useNavPrefs();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -593,6 +594,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMyLifosOpen(false);
     setQuickAddOpen(false);
   }, [location]);
+
+  // Listen for programmatic open-quick-add events from empty states / other pages
+  useEffect(() => {
+    function onOpenQuickAdd(e: Event) {
+      const section = (e as CustomEvent<{ section?: SectionKey }>).detail?.section ?? null;
+      setQuickAddSection(section);
+      setQuickAddOpen(true);
+    }
+    window.addEventListener("open-quick-add", onOpenQuickAdd);
+    return () => window.removeEventListener("open-quick-add", onOpenQuickAdd);
+  }, []);
 
   // Privacy settings (used by My Lifos sheet)
   const { data: privacySettings = [] } = useQuery<{ path: string; visibility: string }[]>({
@@ -1060,7 +1072,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       />}
 
       {/* ── Quick-add modal ──────────────────────────────────────────────────── */}
-      <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+      <QuickAddModal
+        open={quickAddOpen}
+        onClose={() => { setQuickAddOpen(false); setQuickAddSection(null); }}
+        initialSection={quickAddSection}
+      />
 
       {/* ── Global search palette (Cmd/Ctrl+K) ──────────────────────────────── */}
       <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />

@@ -1078,8 +1078,8 @@ export default function GoalsPage() {
                   {horizonTab === "vision" ? "Vision goals define where you want to be in 5–10 years." : "Goals turn intentions into progress you can track."}
                 </p>
                 <button
-                  onClick={() => setBrowseModal(true)}
-                  className="mt-3 text-[11px] font-medium text-primary hover:underline"
+                  onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "goal" } }))}
+                  className="mt-3 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
                 >
                   + Add a goal
                 </button>

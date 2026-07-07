@@ -360,7 +360,12 @@ function ProjectCard({
           )}
 
           {project.tasks.length === 0 && !addingTask && (
-            <p className="text-xs text-muted-foreground py-2 text-center">No tasks yet</p>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "task" } }))}
+              className="text-xs text-muted-foreground hover:text-primary py-2 text-center w-full hover:underline transition-colors"
+            >
+              No tasks yet — quick add one
+            </button>
           )}
 
           {activeTasks.map(t => (

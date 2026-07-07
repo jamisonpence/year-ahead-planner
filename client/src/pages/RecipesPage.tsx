@@ -2210,7 +2210,13 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
                   <p className="font-medium">No recipes yet</p>
-                  <p className="text-sm mt-1">Add your first recipe or browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Browse</button> tab</p>
+                  <p className="text-sm mt-1 mb-4">Browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Browse tab</button>, or quick-add one below</p>
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "recipe" } }))}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    + Save a Recipe
+                  </button>
                 </div>
               )}
             </div>

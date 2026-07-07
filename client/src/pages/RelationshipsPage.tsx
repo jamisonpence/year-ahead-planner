@@ -3493,7 +3493,7 @@ export default function RelationshipsPage() {
                     <Users size={30} className="mx-auto mb-2 opacity-20" />
                     <p className="text-sm font-medium text-foreground">No contacts yet</p>
                     <p className="text-xs mt-1 mb-3">Keep track of friends, family, and colleagues in one place.</p>
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "person" } }))}>
                       <UserPlus size={13} /> Add First Person
                     </Button>
                   </div>
