@@ -1548,7 +1548,11 @@ Rules:
     const enc = await storage.getAnthropicApiKeyEnc(user.id);
     // Never expose secrets (password hash, OAuth tokens, encrypted API key) —
     // only indicate whether an Anthropic key is saved
-    res.json({ ...sanitizeUser(user), hasAnthropicKey: !!enc });
+    const QA_EMAIL = "jamison@trysecurelead.com";
+    const sanitized = sanitizeUser(user);
+    // QA account always appears as unonboarded so onboarding can be tested on every load
+    if (sanitized.email?.toLowerCase() === QA_EMAIL) sanitized.onboarded = false;
+    res.json({ ...sanitized, hasAnthropicKey: !!enc });
   });
 
   // ── Google Calendar Integration ───────────────────────────────────────────────
