@@ -77,13 +77,17 @@ function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
     const sched = parsePlanSched(plan.scheduleJson ?? "[]");
 
     if (sched.isWizard) {
-      // A/B alternating weeks: week 1 = A, week 2 = B, week 3 = A, ...
+      // A/B alternating microcycle — durationWeeks=2 is just the cycle length, plan repeats indefinitely.
+      // Generate items out to 90 days from today so the full calendar shows upcoming sessions.
       const weekKeys = Object.keys(sched.wizardWeeks); // e.g. ["A", "B"]
       if (weekKeys.length === 0) return;
-      for (let w = 1; w <= plan.durationWeeks; w++) {
+      const horizon = format(addDays(new Date(), 90), "yyyy-MM-dd");
+      let w = 1;
+      while (true) {
+        const weekMon = addDays(week1Mon, (w - 1) * 7);
+        if (format(weekMon, "yyyy-MM-dd") > horizon) break;
         const weekKey = weekKeys[(w - 1) % weekKeys.length];
         const sessions: any[] = sched.wizardWeeks[weekKey] ?? [];
-        const weekMon = addDays(week1Mon, (w - 1) * 7);
         sessions.forEach((s: any) => {
           const dayOfWeek: string = (s.day ?? "").toLowerCase();
           if (!dayOfWeek || !(dayOfWeek in DAY_OFFSETS)) return;
@@ -92,6 +96,7 @@ function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
           const date = format(addDays(weekMon, DAY_OFFSETS[dayOfWeek]), "yyyy-MM-dd");
           items.push({ id: `wp:${plan.id}:${w}:${dayOfWeek}`, title: label, date, type: "workout_planned", completed: false, sourceId: plan.id });
         });
+        w++;
       }
     } else if (sched.isV2) {
       sched.weeks.forEach((wk: any) => {
