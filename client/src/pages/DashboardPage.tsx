@@ -36,7 +36,7 @@ import { History } from "lucide-react";
 type SectionId = "today" | "focus" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories" | "quote";
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  today:            "Today",
+  today:            "Right Now",
   focus:            "Focus",
   up_next:          "Up Next",
   needs_attention:  "Needs Attention",
@@ -574,11 +574,7 @@ export default function DashboardPage() {
     label: t.title, sub: t.source ? `from ${t.source}` : "Task due today", href: "/tasks",
     action: t.source ? undefined : { type: "general", id: t.id, title: t.title, context: "Today task completed" },
   }));
-  habitsDueToday.slice(0, 3).forEach((h: any) => todayItems.push({
-    key: `habit-${h.id}`, icon: <Zap size={13} className="text-emerald-500" />,
-    label: h.name ?? h.title, sub: "Habit — not yet done", href: "/habits",
-    action: { type: "habit", id: h.id, title: h.name ?? h.title, context: "Habit momentum kept" },
-  }));
+  // Habits rendered separately as inline chip section (not in todayItems list)
   choresToday.forEach((c) => todayItems.push({
     key: `chore-${c.id}`, icon: <Home size={13} className="text-amber-500" />,
     label: c.title, sub: "Chore due today", href: "/housekeeping",
@@ -726,7 +722,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Sun size={15} className="text-amber-500" />
-                  <span className="text-sm font-bold">Today</span>
+                  <span className="text-sm font-bold">Right Now</span>
                   {habitsCompletedToday.length > 0 && (
                     <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
                       {habitsCompletedToday.length} habit{habitsCompletedToday.length !== 1 ? "s" : ""} done
@@ -781,7 +777,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium truncate mt-0.5">{completedMoment.title}</p>
                       <p className="text-xs text-muted-foreground mt-1">{completedMoment.context}</p>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <Link href="/review"><a className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline">Add to Review</a></Link>
+                        <Link href="/journal"><a className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline">Write in Journal</a></Link>
                         <Link href="/goals"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">View Progress</a></Link>
                         <Link href="/messenger"><a className="text-xs font-medium text-muted-foreground hover:text-foreground">Share a win</a></Link>
                       </div>
@@ -832,6 +828,41 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
+              {/* ── Inline habit completion ── */}
+              {habitsActiveToday.length > 0 && (
+                <div className={todayItems.length > 0 ? "mt-3 pt-3 border-t border-border/50" : ""}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Habits</span>
+                    <span className="text-xs text-muted-foreground">
+                      {habitsCompletedToday.length}/{habitsActiveToday.length} done
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {habitsDueToday.map((h: any) => (
+                      <button
+                        key={h.id}
+                        onClick={() => completeItem.mutate({ type: "habit", id: h.id, title: h.name ?? h.title, context: "Habit momentum kept" })}
+                        disabled={completeItem.isPending}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-border bg-secondary/40 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-700 text-xs font-medium transition-colors"
+                      >
+                        <span className="text-sm leading-none">{h.emoji || "✅"}</span>
+                        <span className="text-foreground/80">{h.name ?? h.title}</span>
+                      </button>
+                    ))}
+                    {habitsCompletedToday.map((h: any) => (
+                      <div
+                        key={h.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 text-xs"
+                      >
+                        <span className="text-sm leading-none">{h.emoji || "✅"}</span>
+                        <span className="text-emerald-700 dark:text-emerald-300 line-through opacity-70">{h.name ?? h.title}</span>
+                        <CheckCircle2 size={10} className="text-emerald-500 shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* AI Day Planner inline if enabled */}
               {visible.day_planner && (
                 <div className="mt-4 pt-4 border-t">
@@ -849,7 +880,7 @@ export default function DashboardPage() {
                   <Target size={14} className="text-violet-500" />
                   <span className="text-sm font-semibold">Focus</span>
                 </div>
-                <Link href="/review"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Review <ChevronRight size={12} /></a></Link>
+                <Link href="/journal"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Journal <ChevronRight size={12} /></a></Link>
               </div>
               {focusData?.focus && !editingFocus ? (
                 <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 px-3 py-3">
@@ -913,7 +944,7 @@ export default function DashboardPage() {
                   <Clock size={14} className="text-blue-500" />
                   <span className="text-sm font-semibold">Up Next</span>
                 </div>
-                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Schedule <ChevronRight size={12} /></a></Link>
+                <Link href="/calendar"><a className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">Calendar <ChevronRight size={12} /></a></Link>
               </div>
               {upNextEvents.length === 0 && tasksDueThisWeek.length === 0 && choresUpNext.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">Nothing coming up in the next 7 days.</p>

@@ -133,7 +133,7 @@ export default function MyLifosPage() {
         <header className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider">MyLifos</p>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">Library</p>
               <h1 className="text-2xl font-bold tracking-tight">Saved Life</h1>
               <p className="text-sm text-muted-foreground mt-1">Everything you save, love, receive, and remember in one place.</p>
             </div>
@@ -150,7 +150,7 @@ export default function MyLifosPage() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search everything in MyLifos"
+                placeholder="Search everything in Library"
                 className="pl-9 h-11"
               />
             </div>
@@ -195,7 +195,7 @@ export default function MyLifosPage() {
               <div className={cardClass("p-4 lg:col-span-2")}>
                 <SectionHeader icon={Clock} title="Recently saved" />
                 {data.recentlySaved.length === 0 ? (
-                  <EmptyState>Recent saves will appear here as you add to MyLifos.</EmptyState>
+                  <EmptyState>Recent saves will appear here as you add to Library.</EmptyState>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {data.recentlySaved.map((item, idx) => (

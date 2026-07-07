@@ -151,14 +151,14 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── Plan ──
   { path: "/calendar",      label: "Calendar",                icon: Calendar        },
   { path: "/goals",         label: "Goals",                   icon: Target          },
-  { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList   },
+  { path: "/tasks",         label: "Tasks",                   icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
   { path: "/journal",       label: "Journal",                 icon: PenLine         },
   { path: "/review",        label: "Review",                  icon: History         },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   // ── Repository ──
-  { path: "/mylifos",       label: "MyLifos",                 icon: Archive         },
+  { path: "/mylifos",       label: "Library",                 icon: Archive         },
   // ── Wellness ──
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
@@ -180,7 +180,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "MyLifos",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
+  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 
@@ -740,7 +740,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <circle cx="16" cy="21" r="2" fill="hsl(25 85% 52%)" />
               <circle cx="22" cy="21" r="2" fill="hsl(210 80% 48%)" />
             </svg>
-            <span className="font-bold text-sm tracking-tight">MyLifos</span>
+            <span className="font-bold text-sm tracking-tight">Library</span>
           </div>
           <button
             onClick={() => setQuickAddOpen(true)}
@@ -958,7 +958,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
             <path d="M2 12h28" stroke="currentColor" strokeWidth="2" />
           </svg>
-          <span className="font-bold text-sm">MyLifos</span>
+          <span className="font-bold text-sm">Library</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -1021,7 +1021,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
             >
               <Archive size={22} className={(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
+              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Library</span>
             </button>
           </Link>
 
