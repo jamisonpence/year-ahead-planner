@@ -2282,6 +2282,10 @@ export default function WorkoutsPage() {
       }
       window.history.replaceState({}, "", url.toString());
     }
+    // Open plan builder when dispatched from onboarding
+    const openPlanBuilder = () => { setEditPlan(null); setPlanModal(true); setTab("plans"); };
+    window.addEventListener("open-plan-builder", openPlanBuilder);
+    return () => window.removeEventListener("open-plan-builder", openPlanBuilder);
   }, []);
   const [bodyCompWizardOpen, setBodyCompWizardOpen] = useState(false);
   const [bodyCompEditingPlan, setBodyCompEditingPlan] = useState<WorkoutPlan | null>(null);

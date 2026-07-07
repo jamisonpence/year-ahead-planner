@@ -3,7 +3,6 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { ArrowRight, Check, Loader2, X } from "lucide-react";
-import GeneralFitnessWizard from "@/components/modals/GeneralFitnessWizard";
 import PlannerSetup from "@/pages/planner/Setup";
 
 // ── Persona definitions ───────────────────────────────────────────────────────
@@ -418,9 +417,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const [selectedOption, setSelectedOption] = useState<CreateOption | null>(null);
   const [createdLabel, setCreatedLabel] = useState<string | null>(null);
   const [createdHref, setCreatedHref] = useState<string | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [mealWizardOpen, setMealWizardOpen] = useState(false);
-  const anyWizardOpen = wizardOpen || mealWizardOpen;
 
   const completeMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/me/complete-onboarding"),
@@ -473,13 +470,18 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     navigate(dest);
   }
 
+  /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
+  function finishImmediate(href: string) {
+    if (persona) saveOnboardingData(persona);
+    saveIntentions(intentions);
+    try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
+    prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
+    completeMut.mutate();
+    navigate(href);
+  }
+
   return (
     <>
-    <GeneralFitnessWizard
-      open={wizardOpen}
-      onClose={() => setWizardOpen(false)}
-      onSaved={() => handleCreated("Training Plan", "/health")}
-    />
     {mealWizardOpen && (
       <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
         <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[92vh]">
@@ -495,13 +497,13 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           <div className="flex-1 overflow-y-auto p-5">
             <PlannerSetup
               onClose={() => setMealWizardOpen(false)}
-              onSaved={() => handleCreated("Meal Plan", "/health?tab=nutrition")}
+              onSaved={() => { setMealWizardOpen(false); handleCreated("Meal Plan", "/health"); }}
             />
           </div>
         </div>
       </div>
     )}
-    <div className={`fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 ${anyWizardOpen ? "hidden" : ""}`}>
+    <div className={`fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 ${mealWizardOpen ? "hidden" : ""}`}>
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[92vh]">
 
         {/* Progress bar */}
@@ -643,9 +645,15 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                       <button
                         key={opt.key}
                         onClick={() => {
-                          if (opt.key === "training_plan") setWizardOpen(true);
-                          else if (opt.key === "meal_plan") setMealWizardOpen(true);
-                          else setSelectedOption(opt);
+                          if (opt.key === "training_plan") {
+                            // Complete onboarding and let WorkoutsPage open the plan builder
+                            window.dispatchEvent(new CustomEvent("open-plan-builder"));
+                            finishImmediate("/health");
+                          } else if (opt.key === "meal_plan") {
+                            setMealWizardOpen(true);
+                          } else {
+                            setSelectedOption(opt);
+                          }
                         }}
                         className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
                       >
