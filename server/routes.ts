@@ -1365,6 +1365,11 @@ Rules:
       const user = await storage.getUserByEmail(email.toLowerCase().trim());
       if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
       if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: "Invalid email or password" });
+      // QA account — always start fresh so onboarding can be tested on every login
+      const QA_EMAIL = "jamison@trysecurelead.com";
+      if (user.email.toLowerCase() === QA_EMAIL) {
+        await pool.query(`UPDATE users SET onboarded = false WHERE id = $1`, [user.id]);
+      }
       req.logIn(user, { keepSessionInfo: true }, (err) => {
         if (err) return res.status(500).json({ error: "Login failed" });
         applyPendingInvite(req, user.id).catch(() => {});
