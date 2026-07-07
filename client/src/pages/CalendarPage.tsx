@@ -16,7 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { MONTHS, nextOccurrence, daysUntil, todayStr } from "@/lib/plannerUtils";
 import EventFormModal from "@/components/modals/EventFormModal";
-import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects, Trip, GeneralTask } from "@shared/schema";
+import type { EventWithTasks, Event, BookWithSessions, WorkoutLog, GoalWithProjects, Trip, GeneralTask, WorkoutPlan } from "@shared/schema";
 
 type ModuleFilter = "all" | "events" | "gcal" | "reading" | "workouts" | "goals" | "trips";
 
@@ -24,7 +24,7 @@ interface UnifiedItem {
   id: string;
   title: string;
   date: string;
-  type: "event" | "gcal" | "reading" | "workout_done" | "goal" | "trip";
+  type: "event" | "gcal" | "reading" | "workout_done" | "workout_planned" | "goal" | "trip";
   time?: string | null;
   category?: string;
   completed?: boolean;
@@ -38,6 +38,62 @@ interface UnifiedItem {
   tripEndDate?: string;
 }
 
+// ── Planned workout helpers ───────────────────────────────────────────────────
+const DAY_OFFSETS: Record<string, number> = {
+  monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
+};
+
+function isRestLabel(label: string): boolean {
+  const l = label.toLowerCase();
+  return l.includes("rest") || l.includes("cross-train") || l.includes("cross train") || l === "off";
+}
+
+function parsePlanSched(json: string) {
+  try {
+    const raw = JSON.parse(json);
+    if (!Array.isArray(raw) || raw.length === 0) return { isV2: true, weeks: [], flatDays: [] as any[] };
+    if ("week" in raw[0]) return { isV2: true, weeks: raw, flatDays: [] as any[] };
+    return { isV2: false, weeks: [], flatDays: raw };
+  } catch { return { isV2: true, weeks: [], flatDays: [] as any[] }; }
+}
+
+function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
+  const items: UnifiedItem[] = [];
+  plans.forEach(plan => {
+    if (!plan.isActive || !plan.startDate) return;
+    const start = parseISO(plan.startDate);
+    // Anchor week 1 to the Monday of the week containing startDate
+    const dow = start.getDay(); // 0=Sun
+    const week1Mon = addDays(start, dow === 0 ? -6 : 1 - dow);
+    const sched = parsePlanSched(plan.scheduleJson ?? "[]");
+
+    if (sched.isV2) {
+      sched.weeks.forEach((wk: any) => {
+        const weekMon = addDays(week1Mon, (wk.week - 1) * 7);
+        (wk.days ?? []).forEach((entry: any) => {
+          const label: string = entry.label ?? "";
+          if (!entry.dayOfWeek || isRestLabel(label)) return;
+          const date = format(addDays(weekMon, DAY_OFFSETS[entry.dayOfWeek] ?? 0), "yyyy-MM-dd");
+          items.push({ id: `wp:${plan.id}:${wk.week}:${entry.dayOfWeek}`, title: label || plan.name, date, type: "workout_planned", completed: false, sourceId: plan.id });
+        });
+      });
+    } else {
+      // Flat format: repeat every week for durationWeeks
+      for (let w = 1; w <= plan.durationWeeks; w++) {
+        const weekMon = addDays(week1Mon, (w - 1) * 7);
+        sched.flatDays.forEach((entry: any) => {
+          if (!entry.dayOfWeek) return;
+          const label: string = entry.label ?? entry.templateName ?? plan.name;
+          if (isRestLabel(label)) return;
+          const date = format(addDays(weekMon, DAY_OFFSETS[entry.dayOfWeek] ?? 0), "yyyy-MM-dd");
+          items.push({ id: `wp:${plan.id}:${w}:${entry.dayOfWeek}`, title: label, date, type: "workout_planned", completed: false, sourceId: plan.id });
+        });
+      }
+    }
+  });
+  return items;
+}
+
 function useAllData() {
   const { data: events = [] } = useQuery<EventWithTasks[]>({ queryKey: ["/api/events"] });
   const { data: books = [] }  = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
@@ -47,7 +103,11 @@ function useAllData() {
     queryKey: ["/api/trips"],
     queryFn: () => apiRequest("GET", "/api/trips").then(r => r.json()),
   });
-  return { events, books, wLogs, goals, trips };
+  const { data: wPlans = [] } = useQuery<WorkoutPlan[]>({
+    queryKey: ["/api/workout-plans"],
+    queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
+  });
+  return { events, books, wLogs, goals, trips, wPlans };
 }
 
 function buildItems(
@@ -57,6 +117,7 @@ function buildItems(
   wLogs: WorkoutLog[],
   goals: GoalWithTasks[],
   trips: Trip[],
+  wPlans: WorkoutPlan[],
   listView = false,
 ): UnifiedItem[] {
   const items: UnifiedItem[] = [];
@@ -89,6 +150,12 @@ function buildItems(
   if (filter === "all" || filter === "workouts") {
     wLogs.forEach((l) => {
       items.push({ id: `wl:${l.id}`, title: l.name, date: l.date, type: "workout_done", completed: l.completed, sourceId: l.id });
+    });
+    // Build set of dates already covered by completed logs so we can dim planned items
+    const loggedDates = new Set(wLogs.map(l => l.date));
+    buildPlannedItems(wPlans).forEach(item => {
+      // Only show planned item if no workout was already logged that day
+      if (!loggedDates.has(item.date)) items.push(item);
     });
   }
 
@@ -132,6 +199,7 @@ function itemStyle(item: UnifiedItem): string {
   if (item.type === "event" && item.category) return `cat-${item.category}`;
   if (item.type === "reading") return "cat-reading";
   if (item.type === "workout_done") return "cat-workout";
+  if (item.type === "workout_planned") return "cat-workout opacity-60";
   if (item.type === "goal") return "cat-goal";
   return "cat-other";
 }
@@ -248,7 +316,7 @@ export default function CalendarPage() {
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
 
-  const { events, books, wLogs, goals, trips } = useAllData();
+  const { events, books, wLogs, goals, trips, wPlans } = useAllData();
 
   // ── General tasks (for "Unscheduled Today" panel) ────────────────────────────
   const { data: generalTasks = [] } = useQuery<GeneralTask[]>({
@@ -326,12 +394,12 @@ export default function CalendarPage() {
 
   // Calendar view: trips span every day; list view: trips appear once on start date
   const items = useMemo(
-    () => buildItems(filter, events, books, wLogs, goals, trips, false),
-    [filter, events, books, wLogs, goals, trips]
+    () => buildItems(filter, events, books, wLogs, goals, trips, wPlans, false),
+    [filter, events, books, wLogs, goals, trips, wPlans]
   );
   const listItems = useMemo(
-    () => buildItems(filter, events, books, wLogs, goals, trips, true),
-    [filter, events, books, wLogs, goals, trips]
+    () => buildItems(filter, events, books, wLogs, goals, trips, wPlans, true),
+    [filter, events, books, wLogs, goals, trips, wPlans]
   );
 
   // Quick lookup: sourceId → full Event object
