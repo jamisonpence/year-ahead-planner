@@ -1369,6 +1369,7 @@ Rules:
       const QA_EMAIL = "jamison@trysecurelead.com";
       if (user.email.toLowerCase() === QA_EMAIL) {
         await pool.query(`UPDATE users SET onboarded = false WHERE id = $1`, [user.id]);
+        (req.session as any).qaOnboardingPresented = false;
       }
       req.logIn(user, { keepSessionInfo: true }, (err) => {
         if (err) return res.status(500).json({ error: "Login failed" });
@@ -1550,8 +1551,15 @@ Rules:
     // only indicate whether an Anthropic key is saved
     const QA_EMAIL = "jamison@trysecurelead.com";
     const sanitized = sanitizeUser(user);
-    // QA account always appears as unonboarded so onboarding can be tested on every load
-    if (sanitized.email?.toLowerCase() === QA_EMAIL) sanitized.onboarded = false;
+    // QA account: force onboarded=false on the FIRST /api/me of each login session only.
+    // After that, let the user proceed normally so they can complete the flow.
+    if (sanitized.email?.toLowerCase() === QA_EMAIL) {
+      const sess = req.session as any;
+      if (!sess.qaOnboardingPresented) {
+        sess.qaOnboardingPresented = true;
+        sanitized.onboarded = false;
+      }
+    }
     res.json({ ...sanitized, hasAnthropicKey: !!enc });
   });
 
