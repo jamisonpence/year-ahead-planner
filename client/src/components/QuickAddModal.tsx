@@ -7,8 +7,8 @@ import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal"
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type SectionKey =
-  | "reading" | "movies" | "music" | "spots"
-  | "task" | "note" | "habit_complete" | "task_complete";
+  | "reading" | "movies" | "music" | "spots" | "recipe"
+  | "task" | "note" | "habit_complete" | "task_complete" | "workout" | "goal" | "person";
 
 interface ActivityItem {
   id: number;
@@ -20,35 +20,69 @@ interface ActivityItem {
 
 // ── Section config ────────────────────────────────────────────────────────────
 
-const REPO_SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[] = [
-  { key: "reading", emoji: "📚", label: "Reading",  sub: "Add a book"          },
-  { key: "movies",  emoji: "🎬", label: "Movies",   sub: "Add to watch list"   },
-  { key: "music",   emoji: "🎵", label: "Music",    sub: "Add artist or song"  },
-  { key: "spots",   emoji: "📍", label: "Places",   sub: "Add a spot or place" },
+interface SectionMeta { key: SectionKey; emoji: string; label: string; sub: string }
+
+const ALL_SECTIONS: SectionMeta[] = [
+  // Save / library
+  { key: "reading", emoji: "📚", label: "Reading",    sub: "Add a book"             },
+  { key: "movies",  emoji: "🎬", label: "Movies",     sub: "Add to watch list"      },
+  { key: "music",   emoji: "🎵", label: "Music",      sub: "Add artist or song"     },
+  { key: "spots",   emoji: "📍", label: "Places",     sub: "Add a spot or place"    },
+  { key: "recipe",  emoji: "🍽️", label: "Recipe",     sub: "Save a recipe"          },
+  // Log / create
+  { key: "task",          emoji: "✅", label: "Task",        sub: "Create a new task"       },
+  { key: "goal",          emoji: "🎯", label: "Goal",        sub: "Set a new goal"           },
+  { key: "note",          emoji: "📝", label: "Note",        sub: "Capture a quick thought"  },
+  { key: "habit_complete",emoji: "🔥", label: "Log Habit",   sub: "Mark a habit done today"  },
+  { key: "task_complete", emoji: "☑️", label: "Log Task",    sub: "Complete a pending task"  },
+  { key: "workout",       emoji: "💪", label: "Workout",     sub: "Log a session"            },
+  { key: "person",        emoji: "👤", label: "Friend",      sub: "Add someone"              },
 ];
 
-const QUICK_LOG_SECTIONS: { key: SectionKey; emoji: string; label: string; sub: string }[] = [
-  { key: "task",          emoji: "✅", label: "Add Task",       sub: "Create a new task"       },
-  { key: "note",          emoji: "📝", label: "Add Note",       sub: "Capture a quick thought" },
-  { key: "habit_complete",emoji: "🔥", label: "Log Habit",      sub: "Mark a habit done today" },
-  { key: "task_complete", emoji: "☑️", label: "Log Task",       sub: "Complete a pending task" },
-];
-
-const ALL_SECTIONS = [...REPO_SECTIONS, ...QUICK_LOG_SECTIONS];
+const SECTION_MAP = Object.fromEntries(ALL_SECTIONS.map(s => [s.key, s])) as Record<SectionKey, SectionMeta>;
 
 const SECTION_EMOJI: Record<string, string> = Object.fromEntries(
   ALL_SECTIONS.map(s => [s.key, s.emoji])
 );
 
-// Intention → suggested section keys (in priority order)
+// ── Persona ordering ──────────────────────────────────────────────────────────
+// Defines the default display order for each persona.
+// All 12 sections are always present — just re-prioritized.
+const PERSONA_ORDER: Record<string, SectionKey[]> = {
+  momentum: [
+    "task", "goal", "habit_complete", "note", "task_complete",
+    "reading", "music", "movies", "spots", "recipe", "workout", "person",
+  ],
+  health: [
+    "workout", "habit_complete", "goal", "recipe", "task",
+    "note", "task_complete", "reading", "movies", "music", "spots", "person",
+  ],
+  explore_life: [
+    "reading", "recipe", "spots", "music", "movies",
+    "note", "task", "goal", "habit_complete", "workout", "task_complete", "person",
+  ],
+  connect: [
+    "person", "spots", "reading", "music", "recipe", "movies",
+    "note", "task", "goal", "habit_complete", "task_complete", "workout",
+  ],
+};
+
+/** Return ALL_SECTIONS sorted by persona priority (falls back to default order). */
+function getPersonaOrderedSections(persona: string): SectionMeta[] {
+  const order = PERSONA_ORDER[persona];
+  if (!order) return ALL_SECTIONS;
+  return order.map(k => SECTION_MAP[k]).filter(Boolean);
+}
+
+// ── Intention → suggested sections ───────────────────────────────────────────
 const INTENTION_SECTIONS: Partial<Record<IntentionKey, SectionKey[]>> = {
-  goal:            ["task"],
-  habit:           ["habit_complete"],
+  goal:            ["goal", "task"],
+  habit:           ["habit_complete", "task"],
   plan_week:       ["task", "task_complete"],
-  save_recs:       ["reading", "movies", "music", "spots"],
-  track_workouts:  ["task", "note"],
+  save_recs:       ["reading", "music", "spots", "recipe"],
+  track_workouts:  ["workout", "habit_complete"],
   organize_places: ["spots"],
-  connect_friends: ["note"],
+  connect_friends: ["person"],
   private_notes:   ["note"],
 };
 
@@ -630,6 +664,48 @@ function TaskCompleteForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ── Quick Log: Add Goal ───────────────────────────────────────────────────────
+function GoalForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [horizon, setHorizon] = useState<"this_week" | "this_month" | "this_year">("this_year");
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/goals", { title, horizon, progressType: "boolean" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/goals"] }); onSuccess(); },
+  });
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
+      <FormInput label="Goal" value={title} onChange={setTitle} placeholder="e.g. Run a 5K" required />
+      <SegmentPicker label="Horizon"
+        options={[
+          { value: "this_week",  label: "This week"  },
+          { value: "this_month", label: "This month" },
+          { value: "this_year",  label: "This year"  },
+        ]}
+        value={horizon} onChange={setHorizon} />
+      <SubmitButton loading={mut.isPending} disabled={!title.trim()} label="Add Goal" />
+    </form>
+  );
+}
+
+// ── Quick Log: Add Person ─────────────────────────────────────────────────────
+function PersonForm({ onSuccess }: { onSuccess: () => void }) {
+  const qc = useQueryClient();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const mut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/people", { firstName, lastName: lastName || undefined }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/people"] }); onSuccess(); },
+  });
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (firstName.trim()) mut.mutate(); }} className="space-y-4">
+      <FormInput label="First name" value={firstName} onChange={setFirstName} placeholder="e.g. Sarah" required />
+      <FormInput label="Last name (optional)" value={lastName} onChange={setLastName} placeholder="e.g. Johnson" />
+      <SubmitButton loading={mut.isPending} disabled={!firstName.trim()} label="Add Friend" />
+    </form>
+  );
+}
+
 // ── Section form router ───────────────────────────────────────────────────────
 
 function SectionForm({ section, onSuccess }: { section: SectionKey; onSuccess: () => void }) {
@@ -638,10 +714,14 @@ function SectionForm({ section, onSuccess }: { section: SectionKey; onSuccess: (
     movies:         <MoviesForm         onSuccess={onSuccess} />,
     music:          <MusicForm          onSuccess={onSuccess} />,
     spots:          <SpotsForm          onSuccess={onSuccess} />,
+    recipe:         <RecipesForm        onSuccess={onSuccess} />,
     task:           <TaskForm           onSuccess={onSuccess} />,
+    goal:           <GoalForm           onSuccess={onSuccess} />,
     note:           <NoteForm           onSuccess={onSuccess} />,
     habit_complete: <HabitCompleteForm  onSuccess={onSuccess} />,
     task_complete:  <TaskCompleteForm   onSuccess={onSuccess} />,
+    workout:        <WorkoutsForm       onSuccess={onSuccess} />,
+    person:         <PersonForm         onSuccess={onSuccess} />,
   };
   return <>{forms[section]}</>;
 }
@@ -708,7 +788,10 @@ interface QuickAddModalProps {
 export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const suggestedSections = getSuggestedSections(loadIntentions());
+  const intentions = loadIntentions();
+  const suggestedSections = getSuggestedSections(intentions);
+  const persona = (() => { try { return localStorage.getItem("mylifos_onboarding_persona") ?? ""; } catch { return ""; } })();
+  const orderedSections = getPersonaOrderedSections(persona);
 
   // Slide-up animation state
   const [visible, setVisible] = useState(false);
@@ -797,7 +880,7 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
           <SectionForm section={activeSection} onSuccess={handleSuccess} />
         </div>
       ) : (
-        /* Two-section picker */
+        /* Persona-sorted single grid */
         <div className="px-4 pb-10 space-y-5 pt-2">
           {/* Suggested section (shown when user has intentions) */}
           {suggestedSections.length > 0 && (
@@ -807,7 +890,8 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
               </p>
               <div className="grid grid-cols-2 gap-2.5">
                 {suggestedSections.map(key => {
-                  const sec = ALL_SECTIONS.find(s => s.key === key)!;
+                  const sec = SECTION_MAP[key];
+                  if (!sec) return null;
                   return (
                     <button
                       key={sec.key}
@@ -826,35 +910,15 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
             </div>
           )}
 
-          {/* Repository section */}
+          {/* All sections, ordered by persona */}
           <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
-              Add to Repository
-            </p>
+            {suggestedSections.length > 0 && (
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+                All Options
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2.5">
-              {REPO_SECTIONS.map(sec => (
-                <button
-                  key={sec.key}
-                  onClick={() => setActiveSection(sec.key)}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95 text-left"
-                >
-                  <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
-                    <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Logs section */}
-          <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
-              Quick Logs
-            </p>
-            <div className="grid grid-cols-2 gap-2.5">
-              {QUICK_LOG_SECTIONS.map(sec => (
+              {orderedSections.map(sec => (
                 <button
                   key={sec.key}
                   onClick={() => setActiveSection(sec.key)}
