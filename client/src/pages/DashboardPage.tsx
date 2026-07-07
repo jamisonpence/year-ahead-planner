@@ -184,18 +184,120 @@ function StartHereCard() {
     localStorage.getItem(START_HERE_DISMISSED_KEY) === "true"
   );
 
-  const persona     = localStorage.getItem(ONBOARDING_PERSONA_KEY) ?? "";
-  const completedAt = parseInt(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY) ?? "0", 10);
+  const persona      = localStorage.getItem(ONBOARDING_PERSONA_KEY) ?? "";
+  const completedAt  = parseInt(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY) ?? "0", 10);
   const withinWindow = completedAt > 0 && Date.now() - completedAt < SEVEN_DAYS_MS;
   const checklist    = loadChecklist();
   const checklistDone = checklist.length > 0 && checklist.every(item => item.done);
+  const shouldShow   = !dismissed && !!persona && completedAt > 0 && (withinWindow || !checklistDone);
 
-  // Only show for users who went through the new onboarding (have completedAt)
-  const shouldShow = !dismissed && !!persona && completedAt > 0 && (withinWindow || !checklistDone);
+  // Share React Query cache with DashboardPage — no extra network requests
+  const enabled = shouldShow;
+  const { data: goals = [] }        = useQuery<any[]>({ queryKey: ["/api/goals"],         enabled });
+  const { data: generalTasks = [] } = useQuery<any[]>({ queryKey: ["/api/general-tasks"],  enabled });
+  const { data: habits = [] }       = useQuery<any[]>({ queryKey: ["/api/habits"],         enabled });
+  const { data: wLogs = [] }        = useQuery<any[]>({ queryKey: ["/api/workout-logs"],   enabled });
+  const { data: books = [] }        = useQuery<any[]>({ queryKey: ["/api/books"],          enabled });
+  const { data: spots = [] }        = useQuery<any[]>({ queryKey: ["/api/spots"],          enabled });
+  const { data: recipes = [] }      = useQuery<any[]>({ queryKey: ["/api/recipes"],        enabled });
+  const { data: music = [] }        = useQuery<any[]>({ queryKey: ["/api/music/artists"],  enabled });
+  const { data: people = [] }       = useQuery<any[]>({ queryKey: ["/api/people"],         enabled });
+
   if (!shouldShow) return null;
 
   const intentions = loadIntentions();
-  const actions    = buildStartActions(persona, intentions);
+  const today      = new Date().toISOString().split("T")[0];
+
+  // ── Derive state from live data ───────────────────────────────────────────
+  const activeHabits   = habits.filter((h: any) => h.isArchived !== true && h.isActive !== false);
+  const habitDoneToday = (h: any) =>
+    Array.isArray(h.completions) && h.completions.some((c: any) => c.date === today);
+  const habitsDueToday = activeHabits.filter((h: any) => !habitDoneToday(h));
+  const openTasks      = generalTasks.filter((t: any) => !t.completed);
+  const tasksDueToday  = openTasks.filter((t: any) => t.dueDate === today);
+  const hasWorkoutHabit = activeHabits.some((h: any) =>
+    /workout|gym|run|exercise|training|lift/i.test(h.title ?? "") ||
+    (h.category ?? "").toLowerCase() === "fitness"
+  );
+  // First saved library item for contextual suggestions
+  const firstLib = books[0] ?? spots[0] ?? recipes[0] ?? music[0];
+  const firstLibName = firstLib
+    ? (firstLib.title ?? firstLib.name ?? firstLib.artistName ?? "").slice(0, 26)
+    : null;
+
+  // ── Build dynamic "what's next" actions ──────────────────────────────────
+  const dynamic: StartAction[] = [];
+
+  // Goal exists with no open next action → prompt to add one
+  const goalNeedingAction = goals.find((g: any) => {
+    const open = (g.projects ?? []).flatMap((p: any) => p.tasks ?? []).filter((t: any) => !t.completed);
+    return open.length === 0;
+  });
+  if (goalNeedingAction) {
+    const name = (goalNeedingAction.title ?? "your goal").slice(0, 26);
+    dynamic.push({ id: "goal_next_action", emoji: "🎯", label: `Add a next action to "${name}"`, href: "/goals" });
+  }
+
+  // Open task → complete today's or schedule the top one
+  if (openTasks.length > 0) {
+    const tgt   = tasksDueToday[0] ?? openTasks[0];
+    const tName = (tgt.title ?? "your task").slice(0, 26);
+    dynamic.push({
+      id: "task_action",
+      emoji: "✅",
+      label: tasksDueToday.length > 0 ? `Complete "${tName}"` : `Schedule "${tName}"`,
+      href: "/tasks",
+    });
+  }
+
+  // Active habit not yet done today
+  if (habitsDueToday.length > 0) {
+    const hName = (habitsDueToday[0].title ?? "your habit").slice(0, 26);
+    dynamic.push({ id: "habit_today", emoji: "🔥", label: `Log today's habit: "${hName}"`, href: "/habits" });
+  }
+
+  // Workout logged but no workout-type habit → suggest creating one
+  if (wLogs.length > 0 && !hasWorkoutHabit) {
+    dynamic.push({ id: "workout_to_habit", emoji: "💪", label: "Turn your workouts into a daily habit", href: "/habits" });
+  }
+
+  // Library item saved + friends exist → suggest sharing
+  if (firstLibName && people.length > 0) {
+    dynamic.push({ id: "share_rec", emoji: "💬", label: `Share "${firstLibName}" with a friend`, href: "/messenger" });
+  } else if (books.length > 0) {
+    const bName = (books[0].title ?? "your book").slice(0, 22);
+    dynamic.push({ id: "book_note", emoji: "📝", label: `Jot a note about "${bName}"`, href: "/journal" });
+  } else if (spots.length > 0) {
+    const sName = (spots[0].name ?? "a place").slice(0, 22);
+    dynamic.push({ id: "spot_note", emoji: "📍", label: `Add notes about "${sName}"`, href: "/places" });
+  }
+
+  // People added → shared interest or rec (if share_rec not already suggested)
+  if (people.length > 0 && !dynamic.find(a => a.id === "share_rec")) {
+    dynamic.push({ id: "people_action", emoji: "👤", label: "Add a shared interest or send a rec", href: "/people" });
+  }
+
+  // ── Fill gaps with persona/intention defaults (skip already-done first steps) ─
+  const completedFirstSteps = new Set<string>([
+    ...(goals.length > 0         ? ["add_goal"]            : []),
+    ...(generalTasks.length > 0  ? ["add_task"]            : []),
+    ...(activeHabits.length > 0  ? ["build_habit", "fitness_habit"] : []),
+    ...(wLogs.length > 0         ? ["log_workout"]         : []),
+    ...(books.length > 0         ? ["save_book"]           : []),
+    ...(spots.length > 0         ? ["add_place"]           : []),
+    ...(recipes.length > 0       ? ["save_recipe"]         : []),
+    ...(people.length > 0        ? ["add_person", "invite"]: []),
+  ]);
+  const staticFallback = buildStartActions(persona, intentions)
+    .filter(a => !completedFirstSteps.has(a.id));
+
+  const seenIds = new Set(dynamic.map(a => a.id));
+  const combined = [...dynamic];
+  for (const a of staticFallback) {
+    if (!seenIds.has(a.id) && combined.length < 4) { seenIds.add(a.id); combined.push(a); }
+  }
+  const actions  = combined.slice(0, 4);
+  const isProgressing = dynamic.length > 0;
 
   function dismiss() {
     try { localStorage.setItem(START_HERE_DISMISSED_KEY, "true"); } catch {}
@@ -211,8 +313,8 @@ function StartHereCard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-base leading-none">🚀</span>
-          <span className="text-sm font-bold">Start Here</span>
+          <span className="text-base leading-none">{isProgressing ? "⚡" : "🚀"}</span>
+          <span className="text-sm font-bold">{isProgressing ? "Up Next" : "Start Here"}</span>
           {daysLeft !== null && daysLeft > 0 && (
             <span className="text-[10px] font-medium text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-full">
               {daysLeft}d left
@@ -234,14 +336,14 @@ function StartHereCard() {
           <Link key={action.id} href={action.href}>
             <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 hover:bg-white/90 dark:hover:bg-white/10 border border-transparent hover:border-violet-200/60 dark:hover:border-violet-700/40 transition-all group">
               <span className="text-base leading-none shrink-0">{action.emoji}</span>
-              <span className="text-sm font-medium flex-1">{action.label}</span>
+              <span className="text-sm font-medium flex-1 truncate">{action.label}</span>
               <ChevronRight size={13} className="text-muted-foreground group-hover:text-violet-500 transition-colors shrink-0" />
             </a>
           </Link>
         ))}
       </div>
 
-      {/* Footer nudge */}
+      {/* Footer */}
       <p className="text-[10px] text-muted-foreground mt-3 text-center">
         Dismiss anytime — your progress is always in the sidebar checklist.
       </p>
