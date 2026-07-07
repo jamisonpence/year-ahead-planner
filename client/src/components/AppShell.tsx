@@ -781,7 +781,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ) : (
             <div>
               {SIDEBAR_GROUPS.map(group => {
-                const groupTabs = visibleTabs.filter(t => group.paths.includes(t.path));
+                // Use SIDEBAR_GROUPS.paths order (not user-saved tab order) so group layout is always intentional
+                const groupTabs = group.paths.map(p => visibleTabs.find(t => t.path === p)).filter(Boolean) as typeof visibleTabs;
                 if (groupTabs.length === 0) return null;
                 return (
                   <div key={group.key} className={group.label ? "mt-4" : ""}>
