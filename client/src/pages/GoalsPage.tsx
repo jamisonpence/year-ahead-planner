@@ -1071,8 +1071,18 @@ export default function GoalsPage() {
             {filteredGoals.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <Target size={28} className="mx-auto mb-3 opacity-20" />
-                <p className="text-xs">No {horizonTab === "this_year" ? "this year's" : horizonTab === "long_term" ? "long-term" : "vision"} goals yet</p>
-                <p className="text-[10px] mt-1 opacity-60">Add a goal and set its horizon</p>
+                <p className="text-xs font-medium text-foreground">
+                  {horizonTab === "this_year" ? "No goals for this year yet" : horizonTab === "long_term" ? "No long-term goals yet" : "No vision goals yet"}
+                </p>
+                <p className="text-[10px] mt-1 opacity-70">
+                  {horizonTab === "vision" ? "Vision goals define where you want to be in 5–10 years." : "Goals turn intentions into progress you can track."}
+                </p>
+                <button
+                  onClick={() => setBrowseModal(true)}
+                  className="mt-3 text-[11px] font-medium text-primary hover:underline"
+                >
+                  + Add a goal
+                </button>
               </div>
             )}
             {filteredGoals.map((g) => {

@@ -232,7 +232,12 @@ export default function MyLifosPage() {
             <section className={cardClass("p-4")}>
               <SectionHeader icon={Library} title="Browse" />
               {data.collections.length === 0 ? (
-                <EmptyState>Start saving things to build your collections.</EmptyState>
+                <div className="text-center py-6 text-muted-foreground">
+                  <Library size={28} className="mx-auto mb-2 opacity-20" />
+                  <p className="text-sm font-medium text-foreground">Your library is empty</p>
+                  <p className="text-xs mt-1">Save books, movies, music, places, and more — everything lives here.</p>
+                  <Link href="/reading"><a className="inline-block mt-3 text-xs font-medium text-primary hover:underline">Start with a book →</a></Link>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {data.collections.map((collection) => (
@@ -258,7 +263,12 @@ export default function MyLifosPage() {
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={Inbox} title="Shared with me" href="/people?tab=discover" />
                 {data.sharedWithMe.length === 0 ? (
-                  <EmptyState>Recommendations from friends collect here.</EmptyState>
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Inbox size={24} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm font-medium text-foreground">No recommendations yet</p>
+                    <p className="text-xs mt-1">Connect with friends and they can share books, movies, and places with you.</p>
+                    <Link href="/people"><a className="inline-block mt-3 text-xs font-medium text-primary hover:underline">Add friends →</a></Link>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {data.sharedWithMe.map((item) => {
@@ -313,7 +323,11 @@ export default function MyLifosPage() {
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={Heart} title="Favorites" />
                 {data.favorites.length === 0 ? (
-                  <EmptyState>Heart items across Library to build your favorites.</EmptyState>
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Heart size={24} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm font-medium text-foreground">No favorites yet</p>
+                    <p className="text-xs mt-1">Heart items across your library to pin the best ones here.</p>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {data.favorites.slice(0, 8).map((item) => (
@@ -339,7 +353,12 @@ export default function MyLifosPage() {
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={StickyNote} title="Private notes" href="/journal" />
                 {data.privateNotes.recent.length === 0 ? (
-                  <EmptyState>Your journal and private notes stay here.</EmptyState>
+                  <div className="text-center py-6 text-muted-foreground">
+                    <StickyNote size={24} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm font-medium text-foreground">No private notes yet</p>
+                    <p className="text-xs mt-1">Write freely — private notes and journal entries never appear in your feed.</p>
+                    <Link href="/journal"><a className="inline-block mt-3 text-xs font-medium text-primary hover:underline">Open Journal →</a></Link>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {data.privateNotes.recent.map((note) => (

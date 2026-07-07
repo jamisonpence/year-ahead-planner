@@ -1009,8 +1009,9 @@ export default function DashboardPage() {
               {todayItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-500 opacity-60" />
-                  <p className="text-sm font-medium text-foreground">You're all caught up!</p>
-                  <p className="text-xs mt-1">Nothing urgent on the schedule today.</p>
+                  <p className="text-sm font-medium text-foreground">All clear for now.</p>
+                  <p className="text-xs mt-1">Nothing urgent on the schedule — a good time to get ahead.</p>
+                  <Link href="/tasks"><a className="inline-block mt-3 text-xs font-medium text-primary hover:underline">Add a task for today →</a></Link>
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">

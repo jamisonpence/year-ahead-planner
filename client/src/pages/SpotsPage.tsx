@@ -1696,14 +1696,14 @@ export default function SpotsPage({ activeView }: { activeView?: "places" | "tri
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-3xl">📍</div>
                 <div className="text-center">
-                  <p className="font-semibold text-foreground mb-1">Start building your places list</p>
-                  <p className="text-sm">Add spots you love, want to visit, or come back to.</p>
+                  <p className="font-semibold text-foreground mb-1">Build your personal map</p>
+                  <p className="text-sm">Save restaurants, hidden gems, and spots to revisit — all in one place.</p>
                 </div>
                 <button
                   onClick={() => setNominatimOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
                 >
-                  <Search size={15} /> Find Places
+                  <Search size={15} /> Find a Place
                 </button>
               </div>
             ) : displaySpots.length === 0 ? (

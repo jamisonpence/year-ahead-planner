@@ -2910,7 +2910,14 @@ export default function WorkoutsPage() {
             </Button>
           </div>
           {logs.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground"><Dumbbell size={40} className="mx-auto mb-4 opacity-20" /><p className="font-medium">No workouts logged yet</p></div>
+            <div className="text-center py-16 text-muted-foreground">
+              <Dumbbell size={40} className="mx-auto mb-4 opacity-20" />
+              <p className="font-medium text-foreground">No workouts logged yet</p>
+              <p className="text-sm mt-1">Every session counts. Log your first to start tracking progress.</p>
+              <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={() => { setEditLog(null); setLogModal(true); }}>
+                <Plus size={13} /> Log First Workout
+              </Button>
+            </div>
           ) : logs.map(log => {
             let exercises: any[] = [];
             try { exercises = JSON.parse(log.exercisesJson); } catch {}
@@ -2973,8 +2980,8 @@ export default function WorkoutsPage() {
           {templates.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <LayoutTemplate size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium">No workouts yet</p>
-              <p className="text-sm mt-1">Create a workout or use <strong>Generate Plan</strong> to build one with AI</p>
+              <p className="font-medium text-foreground">No workout templates yet</p>
+              <p className="text-sm mt-1">Build reusable routines you can start with one tap, or let AI generate a plan.</p>
               <div className="flex gap-2 justify-center mt-4">
                 <Button variant="outline" size="sm" className="gap-1" onClick={() => { setEditTemplate(null); setTemplateModal(true); }}><Plus size={13} /> New Workout</Button>
                 <Button variant="outline" size="sm" className="gap-1 border-purple-300 text-purple-700" onClick={() => setGenerateOpen(true)}><Sparkles size={13} /> Generate Plan</Button>

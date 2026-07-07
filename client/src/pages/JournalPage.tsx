@@ -941,16 +941,16 @@ export default function JournalPage() {
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen size={36} className="mx-auto mb-3 opacity-20" />
           <p className="font-semibold text-foreground">
-            {allEntries.length === 0 ? "No entries yet" : "No entries match your filters"}
+            {allEntries.length === 0 ? "Nothing written yet" : "No entries match your filters"}
           </p>
           <p className="text-sm mt-1">
             {allEntries.length === 0
-              ? "Start writing your first entry."
+              ? "Writing clarifies your thinking. Start with whatever's on your mind today."
               : "Try adjusting your filters."}
           </p>
           {allEntries.length === 0 && (
             <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => openAdd()}>
-              <Plus size={14} /> New Entry
+              <Plus size={14} /> Write First Entry
             </Button>
           )}
         </div>

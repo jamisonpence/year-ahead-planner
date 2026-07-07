@@ -1504,9 +1504,9 @@ export default function TasksPage() {
                 <div className="text-center py-16 text-muted-foreground">
                   <ClipboardList size={36} className="mx-auto mb-3 opacity-20" />
                   <p className="font-semibold text-foreground">No open tasks</p>
-                  <p className="text-sm mt-1">One-off tasks like errands, to-dos, and action items live here.</p>
+                  <p className="text-sm mt-1">Capture every to-do here — errands, action items, anything you need to get done.</p>
                   <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={() => setNewTaskModal(true)}>
-                    <Plus size={13} /> New Task
+                    <Plus size={13} /> Add First Task
                   </Button>
                 </div>
               ) : filteredTasks.length > 0 ? (

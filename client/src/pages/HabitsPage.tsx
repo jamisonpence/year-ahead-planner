@@ -569,7 +569,7 @@ function WeeklyHabitGrid({ habits, onToggle }: { habits: HabitWithStats[]; onTog
       </div>
 
       {habits.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-sm">No habits yet. Add one in the Habits tab!</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">No habits tracked yet — head to the <strong>Habits</strong> tab to add your first.</div>
       )}
 
       {/* Grid */}
@@ -850,9 +850,9 @@ export default function HabitsPage() {
                 <div className="rounded-xl border border-dashed p-6 text-center">
                   <Sparkles size={28} className="mx-auto opacity-20 mb-2" />
                   <p className="text-sm font-semibold">No habits yet</p>
-                  <p className="text-xs text-muted-foreground mt-1 mb-3">Start building consistency with daily habits</p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">Small habits compound into big results. Start with one that matters.</p>
                   <Button size="sm" onClick={() => { setEditHabit(null); setHabitModalOpen(true); }}>
-                    <Plus size={13} className="mr-1" /> New Habit
+                    <Plus size={13} className="mr-1" /> Add First Habit
                   </Button>
                 </div>
               )}

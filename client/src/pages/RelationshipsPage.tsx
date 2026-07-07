@@ -3271,8 +3271,8 @@ export default function RelationshipsPage() {
                 {count === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <UserCheck size={30} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">No Lifos friends yet</p>
-                    <p className="text-xs mt-1">Use Find Friends above to connect with people on the app</p>
+                    <p className="text-sm font-medium text-foreground">No friends connected yet</p>
+                    <p className="text-xs mt-1">Connect with people on the app to share what you're reading, watching, and saving.</p>
                   </div>
                 ) : (
                   <div className="pt-3 space-y-2">
@@ -3486,9 +3486,10 @@ export default function RelationshipsPage() {
                 {count === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Users size={30} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">No manually added contacts</p>
-                    <Button size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
-                      <UserPlus size={13} /> Add Person
+                    <p className="text-sm font-medium text-foreground">No contacts yet</p>
+                    <p className="text-xs mt-1 mb-3">Keep track of friends, family, and colleagues in one place.</p>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEditPerson(null); setEditFriendLinkedUserId(null); setPersonModal(true); }}>
+                      <UserPlus size={13} /> Add First Person
                     </Button>
                   </div>
                 ) : (
