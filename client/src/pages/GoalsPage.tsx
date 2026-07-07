@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X, CalendarCheck,
+  ClipboardList, Flag, X, CalendarCheck, Trophy,
   Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
   Users, Search, Sparkles, ArrowRight,
 } from "lucide-react";
@@ -832,6 +832,8 @@ export default function GoalsPage() {
   const [mobileView, setMobileView] = useState<"goals" | "detail">("goals");
   const [quickWinGoalId, setQuickWinGoalId] = useState<number | null>(null);
   const [quickWinText, setQuickWinText] = useState("");
+  const [logWinGoalId, setLogWinGoalId] = useState<number | null>(null);
+  const [logWinText, setLogWinText] = useState("");
   type HorizonTab = "this_year" | "long_term" | "vision";
   const [horizonTab, setHorizonTab] = useState<HorizonTab>("this_year");
 
@@ -933,6 +935,29 @@ export default function GoalsPage() {
         },
       });
     }
+  }
+
+  // ── Log Win mutation ───────────────────────────────────────────────────────
+  const createJournalEntry = useMutation({
+    mutationFn: (data: { title: string; content: string; tags: string; date: string }) =>
+      apiRequest("POST", "/api/journal", { ...data, mood: null, isFavorite: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/journal"] });
+      setLogWinGoalId(null);
+      setLogWinText("");
+      confettiBurst({ particles: 28, originY: 0.3 });
+      toast({ title: "Win logged! 🏆" });
+    },
+  });
+
+  function handleLogWin(g: GoalWithProjects) {
+    if (!logWinText.trim()) return;
+    createJournalEntry.mutate({
+      title: `Win: ${g.title}`,
+      content: logWinText.trim(),
+      tags: "win",
+      date: new Date().toISOString().slice(0, 10),
+    });
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────────
@@ -1180,7 +1205,7 @@ export default function GoalsPage() {
                     </div>
                   </div>
 
-                  {/* Quick Win */}
+                  {/* Quick Win + Log a Win */}
                   {quickWinGoalId === g.id ? (
                     <div className="mt-2 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                       <input
@@ -1207,13 +1232,47 @@ export default function GoalsPage() {
                         <X size={11} />
                       </button>
                     </div>
+                  ) : logWinGoalId === g.id ? (
+                    <div className="mt-2 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        value={logWinText}
+                        onChange={e => setLogWinText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") handleLogWin(g);
+                          if (e.key === "Escape") { setLogWinGoalId(null); setLogWinText(""); }
+                        }}
+                        placeholder="What did you accomplish?"
+                        className="flex-1 h-7 text-xs bg-background border rounded-lg px-2 outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        onClick={() => handleLogWin(g)}
+                        className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700"
+                      >
+                        <Check size={11} />
+                      </button>
+                      <button
+                        onClick={() => { setLogWinGoalId(null); setLogWinText(""); }}
+                        className="h-7 w-7 rounded-lg hover:bg-secondary text-muted-foreground flex items-center justify-center"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      onClick={e => { e.stopPropagation(); setQuickWinGoalId(g.id); }}
-                      className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors w-full"
-                    >
-                      <Plus size={10} /> Quick Win
-                    </button>
+                    <div className="mt-2 flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={e => { e.stopPropagation(); setQuickWinGoalId(g.id); setLogWinGoalId(null); }}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Plus size={10} /> Quick Win
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setLogWinGoalId(g.id); setQuickWinGoalId(null); }}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-emerald-600 transition-colors"
+                      >
+                        <Trophy size={10} /> Log a Win
+                      </button>
+                    </div>
                   )}
                 </div>
               );
@@ -1384,7 +1443,23 @@ export default function GoalsPage() {
 
         {/* ── Column 2: Goal Detail ──────────────────────────────────────── */}
         <div className={`flex-1 flex flex-col min-h-0 min-w-0 ${mobileView !== "detail" ? "hidden md:flex" : "flex"}`}>
-          <div className="px-4 py-3 border-b flex items-center justify-between">
+          <div className="px-4 py-3 border-b">
+            {selectedGoal && (() => {
+              const parentId = (selectedGoal as any).parentGoalId ?? null;
+              const parentGoal = parentId ? goals.find(g => g.id === parentId) : null;
+              if (!parentGoal) return null;
+              const ph = (parentGoal as any).horizon ?? "this_year";
+              const parentTab: HorizonTab = ph === "someday" ? "vision" : ph === "this_year" ? "this_year" : "long_term";
+              return (
+                <button
+                  onClick={() => { setSelectedGoalId(parentGoal.id); setHorizonTab(parentTab); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-1.5"
+                >
+                  <ChevronRight size={11} className="rotate-180 shrink-0" />
+                  <span className="truncate max-w-[200px]">{parentGoal.title}</span>
+                </button>
+              );
+            })()}
             <span className="text-sm font-semibold text-foreground">{detailLabel}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
@@ -1574,16 +1649,22 @@ export default function GoalsPage() {
                         </div>
                       )}
                       {unlinkedHabits.length > 0 && (
-                        <select
-                          className="w-full text-xs rounded-lg border bg-card px-2 py-1.5 text-muted-foreground"
-                          value=""
-                          onChange={e => { if (e.target.value) linkHabit(Number(e.target.value)); }}
-                        >
-                          <option value="">+ Link a habit…</option>
-                          {unlinkedHabits.map((h: any) => (
-                            <option key={h.id} value={h.id}>{h.emoji} {h.title}</option>
-                          ))}
-                        </select>
+                        <div>
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 px-0.5">Add habit</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {unlinkedHabits.map((h: any) => (
+                              <button
+                                key={h.id}
+                                onClick={() => linkHabit(h.id)}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-dashed border-border hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-xs text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                              >
+                                <span>{h.emoji}</span>
+                                <span>{h.title}</span>
+                                <Plus size={9} className="shrink-0 opacity-60" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   );

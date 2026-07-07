@@ -435,6 +435,10 @@ export default function DashboardPage() {
 
   // ── Goals ──────────────────────────────────────────────────────────────────
   const activeGoals = goals.filter((g) => !g.completedDate);
+  // Rotating vision goal — pick one per day so it feels alive without being noisy
+  const visionGoals = goals.filter((g) => (g as any).horizon === "someday" && !g.completedDate);
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  const featuredVision = visionGoals.length > 0 ? visionGoals[dayOfYear % visionGoals.length] : null;
   const avgGoalPct = activeGoals.length
     ? Math.round(activeGoals.reduce((sum, g) => {
         const pct = g.progressType === "boolean"
@@ -1044,6 +1048,23 @@ export default function DashboardPage() {
 
         {/* ── Right column (secondary) ────────────────────────────────────── */}
         <div className="space-y-5">
+
+          {/* ── DREAM (rotating vision goal) ───────────────────────────────── */}
+          {featuredVision && (
+            <Link href="/goals">
+              <a className="block bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={13} className="text-violet-500 shrink-0" />
+                  <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">Dream</span>
+                </div>
+                <p className="text-sm font-semibold leading-snug text-foreground line-clamp-2">{featuredVision.title}</p>
+                {(featuredVision as any).description && (
+                  <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{(featuredVision as any).description}</p>
+                )}
+                <p className="text-xs text-violet-500 mt-2">Vision →</p>
+              </a>
+            </Link>
+          )}
 
           {/* ── PROGRESS ───────────────────────────────────────────────────── */}
           {visible.progress && (
