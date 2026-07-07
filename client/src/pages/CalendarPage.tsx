@@ -109,9 +109,13 @@ function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
         });
       });
     } else {
-      // Flat format: repeat every week for durationWeeks
-      for (let w = 1; w <= plan.durationWeeks; w++) {
+      // Flat format: repeating weekly schedule — generate items out to 90 days so the
+      // calendar always shows upcoming sessions even if the plan started weeks ago.
+      const horizon = format(addDays(new Date(), 90), "yyyy-MM-dd");
+      let w = 1;
+      while (true) {
         const weekMon = addDays(week1Mon, (w - 1) * 7);
+        if (format(weekMon, "yyyy-MM-dd") > horizon) break;
         sched.flatDays.forEach((entry: any) => {
           if (!entry.dayOfWeek) return;
           const label: string = entry.label ?? entry.templateName ?? plan.name;
@@ -119,6 +123,7 @@ function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
           const date = format(addDays(weekMon, DAY_OFFSETS[entry.dayOfWeek] ?? 0), "yyyy-MM-dd");
           items.push({ id: `wp:${plan.id}:${w}:${entry.dayOfWeek}`, title: label, date, type: "workout_planned", completed: false, sourceId: plan.id });
         });
+        w++;
       }
     }
   });
