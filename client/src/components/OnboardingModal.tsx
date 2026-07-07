@@ -42,6 +42,29 @@ const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[]
   },
 ];
 
+// ── Intention definitions ─────────────────────────────────────────────────────
+
+export type IntentionKey =
+  | "goal"
+  | "habit"
+  | "plan_week"
+  | "save_recs"
+  | "track_workouts"
+  | "organize_places"
+  | "connect_friends"
+  | "private_notes";
+
+export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] = [
+  { key: "goal",            emoji: "🎯", label: "Hit a goal"            },
+  { key: "habit",           emoji: "✅", label: "Build a habit"         },
+  { key: "plan_week",       emoji: "📅", label: "Plan my week"          },
+  { key: "save_recs",       emoji: "⭐", label: "Save recommendations"  },
+  { key: "track_workouts",  emoji: "💪", label: "Track workouts"        },
+  { key: "organize_places", emoji: "📍", label: "Organize places/trips" },
+  { key: "connect_friends", emoji: "👥", label: "Connect with friends"  },
+  { key: "private_notes",   emoji: "📝", label: "Keep private notes"    },
+];
+
 // ── Path definitions ──────────────────────────────────────────────────────────
 
 interface PathStep { section: string; description: string; highlight: string; href: string }
@@ -158,8 +181,9 @@ const PATHS: Record<PersonaKey, PathStep[]> = {
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
-export const ONBOARDING_PERSONA_KEY  = "mylifos_onboarding_persona";
-export const ONBOARDING_CHECKLIST_KEY = "mylifos_onboarding_checklist";
+export const ONBOARDING_PERSONA_KEY    = "mylifos_onboarding_persona";
+export const ONBOARDING_CHECKLIST_KEY  = "mylifos_onboarding_checklist";
+export const ONBOARDING_INTENTIONS_KEY = "mylifos_onboarding_intentions";
 
 /** Normalise a raw stored persona string (including legacy v1 keys) to a current PersonaKey. */
 function normalisePersona(raw: string): PersonaKey {
@@ -188,13 +212,25 @@ export function saveChecklist(items: { section: string; href: string; done: bool
   try { localStorage.setItem(ONBOARDING_CHECKLIST_KEY, JSON.stringify(items)); } catch {}
 }
 
+export function loadIntentions(): IntentionKey[] {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_INTENTIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveIntentions(intentions: IntentionKey[]) {
+  try { localStorage.setItem(ONBOARDING_INTENTIONS_KEY, JSON.stringify(intentions)); } catch {}
+}
+
 // ── Main Modal ────────────────────────────────────────────────────────────────
 
 export default function OnboardingModal({ userName }: { userName: string }) {
   const qc = useQueryClient();
   const [, navigate] = useLocation();
-  const [screen, setScreen] = useState<1 | 2 | 3>(1);
+  const [screen, setScreen] = useState<1 | 2 | 3 | 4>(1);
   const [persona, setPersona] = useState<PersonaKey | null>(null);
+  const [intentions, setIntentions] = useState<IntentionKey[]>([]);
   const [pathStep, setPathStep] = useState(0);
 
   const completeMut = useMutation({
@@ -202,15 +238,20 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/me"] }); },
   });
 
+  const prefsMut = useMutation({
+    mutationFn: (data: object) => apiRequest("PUT", "/api/me/prefs", data),
+  });
+
   const firstName = userName.split(" ")[0];
   const steps = persona ? PATHS[persona] : [];
   const currentStep = steps[pathStep];
   const totalSteps = steps.length;
-  const progressPct = screen === 1
-    ? 5
-    : screen === 2
-    ? Math.round(((pathStep + 1) / totalSteps) * 70) + 5
-    : 100;
+
+  const progressPct =
+    screen === 1 ? 5 :
+    screen === 2 ? 28 :
+    screen === 3 ? Math.round(((pathStep + 1) / totalSteps) * 57) + 28 :
+    100;
 
   function pickPersona(p: PersonaKey) {
     setPersona(p);
@@ -218,11 +259,19 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     setScreen(2);
   }
 
+  function toggleIntention(k: IntentionKey) {
+    setIntentions(prev => {
+      if (prev.includes(k)) return prev.filter(x => x !== k);
+      if (prev.length >= 2) return prev; // max 2
+      return [...prev, k];
+    });
+  }
+
   function nextStep() {
     if (pathStep < steps.length - 1) {
       setPathStep(i => i + 1);
     } else {
-      setScreen(3);
+      setScreen(4);
     }
   }
 
@@ -232,6 +281,9 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
   function finish() {
     if (persona) saveOnboardingData(persona);
+    saveIntentions(intentions);
+    // Persist to server (fire-and-forget — localStorage is the source of truth)
+    prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
   }
 
@@ -272,8 +324,67 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           </div>
         )}
 
-        {/* ── Screen 2: Path walkthrough ─────────────────────────────────── */}
-        {screen === 2 && persona && currentStep && (
+        {/* ── Screen 2: Intentions picker ────────────────────────────────── */}
+        {screen === 2 && (
+          <div className="p-6 sm:p-8 space-y-6">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 2 of 2</p>
+              <h1 className="text-2xl font-bold leading-tight">What do you want to do first?</h1>
+              <p className="text-sm text-muted-foreground mt-1">Pick up to 2 — we'll highlight these to help you get started fast.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {INTENTIONS.map(item => {
+                const selected = intentions.includes(item.key);
+                const disabled = !selected && intentions.length >= 2;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => toggleIntention(item.key)}
+                    disabled={disabled}
+                    className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all
+                      ${selected
+                        ? "border-primary bg-primary/8 text-foreground"
+                        : disabled
+                        ? "border-border/40 text-muted-foreground/40 cursor-not-allowed"
+                        : "border-border hover:border-primary/50 hover:bg-primary/5"
+                      }`}
+                  >
+                    <span className="text-xl leading-none shrink-0">{item.emoji}</span>
+                    <span className="text-sm font-medium leading-snug">{item.label}</span>
+                    {selected && (
+                      <div className="ml-auto shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check size={11} className="text-primary-foreground" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {intentions.length === 2 && (
+              <p className="text-xs text-center text-muted-foreground">You've picked 2 — deselect one to change your choice.</p>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => setScreen(1)}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => setScreen(3)}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors"
+              >
+                {intentions.length === 0 ? "Skip" : "Next"} <ArrowRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Screen 3: Path walkthrough ─────────────────────────────────── */}
+        {screen === 3 && persona && currentStep && (
           <div className="p-6 sm:p-8 space-y-6">
             {/* Step indicators */}
             <div className="flex items-center gap-2">
@@ -318,7 +429,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
             {/* Navigation */}
             <div className="flex items-center justify-between gap-3">
               <button
-                onClick={() => pathStep === 0 ? setScreen(1) : setPathStep(i => i - 1)}
+                onClick={() => pathStep === 0 ? setScreen(2) : setPathStep(i => i - 1)}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 ← Back
@@ -333,8 +444,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           </div>
         )}
 
-        {/* ── Screen 3: Confirm ──────────────────────────────────────────── */}
-        {screen === 3 && persona && (
+        {/* ── Screen 4: Confirm ──────────────────────────────────────────── */}
+        {screen === 4 && persona && (
           <div className="p-6 sm:p-8 space-y-6">
             <div>
               <p className="text-2xl mb-2">🎉</p>
@@ -356,7 +467,19 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               ))}
             </div>
 
-            <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3">
+            {intentions.length > 0 && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center gap-2.5">
+                <span className="text-base shrink-0">✨</span>
+                <p className="text-xs text-muted-foreground">
+                  Your Today page will highlight your focus areas:{" "}
+                  <strong className="text-foreground">
+                    {intentions.map(k => INTENTIONS.find(i => i.key === k)?.label).filter(Boolean).join(" & ")}
+                  </strong>
+                </p>
+              </div>
+            )}
+
+            <div className="bg-secondary/40 rounded-xl px-4 py-3">
               <p className="text-xs text-muted-foreground">
                 A <strong>Get Started</strong> checklist will appear in your sidebar to track your progress. You can dismiss it anytime.
               </p>

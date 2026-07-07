@@ -469,6 +469,36 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  // ── User preferences (intentions, persona, etc.) ─────────────────────────────
+  // One JSON document per user; same pattern as notes_data.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_prefs_data (
+      user_id INTEGER PRIMARY KEY,
+      data_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  app.get("/api/me/prefs", requireAuth, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT data_json FROM user_prefs_data WHERE user_id=$1`, [(req.user as User).id]);
+      try { res.json(JSON.parse(r.rows[0]?.data_json ?? "{}")); }
+      catch { res.json({}); }
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/me/prefs", requireAuth, async (req, res) => {
+    try {
+      const data = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+      await pool.query(
+        `INSERT INTO user_prefs_data (user_id, data_json, updated_at) VALUES ($1,$2,$3)
+         ON CONFLICT (user_id) DO UPDATE SET data_json=$2, updated_at=$3`,
+        [(req.user as User).id, JSON.stringify(data), new Date().toISOString()]
+      );
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── On this day (memories resurfacing) ───────────────────────────────────────
   // Entries from this same calendar date in previous years, plus 1/3/6 months ago.
   app.get("/api/on-this-day", requireAuth, async (req, res) => {

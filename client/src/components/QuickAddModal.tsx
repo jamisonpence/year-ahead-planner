@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { X, ArrowLeft, Check, Loader2 } from "lucide-react";
+import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,33 @@ const ALL_SECTIONS = [...REPO_SECTIONS, ...QUICK_LOG_SECTIONS];
 const SECTION_EMOJI: Record<string, string> = Object.fromEntries(
   ALL_SECTIONS.map(s => [s.key, s.emoji])
 );
+
+// Intention → suggested section keys (in priority order)
+const INTENTION_SECTIONS: Partial<Record<IntentionKey, SectionKey[]>> = {
+  goal:            ["task"],
+  habit:           ["habit_complete"],
+  plan_week:       ["task", "task_complete"],
+  save_recs:       ["reading", "movies", "music", "spots"],
+  track_workouts:  ["task", "note"],
+  organize_places: ["spots"],
+  connect_friends: ["note"],
+  private_notes:   ["note"],
+};
+
+/** Return deduplicated suggested section keys for the user's stored intentions (max 3). */
+function getSuggestedSections(intentions: IntentionKey[]): SectionKey[] {
+  const seen = new Set<SectionKey>();
+  const result: SectionKey[] = [];
+  for (const intent of intentions) {
+    for (const key of INTENTION_SECTIONS[intent] ?? []) {
+      if (!seen.has(key) && result.length < 3) {
+        seen.add(key);
+        result.push(key);
+      }
+    }
+  }
+  return result;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -680,6 +708,7 @@ interface QuickAddModalProps {
 export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const suggestedSections = getSuggestedSections(loadIntentions());
 
   // Slide-up animation state
   const [visible, setVisible] = useState(false);
@@ -770,6 +799,33 @@ export default function QuickAddModal({ open, onClose }: QuickAddModalProps) {
       ) : (
         /* Two-section picker */
         <div className="px-4 pb-10 space-y-5 pt-2">
+          {/* Suggested section (shown when user has intentions) */}
+          {suggestedSections.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+                ✨ Suggested for You
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {suggestedSections.map(key => {
+                  const sec = ALL_SECTIONS.find(s => s.key === key)!;
+                  return (
+                    <button
+                      key={sec.key}
+                      onClick={() => setActiveSection(sec.key)}
+                      className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-primary/6 hover:bg-primary/12 border border-primary/20 hover:border-primary/40 transition-all active:scale-95 text-left"
+                    >
+                      <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
+                        <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Repository section */}
           <div>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">

@@ -30,6 +30,19 @@ import WorkoutLogModal from "@/components/modals/WorkoutLogModal";
 import { useAuth } from "@/hooks/useAuth";
 import { confettiBurst } from "@/lib/confetti";
 import { History } from "lucide-react";
+import { loadIntentions, INTENTIONS, type IntentionKey } from "@/components/OnboardingModal";
+
+// Intention → quick-link config
+const INTENTION_LINKS: Record<IntentionKey, { emoji: string; label: string; href: string }> = {
+  goal:            { emoji: "🎯", label: "Set a goal",       href: "/goals"    },
+  habit:           { emoji: "✅", label: "Add a habit",      href: "/habits"   },
+  plan_week:       { emoji: "📅", label: "Plan this week",   href: "/review"   },
+  save_recs:       { emoji: "⭐", label: "Save something",   href: "/library"  },
+  track_workouts:  { emoji: "💪", label: "Log a workout",    href: "/health"   },
+  organize_places: { emoji: "📍", label: "Add a place",      href: "/places"   },
+  connect_friends: { emoji: "👥", label: "Add someone",      href: "/people"   },
+  private_notes:   { emoji: "📝", label: "Write an entry",   href: "/journal"  },
+};
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
@@ -439,6 +452,9 @@ export default function DashboardPage() {
   const visionGoals = goals.filter((g) => (g as any).horizon === "someday" && !g.completedDate);
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   const featuredVision = visionGoals.length > 0 ? visionGoals[dayOfYear % visionGoals.length] : null;
+
+  // ── Intentions (from onboarding) ─────────────────────────────────────────────
+  const userIntentions = loadIntentions();
 
   // ── Mantras ─────────────────────────────────────────────────────────────────
   const { data: mantras = [] } = useQuery<Mantra[]>({
@@ -1072,6 +1088,28 @@ export default function DashboardPage() {
                 <p className="text-xs text-violet-500 mt-2">Vision →</p>
               </a>
             </Link>
+          )}
+
+          {/* ── FOCUS (intentions-based quick links) ───────────────────────── */}
+          {userIntentions.length > 0 && (
+            <div className="bg-card border rounded-xl p-4 space-y-2.5">
+              <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">✨ Your Focus</p>
+              <div className="space-y-1.5">
+                {userIntentions.map(key => {
+                  const link = INTENTION_LINKS[key];
+                  if (!link) return null;
+                  return (
+                    <Link key={key} href={link.href}>
+                      <a className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-secondary/50 hover:bg-primary/8 hover:text-primary transition-colors group">
+                        <span className="text-base leading-none shrink-0">{link.emoji}</span>
+                        <span className="text-sm font-medium flex-1">{link.label}</span>
+                        <ChevronRight size={13} className="text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                      </a>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* ── MANTRA ─────────────────────────────────────────────────────── */}
