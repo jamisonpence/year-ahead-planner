@@ -714,6 +714,28 @@ export default function JournalPage() {
     setModalOpen(true);
   }
 
+  function openWeeklyReview() {
+    const now = new Date();
+    // Find Monday of current week
+    const day = now.getDay(); // 0=Sun
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((day + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const weekLabel = `${fmt(monday)} – ${fmt(sunday)}`;
+    setEditing(null);
+    setForm({
+      date: todayISO(),
+      title: `Weekly Review — ${weekLabel}`,
+      content: `✅ What did I complete this week?\n• \n\n📚 What did I learn?\n• \n\n🎯 What's my focus next week?\n• \n\n🙏 One thing I'm grateful for:\n`,
+      mood: "",
+      tags: "weekly-review",
+      isFavorite: false,
+    });
+    setModalOpen(true);
+  }
+
   function openEdit(entry: JournalEntry) {
     setEditing(entry);
     setForm({
@@ -798,6 +820,9 @@ export default function JournalPage() {
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openAdd(todayISO())}>
               <Calendar size={14} /> Today
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openWeeklyReview()}>
+              🪞 Weekly Review
             </Button>
             <Button size="sm" className="gap-1.5" onClick={() => openAdd()}>
               <Plus size={15} /> New Entry

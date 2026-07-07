@@ -176,8 +176,9 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "today",     label: null,                paths: ["/dashboard", "/habits"] },
-  { key: "plan",      label: "Plan",              paths: ["/calendar", "/goals", "/tasks", "/journal", "/review"] },
+  { key: "today",     label: null,                paths: ["/dashboard"] },
+  { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
+  { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
   { key: "people",    label: "People",            paths: ["/people"] },
   { key: "mylifos",   label: "MyLifos",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },

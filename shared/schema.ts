@@ -1934,6 +1934,7 @@ export const habits = pgTable("habits", {
   createdAt: text("created_at").notNull(),
   // JSON array: [{ date: "YYYY-MM-DD", note?: string }]
   completionsJson: text("completions_json").notNull().default("[]"),
+  linkedGoalId: integer("linked_goal_id"),
 });
 
 export const insertHabitSchema = createInsertSchema(habits).omit({ id: true });

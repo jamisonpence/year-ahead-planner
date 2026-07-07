@@ -335,6 +335,8 @@ export default function DashboardPage() {
   const { data: standaloneProjects = [] } = useQuery<any[]>({ queryKey: ["/api/projects/standalone"] });
 
   const today = todayStr();
+  const dayOfWeek = new Date().getDay(); // 0=Sun, 5=Fri
+  const isReviewDay = dayOfWeek === 0 || dayOfWeek === 5;
   const allSessions = books.flatMap((b) => b.sessions ?? []);
 
   // ── Events ─────────────────────────────────────────────────────────────────
@@ -658,7 +660,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <div className="hidden sm:flex gap-2 items-center">
-            <Link href="/review">
+            <Link href="/journal">
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">🪞 Review</Button>
             </Link>
             <Button size="sm" variant="outline" onClick={() => setAddEvent(true)} className="gap-1.5 h-8 text-xs"><Plus size={12} /><Calendar size={12} />Event</Button>
@@ -695,6 +697,22 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Weekly review banner (Fri/Sun) ──────────────────────────────── */}
+      {isReviewDay && (
+        <Link href="/journal">
+          <a className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/20 cursor-pointer hover:bg-violet-100 dark:hover:bg-violet-950/30 transition-colors">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🪞</span>
+              <div>
+                <p className="text-sm font-semibold text-violet-900 dark:text-violet-100">Time for your weekly review</p>
+                <p className="text-xs text-violet-700 dark:text-violet-300">Reflect on the week, capture what you learned, set your focus.</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-violet-500 shrink-0" />
+          </a>
+        </Link>
+      )}
 
       {/* ── 2-column layout ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">

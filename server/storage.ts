@@ -6446,6 +6446,7 @@ export const storage: IStorage = {
       isArchived: false,
       createdAt: now,
       completionsJson: "[]",
+      linkedGoalId: data.linkedGoalId ?? null,
     }).returning();
     return row;
   },

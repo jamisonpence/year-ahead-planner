@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   Plus, Target, Pencil, Trash2, MoreHorizontal, Check,
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
-  ClipboardList, Flag, X,
+  ClipboardList, Flag, X, CalendarCheck,
   Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
   Users, Search, Sparkles, ArrowRight,
 } from "lucide-react";
@@ -844,6 +844,7 @@ export default function GoalsPage() {
     if (horizonTab === "vision") return h === "someday";
     return false;
   });
+  const { data: habitsData = [] } = useQuery<any[]>({ queryKey: ["/api/habits"] });
   const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
   const { data: readingGoal } = useQuery<ReadingGoal | null>({ queryKey: ["/api/reading/goal"] });
@@ -1127,6 +1128,24 @@ export default function GoalsPage() {
                       )}
                     </div>
                   )}
+
+                  {/* Linked habits chips */}
+                  {(() => {
+                    const linkedHabits = habitsData.filter((h: any) => h.linkedGoalId === g.id && !h.isArchived);
+                    if (linkedHabits.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {linkedHabits.slice(0, 3).map((h: any) => (
+                          <span key={h.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] border border-emerald-200 dark:border-emerald-800">
+                            <span>{h.emoji}</span>{h.title}
+                          </span>
+                        ))}
+                        {linkedHabits.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground px-1 py-0.5">+{linkedHabits.length - 3} habits</span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {!linkedPlan && nextAction && (
                     <div className="mb-2 rounded-lg bg-secondary/30 px-2 py-1.5">
@@ -1512,6 +1531,59 @@ export default function GoalsPage() {
                             })}
                           </div>
                         </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Linked habits */}
+                {(() => {
+                  const detailHabits = habitsData.filter((h: any) => h.linkedGoalId === selectedGoal.id && !h.isArchived);
+                  const unlinkHabit = async (habitId: number) => {
+                    await apiRequest("PATCH", `/api/habits/${habitId}`, { linkedGoalId: null });
+                    queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+                  };
+                  const linkHabit = async (habitId: number) => {
+                    await apiRequest("PATCH", `/api/habits/${habitId}`, { linkedGoalId: selectedGoal.id });
+                    queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+                  };
+                  const unlinkedHabits = habitsData.filter((h: any) => !h.isArchived && h.linkedGoalId !== selectedGoal.id);
+                  return (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between mb-2 px-1">
+                        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                          <CalendarCheck size={14} className="text-emerald-600 dark:text-emerald-400" /> Linked Habits
+                        </span>
+                        {detailHabits.length > 0 && (
+                          <span className="text-xs text-muted-foreground">{detailHabits.length}</span>
+                        )}
+                      </div>
+                      {detailHabits.length > 0 && (
+                        <div className="space-y-1.5 mb-2">
+                          {detailHabits.map((h: any) => (
+                            <div key={h.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                              <span className="text-base shrink-0">{h.emoji}</span>
+                              <p className="text-sm font-medium flex-1 truncate">{h.title}</p>
+                              <button
+                                onClick={() => unlinkHabit(h.id)}
+                                className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+                                title="Unlink"
+                              >✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {unlinkedHabits.length > 0 && (
+                        <select
+                          className="w-full text-xs rounded-lg border bg-card px-2 py-1.5 text-muted-foreground"
+                          value=""
+                          onChange={e => { if (e.target.value) linkHabit(Number(e.target.value)); }}
+                        >
+                          <option value="">+ Link a habit…</option>
+                          {unlinkedHabits.map((h: any) => (
+                            <option key={h.id} value={h.id}>{h.emoji} {h.title}</option>
+                          ))}
+                        </select>
                       )}
                     </div>
                   );
