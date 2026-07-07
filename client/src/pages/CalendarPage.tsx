@@ -258,6 +258,29 @@ export default function CalendarPage() {
   const today = todayStr();
   const unscheduledToday = generalTasks.filter(t => !t.completed && t.dueDate === today);
 
+  // ── 21-day alert dismiss ─────────────────────────────────────────────────────
+  const [alertDismissed, setAlertDismissed] = useState<boolean>(() => {
+    try {
+      const until = localStorage.getItem("cal_21day_dismissed_until");
+      if (until && Date.now() < parseInt(until)) return true;
+    } catch {}
+    return false;
+  });
+  const dismiss21Alert = () => {
+    try { localStorage.setItem("cal_21day_dismissed_until", String(Date.now() + 30 * 24 * 60 * 60 * 1000)); } catch {}
+    setAlertDismissed(true);
+  };
+
+  // ── Task due-date dots ───────────────────────────────────────────────────────
+  const tasksByDate = useMemo(() => {
+    const m: Record<string, GeneralTask[]> = {};
+    generalTasks.filter(t => !t.completed && t.dueDate).forEach(t => {
+      if (!m[t.dueDate!]) m[t.dueDate!] = [];
+      m[t.dueDate!].push(t);
+    });
+    return m;
+  }, [generalTasks]);
+
   // ── Google Calendar ──────────────────────────────────────────────────────────
   const { data: gcalStatus, refetch: refetchGcalStatus } = useQuery<{ connected: boolean; lastSync: string | null; callbackUrl?: string }>({
     queryKey: ["/api/gcal/status"],
@@ -386,11 +409,11 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Calendar</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-secondary rounded-lg p-0.5">
-            <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${view === "calendar" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
-              <LayoutGrid size={13} />Calendar
+          <div className="flex items-center bg-secondary rounded-lg p-0.5 border border-border/50">
+            <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors font-medium ${view === "calendar" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-background/50"}`}>
+              <LayoutGrid size={13} />Grid
             </button>
-            <button onClick={() => setView("list")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${view === "list" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}>
+            <button onClick={() => setView("list")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors font-medium ${view === "list" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-background/50"}`}>
               <List size={13} />List
             </button>
           </div>
@@ -449,19 +472,19 @@ export default function CalendarPage() {
 
       {/* ── Unscheduled Today panel ── */}
       {unscheduledToday.length > 0 && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-3">
+        <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/20 p-3">
           <div className="flex items-center gap-2 mb-2">
-            <ClipboardList size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
-            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+            <ClipboardList size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">
               Unscheduled Today
             </p>
-            <span className="text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-700 ml-auto">
+            <span className="text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/40 px-1.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-700 ml-auto">
               {unscheduledToday.length} task{unscheduledToday.length !== 1 ? "s" : ""} due
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {unscheduledToday.map(t => (
-              <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs border border-amber-200 dark:border-amber-700">
+              <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 text-xs border border-indigo-200 dark:border-indigo-700">
                 {t.title}
               </span>
             ))}
@@ -470,7 +493,7 @@ export default function CalendarPage() {
       )}
 
       {/* 21-day alert */}
-      {upcoming21.length > 0 && (
+      {!alertDismissed && upcoming21.length > 0 && (
         <div className="alert-upcoming border rounded-xl p-3">
           <div className="flex items-start gap-2">
             <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
@@ -488,6 +511,13 @@ export default function CalendarPage() {
                 })}
               </div>
             </div>
+            <button
+              onClick={dismiss21Alert}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0 mt-0.5 px-2 py-1 rounded-lg hover:bg-secondary transition-colors"
+              title="Dismiss for 30 days"
+            >
+              <X size={12} /><span className="hidden sm:inline">Dismiss</span>
+            </button>
           </div>
         </div>
       )}
@@ -544,6 +574,17 @@ export default function CalendarPage() {
                         </div>
                       ))}
                       {dayItems.length > 3 && <div className="text-xs text-muted-foreground px-1">+{dayItems.length - 3}</div>}
+                      {/* Task due-date dots */}
+                      {(tasksByDate[key] ?? []).length > 0 && (
+                        <div className="flex items-center gap-0.5 pt-0.5 px-0.5">
+                          {(tasksByDate[key] ?? []).slice(0, 5).map(t => (
+                            <div key={t.id} title={t.title} className="w-1.5 h-1.5 rounded-full bg-indigo-400 dark:bg-indigo-500 shrink-0" />
+                          ))}
+                          {(tasksByDate[key] ?? []).length > 5 && (
+                            <span className="text-[9px] text-muted-foreground leading-none">+{(tasksByDate[key] ?? []).length - 5}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -558,7 +599,7 @@ export default function CalendarPage() {
                 <p className="font-semibold">{format(parseISO(selectedDay), "EEEE, MMMM d, yyyy")}</p>
                 <button onClick={() => setSelectedDay(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
               </div>
-              {selectedItems.length === 0
+              {selectedItems.length === 0 && (tasksByDate[selectedDay] ?? []).length === 0
                 ? <p className="text-sm text-muted-foreground">Nothing scheduled on this day</p>
                 : (
                   <div className="space-y-2">
@@ -571,6 +612,21 @@ export default function CalendarPage() {
                         onDelete={handleDelete}
                       />
                     ))}
+                    {/* Tasks due on this day */}
+                    {(tasksByDate[selectedDay] ?? []).length > 0 && (
+                      <div className={selectedItems.length > 0 ? "mt-3 pt-3 border-t" : ""}>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">Tasks Due</p>
+                        <div className="space-y-1.5">
+                          {(tasksByDate[selectedDay] ?? []).map(t => (
+                            <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl border bg-card">
+                              <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 shrink-0" />
+                              <p className="text-sm flex-1">{t.title}</p>
+                              <a href="#/tasks" className="text-xs text-muted-foreground hover:text-foreground">Tasks →</a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               }
