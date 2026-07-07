@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import FriendsSocialHub from "@/components/FriendsSocialHub";
+import LifeGraphPanel from "@/components/LifeGraphPanel";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
 import {
@@ -1051,13 +1052,17 @@ function PersonTile({ person, allPeople, onEdit, onDelete, color, friend }: {
                 )}
               </div>
             )}
-            {/* 6. Notes & reflection — always last */}
+            {/* 6. Notes & reflection */}
             {person.notes && (
               <div className="flex items-start gap-1.5 pt-1 border-t">
                 <StickyNote size={12} className="text-muted-foreground mt-0.5 shrink-0" />
                 <p className="text-xs text-muted-foreground leading-relaxed">{person.notes}</p>
               </div>
             )}
+            {/* 7. Life Graph connections */}
+            <div className="pt-1 border-t">
+              <LifeGraphPanel entityType="person" entityId={person.id} title="Connections" />
+            </div>
           </div>
         )}
       </div>

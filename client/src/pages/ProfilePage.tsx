@@ -6,8 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette,
   Target, Dumbbell, Star, Heart, Lock, Plus, Check, Sparkles, Flame, Send, X,
-  Loader2,
+  Loader2, GitMerge, UserPlus,
 } from "lucide-react";
+import LifeGraphPanel from "@/components/LifeGraphPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -570,6 +571,14 @@ export default function ProfilePage() {
     enabled: !!userId,
   });
 
+  // Look up the local contacts entry linked to this app user
+  const { data: allPeople = [] } = useQuery<any[]>({
+    queryKey: ["/api/people"],
+    queryFn: () => apiRequest("GET", "/api/people").then(r => r.json()),
+    enabled: !!userId,
+  });
+  const linkedPerson = allPeople.find((p: any) => p.linkedUserId === userId) ?? null;
+
   const [recOpen, setRecOpen] = useState(false);
   const [recType, setRecType] = useState("book");
   const [recTitle, setRecTitle] = useState("");
@@ -731,6 +740,21 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Life graph connections */}
+      {linkedPerson ? (
+        <div className="mb-6">
+          <LifeGraphPanel entityType="person" entityId={linkedPerson.id} title={`Your connections to ${user.name}`} />
+        </div>
+      ) : (
+        <div className="mb-6 p-4 rounded-xl border bg-card flex items-center gap-3">
+          <GitMerge size={18} className="text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Track your connections</p>
+            <p className="text-xs text-muted-foreground">Add {user.name} to your contacts to link places, books, goals, and memories to them.</p>
+          </div>
+        </div>
+      )}
 
       {/* Rec modal */}
       {recOpen && (
