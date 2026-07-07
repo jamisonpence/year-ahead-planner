@@ -17,7 +17,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { bookProgress, daysUntil, BOOK_STATUSES, GENRE_TAGS, readingStreak } from "@/lib/plannerUtils";
 import BookFormModal from "@/components/modals/BookFormModal";
-import GoogleBooksModal, { GBVolume, buildBookPayload } from "@/components/GoogleBooksModal";
 import ReadingSessionModal from "@/components/modals/ReadingSessionModal";
 import type { BookWithSessions, Book, ReadingSession, BookRecommendationWithUser, PublicUser, ReadingGoal } from "@shared/schema";
 
@@ -328,7 +327,6 @@ export default function ReadingPage() {
   }, [tab]);
   const [bookModal, setBookModal] = useState(false);
   const [sessionModal, setSessionModal] = useState(false);
-  const [gbooksOpen, setGbooksOpen] = useState(false);
   const [editBook, setEditBook] = useState<Book | null>(null);
   const [editSession, setEditSession] = useState<ReadingSession | null>(null);
   const [sessionBookId, setSessionBookId] = useState<number | undefined>();
@@ -439,11 +437,6 @@ export default function ReadingPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/books"] }); toast({ title: "Book removed" }); },
   });
 
-  const createMut = useMutation({
-    mutationFn: (d: any) => apiRequest("POST", "/api/books", d),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/books"] }),
-  });
-
   const markFinished = useMutation({
     mutationFn: (b: BookWithSessions) => apiRequest("PATCH", `/api/books/${b.id}`, {
       status: "finished", finishDate: new Date().toISOString().split("T")[0], pagesRead: b.totalPages ?? b.pagesRead,
@@ -482,9 +475,6 @@ export default function ReadingPage() {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={openNewGoalModal} className="gap-1.5">
             <Target size={13} /> Set Goal
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setGbooksOpen(true)} className="gap-1.5">
-            <Search size={13} /> Find Books
           </Button>
           <Button size="sm" onClick={() => { setEditBook(null); setBookModal(true); }} className="gap-1.5">
             <Plus size={13} /> Add Book
@@ -588,13 +578,10 @@ export default function ReadingPage() {
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen size={40} className="mx-auto mb-4 opacity-20" />
           <p className="font-medium">No books here yet</p>
-          <p className="text-sm mt-1 mb-4">Use <strong>Find Books</strong> to search Google Books, or quick-add below</p>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "reading" } }))}
-            className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            + Save a Book
-          </button>
+          <p className="text-sm mt-1 mb-4">Search for a book by title or author, or add one manually</p>
+          <Button size="sm" onClick={() => { setEditBook(null); setBookModal(true); }} className="gap-1.5">
+            <Plus size={13} /> Add Book
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -694,11 +681,6 @@ export default function ReadingPage() {
       {/* Modals */}
       <BookFormModal open={bookModal} onClose={() => { setBookModal(false); setEditBook(null); }} editBook={editBook} />
       {sessionModal && <ReadingSessionModal open onClose={() => { setSessionModal(false); setSessionBookId(undefined); }} books={books} editSession={editSession} defaultBookId={sessionBookId} />}
-      <GoogleBooksModal
-        open={gbooksOpen}
-        onClose={() => setGbooksOpen(false)}
-        onAdd={(payload) => createMut.mutate(payload)}
-      />
       <RecommendModal
         open={!!recommendBook}
         onClose={() => setRecommendBook(null)}
