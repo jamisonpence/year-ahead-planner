@@ -15,7 +15,7 @@ import {
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList, Archive,
-  History, BookOpen,
+  History, BookOpen, Quote,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -163,6 +163,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
   { path: "/library",       label: "Media",                   icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
+  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
   { path: "/hobbies",       label: "Interests",               icon: Sparkles        },
   // ── Places ──
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
@@ -180,7 +181,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
+  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/quotes", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 

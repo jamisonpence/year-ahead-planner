@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import QuotesPage from "@/pages/QuotesPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { JournalEntry } from "@shared/schema";
@@ -12,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BookOpen, Plus, Heart, Search, Pencil, Trash2,
-  ChevronDown, ChevronRight, Star, Calendar, Tag, Quote,
+  ChevronDown, ChevronRight, Star, Calendar, Tag,
   Folder, FolderOpen, FileText, MoreHorizontal, X, FolderPlus, FilePlus, ChevronUp,
 } from "lucide-react";
 
@@ -151,6 +150,8 @@ function EntryCard({
   const excerpt = entry.content.length > 200 ? entry.content.slice(0, 200) + "…" : entry.content;
   const needsExpand = entry.content.length > 200;
   const moodBorder = getMoodBorder(entry.mood);
+  const wordCount = entry.content.split(/\s+/).filter(Boolean).length;
+  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   return (
     <div
@@ -222,24 +223,30 @@ function EntryCard({
       <EntryPhotos entryId={entry.id} />
 
       {/* Footer row */}
-      {(entry.mood || tags.length > 0) && (
-        <div className="px-5 pb-3 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5">
-          {entry.mood && (
+      <div className="px-5 pb-3 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5">
+        <span className="text-xs text-muted-foreground/60">
+          {wordCount} {wordCount === 1 ? "word" : "words"} · {readingTime} min read
+        </span>
+        {entry.mood && (
+          <>
+            <span className="text-muted-foreground/30 text-xs">·</span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <span>{getMoodEmoji(entry.mood)}</span>
               <span>{getMoodLabel(entry.mood)}</span>
             </span>
-          )}
-          {entry.mood && tags.length > 0 && (
+          </>
+        )}
+        {tags.length > 0 && (
+          <>
             <span className="text-muted-foreground/30 text-xs">·</span>
-          )}
-          {tags.map((t) => (
-            <Badge key={t} variant="secondary" className="text-xs py-0 px-1.5">
-              {t}
-            </Badge>
-          ))}
-        </div>
-      )}
+            {tags.map((t) => (
+              <Badge key={t} variant="secondary" className="text-xs py-0 px-1.5">
+                {t}
+              </Badge>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -636,7 +643,7 @@ export default function JournalPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [section, setSection] = useState<"journal" | "quotes" | "mantras" | "notes">("journal");
+  const [showNotes, setShowNotes] = useState(false);
 
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("all");
@@ -809,71 +816,29 @@ export default function JournalPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BookOpen size={22} /> Journal
           </h1>
-          {section === "journal" && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {allEntries.length} {allEntries.length === 1 ? "entry" : "entries"}
-              {favoriteCount > 0 && ` · ${favoriteCount} favorited`}
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {allEntries.length} {allEntries.length === 1 ? "entry" : "entries"}
+            {favoriteCount > 0 && ` · ${favoriteCount} favorited`}
+          </p>
         </div>
-        {section === "journal" && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openAdd(todayISO())}>
-              <Calendar size={14} /> Today
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openWeeklyReview()}>
-              🪞 Weekly Review
-            </Button>
-            <Button size="sm" className="gap-1.5" onClick={() => openAdd()}>
-              <Plus size={15} /> New Entry
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant={showNotes ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowNotes((v) => !v)}
+          >
+            <FileText size={14} /> Notebooks
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openWeeklyReview()}>
+            🪞 Weekly Review
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => openAdd()}>
+            <Plus size={15} /> New Entry
+          </Button>
+        </div>
       </div>
 
-      {/* Section tab switcher */}
-      <div className="flex gap-1 bg-secondary rounded-lg p-1 mb-5">
-        <button
-          onClick={() => setSection("journal")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-            section === "journal" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <BookOpen size={14} /> Journal
-        </button>
-        <button
-          onClick={() => setSection("quotes")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-            section === "quotes" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Quote size={14} /> Quotes
-        </button>
-        <button
-          onClick={() => setSection("mantras")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-            section === "mantras" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          🔥 Mantras
-        </button>
-        <button
-          onClick={() => setSection("notes")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-            section === "notes" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <FileText size={14} /> Notes
-        </button>
-      </div>
-
-      {/* Quotes / Mantras sections */}
-      {section === "quotes" && <QuotesPage embedded embeddedTab="quotes" />}
-      {section === "mantras" && <QuotesPage embedded embeddedTab="mantras" />}
-      {section === "notes" && <NotesSection />}
-
-      {/* Journal content */}
-      {section === "journal" && <>
 
 
       {/* Search + filters */}
@@ -1075,7 +1040,17 @@ export default function JournalPage() {
           </div>
         </>
       )}
-      </>}
+
+      {/* Notebooks — collapsible, toggled from header */}
+      {showNotes && (
+        <div className="mt-8 pt-6 border-t">
+          <div className="flex items-center gap-2 mb-4">
+            <FileText size={16} className="text-muted-foreground" />
+            <h2 className="text-base font-semibold">Notebooks</h2>
+          </div>
+          <NotesSection />
+        </div>
+      )}
     </div>
   );
 }

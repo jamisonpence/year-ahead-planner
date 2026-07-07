@@ -16,7 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
   EventWithTasks, BookWithSessions, WorkoutLog, WorkoutTemplate,
-  GoalWithProjects, Chore, Spot, Quote, Subscription, NutritionGoal, WorkoutPlan, ReadingGoal,
+  GoalWithProjects, Chore, Spot, Quote, Subscription, NutritionGoal, WorkoutPlan, ReadingGoal, Mantra,
 } from "@shared/schema";
 import {
   daysUntil, nextOccurrence, thisWeekDates, todayStr,
@@ -439,6 +439,14 @@ export default function DashboardPage() {
   const visionGoals = goals.filter((g) => (g as any).horizon === "someday" && !g.completedDate);
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   const featuredVision = visionGoals.length > 0 ? visionGoals[dayOfYear % visionGoals.length] : null;
+
+  // ── Mantras ─────────────────────────────────────────────────────────────────
+  const { data: mantras = [] } = useQuery<Mantra[]>({
+    queryKey: ["/api/mantras"],
+    queryFn: () => apiRequest("GET", "/api/mantras").then(r => r.json()),
+  });
+  const activeMantras = mantras.filter((m) => m.isActive);
+  const dailyMantra = activeMantras.length > 0 ? activeMantras[dayOfYear % activeMantras.length] : null;
   const avgGoalPct = activeGoals.length
     ? Math.round(activeGoals.reduce((sum, g) => {
         const pct = g.progressType === "boolean"
@@ -1064,6 +1072,17 @@ export default function DashboardPage() {
                 <p className="text-xs text-violet-500 mt-2">Vision →</p>
               </a>
             </Link>
+          )}
+
+          {/* ── MANTRA ─────────────────────────────────────────────────────── */}
+          {dailyMantra && (
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🔥 Today's Mantra</p>
+              <p className="text-sm font-medium leading-relaxed text-foreground italic">"{dailyMantra.text}"</p>
+              {dailyMantra.intention && (
+                <p className="text-xs text-muted-foreground mt-1.5">{dailyMantra.intention}</p>
+              )}
+            </div>
           )}
 
           {/* ── PROGRESS ───────────────────────────────────────────────────── */}
