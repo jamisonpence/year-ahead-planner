@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { ElementType, ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-  Activity, Archive, BookMarked, ChevronRight, Clock, Heart, Inbox,
-  Library, Lock, Search, Sparkles, StickyNote, BarChart3,
+  Archive, BookMarked, ChevronRight, Heart, Inbox,
+  Library, Search, Sparkles, StickyNote, ThumbsUp, Bookmark,
+  Clock,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 type SavedItem = {
   type: string;
@@ -100,8 +102,21 @@ function SectionHeader({ icon: Icon, title, href }: { icon: ElementType; title: 
   );
 }
 
+const SHORTCUTS = [
+  ["/library", "📚 Media"],
+  ["/hobbies", "🎸 Interests"],
+  ["/health", "🏋️ Health"],
+  ["/places", "📍 Places"],
+  ["/housekeeping", "🏠 Home"],
+  ["/budget", "💰 Finance"],
+  ["/faith", "🕊️ Faith"],
+  ["/politics", "🗳️ Civic"],
+] as const;
+
 export default function MyLifosPage() {
+  const { toast } = useToast();
   const [query, setQuery] = useState("");
+  const [thankedIds, setThankedIds] = useState<Set<number>>(new Set());
   const searchTerm = query.trim();
 
   const { data, isLoading } = useQuery<HubData>({
@@ -115,33 +130,27 @@ export default function MyLifosPage() {
     queryFn: async () => (await apiRequest("GET", `/api/search?q=${encodeURIComponent(searchTerm)}`)).json(),
   });
 
-  const topStats = useMemo(() => {
-    if (!data) return [];
-    return [
-      { label: "Saved items", value: data.lifeStats.totalItems },
-      { label: "Collections", value: data.collections.length },
-      { label: "Favorites", value: data.favorites.length },
-      { label: "Private notes", value: data.privateNotes.total },
-      { label: "Shared with me", value: data.sharedWithMe.length },
-      { label: "Friends", value: data.lifeStats.friendsCount },
-    ];
-  }, [data]);
+  // Quick "Thanks" on shared recommendations
+  const thankMut = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("POST", `/api/recommendations/${id}/react`, { type: "thanks" }),
+    onSettled: (_data, _err, id) => {
+      // Update UI regardless of server response
+      setThankedIds((prev) => new Set([...prev, id]));
+      toast({ title: "Thanks sent! 👍" });
+    },
+  });
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+        {/* ── Header ────────────────────────────────────────────────────── */}
         <header className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider">Library</p>
-              <h1 className="text-2xl font-bold tracking-tight">Saved Life</h1>
-              <p className="text-sm text-muted-foreground mt-1">Everything you save, love, receive, and remember in one place.</p>
-            </div>
-            <Link href="/journal">
-              <a className="inline-flex items-center gap-1.5 text-sm border rounded-lg px-3 py-2 hover:bg-secondary transition-colors">
-                <Lock size={14} /> Private notes
-              </a>
-            </Link>
+          <div>
+            <p className="text-xs font-semibold text-primary uppercase tracking-wider">Library</p>
+            <h1 className="text-2xl font-bold tracking-tight">Saved Life</h1>
+            <p className="text-sm text-muted-foreground mt-1">Your archive — everything you save, love, and receive.</p>
           </div>
 
           <div className={cardClass("p-3")}>
@@ -149,7 +158,7 @@ export default function MyLifosPage() {
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search everything in Library"
                 className="pl-9 h-11"
               />
@@ -175,91 +184,139 @@ export default function MyLifosPage() {
         </header>
 
         {isLoading || !data ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-pulse">
-            <div className="lg:col-span-2 h-52 rounded-xl bg-secondary/50" />
+          <div className="space-y-4 animate-pulse">
+            <div className="flex gap-3">
+              <div className="flex-none w-44 h-40 rounded-xl bg-secondary/50" />
+              <div className="flex-none w-44 h-40 rounded-xl bg-secondary/40" />
+              <div className="flex-none w-44 h-40 rounded-xl bg-secondary/30" />
+            </div>
             <div className="h-52 rounded-xl bg-secondary/40" />
-            <div className="lg:col-span-3 h-28 rounded-xl bg-secondary/30" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-48 rounded-xl bg-secondary/30" />
+              <div className="h-48 rounded-xl bg-secondary/30" />
+            </div>
           </div>
         ) : (
           <>
-            <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              {topStats.map((stat) => (
-                <div key={stat.label} className={cardClass("p-3")}>
-                  <p className="text-xl font-semibold">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
+            {/* ── Pick up where you left off ──────────────────────────────── */}
+            {data.recentlySaved.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-2.5 px-0.5">
+                  <Clock size={13} className="text-muted-foreground" />
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pick up where you left off</h2>
                 </div>
-              ))}
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+                  {data.recentlySaved.slice(0, 5).map((item, idx) => (
+                    <div
+                      key={`${item.type}-${item.title}-${idx}`}
+                      className="flex-none w-44 rounded-xl border bg-card hover:shadow-sm transition-shadow snap-start cursor-pointer"
+                    >
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.title} className="w-full h-24 object-cover rounded-t-xl" />
+                      ) : (
+                        <div className="w-full h-24 rounded-t-xl bg-secondary/50 flex items-center justify-center">
+                          <Archive size={22} className="text-muted-foreground opacity-30" />
+                        </div>
+                      )}
+                      <div className="p-2.5">
+                        <p className="text-sm font-medium truncate leading-snug">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{typeLabel(item.type)}{item.subtitle ? ` · ${item.subtitle}` : ""}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── Browse (Collections by type) ────────────────────────────── */}
+            <section className={cardClass("p-4")}>
+              <SectionHeader icon={Library} title="Browse" />
+              {data.collections.length === 0 ? (
+                <EmptyState>Start saving things to build your collections.</EmptyState>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {data.collections.map((collection) => (
+                    <Link key={collection.key} href={collection.href}>
+                      <a className="group rounded-xl border bg-background p-3 hover:bg-secondary/60 transition-colors block">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold group-hover:text-primary transition-colors truncate">{collection.label}</p>
+                          <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+                        </div>
+                        <p className="text-2xl font-bold mt-2.5 tabular-nums">{collection.count}</p>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{collection.items.join(" · ")}</p>
+                      </a>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </section>
 
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className={cardClass("p-4 lg:col-span-2")}>
-                <SectionHeader icon={Clock} title="Recently saved" />
-                {data.recentlySaved.length === 0 ? (
-                  <EmptyState>Recent saves will appear here as you add to Library.</EmptyState>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {data.recentlySaved.map((item, idx) => (
-                      <div key={`${item.type}-${item.title}-${idx}`} className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.title} className="w-10 h-10 rounded object-cover shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center shrink-0">
-                            <Archive size={15} className="text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{item.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">{typeLabel(item.type)}{item.subtitle ? ` · ${item.subtitle}` : ""}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {/* ── Shared with me + Favorites ──────────────────────────────── */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
+              {/* Shared with me */}
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={Inbox} title="Shared with me" href="/people?tab=discover" />
                 {data.sharedWithMe.length === 0 ? (
-                  <EmptyState>Recommendations from friends will collect here.</EmptyState>
+                  <EmptyState>Recommendations from friends collect here.</EmptyState>
                 ) : (
                   <div className="space-y-2">
-                    {data.sharedWithMe.map((item) => (
-                      <div key={`${item.recType}-${item.id}`} className="rounded-lg border bg-background px-3 py-2">
-                        <p className="text-sm font-medium truncate">{item.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{typeLabel(item.recType)} from {item.fromUser.name}</p>
-                      </div>
-                    ))}
+                    {data.sharedWithMe.map((item) => {
+                      const thanked = thankedIds.has(item.id);
+                      return (
+                        <div key={`${item.recType}-${item.id}`} className="rounded-xl border bg-background p-3">
+                          <div className="flex items-start gap-2.5">
+                            {item.fromUser.avatarUrl ? (
+                              <img src={item.fromUser.avatarUrl} alt={item.fromUser.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 text-xs font-bold">
+                                {item.fromUser.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{item.title}</p>
+                              <p className="text-xs text-muted-foreground">{typeLabel(item.recType)} · from {item.fromUser.name}</p>
+                              {item.note && (
+                                <p className="text-xs text-muted-foreground mt-1.5 italic line-clamp-2 bg-secondary/50 rounded px-2 py-1">
+                                  "{item.note}"
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-border/60">
+                            <button
+                              onClick={() => !thanked && thankMut.mutate(item.id)}
+                              disabled={thanked || thankMut.isPending}
+                              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                                thanked
+                                  ? "bg-primary/10 border-primary/20 text-primary cursor-default"
+                                  : "border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              <ThumbsUp size={11} />
+                              {thanked ? "Thanks sent" : "Thanks"}
+                            </button>
+                            <button
+                              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Bookmark size={11} /> Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            </section>
 
-            <section className={cardClass("p-4")}>
-              <SectionHeader icon={Library} title="Collections" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {data.collections.map((collection) => (
-                  <Link key={collection.key} href={collection.href}>
-                    <a className="rounded-xl border bg-background p-3 hover:bg-secondary/60 transition-colors">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">{collection.label}</p>
-                        <ChevronRight size={14} className="text-muted-foreground" />
-                      </div>
-                      <p className="text-2xl font-semibold mt-3">{collection.count}</p>
-                      <p className="text-xs text-muted-foreground mt-1 truncate">{collection.items.join(" · ")}</p>
-                    </a>
-                  </Link>
-                ))}
-              </div>
-            </section>
-
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Favorites */}
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={Heart} title="Favorites" />
                 {data.favorites.length === 0 ? (
-                  <EmptyState>Heart items across MyLifos to build your favorites.</EmptyState>
+                  <EmptyState>Heart items across Library to build your favorites.</EmptyState>
                 ) : (
                   <div className="space-y-2">
-                    {data.favorites.slice(0, 6).map((item) => (
+                    {data.favorites.slice(0, 8).map((item) => (
                       <Link key={`${item.type}-${item.id}`} href={item.href}>
                         <a className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 hover:bg-secondary/60 transition-colors">
                           <Heart size={13} className="text-rose-500 fill-rose-500 shrink-0" />
@@ -267,12 +324,17 @@ export default function MyLifosPage() {
                             <span className="block text-sm font-medium truncate">{item.title}</span>
                             <span className="block text-xs text-muted-foreground truncate">{typeLabel(item.type)}{item.subtitle ? ` · ${item.subtitle}` : ""}</span>
                           </span>
+                          <ChevronRight size={12} className="text-muted-foreground shrink-0 ml-auto" />
                         </a>
                       </Link>
                     ))}
                   </div>
                 )}
               </div>
+            </section>
+
+            {/* ── Private Notes + Browse Shortcuts ────────────────────────── */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
               <div className={cardClass("p-4")}>
                 <SectionHeader icon={StickyNote} title="Private notes" href="/journal" />
@@ -293,47 +355,16 @@ export default function MyLifosPage() {
               </div>
 
               <div className={cardClass("p-4")}>
-                <SectionHeader icon={BarChart3} title="Life stats" />
-                <div className="space-y-3">
-                  {[
-                    ["Media", (data.lifeStats.counts.reading ?? 0) + (data.lifeStats.counts.movies ?? 0) + (data.lifeStats.counts.music ?? 0)],
-                    ["Health", (data.lifeStats.counts.workouts ?? 0) + (data.lifeStats.counts.recipes ?? 0)],
-                    ["Places", data.lifeStats.counts.spots ?? 0],
-                    ["Goals", data.lifeStats.counts.goals ?? 0],
-                    ["People", data.lifeStats.counts.relationships ?? 0],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-medium">{value}</span>
-                    </div>
+                <SectionHeader icon={Sparkles} title="Browse everything" />
+                <div className="flex flex-wrap gap-2">
+                  {SHORTCUTS.map(([href, label]) => (
+                    <Link key={href} href={href}>
+                      <a className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
+                        <BookMarked size={12} className="shrink-0 opacity-60" /> {label}
+                      </a>
+                    </Link>
                   ))}
-                  <div className="pt-3 border-t flex items-center gap-2 text-xs text-muted-foreground">
-                    <Activity size={13} />
-                    <span>{data.lifeStats.recommendationsSent} recommendations sent</span>
-                  </div>
                 </div>
-              </div>
-            </section>
-
-            <section className={cardClass("p-4")}>
-              <SectionHeader icon={Sparkles} title="Repository shortcuts" />
-              <div className="flex flex-wrap gap-2">
-                {[
-                  ["/library", "Media"],
-                  ["/hobbies", "Interests"],
-                  ["/health", "Health"],
-                  ["/places", "Places"],
-                  ["/housekeeping", "Home"],
-                  ["/budget", "Finance"],
-                  ["/faith", "Faith"],
-                  ["/politics", "Civic"],
-                ].map(([href, label]) => (
-                  <Link key={href} href={href}>
-                    <a className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
-                      <BookMarked size={13} /> {label}
-                    </a>
-                  </Link>
-                ))}
               </div>
             </section>
           </>
