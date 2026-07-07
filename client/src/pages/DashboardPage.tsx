@@ -79,6 +79,37 @@ const DEFAULT_VISIBLE: Record<SectionId, boolean> = {
   day_planner: false, memories: false, quote: false,
 };
 
+// Persona-matched first-run defaults.
+// Applied only when dashboard_sections_v2 is absent (user has never customized).
+// Each entry is a full override of DEFAULT_VISIBLE.
+const PERSONA_SECTION_DEFAULTS: Record<string, Record<SectionId, boolean>> = {
+  // Build Momentum: Today tasks/habits, weekly focus, up next, goal progress
+  momentum: {
+    today: true, focus: true, up_next: true, progress: true,
+    social_feed: false, needs_attention: false, events: false,
+    recent_activity: false, quick_jump: false, day_planner: false, memories: false, quote: false,
+  },
+  // Health & Energy: Today (workout items), focus, habits + goal progress, recent activity for logs
+  health: {
+    today: true, focus: true, up_next: true, progress: true, recent_activity: true,
+    social_feed: false, needs_attention: false, events: false,
+    quick_jump: false, day_planner: false, memories: false, quote: false,
+  },
+  // Save & Explore Life: recent saves, friend highlights (sharing), up next, memories, a daily quote
+  explore_life: {
+    today: false, focus: false, social_feed: true, recent_activity: true,
+    up_next: true, memories: true, quote: true,
+    needs_attention: false, progress: false, events: false,
+    quick_jump: false, day_planner: false,
+  },
+  // Connect with People: friend highlights, today (shared events), recent activity, quick jump
+  connect: {
+    today: true, social_feed: true, recent_activity: true, quick_jump: true,
+    up_next: true, focus: false, progress: false,
+    needs_attention: false, events: false, memories: false, quote: false, day_planner: false,
+  },
+};
+
 // ── On This Day (memories resurfacing) ────────────────────────────────────────
 function OnThisDay() {
   const { data } = useQuery<{ items: Array<{ type: string; emoji: string; href: string; id: number; title: string; sub: string | null; date: string; when: string }> }>({
@@ -116,6 +147,7 @@ function loadVisibility(): Record<SectionId, boolean> {
     const raw = localStorage.getItem("dashboard_sections_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Migrate users who had the old all-on default saved before DEFAULT_VISIBLE was introduced
       const wasOldDefault =
         parsed &&
         typeof parsed === "object" &&
@@ -123,6 +155,11 @@ function loadVisibility(): Record<SectionId, boolean> {
         Object.entries(parsed).every(([key, value]) => ALL_ON[key as SectionId] === value);
       if (wasOldDefault) return { ...DEFAULT_VISIBLE };
       return { ...DEFAULT_VISIBLE, ...parsed };
+    }
+    // No saved customization — apply persona-specific defaults for new users
+    const persona = localStorage.getItem("mylifos_onboarding_persona") ?? "";
+    if (persona in PERSONA_SECTION_DEFAULTS) {
+      return { ...PERSONA_SECTION_DEFAULTS[persona] };
     }
   } catch {}
   return { ...DEFAULT_VISIBLE };
