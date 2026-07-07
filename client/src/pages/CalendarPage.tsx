@@ -48,13 +48,22 @@ function isRestLabel(label: string): boolean {
   return l.includes("rest") || l.includes("cross-train") || l.includes("cross train") || l === "off";
 }
 
-function parsePlanSched(json: string) {
+function parsePlanSched(json: string): { isV2: boolean; isWizard: boolean; weeks: any[]; flatDays: any[]; wizardWeeks: Record<string, any[]> } {
+  const empty = { isV2: false, isWizard: false, weeks: [], flatDays: [], wizardWeeks: {} };
   try {
     const raw = JSON.parse(json);
-    if (!Array.isArray(raw) || raw.length === 0) return { isV2: true, weeks: [], flatDays: [] as any[] };
-    if ("week" in raw[0]) return { isV2: true, weeks: raw, flatDays: [] as any[] };
-    return { isV2: false, weeks: [], flatDays: raw };
-  } catch { return { isV2: true, weeks: [], flatDays: [] as any[] }; }
+    // General Fitness Wizard format: { plan: { weeks: { A: [...], B: [...] } } }
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const wizardPlan = raw.plan ?? raw;
+      if (wizardPlan?.weeks && typeof wizardPlan.weeks === "object" && !Array.isArray(wizardPlan.weeks)) {
+        return { isV2: false, isWizard: true, weeks: [], flatDays: [], wizardWeeks: wizardPlan.weeks };
+      }
+      return empty;
+    }
+    if (!Array.isArray(raw) || raw.length === 0) return { ...empty, isV2: true };
+    if ("week" in raw[0]) return { isV2: true, isWizard: false, weeks: raw, flatDays: [], wizardWeeks: {} };
+    return { isV2: false, isWizard: false, weeks: [], flatDays: raw, wizardWeeks: {} };
+  } catch { return empty; }
 }
 
 function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
@@ -67,7 +76,24 @@ function buildPlannedItems(plans: WorkoutPlan[]): UnifiedItem[] {
     const week1Mon = addDays(start, dow === 0 ? -6 : 1 - dow);
     const sched = parsePlanSched(plan.scheduleJson ?? "[]");
 
-    if (sched.isV2) {
+    if (sched.isWizard) {
+      // A/B alternating weeks: week 1 = A, week 2 = B, week 3 = A, ...
+      const weekKeys = Object.keys(sched.wizardWeeks); // e.g. ["A", "B"]
+      if (weekKeys.length === 0) return;
+      for (let w = 1; w <= plan.durationWeeks; w++) {
+        const weekKey = weekKeys[(w - 1) % weekKeys.length];
+        const sessions: any[] = sched.wizardWeeks[weekKey] ?? [];
+        const weekMon = addDays(week1Mon, (w - 1) * 7);
+        sessions.forEach((s: any) => {
+          const dayOfWeek: string = (s.day ?? "").toLowerCase();
+          if (!dayOfWeek || !(dayOfWeek in DAY_OFFSETS)) return;
+          const label = s.name ?? [s.session_type, s.marker].filter(Boolean).join(" · ") ?? plan.name;
+          if (isRestLabel(label)) return;
+          const date = format(addDays(weekMon, DAY_OFFSETS[dayOfWeek]), "yyyy-MM-dd");
+          items.push({ id: `wp:${plan.id}:${w}:${dayOfWeek}`, title: label, date, type: "workout_planned", completed: false, sourceId: plan.id });
+        });
+      }
+    } else if (sched.isV2) {
       sched.weeks.forEach((wk: any) => {
         const weekMon = addDays(week1Mon, (wk.week - 1) * 7);
         (wk.days ?? []).forEach((entry: any) => {
