@@ -3219,7 +3219,7 @@ export default function RelationshipsPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-primary">Find Friends</p>
-              <p className="text-xs text-muted-foreground">Search for people on the app to send friend requests</p>
+              <p className="text-xs text-muted-foreground">Find people already on the app — most useful once you have a few saved interests</p>
             </div>
           </div>
           {searchOpen && (
@@ -3271,8 +3271,8 @@ export default function RelationshipsPage() {
                 {count === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <UserCheck size={30} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-sm font-medium text-foreground">No friends connected yet</p>
-                    <p className="text-xs mt-1">Connect with people on the app to share what you're reading, watching, and saving.</p>
+                    <p className="text-sm font-medium text-foreground">No app friends yet</p>
+                    <p className="text-xs mt-1">Save books, places, and interests first — then find friends on the app to share them with.</p>
                   </div>
                 ) : (
                   <div className="pt-3 space-y-2">

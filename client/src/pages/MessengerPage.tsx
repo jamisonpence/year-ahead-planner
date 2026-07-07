@@ -1248,15 +1248,22 @@ export default function MessengerPage() {
               <p className="text-sm font-medium">
                 {search ? "Nothing found" : view === "channels" ? "No channels yet" : "No messages yet"}
               </p>
-              {!search && (
+              {!search && view === "channels" && (
                 <p className="text-xs mt-1">
-                  <button
-                    className="text-primary hover:underline"
-                    onClick={() => (view === "channels" ? setShowGroupDialog(true) : setShowDMDialog(true))}
-                  >
-                    {view === "channels" ? "Create a channel for your crew" : "Start a conversation"}
+                  <button className="text-primary hover:underline" onClick={() => setShowGroupDialog(true)}>
+                    Create a channel for your crew
                   </button>
                 </p>
+              )}
+              {!search && view === "chats" && friends.length > 0 && (
+                <p className="text-xs mt-1">
+                  <button className="text-primary hover:underline" onClick={() => setShowDMDialog(true)}>
+                    Start a conversation
+                  </button>
+                </p>
+              )}
+              {!search && view === "chats" && friends.length === 0 && (
+                <p className="text-xs mt-1 px-4">Add friends in <span className="text-primary">People</span> first, then message them here.</p>
               )}
             </div>
           ) : (

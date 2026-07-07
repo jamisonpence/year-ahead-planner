@@ -286,10 +286,11 @@ interface ContactMatch extends SearchResult {
   contactName: string | null;
 }
 
-function ContactMatchesSection({ onSendRequest, onAccept, sendPending }: {
+function ContactMatchesSection({ onSendRequest, onAccept, sendPending, libraryCount }: {
   onSendRequest: (id: number) => void;
   onAccept: (reqId: number) => void;
   sendPending: boolean;
+  libraryCount: number;
 }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -354,14 +355,22 @@ function ContactMatchesSection({ onSendRequest, onAccept, sendPending }: {
           ))}
         </>
       )}
-      <button
-        onClick={() => inviteMut.mutate()}
-        disabled={inviteMut.isPending}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-violet-400/40 text-violet-500 text-sm font-medium hover:bg-violet-500/5 disabled:opacity-50 transition-colors"
-      >
-        {inviteMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
-        Copy my invite link
-      </button>
+      {libraryCount >= 3 ? (
+        <button
+          onClick={() => inviteMut.mutate()}
+          disabled={inviteMut.isPending}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-violet-400/40 text-violet-500 text-sm font-medium hover:bg-violet-500/5 disabled:opacity-50 transition-colors"
+        >
+          {inviteMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+          Copy my invite link
+        </button>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border bg-secondary/30 px-4 py-3 text-center">
+          <p className="text-xs text-muted-foreground">
+            Save a few books, places, or interests first — then invite friends to compare tastes.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -848,6 +857,16 @@ export default function FriendsSocialHub() {
     queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()),
   });
 
+  // Library richness — gates invite prompt
+  const { data: _hub } = useQuery<{ lifeStats: { counts: Record<string, number> } }>({
+    queryKey: ["/api/mylifos/hub"],
+    queryFn: () => apiRequest("GET", "/api/mylifos/hub").then(r => r.json()),
+  });
+  const hubCounts = _hub?.lifeStats?.counts ?? {};
+  const hubLibraryCount = (hubCounts.reading ?? 0) + (hubCounts.movies ?? 0) +
+    (hubCounts.music ?? 0) + (hubCounts.recipes ?? 0) +
+    (hubCounts.spots ?? 0) + (hubCounts.hobbies ?? 0) + (hubCounts.journal ?? 0);
+
   const { data: requests = { incoming: [], outgoing: [] } } = useQuery<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>({
     queryKey: ["/api/friend-requests"],
     queryFn: () => apiRequest("GET", "/api/friend-requests").then(r => r.json()),
@@ -907,6 +926,7 @@ export default function FriendsSocialHub() {
         onSendRequest={(id) => sendMut.mutate(id)}
         onAccept={(reqId) => respondMut.mutate({ id: reqId, status: "accepted" })}
         sendPending={sendMut.isPending}
+        libraryCount={hubLibraryCount}
       />
 
       {/* Incoming Friend Requests */}

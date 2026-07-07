@@ -261,8 +261,11 @@ function StartHereCard() {
     dynamic.push({ id: "workout_to_habit", emoji: "💪", label: "Turn your workouts into a daily habit", href: "/habits" });
   }
 
-  // Library item saved + friends exist → suggest sharing
-  if (firstLibName && people.length > 0) {
+  // Compute library richness — gate social prompts until user has something to share
+  const libraryCount = books.length + spots.length + recipes.length + music.length;
+
+  // Library item saved + friends exist + enough content → suggest sharing
+  if (firstLibName && people.length > 0 && libraryCount >= 3) {
     dynamic.push({ id: "share_rec", emoji: "💬", label: `Share "${firstLibName}" with a friend`, href: "/messenger" });
   } else if (books.length > 0) {
     const bName = (books[0].title ?? "your book").slice(0, 22);
@@ -272,8 +275,8 @@ function StartHereCard() {
     dynamic.push({ id: "spot_note", emoji: "📍", label: `Add notes about "${sName}"`, href: "/places" });
   }
 
-  // People added → shared interest or rec (if share_rec not already suggested)
-  if (people.length > 0 && !dynamic.find(a => a.id === "share_rec")) {
+  // People added + enough library content → shared interest or rec
+  if (people.length > 0 && libraryCount >= 3 && !dynamic.find(a => a.id === "share_rec")) {
     dynamic.push({ id: "people_action", emoji: "👤", label: "Add a shared interest or send a rec", href: "/people" });
   }
 
@@ -286,7 +289,9 @@ function StartHereCard() {
     ...(books.length > 0         ? ["save_book"]           : []),
     ...(spots.length > 0         ? ["add_place"]           : []),
     ...(recipes.length > 0       ? ["save_recipe"]         : []),
-    ...(people.length > 0        ? ["add_person", "invite"]: []),
+    ...(people.length > 0        ? ["add_person"]          : []),
+    // Don't suggest invite/social until user has built a meaningful library
+    ...(libraryCount < 3         ? ["invite", "send_rec", "people_action"] : []),
   ]);
   const staticFallback = buildStartActions(persona, intentions)
     .filter(a => !completedFirstSteps.has(a.id));
@@ -1979,6 +1984,13 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
   });
   void 0; // (own-activity fallback removed — friends' feed stays friends-only)
 
+  // Check if user has built enough of a library to make social meaningful
+  const { data: _books = [] }   = useQuery<any[]>({ queryKey: ["/api/books"]          });
+  const { data: _spots = [] }   = useQuery<any[]>({ queryKey: ["/api/spots"]          });
+  const { data: _recipes = [] } = useQuery<any[]>({ queryKey: ["/api/recipes"]        });
+  const { data: _music = [] }   = useQuery<any[]>({ queryKey: ["/api/music/artists"]  });
+  const feedLibraryCount = _books.length + _spots.length + _recipes.length + _music.length;
+
   if (isLoading) {
     return (
       <div className="bg-card border rounded-xl p-4">
@@ -1998,11 +2010,22 @@ function SocialFeed({ currentUserId }: { currentUserId?: number }) {
           <Users size={14} className="text-primary" />
           <span className="text-sm font-semibold">Friend Highlights</span>
         </div>
-        <div className="text-center py-4 text-muted-foreground">
-          <Users size={24} className="opacity-20 mx-auto mb-2" />
-          <p className="text-xs mb-2">Add friends to see their activity</p>
-          <Link href="/relationships"><a className="text-xs text-primary hover:underline">Go to Friends</a></Link>
-        </div>
+        {feedLibraryCount < 3 ? (
+          // Not enough content yet — encourage building library first
+          <div className="text-center py-4 text-muted-foreground">
+            <Users size={24} className="opacity-20 mx-auto mb-2" />
+            <p className="text-xs font-medium text-foreground mb-1">Save a few things first</p>
+            <p className="text-xs mb-3">Add books, places, or recipes to have something worth sharing when you connect with friends.</p>
+            <Link href="/library"><a className="text-xs text-primary hover:underline font-medium">Start saving →</a></Link>
+          </div>
+        ) : (
+          // Has content — invite prompt makes sense
+          <div className="text-center py-4 text-muted-foreground">
+            <Users size={24} className="opacity-20 mx-auto mb-2" />
+            <p className="text-xs mb-2">Invite a friend to compare interests and share recommendations.</p>
+            <InviteFriendCTA />
+          </div>
+        )}
       </div>
     );
   }
