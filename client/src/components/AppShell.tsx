@@ -154,7 +154,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/goals",         label: "Goals",                   icon: Target          },
   { path: "/tasks",         label: "Tasks",                   icon: ClipboardList   },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
-  { path: "/journal",       label: "Journal",                 icon: PenLine         },
+  { path: "/journal",       label: "Journal",                 icon: PenLine,        matchPaths: ["/quotes"] },
   { path: "/review",        label: "Review",                  icon: History         },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
@@ -164,7 +164,6 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
   { path: "/library",       label: "Media",                   icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
-  { path: "/quotes",        label: "Quotes",                  icon: Quote           },
   { path: "/hobbies",       label: "Interests",               icon: Sparkles        },
   // ── Places ──
   { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
@@ -181,7 +180,7 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/quotes", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/beliefs"] },
+  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/beliefs"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 

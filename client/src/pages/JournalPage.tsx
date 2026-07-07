@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import QuotesPage from "@/pages/QuotesPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { JournalEntry } from "@shared/schema";
@@ -11,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BookOpen, Plus, Heart, Search, Pencil, Trash2,
-  ChevronDown, ChevronRight, Star, Calendar, Tag,
+  ChevronDown, ChevronRight, Star, Calendar, Tag, Quote,
   Folder, FolderOpen, FileText, MoreHorizontal, X, FolderPlus, FilePlus, ChevronUp,
 } from "lucide-react";
 
@@ -643,6 +644,7 @@ export default function JournalPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  const [section, setSection] = useState<"journal" | "quotes">("journal");
   const [showNotes, setShowNotes] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -809,7 +811,39 @@ export default function JournalPage() {
   const hasFilters = search || moodFilter !== "all" || favOnly;
 
   return (
-    <div className="p-3 sm:p-6 max-w-3xl mx-auto">
+    <div>
+      {/* Tab strip */}
+      <div className="sticky top-0 z-10 bg-background border-b px-4 sm:px-6">
+        <div className="flex gap-0">
+          <button
+            onClick={() => setSection("journal")}
+            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              section === "journal"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BookOpen size={14} /> Journal
+          </button>
+          <button
+            onClick={() => setSection("quotes")}
+            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              section === "quotes"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Quote size={14} /> Quotes
+          </button>
+        </div>
+      </div>
+
+      {/* Quotes sub-page */}
+      {section === "quotes" && <QuotesPage />}
+
+      {/* Journal content */}
+      <div className={`p-3 sm:p-6 max-w-3xl mx-auto${section !== "journal" ? " hidden" : ""}`}>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
@@ -1051,6 +1085,7 @@ export default function JournalPage() {
           <NotesSection />
         </div>
       )}
+      </div>{/* end journal content */}
     </div>
   );
 }
