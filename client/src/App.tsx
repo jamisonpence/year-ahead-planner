@@ -86,6 +86,7 @@ const HobbiesPage = lazyPage(() => import("@/pages/HobbiesPage"));
 const HobbyDetailPage = lazyPage(() => import("@/pages/HobbyDetailPage"));
 const HobbyPlanDetailPage = lazyPage(() => import("@/pages/HobbyPlanDetailPage"));
 const HabitsPage = lazyPage(() => import("@/pages/HabitsPage"));
+const BeliefsPage = lazyPage(() => import("@/pages/BeliefsPage"));
 const FaithPage = lazyPage(() => import("@/pages/FaithPage"));
 const HealthPage = lazyPage(() => import("@/pages/HealthPage"));
 const NutritionPage = lazyPage(() => import("@/pages/NutritionPage"));
@@ -190,6 +191,7 @@ function AuthenticatedApp() {
         <Route path="/hobbies/:id/plans/:planId" component={HobbyPlanDetailPage} />
         <Route path="/hobbies/:id" component={HobbyDetailPage} />
         <Route path="/habits" component={HabitsPage} />
+        <Route path="/beliefs" component={BeliefsPage} />
         <Route path="/faith" component={FaithPage} />
         <Route path="/nutrition" component={NutritionPage} />
         <Route path="/politics" component={PoliticsPage} />

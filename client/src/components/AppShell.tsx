@@ -38,6 +38,7 @@ const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
   "/quotes":        "Your saved quotes are visible to friends",
   "/art":           "Your art collection is visible to friends",
   "/hobbies":       "Your hobbies are visible to friends",
+  "/beliefs":       "Your Faith and Civic Life content is visible to friends (Prayer List is always private)",
   "/faith":         "Sacred Texts, Practices, and Teachings are visible to friends (Prayer List is always private)",
   "/politics":      "Your political notes are visible to friends",
 };
@@ -170,9 +171,8 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet          },
   { path: "/housekeeping",  label: "Home",                    icon: Home            },
-  // ── Beliefs & Society ──
-  { path: "/faith",         label: "Faith",                   icon: Flame           },
-  { path: "/politics",      label: "Politics & Civic Life",   icon: Landmark,       beta: true },
+  // ── Beliefs ──
+  { path: "/beliefs",       label: "Beliefs",                 icon: Flame,          matchPaths: ["/faith", "/politics"] },
 ];
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
@@ -181,13 +181,13 @@ const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] =
   { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
   { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
   { key: "people",    label: "People",            paths: ["/people"] },
-  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/quotes", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/faith", "/politics"] },
+  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/quotes", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/beliefs"] },
   { key: "messages",  label: null,                paths: ["/messenger"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
 const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover"];
-const MYLIFOS_PATHS = ["/mylifos", "/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/faith", "/politics", "/plants", "/quotes"];
+const MYLIFOS_PATHS = ["/mylifos", "/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/beliefs", "/faith", "/politics", "/plants", "/quotes"];
 
 function basePath(path: string) {
   return path.split("?")[0];
