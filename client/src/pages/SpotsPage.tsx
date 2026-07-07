@@ -19,8 +19,9 @@ import {
   CheckCircle2, Circle, StickyNote, Sunrise, Sparkles, MessageCircle,
   Backpack, ClipboardList, Star, ChevronDown, ChevronUp, RefreshCw,
   SlidersHorizontal, List, Map as MapIcon, CheckCheck, Share2,
-  FolderOpen, FolderPlus, FolderEdit, Users,
+  FolderOpen, FolderPlus, FolderEdit, Users, GitMerge,
 } from "lucide-react";
+import LifeGraphPanel from "@/components/LifeGraphPanel";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -494,6 +495,7 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, o
   onRate: (rating: number) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showConnections, setShowConnections] = useState(false);
   const location = [spot.neighborhood, spot.city].filter(Boolean).join(", ");
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([spot.name, spot.address, spot.city].filter(Boolean).join(", "))}`;
   const thumbBg = TYPE_THUMB[spot.type] ?? "bg-gray-100 text-gray-500";
@@ -567,6 +569,23 @@ function SpotCard({ spot, onEdit, onDelete, onToggleFav, onShare, onAddToTrip, o
             )}
           </div>
         </div>
+
+        {/* Connections toggle bar */}
+        <button
+          onClick={() => setShowConnections(v => !v)}
+          className="flex w-full items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/50 border-t transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <GitMerge size={11} />
+            Connections — who, why, what
+          </span>
+          {showConnections ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        </button>
+        {showConnections && (
+          <div className="px-3 pb-3 border-t-0">
+            <LifeGraphPanel entityType="place" entityId={spot.id} title="" />
+          </div>
+        )}
       </div>
 
       {/* Overflow menu bottom sheet */}
