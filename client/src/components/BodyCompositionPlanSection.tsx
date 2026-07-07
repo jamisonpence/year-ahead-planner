@@ -1583,11 +1583,6 @@ export default function BodyCompositionPlanSection({
     onExternalWizardClose?.();
   }
 
-  // Hide section when no plans exist and no modal is active
-  if (plans.length === 0 && !wizardOpen && checkInPlanId === null) {
-    return null;
-  }
-
   const { data: allPlans = [] } = useQuery<WorkoutPlan[]>({
     queryKey: ["/api/workout-plans"],
     queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
@@ -1615,6 +1610,11 @@ export default function BodyCompositionPlanSection({
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/workout-plans"] }); toast({ title: "Plan deactivated" }); },
     onError: () => toast({ title: "Failed to deactivate plan", variant: "destructive" }),
   });
+
+  // Hide section when no plans exist and no modal is active (all hooks run above)
+  if (plans.length === 0 && !wizardOpen && checkInPlanId === null) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">
