@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, X } from "lucide-react";
 import GeneralFitnessWizard from "@/components/modals/GeneralFitnessWizard";
+import PlannerSetup from "@/pages/planner/Setup";
 
 // ── Persona definitions ───────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 
 type CreateOptionKey =
   | "goal" | "task" | "habit"
-  | "workout_log" | "health_goal" | "fitness_habit" | "training_plan"
+  | "workout_log" | "health_goal" | "fitness_habit" | "training_plan" | "meal_plan"
   | "book" | "place" | "recipe"
   | "person" | "interest" | "book_share";
 
@@ -90,9 +91,10 @@ const CREATE_OPTIONS: Record<PersonaKey, CreateOption[]> = {
     { key: "habit", emoji: "🔥", label: "Build a habit", sub: "A daily action you want to lock in",          href: "/habits" },
   ],
   health: [
-    { key: "training_plan", emoji: "🏋️", label: "Build a Training Plan", sub: "Get an AI-generated workout schedule", href: "/health"  },
-    { key: "health_goal",   emoji: "🎯", label: "Set a health goal",   sub: "A fitness or wellness target",          href: "/goals"   },
-    { key: "fitness_habit", emoji: "🔥", label: "Create a fitness habit", sub: "A daily movement or wellness habit", href: "/habits"  },
+    { key: "training_plan", emoji: "🏋️", label: "Build a Training Plan", sub: "Get an AI-generated workout schedule",  href: "/health"              },
+    { key: "meal_plan",     emoji: "🍽️", label: "Create a Meal Plan",    sub: "AI meal plan tailored to your goals",  href: "/health?tab=nutrition" },
+    { key: "health_goal",   emoji: "🎯", label: "Set a health goal",     sub: "A fitness or wellness target",          href: "/goals"                },
+    { key: "fitness_habit", emoji: "🔥", label: "Create a fitness habit", sub: "A daily movement or wellness habit",   href: "/habits"               },
   ],
   explore_life: [
     { key: "book",   emoji: "📚", label: "Save a book",   sub: "Something you want to read",          href: "/library" },
@@ -417,6 +419,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const [createdLabel, setCreatedLabel] = useState<string | null>(null);
   const [createdHref, setCreatedHref] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [mealWizardOpen, setMealWizardOpen] = useState(false);
+  const anyWizardOpen = wizardOpen || mealWizardOpen;
 
   const completeMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/me/complete-onboarding"),
@@ -450,9 +454,9 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     });
   }
 
-  function handleCreated(label: string) {
+  function handleCreated(label: string, href?: string) {
     setCreatedLabel(label);
-    setCreatedHref(selectedOption?.href ?? null);
+    setCreatedHref(href ?? selectedOption?.href ?? null);
     // Brief pause to show success, then advance
     setTimeout(() => setScreen(4), 900);
   }
@@ -474,9 +478,30 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     <GeneralFitnessWizard
       open={wizardOpen}
       onClose={() => setWizardOpen(false)}
-      onSaved={() => { setCreatedHref("/health"); handleCreated("Training Plan"); }}
+      onSaved={() => handleCreated("Training Plan", "/health")}
     />
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    {mealWizardOpen && (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[92vh]">
+          <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+            <div>
+              <h2 className="font-semibold flex items-center gap-2">🍽️ Meal Plan Setup</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Four quick steps to build your plan</p>
+            </div>
+            <button onClick={() => setMealWizardOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5">
+            <PlannerSetup
+              onClose={() => setMealWizardOpen(false)}
+              onSaved={() => handleCreated("Meal Plan", "/health?tab=nutrition")}
+            />
+          </div>
+        </div>
+      </div>
+    )}
+    <div className={`fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 ${anyWizardOpen ? "hidden" : ""}`}>
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[92vh]">
 
         {/* Progress bar */}
@@ -617,7 +642,11 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     {options.map(opt => (
                       <button
                         key={opt.key}
-                        onClick={() => opt.key === "training_plan" ? setWizardOpen(true) : setSelectedOption(opt)}
+                        onClick={() => {
+                          if (opt.key === "training_plan") setWizardOpen(true);
+                          else if (opt.key === "meal_plan") setMealWizardOpen(true);
+                          else setSelectedOption(opt);
+                        }}
                         className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
                       >
                         <span className="text-2xl shrink-0">{opt.emoji}</span>
