@@ -1583,6 +1583,11 @@ export default function BodyCompositionPlanSection({
     onExternalWizardClose?.();
   }
 
+  // Hide section when no plans exist and no modal is active
+  if (plans.length === 0 && !wizardOpen && checkInPlanId === null) {
+    return null;
+  }
+
   const { data: allPlans = [] } = useQuery<WorkoutPlan[]>({
     queryKey: ["/api/workout-plans"],
     queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
