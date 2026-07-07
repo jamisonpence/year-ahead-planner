@@ -69,6 +69,19 @@ import { eq, asc, desc, and, inArray, or, isNull } from "drizzle-orm";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || "postgresql://localhost/planner" });
 const db = drizzle(pool);
 
+// ── Schema migrations ─────────────────────────────────────────────────────────
+// Add new columns here with IF NOT EXISTS so they apply automatically on startup
+// without needing drizzle-kit push in production.
+export async function runMigrations() {
+  const migrations = [
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS linked_goal_id integer`,
+  ];
+  for (const sql of migrations) {
+    await pool.query(sql);
+  }
+  console.log("[migrations] schema up to date");
+}
+
 // ── OAuth token encryption ────────────────────────────────────────────────────
 // Third-party OAuth tokens (Google, Strava, Facebook, LinkedIn) are encrypted
 // at rest with AES-256-GCM. Legacy plaintext rows are handled transparently:

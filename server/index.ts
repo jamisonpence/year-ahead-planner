@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
-import { initializeStorage, seedSystemRecipes } from "./storage";
+import { initializeStorage, seedSystemRecipes, runMigrations } from "./storage";
 import { createMcpRouter, createOAuthRouter, createOAuthEndpoints } from "./mylifos-mcp-server";
 
 const app = express();
@@ -77,7 +77,9 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    log("Starting up — initializing storage…");
+    log("Starting up — running schema migrations…");
+    await runMigrations();
+    log("Migrations done — initializing storage…");
     await initializeStorage();
     log("Storage initialized — seeding system recipes…");
     await seedSystemRecipes();
