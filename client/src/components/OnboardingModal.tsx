@@ -6,12 +6,40 @@ import { ArrowRight, Check } from "lucide-react";
 
 // ── Persona definitions ───────────────────────────────────────────────────────
 
-type PersonaKey = "healthy" | "explore" | "organized";
+type PersonaKey = "momentum" | "health" | "explore_life" | "connect";
+
+// Legacy keys from v1 onboarding — mapped forward for any existing stored values
+const LEGACY_PERSONA_MAP: Record<string, PersonaKey> = {
+  healthy:    "health",
+  explore:    "explore_life",
+  organized:  "momentum",
+};
 
 const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[] = [
-  { key: "healthy",    emoji: "💪", title: "Get healthier",        sub: "Workouts, nutrition, and habits that stick"          },
-  { key: "explore",   emoji: "⭐", title: "Explore and enjoy life", sub: "Books, films, recipes, hobbies, and places"          },
-  { key: "organized", emoji: "📋", title: "Get organized",          sub: "Goals, tasks, habits, and your calendar — connected" },
+  {
+    key: "momentum",
+    emoji: "🎯",
+    title: "Build Momentum",
+    sub:   "Goals, tasks, habits, and weekly reviews that keep you moving forward",
+  },
+  {
+    key: "health",
+    emoji: "💪",
+    title: "Health & Energy",
+    sub:   "Workouts, nutrition, habits, and body metrics — all in one place",
+  },
+  {
+    key: "explore_life",
+    emoji: "⭐",
+    title: "Save & Explore Life",
+    sub:   "Books, music, recipes, places, trips, and interests worth remembering",
+  },
+  {
+    key: "connect",
+    emoji: "👥",
+    title: "Connect with People",
+    sub:   "Friends, family, shared interests, and recommendations that matter",
+  },
 ];
 
 // ── Path definitions ──────────────────────────────────────────────────────────
@@ -19,35 +47,132 @@ const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[]
 interface PathStep { section: string; description: string; highlight: string; href: string }
 
 const PATHS: Record<PersonaKey, PathStep[]> = {
-  healthy: [
-    { section: "Workouts",   description: "Log sessions, track PRs, and follow a plan.",           highlight: "💪 Build a streak that motivates you",           href: "/workouts"  },
-    { section: "Nutrition",  description: "Set calorie and macro goals, log meals and water.",      highlight: "🥗 Fuel your body intentionally",                href: "/nutrition" },
-    { section: "Habits",     description: "Track daily actions that compound over time.",           highlight: "✅ Small steps, big change",                     href: "/habits"    },
-    { section: "Goals",      description: "Set targets and track progress across all your plans.",  highlight: "🎯 See the big picture, not just the day",       href: "/goals"     },
+  momentum: [
+    {
+      section:     "Goals",
+      description: "Set your year-ahead goals and connect every project and task to them.",
+      highlight:   "🎯 One clear direction for the year",
+      href:        "/goals",
+    },
+    {
+      section:     "Tasks",
+      description: "Break goals into projects and daily actions you can actually finish.",
+      highlight:   "📋 See what needs doing — right now",
+      href:        "/tasks",
+    },
+    {
+      section:     "Habits",
+      description: "Build the daily routines that make your goals inevitable.",
+      highlight:   "✅ Small actions, compounding results",
+      href:        "/habits",
+    },
+    {
+      section:     "Review",
+      description: "Run a weekly review to reflect, reset, and stay on track.",
+      highlight:   "🪞 One hour a week changes everything",
+      href:        "/review",
+    },
   ],
-  explore: [
-    { section: "Reading",        description: "Track books, log sessions, and hit your reading goal.",       highlight: "📚 Read more, remember more",              href: "/reading" },
-    { section: "Movies & Shows", description: "Build your watchlist and track what you've seen.",            highlight: "🎬 Never forget a great watch",            href: "/movies"  },
-    { section: "Recipes",        description: "Save recipes, plan meals, and build your cookbook.",          highlight: "🍽️ Cook something new every week",          href: "/recipes" },
-    { section: "Hobbies",        description: "Log your hobbies, set goals, and track your progress.",      highlight: "✨ Make time for what you love",            href: "/hobbies" },
+
+  health: [
+    {
+      section:     "Workouts",
+      description: "Log sessions, track personal records, and follow a training plan.",
+      highlight:   "💪 Build a streak that actually motivates you",
+      href:        "/health",
+    },
+    {
+      section:     "Nutrition",
+      description: "Set calorie and macro goals, log meals, and track hydration.",
+      highlight:   "🥗 Fuel your body intentionally",
+      href:        "/health?tab=nutrition",
+    },
+    {
+      section:     "Habits",
+      description: "Stack health habits — sleep, movement, mindfulness, and more.",
+      highlight:   "✅ Small daily choices add up fast",
+      href:        "/habits",
+    },
+    {
+      section:     "Vitals",
+      description: "Track body metrics and health trends over time.",
+      highlight:   "📈 See the trend, not just today's number",
+      href:        "/health?tab=vitals",
+    },
   ],
-  organized: [
-    { section: "Goals",    description: "Create annual goals and link projects and tasks to them.",  highlight: "🎯 Everything connected to a bigger purpose",  href: "/goals"    },
-    { section: "Tasks",    description: "Manage projects, tasks, and recurring chores.",             highlight: "📋 See what needs doing today",                href: "/tasks"    },
-    { section: "Habits",   description: "Build the daily habits that make everything easier.",       highlight: "✅ Consistency is the system",                 href: "/habits"   },
-    { section: "Calendar", description: "View all events, tasks, and plans in one place.",           highlight: "📅 Your life, in one view",                   href: "/calendar" },
+
+  explore_life: [
+    {
+      section:     "Media",
+      description: "Track books, films, music, and art — rate what you love and discover more.",
+      highlight:   "📚 Build your personal taste profile",
+      href:        "/library",
+    },
+    {
+      section:     "Recipes",
+      description: "Save recipes, plan meals, and build your own digital cookbook.",
+      highlight:   "🍽️ Cook something new every week",
+      href:        "/health?tab=recipes",
+    },
+    {
+      section:     "Places & Trips",
+      description: "Save spots you love, plan upcoming trips, and log where you've been.",
+      highlight:   "📍 Never lose a place worth returning to",
+      href:        "/places",
+    },
+    {
+      section:     "Interests",
+      description: "Log your hobbies, set goals, and track progress in the things you love.",
+      highlight:   "✨ Make time for what lights you up",
+      href:        "/hobbies",
+    },
+  ],
+
+  connect: [
+    {
+      section:     "People",
+      description: "Track your relationships — friends, family, and the contacts who matter most.",
+      highlight:   "👥 Meaningful relationships, not just a contact list",
+      href:        "/people",
+    },
+    {
+      section:     "Messages",
+      description: "Send and receive recommendations and stay in touch inside MyLifos.",
+      highlight:   "💬 Real conversations about real things",
+      href:        "/messenger",
+    },
+    {
+      section:     "Library",
+      description: "See what friends are saving and sharing with you across every category.",
+      highlight:   "⭐ Good taste is worth sharing",
+      href:        "/mylifos",
+    },
+    {
+      section:     "Interests",
+      description: "Connect over shared hobbies, films, books, and passions.",
+      highlight:   "✨ Find your people through shared interests",
+      href:        "/hobbies",
+    },
   ],
 };
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
-export const ONBOARDING_PERSONA_KEY = "mylifos_onboarding_persona";
+export const ONBOARDING_PERSONA_KEY  = "mylifos_onboarding_persona";
 export const ONBOARDING_CHECKLIST_KEY = "mylifos_onboarding_checklist";
+
+/** Normalise a raw stored persona string (including legacy v1 keys) to a current PersonaKey. */
+function normalisePersona(raw: string): PersonaKey {
+  if (raw in LEGACY_PERSONA_MAP) return LEGACY_PERSONA_MAP[raw as keyof typeof LEGACY_PERSONA_MAP];
+  if (raw in PATHS) return raw as PersonaKey;
+  return "momentum"; // safe fallback
+}
 
 export function saveOnboardingData(persona: PersonaKey) {
   try {
-    localStorage.setItem(ONBOARDING_PERSONA_KEY, persona);
-    const steps = PATHS[persona].map(s => ({ section: s.section, href: s.href, done: false }));
+    const key = normalisePersona(persona);
+    localStorage.setItem(ONBOARDING_PERSONA_KEY, key);
+    const steps = PATHS[key].map(s => ({ section: s.section, href: s.href, done: false }));
     localStorage.setItem(ONBOARDING_CHECKLIST_KEY, JSON.stringify(steps));
   } catch {}
 }
@@ -80,7 +205,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const firstName = userName.split(" ")[0];
   const steps = persona ? PATHS[persona] : [];
   const currentStep = steps[pathStep];
-  const progressPct = screen === 1 ? 5 : screen === 2 ? Math.round(((pathStep + 1) / 4) * 70) + 5 : 100;
+  const totalSteps = steps.length;
+  const progressPct = screen === 1
+    ? 5
+    : screen === 2
+    ? Math.round(((pathStep + 1) / totalSteps) * 70) + 5
+    : 100;
 
   function pickPersona(p: PersonaKey) {
     setPersona(p);
@@ -119,8 +249,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           <div className="p-6 sm:p-8 space-y-6">
             <div>
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Welcome, {firstName} 👋</p>
-              <h1 className="text-2xl font-bold leading-tight">What brings you to MyLifos?</h1>
-              <p className="text-sm text-muted-foreground mt-1">Pick the one that fits best — you can explore everything later.</p>
+              <h1 className="text-2xl font-bold leading-tight">What do you want to get out of MyLifos?</h1>
+              <p className="text-sm text-muted-foreground mt-1">Pick the outcome that fits best — you can explore everything later.</p>
             </div>
 
             <div className="space-y-3">
@@ -166,7 +296,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
             {/* Section card */}
             <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-5 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-primary uppercase tracking-wider">Step {pathStep + 1} of {steps.length}</p>
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider">Step {pathStep + 1} of {totalSteps}</p>
                 <h2 className="text-xl font-bold mt-1">{currentStep.section}</h2>
                 <p className="text-sm text-muted-foreground mt-1">{currentStep.description}</p>
               </div>
