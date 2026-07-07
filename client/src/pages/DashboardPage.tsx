@@ -580,6 +580,12 @@ export default function DashboardPage() {
     label: c.title, sub: "Chore due today", href: "/housekeeping",
     action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Home moved forward" },
   }));
+  // Overdue chores surface here so they're visible even when Needs Attention is off
+  choresOverdue.slice(0, 3).forEach((c) => todayItems.push({
+    key: `overdue-chore-${c.id}`, icon: <RefreshCw size={13} className="text-red-500" />,
+    label: c.title, sub: `Recurring · ${Math.abs(c.daysLeft!)}d overdue`, href: "/housekeeping", urgent: true,
+    action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Overdue chore cleared" },
+  }));
   if (!todayWorkoutDone && wPlanned > 0) todayItems.push({
     key: "workout", icon: <Dumbbell size={13} className="text-blue-400" />,
     label: "Log today's workout", sub: `${wCompleted}/${wPlanned} this week`, href: "/workouts",

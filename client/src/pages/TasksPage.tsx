@@ -1204,6 +1204,10 @@ export default function TasksPage() {
   const openTasks     = generalTasksData.filter(t => !t.completed);
   const completedTasks = generalTasksData.filter(t => t.completed);
 
+  // Weekly wins — tasks completed since this Sunday midnight
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0, 0, 0, 0);
+  const completedThisWeek = completedTasks.filter(t => (t as any).completedAt && new Date((t as any).completedAt) >= weekStart).length;
+
   const choresDueSoon = useMemo(() =>
     chores.filter(c => c.isActive && c.nextDue && c.nextDue <= today),
     [chores, today]
@@ -1294,7 +1298,7 @@ export default function TasksPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="px-5 py-4 border-b flex items-center justify-between gap-3 flex-wrap shrink-0">
-        <h1 className="text-xl font-bold">Projects &amp; Tasks</h1>
+        <h1 className="text-xl font-bold">Tasks</h1>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setNewProjectModal(true)} className="gap-1.5">
             <Plus size={13} /><Folder size={13} /><span className="hidden sm:inline">Project</span>
@@ -1765,6 +1769,24 @@ export default function TasksPage() {
 
         {activeView === "completed" && (
           <div className="space-y-5">
+            {/* Weekly wins banner */}
+            {completedThisWeek > 0 ? (
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/20 px-4 py-4 text-center">
+                <div className="text-2xl mb-1">🎉</div>
+                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                  You knocked out {completedThisWeek} task{completedThisWeek !== 1 ? "s" : ""} this week
+                </p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">Keep the momentum going</p>
+              </div>
+            ) : (
+              completedTasks.length === 0 && completedProjects.length === 0 ? null : (
+                <div className="rounded-xl border border-border bg-secondary/30 px-4 py-3 text-center">
+                  <p className="text-sm font-semibold text-foreground">Nothing completed yet this week</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Your older wins are listed below</p>
+                </div>
+              )
+            )}
+
             {/* Completed projects */}
             {completedProjects.length > 0 && (
               <div>
