@@ -10,7 +10,6 @@ import PlannerPlan from "@/pages/planner/Plan";
 import PlannerLibrary from "@/pages/planner/Library";
 import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
 import PlannerShopping from "@/pages/planner/Shopping";
-import BodyCompositionPlanSection from "@/components/BodyCompositionPlanSection";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
@@ -2329,6 +2328,203 @@ function NutritionConnectionsCard() {
   );
 }
 
+function parseRecipeNutrition(recipe: Recipe): NutritionSummary | null {
+  try {
+    return recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null;
+  } catch {
+    return null;
+  }
+}
+
+function NutritionMealsLibrary({
+  recentFoods,
+  recipes,
+  goals,
+  onLogRecent,
+  onSaveRecent,
+  onLogRecipe,
+  savingRecentId,
+  loggingRecent,
+  loggingRecipe,
+}: {
+  recentFoods: FoodLogEntry[];
+  recipes: Recipe[];
+  goals: { calories: number; protein: number; carbs: number; fat: number };
+  onLogRecent: (item: FoodLogEntry) => void;
+  onSaveRecent: (item: FoodLogEntry) => void;
+  onLogRecipe: (recipe: Recipe) => void;
+  savingRecentId?: number | null;
+  loggingRecent: boolean;
+  loggingRecipe: boolean;
+}) {
+  const uniqueRecent = useMemo(() => {
+    const seen = new Set<string>();
+    return recentFoods.filter(item => {
+      const key = item.foodName.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 8);
+  }, [recentFoods]);
+  const savedMeals = recipes.slice(0, 8);
+  const highProteinMeals = [
+    ...savedMeals.filter(recipe => (parseRecipeNutrition(recipe)?.protein ?? 0) >= Math.max(25, goals.protein * 0.2)),
+    ...uniqueRecent.filter(item => Number(item.protein) >= Math.max(20, goals.protein * 0.15)),
+  ].slice(0, 4);
+  const topRepeat = uniqueRecent[0] ?? null;
+  const hasMealData = uniqueRecent.length > 0 || savedMeals.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-card p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Meals Library</p>
+            <p className="text-xs text-muted-foreground">Reusable meals you can log, save, plan, and recommend.</p>
+          </div>
+          <a href="#/recipes" className="shrink-0 text-xs text-primary hover:underline">Manage recipes</a>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: "Saved meals", value: savedMeals.length },
+            { label: "Recent meals", value: uniqueRecent.length },
+            { label: "High protein", value: highProteinMeals.length },
+            { label: "Privacy", value: "Private" },
+          ].map(item => (
+            <div key={item.label} className="rounded-xl border bg-secondary/20 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+              <p className="text-sm font-bold">{item.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
+          <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
+          <p className="text-[11px] text-muted-foreground">Food logs stay private. Saved meals and recipes are reusable MyLifos items you can choose to recommend.</p>
+        </div>
+      </div>
+
+      {!hasMealData && (
+        <div className="rounded-2xl border border-dashed bg-card p-6 text-center space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Save meals you eat often</p>
+            <p className="text-xs text-muted-foreground mt-1">Once you log or save meals, this becomes your quick library for planning and repeating what works.</p>
+          </div>
+          <div className="flex justify-center gap-2 flex-wrap">
+            <a href="#/nutrition" className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold">Log food</a>
+            <a href="#/recipes" className="rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-secondary">Browse recipes</a>
+          </div>
+        </div>
+      )}
+
+      {uniqueRecent.length > 0 && (
+        <div className="rounded-2xl border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Recent Meals</p>
+              <p className="text-xs text-muted-foreground">Repeat or save what you already eat.</p>
+            </div>
+            {topRepeat && (
+              <button onClick={() => onSaveRecent(topRepeat)} className="text-xs text-primary hover:underline shrink-0">
+                Save top repeat
+              </button>
+            )}
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {uniqueRecent.map(item => (
+              <div key={item.id} className="rounded-xl border bg-background p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{item.foodName}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {Math.round(Number(item.calories))} kcal · P {Math.round(Number(item.protein))}g · C {Math.round(Number(item.carbs))}g · F {Math.round(Number(item.fat))}g
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground capitalize shrink-0">{item.mealType}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button size="sm" className="h-7 text-xs" onClick={() => onLogRecent(item)} disabled={loggingRecent}>Log today</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onSaveRecent(item)} disabled={savingRecentId === item.id}>
+                    {savingRecentId === item.id ? "Saving..." : "Save meal"}
+                  </Button>
+                  <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
+                  <a href="#/people?tab=discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {savedMeals.length > 0 && (
+        <div className="rounded-2xl border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Saved Meals & Recipes</p>
+              <p className="text-xs text-muted-foreground">Reusable MyLifos food items for logging, planning, and recommendations.</p>
+            </div>
+            <a href="#/recipes" className="text-xs text-primary hover:underline shrink-0">View all</a>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {savedMeals.map(recipe => {
+              const nutrition = parseRecipeNutrition(recipe);
+              return (
+                <div key={recipe.id} className="rounded-xl border bg-background p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg leading-none">{recipe.emoji || "🍽️"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{recipe.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {nutrition
+                          ? `${Math.round(nutrition.calories)} kcal · P ${Math.round(nutrition.protein)}g`
+                          : "Nutrition not estimated yet"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button size="sm" className="h-7 text-xs" onClick={() => onLogRecipe(recipe)} disabled={loggingRecipe}>Log today</Button>
+                    <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
+                    <a href="#/people?tab=discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                    <a href="#/messenger" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-[1fr_1fr] gap-3">
+        <div className="rounded-2xl border bg-card p-4 space-y-3">
+          <p className="text-sm font-semibold">Meal Collections</p>
+          <div className="flex gap-2 flex-wrap">
+            {["High protein", "Breakfasts", "Weeknight dinners", "Restaurants", "Post-workout", "Family favorites"].map(label => (
+              <span key={label} className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{label}</span>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">Collections are ready as a UI pattern. Saved meals can be grouped here as the library grows.</p>
+        </div>
+        <div className="rounded-2xl border bg-card p-4 space-y-3">
+          <p className="text-sm font-semibold">Smart Suggestions</p>
+          <div className="space-y-2">
+            {topRepeat ? (
+              <button onClick={() => onSaveRecent(topRepeat)} className="w-full text-left rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
+                <p className="text-xs font-semibold">You repeat {topRepeat.foodName}</p>
+                <p className="text-[11px] text-muted-foreground">Save it as a meal so it is faster to log and add to plans.</p>
+              </button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Log a few meals and MyLifos will suggest what to save.</p>
+            )}
+            <a href="#/nutrition?tab=targets" className="block rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
+              <p className="text-xs font-semibold">Build around your protein target</p>
+              <p className="text-[11px] text-muted-foreground">Save one reliable high-protein meal for days when you fall short.</p>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── NutritionTab ─────────────────────────────────────────────────────────────
 // Exported so NutritionPage can use it directly.
 // Pass `section` + `onSection` to control from outside (hides internal nav).
@@ -2370,6 +2566,10 @@ export function NutritionTab({
   const { data: recentFoods = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log/history"],
     queryFn: () => apiRequest("GET", "/api/nutrition/food-log/history").then(r => r.json()),
+  });
+  const { data: recipes = [] } = useQuery<Recipe[]>({
+    queryKey: ["/api/recipes"],
+    queryFn: () => apiRequest("GET", "/api/recipes").then(r => r.json()),
   });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({
     queryKey: ["/api/workout-plans"],
@@ -2470,6 +2670,64 @@ export function NutritionTab({
       toast({ title: `${item.foodName} logged` });
     },
     onError: () => toast({ title: "Failed to log food", variant: "destructive" }),
+  });
+  const logRecipeMut = useMutation({
+    mutationFn: (recipe: Recipe) => {
+      const nutrition = parseRecipeNutrition(recipe);
+      return apiRequest("POST", "/api/nutrition/food-log", {
+        foodName: recipe.name,
+        servingSize: 1,
+        servingUnit: "serving",
+        quantity: 1,
+        mealType: "snack",
+        date: selectedDate,
+        calories: nutrition?.calories ?? 0,
+        protein: nutrition?.protein ?? 0,
+        carbs: nutrition?.carbs ?? 0,
+        fat: nutrition?.fat ?? 0,
+        fiber: nutrition?.fiber ?? 0,
+        sugar: nutrition?.sugar ?? 0,
+        sodium: nutrition?.sodium ?? 0,
+      }).then(r => r.json());
+    },
+    onSuccess: (_data, recipe) => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+      toast({ title: `${recipe.name} logged` });
+    },
+    onError: () => toast({ title: "Failed to log recipe", variant: "destructive" }),
+  });
+  const [savingRecentMealId, setSavingRecentMealId] = useState<number | null>(null);
+  const saveRecentMealMut = useMutation({
+    mutationFn: (item: FoodLogEntry) => {
+      setSavingRecentMealId(item.id);
+      const nutrition: NutritionSummary = {
+        calories: Number(item.calories) || 0,
+        protein: Number(item.protein) || 0,
+        carbs: Number(item.carbs) || 0,
+        fat: Number(item.fat) || 0,
+        fiber: Number(item.fiber) || 0,
+        sugar: Number(item.sugar) || 0,
+        sodium: Number(item.sodium) || 0,
+        servings: 1,
+      };
+      return apiRequest("POST", "/api/recipes", {
+        name: item.foodName,
+        emoji: "🍽️",
+        category: "Saved meal",
+        servings: 1,
+        ingredientsJson: item.ingredientsJson || "[]",
+        nutritionData: JSON.stringify(nutrition),
+        description: `Saved from Nutrition after logging as ${item.mealType || "a meal"}.`,
+        tags: "saved meal,nutrition",
+      }).then(r => r.json());
+    },
+    onSuccess: (_data, item) => {
+      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: `${item.foodName} saved as a meal` });
+    },
+    onError: () => toast({ title: "Failed to save meal", variant: "destructive" }),
+    onSettled: () => setSavingRecentMealId(null),
   });
 
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -3101,7 +3359,17 @@ export function NutritionTab({
       )}
 
       {activeSection === "meals" && (
-        <BodyCompositionPlanSection />
+        <NutritionMealsLibrary
+          recentFoods={recentFoods}
+          recipes={recipes}
+          goals={g}
+          onLogRecent={(item) => repeatFoodMut.mutate(item)}
+          onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
+          onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
+          savingRecentId={savingRecentMealId}
+          loggingRecent={repeatFoodMut.isPending}
+          loggingRecipe={logRecipeMut.isPending}
+        />
       )}
 
       {activeSection === "trends" && (
