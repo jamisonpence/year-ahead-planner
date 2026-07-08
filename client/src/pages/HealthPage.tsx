@@ -11,6 +11,7 @@ import PlannerLibrary from "@/pages/planner/Library";
 import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
 import PlannerShopping from "@/pages/planner/Shopping";
 import type { Recipe as PlannerRecipe, MealSlot } from "@/lib/planner/types";
+import { buildShoppingList } from "@/lib/planner/shopping";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
@@ -2280,12 +2281,10 @@ function useEmbedLocation(): EmbedNav {
 }
 
 const PLANNER_SUB_NAV = [
-  { path: "/meal-planner",             label: "Overview"    },
-  { path: "/meal-planner/setup",       label: "Build Plan"  },
-  { path: "/meal-planner/plan",        label: "Weekly Plan" },
-  { path: "/meal-planner/library",     label: "Saved Meals" },
-  { path: "/meal-planner/shopping",    label: "Shopping"    },
-  { path: "/meal-planner/preferences", label: "Preferences" },
+  { path: "/meal-planner",             label: "Week"     },
+  { path: "/meal-planner/plan",        label: "Today"    },
+  { path: "/meal-planner/library",     label: "Saved"    },
+  { path: "/meal-planner/shopping",    label: "Shopping" },
 ];
 
 function MealPlannerEmbed({
@@ -2298,7 +2297,7 @@ function MealPlannerEmbed({
   onSaveMealNote?: (item: NutritionMealActionItem) => void;
 } = {}) {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
-  const { plan, recipes } = usePlanner();
+  const { plan, recipes, setPlan } = usePlanner();
   const { toast } = useToast();
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -2329,6 +2328,24 @@ function MealPlannerEmbed({
   }
 
   const plannedToday = plan?.days[0]?.meals.filter(m => !m.removed) ?? [];
+  const plannedTomorrow = plan?.days[1]?.meals.filter(m => !m.removed) ?? [];
+  const planDays = plan?.days ?? [];
+  const plannedMeals = planDays.flatMap(day => day.meals.filter(m => !m.removed).map(meal => ({ day, meal })));
+  const planLength = planDays.length || 0;
+  const mealSlots: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
+  const missingSlots = planDays.reduce((count, day) => {
+    const slots = new Set(day.meals.filter(m => !m.removed).map(m => m.slot));
+    return count + mealSlots.filter(slot => !slots.has(slot)).length;
+  }, 0);
+  const proteinCoverageDays = planDays.filter(day => day.totals.p >= (plan?.target.p ?? 0) * 0.85).length;
+  const breakfastDays = planDays.filter(day => day.meals.some(m => !m.removed && m.slot === "breakfast")).length;
+  const repeatedMealCount = (() => {
+    const counts = new Map<string, number>();
+    plannedMeals.forEach(({ meal }) => counts.set(meal.recipe.name, (counts.get(meal.recipe.name) ?? 0) + 1));
+    return Array.from(counts.values()).filter(count => count > 1).length;
+  })();
+  const shoppingPreview = plan ? buildShoppingList(plan, plan.days.map(day => day.day)) : null;
+  const quickSavedMeals = recipes.slice(0, 4);
   const firstPlannedMeal = plannedToday[0] ?? null;
   const firstPlannedMealAction = firstPlannedMeal ? {
     id: `planned-${firstPlannedMeal.recipe.id}`,
@@ -2365,71 +2382,264 @@ function MealPlannerEmbed({
     onError: () => toast({ title: "Failed to log planned meal", variant: "destructive" }),
   });
 
+  function recalcPlannedMeals(meals: NonNullable<typeof plan>["days"][number]["meals"]) {
+    return meals.filter(meal => !meal.removed).reduce((acc, meal) => ({
+      cal: acc.cal + meal.recipe.macros.cal,
+      p: acc.p + meal.recipe.macros.p,
+      c: acc.c + meal.recipe.macros.c,
+      f: acc.f + meal.recipe.macros.f,
+    }), { cal: 0, p: 0, c: 0, f: 0 });
+  }
+
+  function removePlannedMeal(dayIndex: number, mealIndex: number) {
+    if (!plan) return;
+    const nextPlan = {
+      ...plan,
+      days: plan.days.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        const meals = day.meals.map((meal, mi) => mi === mealIndex ? { ...meal, removed: true } : meal);
+        return { ...day, meals, totals: recalcPlannedMeals(meals) };
+      }),
+    };
+    setPlan(nextPlan);
+    toast({ title: "Meal removed from plan" });
+  }
+
+  function movePlannedMealToTomorrow(dayIndex: number, mealIndex: number) {
+    if (!plan || plan.days.length < 2) {
+      toast({ title: "Add another plan day first", description: "Generate a multi-day plan to move meals between days." });
+      return;
+    }
+    const targetIndex = Math.min(dayIndex + 1, plan.days.length - 1);
+    const sourceMeal = plan.days[dayIndex]?.meals[mealIndex];
+    if (!sourceMeal) return;
+    const nextPlan = {
+      ...plan,
+      days: plan.days.map((day, idx) => {
+        if (idx === dayIndex) {
+          const meals = day.meals.map((meal, mi) => mi === mealIndex ? { ...meal, removed: true } : meal);
+          return { ...day, meals, totals: recalcPlannedMeals(meals) };
+        }
+        if (idx === targetIndex) {
+          const meals = [...day.meals, sourceMeal];
+          return { ...day, meals, totals: recalcPlannedMeals(meals) };
+        }
+        return day;
+      }),
+    };
+    setPlan(nextPlan);
+    toast({ title: "Meal moved", description: `${sourceMeal.recipe.name} moved to day ${targetIndex + 1}.` });
+  }
+
   return (
     <EmbedNavCtx.Provider value={[embedPath, navigate]}>
-      <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-3">
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Meal Plan</p>
-              <p className="text-xs text-muted-foreground">Plan the week, reuse saved meals, and log planned meals into Today.</p>
-            </div>
-            <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => navigate("/meal-planner/setup")}>
-              Build Plan
-            </Button>
+      <div className="rounded-2xl border bg-card p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">This Week's Meal Plan</p>
+            <p className="text-xs text-muted-foreground">Built from your stats, goals, dietary preferences, and saved meals.</p>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Plan length", value: plan ? `${plan.days.length} day${plan.days.length === 1 ? "" : "s"}` : "None" },
-              { label: "Saved meals", value: recipes.length || "Loading" },
-              { label: "Daily target", value: plan ? `${plan.target.cal} kcal` : "Not set" },
-            ].map(item => (
-              <div key={item.label} className="rounded-lg bg-secondary/20 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
-                <p className="text-sm font-bold truncate">{item.value}</p>
-              </div>
-            ))}
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" className="h-8 text-xs" onClick={() => navigate(plan ? "/meal-planner/plan" : "/meal-planner/setup")}>
+              {plan ? "View Week" : "Generate My Plan"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate("/meal-planner/setup")}>
+              Customize Plan
+            </Button>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+        {!plan ? (
+          <div className="rounded-xl border border-dashed p-5 text-center space-y-3">
             <div>
-              <p className="text-sm font-semibold">Planned Today</p>
-              <p className="text-xs text-muted-foreground">Log planned meals with one click.</p>
+              <p className="text-sm font-semibold">Generate a personalized meal plan</p>
+              <p className="text-xs text-muted-foreground mt-1">MyLifos can build meals from your stats, target, dietary preferences, exclusions, and household settings.</p>
             </div>
-            <button onClick={() => navigate("/meal-planner/plan")} className="text-xs text-primary hover:underline shrink-0">View plan</button>
+            <div className="flex justify-center gap-2 flex-wrap">
+              <Button size="sm" onClick={() => navigate("/meal-planner/setup")}>Generate My Plan</Button>
+              <Button size="sm" variant="outline" onClick={() => navigate("/meal-planner/preferences")}>Diet & Preferences</Button>
+            </div>
           </div>
-          {plannedToday.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-3 text-center">
-              <p className="text-xs font-medium">No planned meals yet</p>
-              <button onClick={() => navigate("/meal-planner/setup")} className="text-xs text-primary hover:underline mt-1">Build a plan</button>
-            </div>
-          ) : (
-            <div className="space-y-1.5 max-h-52 overflow-y-auto">
-              {plannedToday.slice(0, 4).map((meal, idx) => (
-                <div key={`${meal.slot}-${meal.recipe.id}-${idx}`} className="flex items-center gap-2 rounded-lg border px-2.5 py-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate">{meal.recipe.name}</p>
-                    <p className="text-[10px] text-muted-foreground capitalize">
-                      {meal.slot} · {meal.recipe.macros.cal} kcal · P {meal.recipe.macros.p}g
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs shrink-0"
-                    onClick={() => logPlannedMealMut.mutate(meal)}
-                    disabled={logPlannedMealMut.isPending}
-                  >
-                    Log today
-                  </Button>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { label: "Plan length", value: `${planLength} day${planLength === 1 ? "" : "s"}` },
+                { label: "Daily target", value: `${plan.target.cal} kcal` },
+                { label: "Protein days", value: `${proteinCoverageDays}/${planLength}` },
+                { label: "Gaps", value: missingSlots },
+              ].map(item => (
+                <div key={item.label} className="rounded-xl border bg-secondary/20 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+                  <p className="text-sm font-bold truncate">{item.value}</p>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="rounded-xl border bg-background p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold">Today</p>
+                  <button onClick={() => navigate("/meal-planner/plan")} className="text-[11px] text-primary hover:underline">Open plan</button>
+                </div>
+                {plannedToday.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No meals planned for today.</p>
+                ) : plannedToday.slice(0, 3).map((meal, idx) => {
+                  const mealIndex = plan.days[0].meals.indexOf(meal);
+                  return (
+                    <div key={`${meal.slot}-${meal.recipe.id}-${idx}`} className="rounded-lg border px-2.5 py-2 space-y-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate">{meal.recipe.name}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize">{meal.slot} · {meal.recipe.macros.cal} kcal · P {meal.recipe.macros.p}g</p>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1">
+                        <button type="button" onClick={() => logPlannedMealMut.mutate(meal)} disabled={logPlannedMealMut.isPending} className="rounded-md bg-primary text-primary-foreground px-1.5 py-1 text-[10px] font-medium disabled:opacity-50">Log</button>
+                        <button type="button" onClick={() => navigate("/meal-planner/plan")} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Swap</button>
+                        <button type="button" onClick={() => movePlannedMealToTomorrow(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Move</button>
+                        <button type="button" onClick={() => removePlannedMeal(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Remove</button>
+                        <button type="button" onClick={() => onRecommendMeal?.({
+                          id: `planned-${meal.recipe.id}`,
+                          title: meal.recipe.name,
+                          subtitle: `${meal.slot} · ${meal.recipe.macros.cal} kcal · P ${meal.recipe.macros.p}g`,
+                          mealType: meal.slot,
+                          calories: meal.recipe.macros.cal,
+                          protein: meal.recipe.macros.p,
+                          carbs: meal.recipe.macros.c,
+                          fat: meal.recipe.macros.f,
+                          source: "recipe",
+                        })} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Rec</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-xl border bg-background p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold">Tomorrow</p>
+                  <button onClick={() => navigate("/meal-planner/setup")} className="text-[11px] text-primary hover:underline">Regenerate</button>
+                </div>
+                {plannedTomorrow.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Tomorrow has room for meals.</p>
+                ) : plannedTomorrow.slice(0, 3).map((meal, idx) => (
+                  <div key={`${meal.slot}-${meal.recipe.id}-${idx}`} className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold truncate">{meal.recipe.name}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">{meal.slot} · P {meal.recipe.macros.p}g</p>
+                    </div>
+                    <button type="button" onClick={() => navigate("/meal-planner/plan")} className="text-[11px] text-primary hover:underline shrink-0">Edit</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {plan && (
+        <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <p className="text-sm font-semibold">Plan Health</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Protein coverage", value: `${proteinCoverageDays}/${planLength} days` },
+                { label: "Breakfast planned", value: `${breakfastDays}/${planLength} days` },
+                { label: "Shopping items", value: shoppingPreview?.flat.length ?? 0 },
+                { label: "Repeats", value: repeatedMealCount },
+              ].map(item => (
+                <div key={item.label} className="rounded-lg bg-secondary/20 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+                  <p className="text-sm font-bold">{item.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button type="button" onClick={() => navigate("/meal-planner/setup")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Fill gaps</button>
+              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add protein meal</button>
+              <button type="button" onClick={() => navigate("/meal-planner/shopping")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Shopping list</button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold">Saved Meals</p>
+                <p className="text-xs text-muted-foreground">Pull reusable ideas into the week.</p>
+              </div>
+              <button onClick={() => navigate("/meal-planner/library")} className="text-xs text-primary hover:underline shrink-0">View saved</button>
+            </div>
+            {quickSavedMeals.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Saved meals will appear here after recipes load.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {quickSavedMeals.map(recipe => (
+                  <div key={recipe.id} className="flex items-center gap-2 rounded-lg border px-2.5 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate">{recipe.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{recipe.macros.cal} kcal · P {recipe.macros.p}g</p>
+                    </div>
+                    <button type="button" onClick={() => navigate("/meal-planner/library")} className="text-[11px] text-primary hover:underline shrink-0">Add</button>
+                    <button type="button" onClick={() => apiRequest("POST", "/api/nutrition/food-log", {
+                      foodName: recipe.name,
+                      servingSize: 1,
+                      servingUnit: "serving",
+                      quantity: 1,
+                      mealType: "snack",
+                      date: todayStr,
+                      calories: recipe.macros.cal,
+                      protein: recipe.macros.p,
+                      carbs: recipe.macros.c,
+                      fat: recipe.macros.f,
+                    }).then(() => {
+                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", todayStr] });
+                      toast({ title: `${recipe.name} logged for today` });
+                    })} className="text-[11px] text-primary hover:underline shrink-0">Log</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {plan && (
+        <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Prep & Shopping</p>
+                <p className="text-xs text-muted-foreground">What needs to happen before the meals are easy to eat.</p>
+              </div>
+              <button onClick={() => navigate("/meal-planner/shopping")} className="text-xs text-primary hover:underline shrink-0">Open list</button>
+            </div>
+            <div className="space-y-1.5">
+              {(shoppingPreview?.aisles ?? []).slice(0, 3).map(aisle => (
+                <div key={aisle.name} className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2">
+                  <p className="text-xs font-medium">{aisle.name}</p>
+                  <span className="text-[11px] text-muted-foreground">{aisle.items.length} items</span>
+                </div>
+              ))}
+              {(!shoppingPreview || shoppingPreview.flat.length === 0) && <p className="text-xs text-muted-foreground">No shopping items yet.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-primary/5 border-primary/20 p-4 space-y-3">
+            <p className="text-sm font-semibold text-primary">Planning Assistant</p>
+            <p className="text-xs text-muted-foreground">
+              {missingSlots > 0
+                ? `You have ${missingSlots} open meal slot${missingSlots === 1 ? "" : "s"} this week. Fill the gaps before grocery shopping.`
+                : proteinCoverageDays < planLength
+                  ? "A few days are light on protein. Add one high-protein saved meal and repeat it."
+                  : "This plan is ready to execute. Log planned meals from Today and adjust next week from Trends."}
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button type="button" onClick={() => navigate("/meal-planner/setup")} className="rounded-lg bg-primary text-primary-foreground px-2 py-2 text-[11px] font-medium">Apply</button>
+              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Save meal</button>
+              <button type="button" onClick={() => toast({ title: "Suggestion dismissed" })} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Dismiss</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card p-4 space-y-3 mt-3">
         <div className="flex items-start justify-between gap-3">
