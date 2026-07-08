@@ -20,7 +20,7 @@ const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[]
   {
     key: "momentum",
     emoji: "🎯",
-    title: "Build Momentum",
+    title: "Get things done",
     sub:   "Goals, tasks, habits, and weekly reviews that keep you moving forward",
   },
   {
@@ -32,13 +32,13 @@ const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[]
   {
     key: "explore_life",
     emoji: "⭐",
-    title: "Save & Explore Life",
+    title: "Save my life library",
     sub:   "Books, music, recipes, places, trips, and interests worth remembering",
   },
   {
     key: "connect",
     emoji: "👥",
-    title: "Connect with People",
+    title: "Share with people",
     sub:   "Friends, family, shared interests, and recommendations that matter",
   },
 ];
@@ -158,6 +158,75 @@ export function saveIntentions(intentions: IntentionKey[]) {
   try { localStorage.setItem(ONBOARDING_INTENTIONS_KEY, JSON.stringify(intentions)); } catch {}
 }
 
+const DASHBOARD_SECTIONS_KEY = "dashboard_sections_v2";
+const NAV_PATHS = [
+  "/dashboard", "/calendar", "/goals", "/tasks", "/habits", "/journal", "/review",
+  "/people", "/messenger", "/mylifos", "/health", "/library", "/hobbies",
+  "/places", "/budget", "/housekeeping", "/beliefs",
+];
+
+const PERSONA_NAV_VISIBLE: Record<PersonaKey, string[]> = {
+  momentum: ["/dashboard", "/goals", "/tasks", "/habits", "/review", "/mylifos", "/health", "/people", "/messenger"],
+  health: ["/dashboard", "/health", "/habits", "/goals", "/tasks", "/review", "/mylifos", "/people", "/messenger"],
+  explore_life: ["/dashboard", "/mylifos", "/library", "/hobbies", "/places", "/journal", "/people", "/messenger", "/health"],
+  connect: ["/dashboard", "/people", "/messenger", "/mylifos", "/library", "/hobbies", "/places", "/goals", "/tasks"],
+};
+
+const INTENTION_NAV_BOOSTS: Partial<Record<IntentionKey, string[]>> = {
+  goal: ["/goals", "/tasks"],
+  habit: ["/habits"],
+  plan_week: ["/review", "/calendar"],
+  save_recs: ["/mylifos", "/library"],
+  track_workouts: ["/health"],
+  organize_places: ["/places"],
+  connect_friends: ["/people", "/messenger"],
+  private_notes: ["/journal"],
+};
+
+function buildNavPrefs(persona: PersonaKey, intentions: IntentionKey[]) {
+  const visible = new Set<string>(["/dashboard", ...(PERSONA_NAV_VISIBLE[persona] ?? [])]);
+  intentions.forEach(intent => INTENTION_NAV_BOOSTS[intent]?.forEach(path => visible.add(path)));
+  const ordered = [
+    "/dashboard",
+    ...intentions.flatMap(intent => INTENTION_NAV_BOOSTS[intent] ?? []),
+    ...(PERSONA_NAV_VISIBLE[persona] ?? []),
+    ...NAV_PATHS,
+  ].filter((path, idx, arr) => NAV_PATHS.includes(path) && arr.indexOf(path) === idx);
+  return ordered.map(path => ({ path, hidden: !visible.has(path) }));
+}
+
+function saveFirstRunDashboardDefaults(persona: PersonaKey, intentions: IntentionKey[]) {
+  try {
+    if (localStorage.getItem(DASHBOARD_SECTIONS_KEY)) return;
+    const social = persona === "connect" || intentions.includes("connect_friends") || intentions.includes("save_recs");
+    const progress = persona === "momentum" || persona === "health" || intentions.includes("goal") || intentions.includes("track_workouts");
+    const recent = persona === "explore_life" || intentions.includes("save_recs") || intentions.includes("private_notes");
+    localStorage.setItem(DASHBOARD_SECTIONS_KEY, JSON.stringify({
+      today: true,
+      focus: true,
+      up_next: true,
+      progress,
+      social_feed: social,
+      needs_attention: false,
+      events: false,
+      recent_activity: recent,
+      quick_jump: false,
+      day_planner: false,
+      memories: persona === "explore_life",
+      quote: persona === "explore_life",
+    }));
+  } catch {}
+}
+
+function persistOnboardingSetup(persona: PersonaKey | null, intentions: IntentionKey[]) {
+  const key = persona ?? "momentum";
+  saveOnboardingData(key);
+  saveIntentions(intentions);
+  saveFirstRunDashboardDefaults(key, intentions);
+  try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
+  apiRequest("POST", "/api/nav-prefs", buildNavPrefs(key, intentions)).catch(() => {});
+}
+
 // ── Minimal inline forms ──────────────────────────────────────────────────────
 
 function FieldInput({ label, value, onChange, placeholder, required }: {
@@ -179,15 +248,44 @@ function FieldInput({ label, value, onChange, placeholder, required }: {
   );
 }
 
+function FieldTextarea({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <textarea
+        className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all resize-none"
+        rows={2}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
 function GoalForm({ onDone }: { onDone: (label: string) => void }) {
   const [title, setTitle] = useState("");
+  const [why, setWhy] = useState("");
+  const [nextAction, setNextAction] = useState("");
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/goals", { title, horizon: "this_year", progressType: "boolean" }),
+    mutationFn: () => apiRequest("POST", "/api/goals", {
+      title,
+      horizon: "this_year",
+      progressType: "boolean",
+      description: [
+        why.trim() ? `Why it matters: ${why.trim()}` : "",
+        nextAction.trim() ? `Next action: ${nextAction.trim()}` : "",
+      ].filter(Boolean).join("\n\n") || undefined,
+    }),
     onSuccess: () => onDone(title),
   });
   return (
     <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
       <FieldInput label="Goal" value={title} onChange={setTitle} placeholder="e.g. Run a 5K" required />
+      <FieldTextarea label="Why it matters (optional)" value={why} onChange={setWhy} placeholder="What makes this meaningful?" />
+      <FieldInput label="Next action (optional)" value={nextAction} onChange={setNextAction} placeholder="e.g. Pick a 5K race date" />
       <CreateButton loading={mut.isPending} disabled={!title.trim()} />
     </form>
   );
@@ -313,10 +411,24 @@ function PlaceForm({ onDone }: { onDone: (label: string) => void }) {
 
 function RecipeForm({ onDone }: { onDone: (label: string) => void }) {
   const [name, setName] = useState("");
+  const [ingredients, setIngredients] = useState("");
+  const [instructions, setInstructions] = useState("");
   const EMOJIS = ["🍽️","🍕","🍜","🥗","🍝","🥘","🍛","🍣","🍔","🥞"];
   const [emoji, setEmoji] = useState("🍽️");
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/recipes", { name, emoji }),
+    mutationFn: () => {
+      const ingredientItems = ingredients
+        .split(/\n|,/)
+        .map(x => x.trim())
+        .filter(Boolean)
+        .map(name => ({ name, qty: "" }));
+      return apiRequest("POST", "/api/recipes", {
+        name,
+        emoji,
+        ingredientsJson: JSON.stringify(ingredientItems),
+        instructions: instructions.trim() || undefined,
+      });
+    },
     onSuccess: () => onDone(name),
   });
   return (
@@ -331,6 +443,8 @@ function RecipeForm({ onDone }: { onDone: (label: string) => void }) {
           </button>
         ))}
       </div>
+      <FieldTextarea label="Ingredients (optional)" value={ingredients} onChange={setIngredients} placeholder="Paste a few ingredients, one per line" />
+      <FieldTextarea label="Instructions or source (optional)" value={instructions} onChange={setInstructions} placeholder="Add quick steps or where you found it" />
       <CreateButton loading={mut.isPending} disabled={!name.trim()} />
     </form>
   );
@@ -644,6 +758,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     100;
 
   const options = persona ? CREATE_OPTIONS[persona] : [];
+  const primaryIntention = intentions[0] ? INTENTIONS.find(i => i.key === intentions[0]) : null;
+  const secondaryIntention = intentions[1] ? INTENTIONS.find(i => i.key === intentions[1]) : null;
 
   function pickPersona(p: PersonaKey) {
     setPersona(p);
@@ -666,22 +782,15 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   function finish() {
-    if (persona) saveOnboardingData(persona);
-    saveIntentions(intentions);
-    // Timestamp used by the Start Here card to enforce the 7-day display window
-    try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
+    persistOnboardingSetup(persona, intentions);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
-    // Navigate to the page for what was created, or default to dashboard
-    const dest = createdHref ?? "/dashboard";
-    navigate(dest);
+    navigate("/dashboard");
   }
 
   /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
   function finishImmediate(href: string) {
-    if (persona) saveOnboardingData(persona);
-    saveIntentions(intentions);
-    try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
+    persistOnboardingSetup(persona, intentions);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
     navigate(href);
@@ -725,8 +834,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
             <div className="p-6 sm:p-8 space-y-6">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Welcome, {firstName} 👋</p>
-                <h1 className="text-2xl font-bold leading-tight">What do you want to get out of MyLifos?</h1>
-                <p className="text-sm text-muted-foreground mt-1">Pick the outcome that fits best — you can explore everything later.</p>
+                <h1 className="text-2xl font-bold leading-tight">What should MyLifos help with first?</h1>
+                <p className="text-sm text-muted-foreground mt-1">Pick the outcome that fits best. MyLifos will shape Today and your sidebar around it.</p>
               </div>
 
               <div className="space-y-3">
@@ -753,9 +862,22 @@ export default function OnboardingModal({ userName }: { userName: string }) {
             <div className="p-6 sm:p-8 space-y-6">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 2 of 3</p>
-                <h1 className="text-2xl font-bold leading-tight">What do you want to do first?</h1>
-                <p className="text-sm text-muted-foreground mt-1">Pick up to 2 — we'll highlight these to help you get started fast.</p>
+                <h1 className="text-2xl font-bold leading-tight">Pick your main focus</h1>
+                <p className="text-sm text-muted-foreground mt-1">Choose one primary focus and, optionally, one secondary focus.</p>
               </div>
+
+              {intentions.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-primary/10 border border-primary/20 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-primary font-semibold">Main</p>
+                    <p className="text-xs font-medium mt-0.5">{primaryIntention?.label}</p>
+                  </div>
+                  <div className="rounded-xl bg-secondary/40 border px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Also</p>
+                    <p className="text-xs font-medium mt-0.5">{secondaryIntention?.label ?? "Optional"}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2.5">
                 {INTENTIONS.map(item => {
@@ -786,9 +908,13 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 })}
               </div>
 
-              {intentions.length === 2 && (
-                <p className="text-xs text-center text-muted-foreground">You've picked 2 — deselect one to change your choice.</p>
-              )}
+              <p className="text-xs text-center text-muted-foreground">
+                {intentions.length === 0
+                  ? "You can skip this and personalize later."
+                  : intentions.length === 1
+                    ? "Pick one more if there is a secondary focus."
+                    : "You've picked a main and secondary focus — deselect one to change it."}
+              </p>
 
               <div className="flex items-center justify-between gap-3">
                 <button onClick={() => setScreen(1)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -843,8 +969,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <>
                   <div>
                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 3 of 3</p>
-                    <h1 className="text-2xl font-bold leading-tight">Create your first item</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Pick one to add right now — takes 10 seconds.</p>
+                    <h1 className="text-2xl font-bold leading-tight">Create the first useful thing</h1>
+                    <p className="text-sm text-muted-foreground mt-1">This makes Today useful immediately. You can skip and set it up later.</p>
                   </div>
 
                   <div className="space-y-2.5">
@@ -882,7 +1008,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                       onClick={() => setScreen(4)}
                       className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      Skip for now →
+                      Skip, set up later →
                     </button>
                   </div>
                 </>
@@ -898,9 +1024,23 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <h1 className="text-2xl font-bold">You're all set, {firstName}!</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   {createdLabel
-                    ? `"${createdLabel}" is saved and ready. Let's take you there.`
-                    : "Everything is ready. Let's go."}
+                    ? `"${createdLabel}" is saved. Today is ready to turn it into action.`
+                    : "Today is ready. You can personalize more anytime."}
                 </p>
+              </div>
+
+              <div className="rounded-xl border bg-card px-4 py-3 space-y-2">
+                <p className="text-xs font-semibold">What MyLifos set up</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    "Today",
+                    primaryIntention?.label ?? "First focus",
+                    secondaryIntention?.label ?? "Sidebar tuned",
+                    createdLabel ? "First item saved" : "Setup later",
+                  ].map(item => (
+                    <div key={item} className="rounded-lg bg-secondary/40 px-2 py-1.5 text-[11px] font-medium">{item}</div>
+                  ))}
+                </div>
               </div>
 
               {intentions.length > 0 && (
@@ -917,7 +1057,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
               <div className="bg-secondary/40 rounded-xl px-4 py-3">
                 <p className="text-xs text-muted-foreground">
-                  A <strong>Get Started</strong> checklist will appear in your sidebar to track your progress. You can dismiss it anytime.
+                  A guided <strong>first week</strong> checklist will appear on Today. You can dismiss it anytime.
                 </p>
               </div>
 
@@ -928,7 +1068,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               >
                 {completeMut.isPending
                   ? "Saving…"
-                  : <>{createdLabel ? `Go to ${PERSONAS.find(p => p.key === persona)?.title}` : "Enter MyLifos"} <ArrowRight size={15} /></>
+                  : <>Go to Today <ArrowRight size={15} /></>
                 }
               </button>
             </div>

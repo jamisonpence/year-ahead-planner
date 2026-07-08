@@ -319,7 +319,7 @@ function StartHereCard() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-base leading-none">{isProgressing ? "⚡" : "🚀"}</span>
-          <span className="text-sm font-bold">{isProgressing ? "Up Next" : "Start Here"}</span>
+          <span className="text-sm font-bold">{isProgressing ? "Up Next" : "First Week"}</span>
           {daysLeft !== null && daysLeft > 0 && (
             <span className="text-[10px] font-medium text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-full">
               {daysLeft}d left
@@ -337,11 +337,14 @@ function StartHereCard() {
 
       {/* Action list */}
       <div className="space-y-1.5">
-        {actions.map(action => (
+        {actions.map((action, idx) => (
           <Link key={action.id} href={action.href}>
             <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 hover:bg-white/90 dark:hover:bg-white/10 border border-transparent hover:border-violet-200/60 dark:hover:border-violet-700/40 transition-all group">
               <span className="text-base leading-none shrink-0">{action.emoji}</span>
-              <span className="text-sm font-medium flex-1 truncate">{action.label}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{idx === 0 ? "Day 1" : idx === 1 ? "Day 2" : idx === actions.length - 1 ? "Day 7" : "This week"}</span>
+                <span className="block text-sm font-medium truncate">{action.label}</span>
+              </span>
               <ChevronRight size={13} className="text-muted-foreground group-hover:text-violet-500 transition-colors shrink-0" />
             </a>
           </Link>
@@ -350,7 +353,7 @@ function StartHereCard() {
 
       {/* Footer */}
       <p className="text-[10px] text-muted-foreground mt-3 text-center">
-        Dismiss anytime — your progress is always in the sidebar checklist.
+        Dismiss anytime — this is just a lightweight first-week guide.
       </p>
     </div>
   );
