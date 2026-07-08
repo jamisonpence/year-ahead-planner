@@ -824,6 +824,7 @@ export default function GoalsPage() {
   const [hobbyPlanWizardId, setHobbyPlanWizardId] = useState<number | undefined>(undefined);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
+  const [editingGoalBuddyId, setEditingGoalBuddyId] = useState<number | null>(null);
   const [selectedHobbyPlanKey, setSelectedHobbyPlanKey] = useState<string | null>(null);
   const [editingHobbyGoalId, setEditingHobbyGoalId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"goals" | "detail">("goals");
@@ -1508,7 +1509,7 @@ export default function GoalsPage() {
                           {!selectedGoal.description?.trim() && (
                             <button
                               type="button"
-                              onClick={() => setEditGoal(selectedGoal)}
+                              onClick={() => { setEditGoal(selectedGoal); setGoalModal(true); }}
                               className="text-xs text-primary hover:underline shrink-0"
                             >
                               Add why
@@ -1623,12 +1624,25 @@ export default function GoalsPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => setEditGoal(selectedGoal)}
+                            onClick={() => setEditingGoalBuddyId(editingGoalBuddyId === selectedGoal.id ? null : selectedGoal.id)}
                             className="text-xs text-primary hover:underline shrink-0"
                           >
-                            {buddy ? "Change" : "Add buddy"}
+                            {editingGoalBuddyId === selectedGoal.id ? "Done" : buddy ? "Change" : "Add buddy"}
                           </button>
                         </div>
+                        {editingGoalBuddyId === selectedGoal.id && (
+                          <div className="mt-3 border-t pt-3">
+                            <GoalBuddyPicker
+                              currentBuddyId={(selectedGoal as any).buddyUserId ?? null}
+                              friends={friends}
+                              label={buddy ? "Change buddy" : "Add buddy"}
+                              onSave={(buddyUserId) => {
+                                updateGoal.mutate({ id: selectedGoal.id, buddyUserId } as any);
+                                setEditingGoalBuddyId(null);
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
