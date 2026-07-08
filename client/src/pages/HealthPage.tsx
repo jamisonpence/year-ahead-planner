@@ -2025,14 +2025,14 @@ export function NutritionTab({
   section: externalSection,
   onSection: externalSetSection,
 }: {
-  section?: "meal-planner" | "log" | "goals" | "plans" | "weekly";
-  onSection?: (s: "meal-planner" | "log" | "goals" | "plans" | "weekly") => void;
+  section?: "today" | "meals" | "targets" | "plan" | "trends";
+  onSection?: (s: "today" | "meals" | "targets" | "plan" | "trends") => void;
 } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [internalSection, setInternalSection] = useState<"meal-planner" | "log" | "goals" | "plans" | "weekly">("log");
+  const [internalSection, setInternalSection] = useState<"today" | "meals" | "targets" | "plan" | "trends">("today");
   const activeSection = externalSection ?? internalSection;
   const setActiveSection = externalSetSection ?? setInternalSection;
 
@@ -2211,12 +2211,12 @@ export function NutritionTab({
       {!externalSection && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-2 flex-wrap">
-            {(["meal-planner", "log", "goals", "plans", "weekly"] as const).map(s => (
+            {(["today", "meals", "targets", "plan", "trends"] as const).map(s => (
               <button key={s} onClick={() => setActiveSection(s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all capitalize ${
                   activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}>
-                {s === "meal-planner" ? "Meal Planner" : s === "log" ? "Food Log" : s === "goals" ? "Goals" : s === "plans" ? "Plans" : "Weekly"}
+                {s === "today" ? "Today" : s === "meals" ? "Meals" : s === "targets" ? "Targets" : s === "plan" ? "Plan" : "Trends"}
               </button>
             ))}
           </div>
@@ -2226,9 +2226,9 @@ export function NutritionTab({
         </div>
       )}
 
-      {activeSection === "meal-planner" && <MealPlannerEmbed />}
+      {activeSection === "plan" && <MealPlannerEmbed />}
 
-      {activeSection === "log" && (
+      {activeSection === "today" && (
         <div className="space-y-4">
           {/* Body Composition Goal card — shown when an active body_composition workout plan exists */}
           {activeBodyCompPlan && bodyCompMetric && (
@@ -2565,7 +2565,7 @@ export function NutritionTab({
         </div>
       )}
 
-      {activeSection === "goals" && (
+      {activeSection === "targets" && (
         <div className="space-y-3">
           {/* Active plan sync banner */}
           {planTargets && (
@@ -2622,11 +2622,11 @@ export function NutritionTab({
         </div>
       )}
 
-      {activeSection === "plans" && (
+      {activeSection === "meals" && (
         <BodyCompositionPlanSection />
       )}
 
-      {activeSection === "weekly" && (
+      {activeSection === "trends" && (
         <WeeklyNutritionView weekDays={weekDays} weeklyByDate={weeklyByDate} goals={g} weeklyLog={weeklyLog} />
       )}
     </div>

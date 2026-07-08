@@ -5,18 +5,18 @@ import {
   UtensilsCrossed, CalendarDays, Target, Layers, BarChart2,
 } from "lucide-react";
 
-type Section = "meal-planner" | "log" | "goals" | "plans" | "weekly";
+type Section = "today" | "meals" | "targets" | "plan" | "trends";
 
 const TABS: { id: Section; label: string; icon: React.ElementType }[] = [
-  { id: "meal-planner", label: "Meal Planner", icon: CalendarDays      },
-  { id: "log",          label: "Food Log",     icon: UtensilsCrossed   },
-  { id: "goals",        label: "Goals",        icon: Target            },
-  { id: "plans",        label: "Plans",        icon: Layers            },
-  { id: "weekly",       label: "Weekly",       icon: BarChart2         },
+  { id: "today",   label: "Today",   icon: UtensilsCrossed },
+  { id: "meals",   label: "Meals",   icon: Layers          },
+  { id: "targets", label: "Targets", icon: Target          },
+  { id: "plan",    label: "Plan",    icon: CalendarDays    },
+  { id: "trends",  label: "Trends",  icon: BarChart2       },
 ];
 
 export default function NutritionPage() {
-  const [activeSection, setActiveSection] = useState<Section>("log");
+  const [activeSection, setActiveSection] = useState<Section>("today");
 
   return (
     <PageShell
