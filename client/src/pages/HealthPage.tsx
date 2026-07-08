@@ -10,6 +10,7 @@ import PlannerPlan from "@/pages/planner/Plan";
 import PlannerLibrary from "@/pages/planner/Library";
 import PlannerRecipeDetail from "@/pages/planner/RecipeDetail";
 import PlannerShopping from "@/pages/planner/Shopping";
+import type { Recipe as PlannerRecipe, MealSlot } from "@/lib/planner/types";
 import { format, parseISO, subDays, isBefore, isAfter, startOfDay } from "date-fns";
 import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
@@ -23,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Select as UISelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal, WorkoutPlan, Recipe, NutritionSummary } from "@shared/schema";
+import type { Medication, HealthMetric, SleepLog, CareProvider, TabCollaborationWithUser, FoodLogEntry, NutritionGoal, WorkoutPlan, Recipe, NutritionSummary, PublicUser } from "@shared/schema";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -2092,7 +2093,15 @@ const PLANNER_SUB_NAV = [
   { path: "/meal-planner/preferences", label: "Preferences" },
 ];
 
-function MealPlannerEmbed() {
+function MealPlannerEmbed({
+  onRecommendMeal,
+  onAskMeal,
+  onSaveMealNote,
+}: {
+  onRecommendMeal?: (item: NutritionMealActionItem) => void;
+  onAskMeal?: (item: NutritionMealActionItem) => void;
+  onSaveMealNote?: (item: NutritionMealActionItem) => void;
+} = {}) {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
   const { plan, recipes } = usePlanner();
   const { toast } = useToast();
@@ -2125,6 +2134,18 @@ function MealPlannerEmbed() {
   }
 
   const plannedToday = plan?.days[0]?.meals.filter(m => !m.removed) ?? [];
+  const firstPlannedMeal = plannedToday[0] ?? null;
+  const firstPlannedMealAction = firstPlannedMeal ? {
+    id: `planned-${firstPlannedMeal.recipe.id}`,
+    title: firstPlannedMeal.recipe.name,
+    subtitle: `${firstPlannedMeal.slot} · ${firstPlannedMeal.recipe.macros.cal} kcal · P ${firstPlannedMeal.recipe.macros.p}g`,
+    mealType: firstPlannedMeal.slot,
+    calories: firstPlannedMeal.recipe.macros.cal,
+    protein: firstPlannedMeal.recipe.macros.p,
+    carbs: firstPlannedMeal.recipe.macros.c,
+    fat: firstPlannedMeal.recipe.macros.f,
+    source: "recipe" as const,
+  } : null;
   const logPlannedMealMut = useMutation({
     mutationFn: (meal: (typeof plannedToday)[number]) => apiRequest("POST", "/api/nutrition/food-log", {
       foodName: meal.recipe.name,
@@ -2224,19 +2245,34 @@ function MealPlannerEmbed() {
           <Lock size={14} className="text-muted-foreground shrink-0 mt-0.5" />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {[
-            { label: "Recommend recipe", href: "#/discover", icon: Share2 },
-            { label: "Ask about recipe", href: "#/messenger", icon: MessageCircle },
-            { label: "Save meal idea", href: "#/recipes", icon: BookMarked },
-            { label: "Link to note", href: "#/journal", icon: Link2 },
-          ].map(item => {
-            const Icon = item.icon;
-            return (
-              <a key={item.label} href={item.href} className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors">
-                <Icon size={12} /> {item.label}
-              </a>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => firstPlannedMealAction ? onRecommendMeal?.(firstPlannedMealAction) : navigate("/meal-planner/library")}
+            className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
+          >
+            <Share2 size={12} /> Recommend meal
+          </button>
+          <button
+            type="button"
+            onClick={() => firstPlannedMealAction ? onAskMeal?.(firstPlannedMealAction) : navigate("/meal-planner/library")}
+            className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
+          >
+            <MessageCircle size={12} /> Ask about meal
+          </button>
+          <button
+            type="button"
+            onClick={() => { navigate("/meal-planner/library"); toast({ title: "Saved meals opened", description: "Choose a reusable meal idea from your planner library." }); }}
+            className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
+          >
+            <BookMarked size={12} /> Save meal idea
+          </button>
+          <button
+            type="button"
+            onClick={() => firstPlannedMealAction ? onSaveMealNote?.(firstPlannedMealAction) : toast({ title: "Plan a meal first", description: "Then MyLifos can create a private note from it." })}
+            className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
+          >
+            <Link2 size={12} /> Link to note
+          </button>
         </div>
       </div>
 
@@ -2336,6 +2372,220 @@ function parseRecipeNutrition(recipe: Recipe): NutritionSummary | null {
   }
 }
 
+type NutritionMealActionItem = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  mealType?: string | null;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  source: "recent" | "recipe";
+};
+
+function mealActionFromRecent(item: FoodLogEntry): NutritionMealActionItem {
+  return {
+    id: `recent-${item.id}`,
+    title: item.foodName,
+    subtitle: `${Math.round(Number(item.calories))} kcal · P ${Math.round(Number(item.protein))}g`,
+    mealType: item.mealType,
+    calories: Number(item.calories) || 0,
+    protein: Number(item.protein) || 0,
+    carbs: Number(item.carbs) || 0,
+    fat: Number(item.fat) || 0,
+    source: "recent",
+  };
+}
+
+function mealActionFromRecipe(recipe: Recipe): NutritionMealActionItem {
+  const nutrition = parseRecipeNutrition(recipe);
+  return {
+    id: `recipe-${recipe.id}`,
+    title: recipe.name,
+    subtitle: nutrition ? `${Math.round(nutrition.calories)} kcal · P ${Math.round(nutrition.protein)}g` : "Saved recipe",
+    mealType: "dinner",
+    calories: nutrition?.calories ?? 0,
+    protein: nutrition?.protein ?? 0,
+    carbs: nutrition?.carbs ?? 0,
+    fat: nutrition?.fat ?? 0,
+    source: "recipe",
+  };
+}
+
+function slugifyMealName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "saved-meal";
+}
+
+function toPlannerRecipe(item: NutritionMealActionItem): PlannerRecipe {
+  return {
+    id: `nutrition-${item.source}-${Date.now()}`,
+    slug: `nutrition-${slugifyMealName(item.title)}-${Date.now()}`,
+    category: item.source === "recipe" ? "Saved recipe" : "Saved meal",
+    name: item.title,
+    description: item.subtitle ?? "Saved from Nutrition.",
+    servings: 1,
+    prepMin: 0,
+    cookMin: 0,
+    totalMin: 0,
+    difficulty: "Easy",
+    ingredients: [],
+    instructions: [],
+    tags: ["nutrition", item.source === "recipe" ? "recipe" : "saved-meal"],
+    source: "MyLifos Nutrition",
+    macros: {
+      cal: Math.round(item.calories ?? 0),
+      p: Math.round(item.protein ?? 0),
+      c: Math.round(item.carbs ?? 0),
+      f: Math.round(item.fat ?? 0),
+    },
+  };
+}
+
+function AddMealToPlanModal({
+  item,
+  onClose,
+  onOpenPlan,
+}: {
+  item: NutritionMealActionItem;
+  onClose: () => void;
+  onOpenPlan: () => void;
+}) {
+  const { plan, setPlan } = usePlanner();
+  const { toast } = useToast();
+  const defaultSlot = (["breakfast", "lunch", "dinner", "snack"].includes(item.mealType || "")
+    ? item.mealType
+    : "dinner") as MealSlot;
+  const [dayIndex, setDayIndex] = useState("0");
+  const [slot, setSlot] = useState<MealSlot>(defaultSlot);
+
+  function addToPlan() {
+    if (!plan) return;
+    const targetDay = Math.min(Math.max(Number(dayIndex) || 0, 0), plan.days.length - 1);
+    const recipe = toPlannerRecipe(item);
+    const nextPlan = {
+      ...plan,
+      days: plan.days.map((day, idx) => {
+        if (idx !== targetDay) return day;
+        const meals = day.meals.filter(meal => !(meal.slot === slot && meal.recipe.name === item.title));
+        meals.push({ slot, recipe });
+        return {
+          ...day,
+          meals,
+          totals: meals.filter(meal => !meal.removed).reduce((acc, meal) => ({
+            cal: acc.cal + meal.recipe.macros.cal,
+            p: acc.p + meal.recipe.macros.p,
+            c: acc.c + meal.recipe.macros.c,
+            f: acc.f + meal.recipe.macros.f,
+          }), { cal: 0, p: 0, c: 0, f: 0 }),
+        };
+      }),
+    };
+    setPlan(nextPlan);
+    toast({ title: "Added to meal plan", description: `${item.title} is now in ${slot} for day ${targetDay + 1}.` });
+    onClose();
+  }
+
+  return (
+    <Modal title="Add to plan" onClose={onClose}>
+      <div className="rounded-xl border bg-secondary/20 p-3">
+        <p className="text-sm font-semibold">{item.title}</p>
+        {item.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>}
+      </div>
+      {!plan ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Build a meal plan first, then MyLifos can place saved meals into specific days and meal slots.</p>
+          <Button className="w-full" onClick={() => { onClose(); onOpenPlan(); }}>Build meal plan</Button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Day">
+              <Select value={dayIndex} onChange={setDayIndex}>
+                {plan.days.map((day, idx) => (
+                  <option key={day.day} value={String(idx)}>Day {idx + 1}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Meal">
+              <Select value={slot} onChange={(value) => setSlot(value as MealSlot)}>
+                <option value="breakfast">Breakfast</option>
+                <option value="lunch">Lunch</option>
+                <option value="dinner">Dinner</option>
+                <option value="snack">Snack</option>
+              </Select>
+            </Field>
+          </div>
+          <Button className="w-full" onClick={addToPlan}>Add meal</Button>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function NutritionFriendActionModal({
+  mode,
+  item,
+  friends,
+  isSending,
+  onClose,
+  onSubmit,
+}: {
+  mode: "recommend" | "ask";
+  item: NutritionMealActionItem;
+  friends: PublicUser[];
+  isSending: boolean;
+  onClose: () => void;
+  onSubmit: (friendId: number, note: string) => void;
+}) {
+  const [friendId, setFriendId] = useState(friends[0]?.id ? String(friends[0].id) : "");
+  const [note, setNote] = useState(
+    mode === "recommend"
+      ? `Thought you might like this: ${item.title}.`
+      : `Have you tried ${item.title}? I am thinking about adding it to my meal rotation.`
+  );
+  const label = mode === "recommend" ? "Recommend recipe" : "Ask about it";
+
+  return (
+    <Modal title={label} onClose={onClose}>
+      <div className="rounded-xl border bg-secondary/20 p-3">
+        <p className="text-sm font-semibold">{item.title}</p>
+        {item.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>}
+      </div>
+      {friends.length === 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Add friends first, then you can send recipe ideas and questions without sharing your private food log.</p>
+          <a href="#/people" onClick={onClose} className="block rounded-lg bg-primary text-primary-foreground px-3 py-2 text-center text-sm font-semibold">Find friends</a>
+        </div>
+      ) : (
+        <>
+          <Field label="Friend">
+            <Select value={friendId} onChange={setFriendId}>
+              {friends.map(friend => (
+                <option key={friend.id} value={friend.id}>{friend.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={mode === "recommend" ? "Why they'll like it" : "Question"}>
+            <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} />
+          </Field>
+          <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
+            <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
+            <p className="text-[11px] text-muted-foreground">Only this recipe or meal idea is shared. Your logged foods, calories, and targets stay private.</p>
+          </div>
+          <Button
+            className="w-full"
+            onClick={() => friendId && onSubmit(Number(friendId), note)}
+            disabled={!friendId || isSending}
+          >
+            {isSending ? "Sending..." : mode === "recommend" ? "Send recommendation" : "Send question"}
+          </Button>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 function NutritionMealsLibrary({
   recentFoods,
   recipes,
@@ -2343,6 +2593,9 @@ function NutritionMealsLibrary({
   onLogRecent,
   onSaveRecent,
   onLogRecipe,
+  onAddToPlan,
+  onRecommend,
+  onAsk,
   onOpenPlan,
   onOpenTargets,
   savingRecentId,
@@ -2355,6 +2608,9 @@ function NutritionMealsLibrary({
   onLogRecent: (item: FoodLogEntry) => void;
   onSaveRecent: (item: FoodLogEntry) => void;
   onLogRecipe: (recipe: Recipe) => void;
+  onAddToPlan: (item: NutritionMealActionItem) => void;
+  onRecommend: (item: NutritionMealActionItem) => void;
+  onAsk: (item: NutritionMealActionItem) => void;
   onOpenPlan: () => void;
   onOpenTargets: () => void;
   savingRecentId?: number | null;
@@ -2450,8 +2706,8 @@ function NutritionMealsLibrary({
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onSaveRecent(item)} disabled={savingRecentId === item.id}>
                     {savingRecentId === item.id ? "Saving..." : "Save meal"}
                   </Button>
-                  <button type="button" onClick={onOpenPlan} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
-                  <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                  <button type="button" onClick={() => onAddToPlan(mealActionFromRecent(item))} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
+                  <button type="button" onClick={() => onRecommend(mealActionFromRecent(item))} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</button>
                 </div>
               </div>
             ))}
@@ -2486,9 +2742,9 @@ function NutritionMealsLibrary({
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button size="sm" className="h-7 text-xs" onClick={() => onLogRecipe(recipe)} disabled={loggingRecipe}>Log today</Button>
-                    <button type="button" onClick={onOpenPlan} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
-                    <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
-                    <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</a>
+                    <button type="button" onClick={() => onAddToPlan(mealActionFromRecipe(recipe))} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
+                    <button type="button" onClick={() => onRecommend(mealActionFromRecipe(recipe))} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</button>
+                    <button type="button" onClick={() => onAsk(mealActionFromRecipe(recipe))} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</button>
                   </div>
                 </div>
               );
@@ -2546,6 +2802,8 @@ export function NutritionTab({
   const [internalSection, setInternalSection] = useState<"today" | "meals" | "targets" | "plan" | "trends">("today");
   const activeSection = externalSection ?? internalSection;
   const setActiveSection = externalSetSection ?? setInternalSection;
+  const [planMealItem, setPlanMealItem] = useState<NutritionMealActionItem | null>(null);
+  const [friendAction, setFriendAction] = useState<{ mode: "recommend" | "ask"; item: NutritionMealActionItem } | null>(null);
 
   // ── Today section: food log panel state ───────────────────────────────
   const [showFoodLog, setShowFoodLog] = useState(false);
@@ -2574,6 +2832,10 @@ export function NutritionTab({
   const { data: recipes = [] } = useQuery<Recipe[]>({
     queryKey: ["/api/recipes"],
     queryFn: () => apiRequest("GET", "/api/recipes").then(r => r.json()),
+  });
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()),
   });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({
     queryKey: ["/api/workout-plans"],
@@ -2733,6 +2995,37 @@ export function NutritionTab({
     onError: () => toast({ title: "Failed to save meal", variant: "destructive" }),
     onSettled: () => setSavingRecentMealId(null),
   });
+  const sendNutritionShareMut = useMutation({
+    mutationFn: ({ mode, item, friendId, note }: { mode: "recommend" | "ask"; item: NutritionMealActionItem; friendId: number; note: string }) =>
+      apiRequest("POST", "/api/recommendations/send", {
+        toUserId: friendId,
+        type: "recipe",
+        title: mode === "ask" ? `Question about ${item.title}` : item.title,
+        subtitle: item.subtitle ?? (mode === "ask" ? "Nutrition question" : "Meal idea"),
+        note,
+      }).then(r => r.json()),
+    onSuccess: (_data, variables) => {
+      toast({ title: variables.mode === "ask" ? "Question sent" : "Recommendation sent", description: variables.item.title });
+      setFriendAction(null);
+    },
+    onError: () => toast({ title: "Could not send", description: "Make sure this person is a friend, then try again.", variant: "destructive" }),
+  });
+  const saveNutritionNoteMut = useMutation({
+    mutationFn: (item: NutritionMealActionItem) => apiRequest("POST", "/api/journal", {
+      date: selectedDate,
+      title: `Meal note: ${item.title}`,
+      content: `${item.title}\n\n${item.subtitle ?? "Saved from Nutrition."}`,
+      mood: null,
+      tags: "nutrition,meal-plan",
+      isFavorite: false,
+      createdAt: new Date().toISOString(),
+    }).then(r => r.json()),
+    onSuccess: (_data, item) => {
+      qc.invalidateQueries({ queryKey: ["/api/journal"] });
+      toast({ title: "Private note created", description: item.title });
+    },
+    onError: () => toast({ title: "Could not create note", variant: "destructive" }),
+  });
 
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ foodName: "", quantity: "1", mealType: "snack", calories: "", protein: "", carbs: "", fat: "" });
@@ -2846,7 +3139,13 @@ export function NutritionTab({
         </div>
       )}
 
-      {activeSection === "plan" && <MealPlannerEmbed />}
+      {activeSection === "plan" && (
+        <MealPlannerEmbed
+          onRecommendMeal={(item) => setFriendAction({ mode: "recommend", item })}
+          onAskMeal={(item) => setFriendAction({ mode: "ask", item })}
+          onSaveMealNote={(item) => saveNutritionNoteMut.mutate(item)}
+        />
+      )}
 
       {activeSection === "today" && (
         <div className="space-y-4">
@@ -3370,6 +3669,9 @@ export function NutritionTab({
           onLogRecent={(item) => repeatFoodMut.mutate(item)}
           onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
           onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
+          onAddToPlan={setPlanMealItem}
+          onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
+          onAsk={(item) => setFriendAction({ mode: "ask", item })}
           onOpenPlan={() => setActiveSection("plan")}
           onOpenTargets={() => setActiveSection("targets")}
           savingRecentId={savingRecentMealId}
@@ -3380,6 +3682,24 @@ export function NutritionTab({
 
       {activeSection === "trends" && (
         <WeeklyNutritionView weekDays={weekDays} weeklyByDate={weeklyByDate} goals={g} weeklyLog={weeklyLog} />
+      )}
+
+      {planMealItem && (
+        <AddMealToPlanModal
+          item={planMealItem}
+          onClose={() => setPlanMealItem(null)}
+          onOpenPlan={() => setActiveSection("plan")}
+        />
+      )}
+      {friendAction && (
+        <NutritionFriendActionModal
+          mode={friendAction.mode}
+          item={friendAction.item}
+          friends={friends}
+          isSending={sendNutritionShareMut.isPending}
+          onClose={() => setFriendAction(null)}
+          onSubmit={(friendId, note) => sendNutritionShareMut.mutate({ mode: friendAction.mode, item: friendAction.item, friendId, note })}
+        />
       )}
     </div>
   );
