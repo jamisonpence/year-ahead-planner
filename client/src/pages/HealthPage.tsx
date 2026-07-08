@@ -2571,14 +2571,14 @@ function NutritionFriendActionModal({
           </Field>
           <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
             <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
-            <p className="text-[11px] text-muted-foreground">Only this recipe or meal idea is shared. Your logged foods, calories, and targets stay private.</p>
+            <p className="text-[11px] text-muted-foreground">This sends a recipe card in Messages. Your logged foods, calories, and targets stay private.</p>
           </div>
           <Button
             className="w-full"
             onClick={() => friendId && onSubmit(Number(friendId), note)}
             disabled={!friendId || isSending}
           >
-            {isSending ? "Sending..." : mode === "recommend" ? "Send recommendation" : "Send question"}
+            {isSending ? "Sending..." : mode === "recommend" ? "Send in Messages" : "Ask in Messages"}
           </Button>
         </>
       )}
@@ -2996,19 +2996,37 @@ export function NutritionTab({
     onSettled: () => setSavingRecentMealId(null),
   });
   const sendNutritionShareMut = useMutation({
-    mutationFn: ({ mode, item, friendId, note }: { mode: "recommend" | "ask"; item: NutritionMealActionItem; friendId: number; note: string }) =>
-      apiRequest("POST", "/api/recommendations/send", {
-        toUserId: friendId,
-        type: "recipe",
-        title: mode === "ask" ? `Question about ${item.title}` : item.title,
-        subtitle: item.subtitle ?? (mode === "ask" ? "Nutrition question" : "Meal idea"),
-        note,
-      }).then(r => r.json()),
+    mutationFn: async ({ mode, item, friendId, note }: { mode: "recommend" | "ask"; item: NutritionMealActionItem; friendId: number; note: string }) => {
+      const dm = await apiRequest("POST", "/api/messenger/dm", { friendId }).then(r => r.json());
+      const messageNote = note.trim() || (mode === "ask"
+        ? `Have you tried ${item.title}?`
+        : `Thought you might like ${item.title}.`);
+      return apiRequest("POST", `/api/messenger/conversations/${dm.id}/share`, {
+        shareType: "recipe",
+        shareData: {
+          shareType: "recipe",
+          name: item.title,
+          subtitle: item.subtitle ?? (mode === "ask" ? "Nutrition question" : "Meal idea"),
+          emoji: "🍽️",
+          note: messageNote,
+          details: {
+            category: item.source === "recipe" ? "Saved recipe" : "Saved meal",
+            servings: 1,
+            calories: Math.round(item.calories ?? 0),
+            protein: Math.round(item.protein ?? 0),
+            carbs: Math.round(item.carbs ?? 0),
+            fat: Math.round(item.fat ?? 0),
+          },
+        },
+        note: messageNote,
+      }).then(r => r.json());
+    },
     onSuccess: (_data, variables) => {
-      toast({ title: variables.mode === "ask" ? "Question sent" : "Recommendation sent", description: variables.item.title });
+      qc.invalidateQueries({ queryKey: ["/api/messenger/conversations"] });
+      toast({ title: variables.mode === "ask" ? "Question sent in Messages" : "Recommendation sent in Messages", description: variables.item.title });
       setFriendAction(null);
     },
-    onError: () => toast({ title: "Could not send", description: "Make sure this person is a friend, then try again.", variant: "destructive" }),
+    onError: () => toast({ title: "Could not send in Messages", description: "Make sure this person is a friend, then try again.", variant: "destructive" }),
   });
   const saveNutritionNoteMut = useMutation({
     mutationFn: (item: NutritionMealActionItem) => apiRequest("POST", "/api/journal", {
