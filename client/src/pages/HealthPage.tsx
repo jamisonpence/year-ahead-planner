@@ -1424,7 +1424,7 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
                 <Button size="sm" variant="ghost" onClick={() => setSelectedRecipe(null)} className="h-7 text-xs">Back</Button>
               </div>
               <div className="grid grid-cols-3 gap-1.5">
-                <a href="#/people?tab=discover" className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
+                <a href="#/discover" className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
                   Recommend
                 </a>
                 <a href="#/messenger" className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
@@ -1933,7 +1933,7 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
             { label: "Cheer", href: "#/people", icon: Heart },
             { label: "Ask about it", href: "#/messenger", icon: MessageCircle },
             { label: "Save this", href: "#/mylifos", icon: Star },
-            { label: "Recommend back", href: "#/people?tab=discover", icon: Share2 },
+            { label: "Recommend back", href: "#/discover", icon: Share2 },
           ].map(item => {
             const Icon = item.icon;
             return (
@@ -2225,7 +2225,7 @@ function MealPlannerEmbed() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { label: "Recommend recipe", href: "#/people?tab=discover", icon: Share2 },
+            { label: "Recommend recipe", href: "#/discover", icon: Share2 },
             { label: "Ask about recipe", href: "#/messenger", icon: MessageCircle },
             { label: "Save meal idea", href: "#/recipes", icon: BookMarked },
             { label: "Link to note", href: "#/journal", icon: Link2 },
@@ -2447,7 +2447,7 @@ function NutritionMealsLibrary({
                     {savingRecentId === item.id ? "Saving..." : "Save meal"}
                   </Button>
                   <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
-                  <a href="#/people?tab=discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                  <a href="#/discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
                 </div>
               </div>
             ))}
@@ -2483,7 +2483,7 @@ function NutritionMealsLibrary({
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button size="sm" className="h-7 text-xs" onClick={() => onLogRecipe(recipe)} disabled={loggingRecipe}>Log today</Button>
                     <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
-                    <a href="#/people?tab=discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                    <a href="#/discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
                     <a href="#/messenger" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</a>
                   </div>
                 </div>

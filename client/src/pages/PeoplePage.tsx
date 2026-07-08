@@ -4,18 +4,19 @@ import RelationshipsPage from "./RelationshipsPage";
 import KidsPage from "./KidsPage";
 import DiscoverPage from "./DiscoverPage";
 
-type PeopleTab = "friends" | "family" | "taste";
+type PeopleTab = "friends" | "family" | "discover";
 
 const TABS: { id: PeopleTab; label: string; icon: React.ElementType }[] = [
   { id: "friends", label: "Friends",     icon: Users    },
   { id: "family",  label: "Family",      icon: Baby     },
-  { id: "taste",   label: "Discover", icon: Sparkles },
+  { id: "discover", label: "Discover", icon: Sparkles },
 ];
 
 function getInitialTab(): PeopleTab {
-  const p = new URLSearchParams(window.location.search).get("tab") as PeopleTab | null;
+  const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
+  const p = new URLSearchParams(window.location.search || hashQuery).get("tab");
   if (p === "family") return "family";
-  if (p === "taste")  return "taste";
+  if (p === "taste" || p === "discover") return "discover";
   return "friends";
 }
 
@@ -51,7 +52,7 @@ export default function PeoplePage() {
       {/* ── All pages mounted; inactive hidden so state is preserved ────────── */}
       <div className={active === "friends" ? "" : "hidden"}><RelationshipsPage /></div>
       <div className={active === "family"  ? "" : "hidden"}><KidsPage /></div>
-      <div className={active === "taste"   ? "" : "hidden"}><DiscoverPage /></div>
+      <div className={active === "discover" ? "" : "hidden"}><DiscoverPage /></div>
     </div>
   );
 }
