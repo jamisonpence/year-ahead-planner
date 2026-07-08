@@ -145,46 +145,43 @@ function PrivacyBanner({ path }: { path: string }) {
   );
 }
 
-const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; matchPaths?: string[] }[] = [
+const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: boolean; defaultHidden?: boolean; matchPaths?: string[] }[] = [
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   // ── Plan ──
-  { path: "/calendar",      label: "Calendar",                icon: Calendar        },
-  { path: "/goals",         label: "Goals",                   icon: Target          },
-  { path: "/tasks",         label: "Tasks",                   icon: ClipboardList   },
-  { path: "/habits",        label: "Habits",                  icon: CalendarCheck   },
-  { path: "/journal",       label: "Journal",                 icon: PenLine,        matchPaths: ["/quotes"] },
-  { path: "/review",        label: "Review",                  icon: History         },
+  { path: "/goals",         label: "Plan",                    icon: Target,         matchPaths: ["/calendar", "/tasks", "/habits", "/journal", "/review"] },
+  { path: "/calendar",      label: "Schedule",                icon: Calendar,       defaultHidden: true },
+  { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList,  defaultHidden: true },
+  { path: "/habits",        label: "Habits",                  icon: CalendarCheck,  defaultHidden: true },
+  { path: "/journal",       label: "Journal",                 icon: PenLine,        defaultHidden: true },
+  { path: "/review",        label: "Review",                  icon: History,        defaultHidden: true },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
   // ── Repository ──
-  { path: "/mylifos",       label: "Overview",                icon: Archive         },
+  { path: "/mylifos",       label: "MyLifos",                 icon: Archive         },
   // ── Wellness ──
-  { path: "/health",        label: "Health",                  icon: Activity,       matchPaths: ["/workouts", "/nutrition", "/recipes"] },
+  { path: "/health",        label: "Health",                  icon: Activity,       defaultHidden: true, matchPaths: ["/workouts", "/nutrition", "/recipes"] },
   // ── Culture ──
-  { path: "/library",       label: "Media",                   icon: Library,        matchPaths: ["/reading", "/movies", "/music", "/art"] },
-  { path: "/hobbies",       label: "Interests",               icon: Sparkles        },
+  { path: "/library",       label: "Media",                   icon: Library,        defaultHidden: true, matchPaths: ["/reading", "/movies", "/music", "/art"] },
+  { path: "/hobbies",       label: "Interests",               icon: Sparkles,       defaultHidden: true },
   // ── Places ──
-  { path: "/places",        label: "Places & Trips",          icon: MapPin,         matchPaths: ["/spots", "/travel"] },
+  { path: "/places",        label: "Places & Trips",          icon: MapPin,         defaultHidden: true, matchPaths: ["/spots", "/travel"] },
   // ── Home ──
-  { path: "/budget",        label: "Finance",                 icon: Wallet          },
-  { path: "/housekeeping",  label: "House",                   icon: Home            },
+  { path: "/budget",        label: "Finance",                 icon: Wallet,         defaultHidden: true },
+  { path: "/housekeeping",  label: "Home",                    icon: Home,           defaultHidden: true },
   // ── Beliefs ──
-  { path: "/beliefs",       label: "Beliefs",                 icon: Flame,          matchPaths: ["/faith", "/politics"] },
+  { path: "/beliefs",       label: "Beliefs",                 icon: Flame,          defaultHidden: true, matchPaths: ["/faith", "/politics"] },
 ];
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "today",     label: null,                paths: ["/dashboard"] },
-  { key: "do",        label: "Do",                paths: ["/calendar", "/tasks", "/habits"] },
-  { key: "plan",      label: "Plan",              paths: ["/goals", "/journal"] },
-  { key: "people",    label: "People",            paths: ["/people", "/messenger"] },
-  { key: "mylifos",   label: "Library",           paths: ["/mylifos", "/library", "/hobbies", "/health", "/places", "/housekeeping", "/budget", "/beliefs"] },
+  { key: "main",      label: null,                paths: ["/dashboard", "/goals", "/people", "/messenger", "/mylifos"] },
+  { key: "pinned",    label: "Pinned",            paths: ["/calendar", "/tasks", "/habits", "/journal", "/review", "/health", "/library", "/hobbies", "/places", "/budget", "/housekeeping", "/beliefs"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
-const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover", "/messenger"];
+const PEOPLE_PATHS = ["/people", "/relationships", "/kids", "/discover"];
 const MYLIFOS_PATHS = ["/mylifos", "/library", "/reading", "/movies", "/music", "/art", "/hobbies", "/health", "/workouts", "/nutrition", "/recipes", "/places", "/spots", "/travel", "/housekeeping", "/budget", "/beliefs", "/faith", "/politics", "/plants", "/quotes"];
 
 function basePath(path: string) {
@@ -205,11 +202,11 @@ function useNavPrefs() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/nav-prefs"] }),
   });
 
-  // Merge saved prefs with ALL_TABS (handles new tabs added later)
-  // Beta tabs default to hidden unless the user has explicitly saved a pref for them.
+  // Merge saved prefs with ALL_TABS (handles new tabs added later).
+  // Deep sections default to hidden so the sidebar stays centered on the five primary destinations.
   const prefs: NavPref[] = ALL_TABS.map((tab) => {
     const saved = savedPrefs.find((p) => p.path === tab.path);
-    return { path: tab.path, hidden: saved?.hidden ?? tab.beta ?? false };
+    return { path: tab.path, hidden: saved?.hidden ?? tab.defaultHidden ?? tab.beta ?? false };
   });
   // Re-order by saved order
   if (savedPrefs.length > 0) {
@@ -398,7 +395,7 @@ const COLLECTION_GROUPS = [
   {
     key: "home",
     label: "Home",
-    subtitle: "Budget and household",
+    subtitle: "Finance and household",
     tiles: [
       { path: "/budget",       emoji: "💰", label: "Finance"       },
       { path: "/housekeeping", emoji: "🏠", label: "Home" },
@@ -406,13 +403,11 @@ const COLLECTION_GROUPS = [
   },
   {
     key: "keepsakes",
-    label: "Values & Keepsakes",
-    subtitle: "Faith, civic life, plants, and quotes",
+    label: "Values",
+    subtitle: "Faith and civic life",
     tiles: [
       { path: "/faith",    emoji: "🕊️", label: "Faith"          },
       { path: "/politics", emoji: "🏛️", label: "Politics & Civic" },
-      { path: "/plants",   emoji: "🌿", label: "Plants" },
-      { path: "/quotes",   emoji: "💬", label: "Quotes" },
     ],
   },
 ];
@@ -751,7 +746,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <circle cx="16" cy="21" r="2" fill="hsl(25 85% 52%)" />
               <circle cx="22" cy="21" r="2" fill="hsl(210 80% 48%)" />
             </svg>
-            <span className="font-bold text-sm tracking-tight">Library</span>
+            <span className="font-bold text-sm tracking-tight">MyLifos</span>
           </div>
           <button
             onClick={() => setQuickAddOpen(true)}
@@ -970,7 +965,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
             <path d="M2 12h28" stroke="currentColor" strokeWidth="2" />
           </svg>
-          <span className="font-bold text-sm">Library</span>
+          <span className="font-bold text-sm">MyLifos</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -1033,7 +1028,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
             >
               <Archive size={22} className={(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Library</span>
+              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
             </button>
           </Link>
 
