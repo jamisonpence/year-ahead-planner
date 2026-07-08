@@ -2343,6 +2343,8 @@ function NutritionMealsLibrary({
   onLogRecent,
   onSaveRecent,
   onLogRecipe,
+  onOpenPlan,
+  onOpenTargets,
   savingRecentId,
   loggingRecent,
   loggingRecipe,
@@ -2353,6 +2355,8 @@ function NutritionMealsLibrary({
   onLogRecent: (item: FoodLogEntry) => void;
   onSaveRecent: (item: FoodLogEntry) => void;
   onLogRecipe: (recipe: Recipe) => void;
+  onOpenPlan: () => void;
+  onOpenTargets: () => void;
   savingRecentId?: number | null;
   loggingRecent: boolean;
   loggingRecipe: boolean;
@@ -2446,8 +2450,8 @@ function NutritionMealsLibrary({
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onSaveRecent(item)} disabled={savingRecentId === item.id}>
                     {savingRecentId === item.id ? "Saving..." : "Save meal"}
                   </Button>
-                  <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
-                  <a href="#/discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                  <button type="button" onClick={onOpenPlan} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
+                  <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
                 </div>
               </div>
             ))}
@@ -2482,9 +2486,9 @@ function NutritionMealsLibrary({
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button size="sm" className="h-7 text-xs" onClick={() => onLogRecipe(recipe)} disabled={loggingRecipe}>Log today</Button>
-                    <a href="#/health?tab=nutrition" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</a>
-                    <a href="#/discover" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
-                    <a href="#/messenger" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</a>
+                    <button type="button" onClick={onOpenPlan} className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Add to plan</button>
+                    <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Recommend</a>
+                    <a href="#/people" className="rounded-md border px-2 py-1.5 text-center text-[11px] hover:bg-secondary">Ask about it</a>
                   </div>
                 </div>
               );
@@ -2514,10 +2518,10 @@ function NutritionMealsLibrary({
             ) : (
               <p className="text-xs text-muted-foreground">Log a few meals and MyLifos will suggest what to save.</p>
             )}
-            <a href="#/nutrition?tab=targets" className="block rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
+            <button type="button" onClick={onOpenTargets} className="block w-full text-left rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
               <p className="text-xs font-semibold">Build around your protein target</p>
               <p className="text-[11px] text-muted-foreground">Save one reliable high-protein meal for days when you fall short.</p>
-            </a>
+            </button>
           </div>
         </div>
       </div>
@@ -3366,6 +3370,8 @@ export function NutritionTab({
           onLogRecent={(item) => repeatFoodMut.mutate(item)}
           onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
           onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
+          onOpenPlan={() => setActiveSection("plan")}
+          onOpenTargets={() => setActiveSection("targets")}
           savingRecentId={savingRecentMealId}
           loggingRecent={repeatFoodMut.isPending}
           loggingRecipe={logRecipeMut.isPending}
