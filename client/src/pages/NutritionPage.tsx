@@ -22,7 +22,7 @@ export default function NutritionPage() {
     <PageShell
       size="sm"
       title="Nutrition"
-      subtitle="Food log, macros, meal plans, and nutrition goals"
+      subtitle="Today's food decisions, targets, meal planning, and trends"
       controls={
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(tab => {

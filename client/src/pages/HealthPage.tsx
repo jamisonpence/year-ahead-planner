@@ -896,7 +896,7 @@ function MacroPreview({ cal, p, c, f }: { cal: number; p: number; c: number; f: 
 }
 
 // ── FoodSearchAdd (tabbed: Search / Quick Add / My Recipes) ───────────────
-function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void }) {
+function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string; onAdded: () => void; defaultMeal?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [mode, setMode] = useState<"search" | "quick" | "recipes">("search");
@@ -907,7 +907,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
-  const [searchMeal, setSearchMeal] = useState("snack");
+  const [searchMeal, setSearchMeal] = useState(defaultMeal);
   const [searchQty, setSearchQty] = useState(1);
   const [adding, setAdding] = useState(false);
 
@@ -915,14 +915,14 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [fsResults, setFsResults] = useState<any[]>([]);
   const [fsFood, setFsFood] = useState<any | null>(null);   // full food detail with servings
   const [fsServingIdx, setFsServingIdx] = useState(0);
-  const [fsMeal, setFsMeal] = useState("snack");
+  const [fsMeal, setFsMeal] = useState(defaultMeal);
   const [fsQty, setFsQty] = useState(1);
   const [fsAdding, setFsAdding] = useState(false);
   const [fsLoading, setFsLoading] = useState(false);
 
   // ── Recent/saved foods ─────────────────────────────────────────────────
   const [recentSelected, setRecentSelected] = useState<FoodLogEntry | null>(null);
-  const [recentMeal, setRecentMeal] = useState("snack");
+  const [recentMeal, setRecentMeal] = useState(defaultMeal);
   const [recentQty, setRecentQty] = useState(1);
   const [recentAdding, setRecentAdding] = useState(false);
 
@@ -939,7 +939,7 @@ function FoodSearchAdd({ date, onAdded }: { date: string; onAdded: () => void })
   const [qaProt, setQaProt] = useState("");
   const [qaCarbs, setQaCarbs] = useState("");
   const [qaFat, setQaFat] = useState("");
-  const [qaMeal, setQaMeal] = useState("snack");
+  const [qaMeal, setQaMeal] = useState(defaultMeal);
   const [qaQty, setQaQty] = useState(1);
   const [qaSaveRecipe, setQaSaveRecipe] = useState(false);
   const [qaAdding, setQaAdding] = useState(false);
@@ -2036,6 +2036,10 @@ export function NutritionTab({
   const activeSection = externalSection ?? internalSection;
   const setActiveSection = externalSetSection ?? setInternalSection;
 
+  // ── Today section: food log panel state ───────────────────────────────
+  const [showFoodLog, setShowFoodLog] = useState(false);
+  const [logMealPreset, setLogMealPreset] = useState("snack");
+
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
     queryFn: () => apiRequest("GET", `/api/nutrition/food-log?date=${selectedDate}`).then(r => r.json()),
@@ -2051,6 +2055,10 @@ export function NutritionTab({
   const { data: weeklyLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log/week"],
     queryFn: () => apiRequest("GET", "/api/nutrition/food-log/week").then(r => r.json()),
+  });
+  const { data: recentFoods = [] } = useQuery<FoodLogEntry[]>({
+    queryKey: ["/api/nutrition/food-log/history"],
+    queryFn: () => apiRequest("GET", "/api/nutrition/food-log/history").then(r => r.json()),
   });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({
     queryKey: ["/api/workout-plans"],
@@ -2102,6 +2110,19 @@ export function NutritionTab({
     carbs:    acc.carbs    + Number(e.carbs)     * Number(e.quantity),
     fat:      acc.fat      + Number(e.fat)       * Number(e.quantity),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  const mealSlotsLogged = new Set(foodLog.map(e => e.mealType)).size;
+  const caloriesLeft = Math.max(0, Math.round(g.calories - totals.calories));
+  const proteinLeft = Math.max(0, Math.round(g.protein - totals.protein));
+  const waterLeft = Math.max(0, g.waterGlasses - waterGlasses);
+  const recentShortcuts = useMemo(() => {
+    const seen = new Set<string>();
+    return recentFoods.filter(item => {
+      const key = item.foodName.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 6);
+  }, [recentFoods]);
 
   const calPct = Math.min(100, g.calories > 0 ? (totals.calories / g.calories) * 100 : 0);
 
@@ -2112,6 +2133,32 @@ export function NutritionTab({
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/nutrition/food-log/${id}`).then(r => r.json()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] }); toast({ title: "Entry removed" }); },
+  });
+  const repeatFoodMut = useMutation({
+    mutationFn: (item: FoodLogEntry) => apiRequest("POST", "/api/nutrition/food-log", {
+      foodName: item.foodName,
+      usdaFoodId: item.usdaFoodId,
+      servingSize: item.servingSize,
+      servingUnit: item.servingUnit,
+      quantity: 1,
+      mealType: item.mealType || "snack",
+      date: selectedDate,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      fiber: item.fiber,
+      sugar: item.sugar,
+      sodium: item.sodium,
+      ingredientsJson: item.ingredientsJson,
+    }).then(r => r.json()),
+    onSuccess: (_data, item) => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/history"] });
+      toast({ title: `${item.foodName} logged` });
+    },
+    onError: () => toast({ title: "Failed to log food", variant: "destructive" }),
   });
 
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -2230,54 +2277,136 @@ export function NutritionTab({
 
       {activeSection === "today" && (
         <div className="space-y-4">
-          {/* Body Composition Goal card — shown when an active body_composition workout plan exists */}
+
+          {/* ── Header: date + primary Log Food action ───────────────────── */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+                className="text-sm border rounded-lg px-2 py-1.5 bg-background" />
+              {selectedDate !== todayStr && (
+                <button onClick={() => setSelectedDate(todayStr)} className="text-xs text-primary hover:underline">Today</button>
+              )}
+            </div>
+            <button
+              onClick={() => { setLogMealPreset("snack"); setShowFoodLog(v => !v); }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm shrink-0"
+            >
+              <Plus size={14} /> Log Food
+            </button>
+          </div>
+
+          {/* ── Collapsible food log panel ─────────────────────────────── */}
+          {showFoodLog && (
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-secondary/20">
+                <p className="text-sm font-semibold">Log Food</p>
+                <button onClick={() => setShowFoodLog(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors">
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="p-4">
+                <FoodSearchAdd
+                  key={logMealPreset}
+                  date={selectedDate}
+                  defaultMeal={logMealPreset}
+                  onAdded={() => {
+                    qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+                    qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── Body comp plan card ──────────────────────────────────────── */}
           {activeBodyCompPlan && bodyCompMetric && (
             <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
           )}
 
-          {/* Date selector */}
-          <div className="flex items-center gap-2">
-            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-              className="text-sm border rounded-lg px-2 py-1 bg-background" />
-            {selectedDate !== todayStr && (
-              <button onClick={() => setSelectedDate(todayStr)} className="text-xs text-primary hover:underline">Today</button>
-            )}
+          {/* ── Next-action nudge card ───────────────────────────────────── */}
+          {(() => {
+            const hour = new Date().getHours();
+            const proteinGap = Math.round(g.protein - totals.protein);
+            const calGap = Math.round(g.calories - totals.calories);
+            const waterGap = g.waterGlasses - waterGlasses;
+            const hasBreakfast = foodLog.some(e => e.mealType === "breakfast");
+            const hasLunch     = foodLog.some(e => e.mealType === "lunch");
+            const hasDinner    = foodLog.some(e => e.mealType === "dinner");
+            let nudge: { emoji: string; text: string; cls: string } | null = null;
+            if (!hasBreakfast && hour >= 5 && hour < 12)
+              nudge = { emoji: "🌅", text: "Start your day — log breakfast", cls: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200" };
+            else if (!hasLunch && hour >= 12 && hour < 15)
+              nudge = { emoji: "☀️", text: "It's lunchtime — log your meal", cls: "bg-sky-50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-200" };
+            else if (!hasDinner && hour >= 17 && hour < 21)
+              nudge = { emoji: "🌙", text: "Log dinner to complete your day", cls: "bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200" };
+            else if (proteinGap >= 10)
+              nudge = { emoji: "💪", text: `You're ${proteinGap}g away from your protein target`, cls: "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200" };
+            else if (waterGap >= 3)
+              nudge = { emoji: "💧", text: `Drink ${waterGap} more glasses to hit your water goal`, cls: "bg-cyan-50 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800 text-cyan-800 dark:text-cyan-200" };
+            else if (calGap > 300 && hour < 20)
+              nudge = { emoji: "🍽️", text: `${calGap} kcal remaining — plan your next meal`, cls: "bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200" };
+            else if (totals.calories >= g.calories * 0.95 && g.calories > 0)
+              nudge = { emoji: "✅", text: "You've hit your calorie goal for today!", cls: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200" };
+            return nudge ? (
+              <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${nudge.cls}`}>
+                <span className="text-xl shrink-0">{nudge.emoji}</span>
+                <p className="text-sm font-medium">{nudge.text}</p>
+              </div>
+            ) : null;
+          })()}
+
+          {/* ── Today at a glance ───────────────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: "Calories left", value: caloriesLeft, unit: "kcal", tone: "bg-primary/5 border-primary/20" },
+              { label: "Protein left",  value: proteinLeft,  unit: "g",    tone: "bg-blue-500/5 border-blue-500/20" },
+              { label: "Meals logged",  value: mealSlotsLogged, unit: "/ 4", tone: "bg-amber-500/5 border-amber-500/20" },
+              { label: "Water left",    value: waterLeft,    unit: waterLeft === 1 ? "glass" : "glasses", tone: "bg-cyan-500/5 border-cyan-500/20" },
+            ].map(item => (
+              <div key={item.label} className={`rounded-xl border px-3 py-2.5 ${item.tone}`}>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+                <p className="text-lg font-bold leading-tight">
+                  {item.value}
+                  <span className="text-[11px] font-medium text-muted-foreground ml-1">{item.unit}</span>
+                </p>
+              </div>
+            ))}
           </div>
 
-          {/* Daily summary */}
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <div className="flex items-center gap-4">
-              {/* Circular calorie gauge */}
-              <div className="relative w-20 h-20 shrink-0">
-                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-                  <circle cx="40" cy="40" r="32" fill="none" stroke="currentColor" strokeOpacity="0.1" strokeWidth="8" />
-                  <circle cx="40" cy="40" r="32" fill="none" stroke="hsl(var(--primary))" strokeWidth="8"
+          {/* ── Daily progress card: calories + macros + water ───────────── */}
+          <div className="rounded-2xl border bg-card p-4 space-y-4">
+            {/* Ring + macro bars */}
+            <div className="flex items-center gap-5">
+              {/* Calorie ring */}
+              <div className="relative w-[76px] h-[76px] shrink-0">
+                <svg className="w-[76px] h-[76px] -rotate-90" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="32" fill="none" stroke="currentColor" strokeOpacity="0.1" strokeWidth="9" />
+                  <circle cx="40" cy="40" r="32" fill="none" stroke="hsl(var(--primary))" strokeWidth="9"
                     strokeDasharray={circumference}
                     strokeDashoffset={circumference * (1 - calPct / 100)}
                     strokeLinecap="round" />
                 </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-base font-bold leading-none">{Math.round(totals.calories)}</span>
-                  <span className="text-[9px] text-muted-foreground">/ {g.calories}</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center leading-none gap-0.5">
+                  <span className="text-[15px] font-bold">{Math.round(totals.calories)}</span>
+                  <span className="text-[8px] text-muted-foreground">/ {g.calories}</span>
+                  <span className="text-[8px] text-muted-foreground">kcal</span>
                 </div>
               </div>
               {/* Macro bars */}
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="text-xs font-medium text-muted-foreground">Today's Macros</p>
+              <div className="flex-1 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold">Macros</p>
                   {goalsMatchPlan && (
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700">
-                      From plan
-                    </span>
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700">From plan</span>
                   )}
                 </div>
-                {[
+                {([
                   { label: "Protein", val: totals.protein, goal: g.protein, color: "bg-blue-500" },
                   { label: "Carbs",   val: totals.carbs,   goal: g.carbs,   color: "bg-amber-500" },
                   { label: "Fat",     val: totals.fat,     goal: g.fat,     color: "bg-rose-500" },
-                ].map(m => (
-                  <div key={m.label} className="space-y-0.5">
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                ] as const).map(m => (
+                  <div key={m.label}>
+                    <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
                       <span>{m.label}</span>
                       <span>{Math.round(m.val)}g / {m.goal}g</span>
                     </div>
@@ -2289,279 +2418,315 @@ export function NutritionTab({
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Water tracker */}
-          <div className="rounded-xl border bg-card p-3">
-            <p className="text-xs font-semibold mb-2">💧 Water — {waterGlasses} of {g.waterGlasses} glasses</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {Array.from({ length: g.waterGlasses }, (_, i) => (
-                <button key={i}
-                  onClick={() => waterMut.mutate(i < waterGlasses ? i : i + 1)}
-                  className={`text-lg transition-all ${i < waterGlasses ? "opacity-100" : "opacity-25 hover:opacity-60"}`}>
-                  🥤
-                </button>
-              ))}
+            {/* Water */}
+            <div className="border-t pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold">💧 Water</p>
+                <span className="text-xs text-muted-foreground">{waterGlasses} / {g.waterGlasses} glasses</span>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {Array.from({ length: g.waterGlasses }, (_, i) => (
+                  <button key={i}
+                    onClick={() => waterMut.mutate(i < waterGlasses ? i : i + 1)}
+                    className={`text-lg transition-all ${i < waterGlasses ? "opacity-100" : "opacity-20 hover:opacity-60"}`}>
+                    🥤
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Food search */}
-          <FoodSearchAdd date={selectedDate} onAdded={() => {
-            qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
-            qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
-          }} />
-
-          {/* Meal groups */}
-          {(["breakfast","lunch","dinner","snack"] as const).map(meal => {
-            const entries = foodLog.filter(e => e.mealType === meal);
-            if (entries.length === 0) return null;
-            const mealCals = entries.reduce((s, e) => s + Number(e.calories) * Number(e.quantity), 0);
-            return (
-              <div key={meal} className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold capitalize text-muted-foreground">{meal}</p>
-                  <span className="text-xs text-muted-foreground">{Math.round(mealCals)} kcal</span>
+          {/* ── Repeat shortcuts ────────────────────────────────────────── */}
+          {recentShortcuts.length > 0 && (
+            <div className="rounded-2xl border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Repeat a recent meal</p>
+                  <p className="text-xs text-muted-foreground">One tap adds it to today.</p>
                 </div>
-                {entries.map(e => (
-                  <div key={e.id} className="rounded-lg bg-secondary/30 border overflow-hidden">
-                    {editingEntryId === e.id ? (
-                      /* ── Inline edit form ── */
-                      <div className="px-3 py-3 space-y-3">
+                <button
+                  onClick={() => setShowFoodLog(true)}
+                  className="text-xs font-medium text-primary hover:underline shrink-0"
+                >
+                  Search instead
+                </button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
+                {recentShortcuts.map(item => (
+                  <button
+                    key={`${item.id}-${item.foodName}`}
+                    onClick={() => repeatFoodMut.mutate(item)}
+                    disabled={repeatFoodMut.isPending}
+                    className="min-w-[150px] max-w-[190px] text-left rounded-xl border bg-background hover:bg-secondary/50 px-3 py-2 transition-colors disabled:opacity-60"
+                  >
+                    <p className="text-xs font-semibold truncate">{item.foodName}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {Math.round(Number(item.calories))} kcal · P {Math.round(Number(item.protein))}g
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-                        {/* Row 1: name + meal inline */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            className="flex-1 text-sm font-medium border rounded-md px-2 py-1.5 bg-background"
-                            value={editForm.foodName}
-                            onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
-                            placeholder="Food name"
-                          />
-                          <select
-                            className="text-xs border rounded-md px-2 py-1.5 bg-background shrink-0"
-                            value={editForm.mealType}
-                            onChange={ev => setEditForm(f => ({ ...f, mealType: ev.target.value }))}
-                          >
-                            <option value="breakfast">Breakfast</option>
-                            <option value="lunch">Lunch</option>
-                            <option value="dinner">Dinner</option>
-                            <option value="snack">Snack</option>
-                          </select>
-                        </div>
-
-                        {/* ── Ingredients (main focus) ── */}
-                        <div className="rounded-lg border bg-background overflow-hidden">
-                          {/* Header */}
-                          <div className="flex items-center justify-between px-3 py-2 border-b bg-secondary/20">
-                            <p className="text-xs font-semibold">Ingredients</p>
-                            {editIngredients.length > 0 && (
-                              <span className="text-[10px] text-muted-foreground">{editIngredients.length} item{editIngredients.length !== 1 ? "s" : ""}</span>
-                            )}
-                          </div>
-
-                          {/* Ingredient rows */}
-                          {editIngredients.length === 0 && !editIngPending && editIngResults.length === 0 && (
-                            <p className="text-xs text-muted-foreground text-center py-3 px-3">No ingredients saved — add some below or edit macros manually.</p>
-                          )}
-                          {editIngredients.map((ing, idx) => (
-                            <div key={`${ing.id}-${idx}`} className="flex items-center gap-2 px-3 py-2.5 border-b last:border-b-0">
-                              {/* Name + macro contribution */}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{ing.name}</p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {Math.round(ing.nutrients.calories * ing.qty)} kcal · P {Math.round(ing.nutrients.protein * ing.qty)}g · C {Math.round(ing.nutrients.carbs * ing.qty)}g · F {Math.round(ing.nutrients.fat * ing.qty)}g
-                                </p>
-                              </div>
-                              {/* Qty stepper */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: Math.max(0.25, parseFloat((x.qty - 0.5).toFixed(2))) } : x))}
-                                  className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
-                                >−</button>
-                                <input
-                                  type="number" min="0.25" step="0.25"
-                                  value={ing.qty}
-                                  onChange={ev => {
-                                    const v = parseFloat(ev.target.value);
-                                    if (!isNaN(v) && v > 0) setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: v } : x));
-                                  }}
-                                  className="w-12 text-xs text-center border rounded-md px-1 py-1 bg-background"
-                                />
-                                <button
-                                  onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: parseFloat((x.qty + 0.5).toFixed(2)) } : x))}
-                                  className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
-                                >+</button>
-                              </div>
-                              {/* Remove */}
-                              <button
-                                onClick={() => setEditIngredients(arr => arr.filter((_, i) => i !== idx))}
-                                className="text-muted-foreground hover:text-destructive shrink-0 p-0.5"
-                              ><X size={13} /></button>
-                            </div>
-                          ))}
-
-                          {/* Confirm pending ingredient */}
-                          {editIngPending && (
-                            <div className="px-3 py-2.5 border-t bg-primary/5 space-y-2">
-                              <p className="text-xs font-medium truncate text-primary">{editIngPending.description}</p>
-                              <div className="flex items-center gap-2">
-                                <label className="text-[10px] text-muted-foreground shrink-0">Servings:</label>
-                                <input
-                                  type="number" min="0.25" step="0.25"
-                                  value={editIngPendingQty}
-                                  onChange={ev => setEditIngPendingQty(parseFloat(ev.target.value) || 1)}
-                                  className="w-16 text-xs border rounded-md px-2 py-1 bg-background"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const n = editIngPending.foodNutrients || [];
-                                    const get = (id: number) => (n.find((x: any) => x.nutrientId === id)?.value || 0);
-                                    setEditIngredients(arr => [...arr, {
-                                      id: editIngPending.fdcId,
-                                      name: editIngPending.description,
-                                      servingSize: editIngPending.servingSize || 100,
-                                      servingUnit: editIngPending.servingUnit || "g",
-                                      qty: editIngPendingQty,
-                                      nutrients: {
-                                        calories: get(1008), protein: get(1003), carbs: get(1005),
-                                        fat: get(1004), fiber: get(1079), sugar: get(2000), sodium: get(1093),
-                                      },
-                                    }]);
-                                    setEditIngPending(null); setEditIngPendingQty(1); setEditIngQuery(""); setEditIngResults([]);
-                                  }}
-                                  className="flex-1 text-xs font-semibold py-1 rounded-md bg-primary text-primary-foreground"
-                                >Add</button>
-                                <button onClick={() => setEditIngPending(null)} className="text-muted-foreground p-0.5"><X size={13} /></button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* USDA search results */}
-                          {editIngResults.length > 0 && !editIngPending && (
-                            <div className="border-t divide-y max-h-40 overflow-y-auto">
-                              {editIngResults.map((item: any) => (
-                                <button
-                                  key={item.fdcId}
-                                  onClick={() => { setEditIngPending(item); setEditIngPendingQty(1); }}
-                                  className="w-full text-left px-3 py-2 hover:bg-secondary/40 text-xs"
-                                >
-                                  <span className="font-medium block truncate">{item.description}</span>
-                                  {item.brandName && <span className="text-muted-foreground text-[10px]">{item.brandName}</span>}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Add ingredient search bar */}
-                          {!editIngPending && (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border-t bg-secondary/10">
-                              <input
-                                className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background"
-                                placeholder="+ Search to add ingredient (USDA)…"
-                                value={editIngQuery}
-                                onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
-                                onKeyDown={ev => ev.key === "Enter" && doEditIngSearch()}
-                              />
-                              <button
-                                onClick={doEditIngSearch}
-                                disabled={editIngSearching || !editIngQuery.trim()}
-                                className="text-xs px-2.5 py-1.5 rounded-md bg-secondary text-foreground shrink-0 disabled:opacity-40"
-                              >{editIngSearching ? "…" : "Search"}</button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Macros — auto-calculated summary when ingredients present, editable when not */}
-                        {editIngredients.length > 0 ? (
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {([
-                              { key: "calories", label: "kcal", val: editForm.calories },
-                              { key: "protein",  label: "prot", val: editForm.protein  },
-                              { key: "carbs",    label: "carbs", val: editForm.carbs   },
-                              { key: "fat",      label: "fat",  val: editForm.fat      },
-                            ] as const).map(({ key, label, val }) => (
-                              <div key={key} className="text-center rounded-md bg-secondary/30 py-1.5 px-1">
-                                <p className="text-sm font-bold">{Math.round(parseFloat(val) || 0)}</p>
-                                <p className="text-[10px] text-muted-foreground">{label}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {(["calories","protein","carbs","fat"] as const).map(field => (
-                              <div key={field}>
-                                <label className="text-[10px] text-muted-foreground font-medium">{field === "calories" ? "kcal" : field}</label>
-                                <input
-                                  type="number" min="0" step="1"
-                                  className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
-                                  value={editForm[field]}
-                                  onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Serving quantity */}
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground shrink-0">Servings logged:</label>
-                          <input
-                            type="number" min="0.1" step="0.1"
-                            className="w-20 text-sm border rounded-md px-2 py-1 bg-background"
-                            value={editForm.quantity}
-                            onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
-                          />
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => updateMut.mutate({ id: e.id, data: {
-                              foodName: editForm.foodName.trim(),
-                              quantity: parseFloat(editForm.quantity) || 1,
-                              mealType: editForm.mealType,
-                              calories: parseFloat(editForm.calories) || 0,
-                              protein:  parseFloat(editForm.protein)  || 0,
-                              carbs:    parseFloat(editForm.carbs)    || 0,
-                              fat:      parseFloat(editForm.fat)      || 0,
-                              ingredientsJson: editIngredients.length > 0 ? JSON.stringify(editIngredients) : null,
-                            }})}
-                            disabled={updateMut.isPending || !editForm.foodName.trim()}
-                            className="flex-1 text-xs font-semibold py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
-                          >
-                            {updateMut.isPending ? "Saving…" : "Save changes"}
-                          </button>
-                          <button
-                            onClick={() => setEditingEntryId(null)}
-                            className="flex-1 text-xs font-medium py-2 rounded-md bg-secondary text-secondary-foreground"
-                          >Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* ── Normal row ── */
-                      <div className="flex items-center gap-2 px-3 py-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{e.foodName}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {e.quantity}× {e.servingSize}{e.servingUnit} · P {Math.round(Number(e.protein) * Number(e.quantity))}g · C {Math.round(Number(e.carbs) * Number(e.quantity))}g · F {Math.round(Number(e.fat) * Number(e.quantity))}g
-                          </p>
-                        </div>
-                        <span className="text-sm font-semibold shrink-0">{Math.round(Number(e.calories) * Number(e.quantity))}</span>
-                        <button onClick={() => openEditEntry(e)} className="text-muted-foreground hover:text-primary shrink-0">
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => deleteMut.mutate(e.id)} className="text-muted-foreground hover:text-destructive shrink-0">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+          {/* ── Meal sections (always visible) ──────────────────────────── */}
+          {(["breakfast", "lunch", "dinner", "snack"] as const).map(meal => {
+            const mealEmoji  = { breakfast: "🌅", lunch: "☀️", dinner: "🌙", snack: "🍎" }[meal];
+            const mealLabel  = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snacks" }[meal];
+            const entries    = foodLog.filter(e => e.mealType === meal);
+            const mealCals   = entries.reduce((s, e) => s + Number(e.calories) * Number(e.quantity), 0);
+            function openLog() { setLogMealPreset(meal); setShowFoodLog(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
+            return (
+              <div key={meal} className="rounded-2xl border bg-card overflow-hidden">
+                {/* Meal header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base leading-none">{mealEmoji}</span>
+                    <p className="text-sm font-semibold">{mealLabel}</p>
+                    {entries.length > 0 && (
+                      <span className="text-xs text-muted-foreground">· {Math.round(mealCals)} kcal</span>
                     )}
                   </div>
-                ))}
+                  <button
+                    onClick={openLog}
+                    className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 px-2 py-1 rounded-lg hover:bg-primary/8 transition-colors"
+                  >
+                    <Plus size={13} /> Add
+                  </button>
+                </div>
+                {/* Entries or empty state */}
+                {entries.length === 0 ? (
+                  <div className="px-4 py-5 flex flex-col items-center gap-1.5 text-center bg-secondary/10">
+                    <p className="text-xs font-medium">No {mealLabel.toLowerCase()} logged</p>
+                    <p className="text-[11px] text-muted-foreground max-w-xs">
+                      Add it here so Today can keep calories, protein, and your next action accurate.
+                    </p>
+                    <button onClick={openLog} className="text-xs text-primary hover:underline font-semibold mt-1">
+                      Log {mealLabel.toLowerCase()}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {entries.map(e => (
+                      <div key={e.id} className="overflow-hidden">
+                        {editingEntryId === e.id ? (
+                          /* ── Inline edit form ── */
+                          <div className="px-3 py-3 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <input
+                                className="flex-1 text-sm font-medium border rounded-md px-2 py-1.5 bg-background"
+                                value={editForm.foodName}
+                                onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
+                                placeholder="Food name"
+                              />
+                              <select
+                                className="text-xs border rounded-md px-2 py-1.5 bg-background shrink-0"
+                                value={editForm.mealType}
+                                onChange={ev => setEditForm(f => ({ ...f, mealType: ev.target.value }))}
+                              >
+                                <option value="breakfast">Breakfast</option>
+                                <option value="lunch">Lunch</option>
+                                <option value="dinner">Dinner</option>
+                                <option value="snack">Snack</option>
+                              </select>
+                            </div>
+                            <div className="rounded-lg border bg-background overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 border-b bg-secondary/20">
+                                <p className="text-xs font-semibold">Ingredients</p>
+                                {editIngredients.length > 0 && (
+                                  <span className="text-[10px] text-muted-foreground">{editIngredients.length} item{editIngredients.length !== 1 ? "s" : ""}</span>
+                                )}
+                              </div>
+                              {editIngredients.length === 0 && !editIngPending && editIngResults.length === 0 && (
+                                <p className="text-xs text-muted-foreground text-center py-3 px-3">No ingredients saved — add some below or edit macros manually.</p>
+                              )}
+                              {editIngredients.map((ing, idx) => (
+                                <div key={`${ing.id}-${idx}`} className="flex items-center gap-2 px-3 py-2.5 border-b last:border-b-0">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium truncate">{ing.name}</p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {Math.round(ing.nutrients.calories * ing.qty)} kcal · P {Math.round(ing.nutrients.protein * ing.qty)}g · C {Math.round(ing.nutrients.carbs * ing.qty)}g · F {Math.round(ing.nutrients.fat * ing.qty)}g
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: Math.max(0.25, parseFloat((x.qty - 0.5).toFixed(2))) } : x))}
+                                      className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
+                                    >−</button>
+                                    <input
+                                      type="number" min="0.25" step="0.25"
+                                      value={ing.qty}
+                                      onChange={ev => {
+                                        const v = parseFloat(ev.target.value);
+                                        if (!isNaN(v) && v > 0) setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: v } : x));
+                                      }}
+                                      className="w-12 text-xs text-center border rounded-md px-1 py-1 bg-background"
+                                    />
+                                    <button
+                                      onClick={() => setEditIngredients(arr => arr.map((x, i) => i === idx ? { ...x, qty: parseFloat((x.qty + 0.5).toFixed(2)) } : x))}
+                                      className="w-6 h-6 rounded-md border bg-secondary/50 hover:bg-secondary text-sm font-bold flex items-center justify-center leading-none"
+                                    >+</button>
+                                  </div>
+                                  <button
+                                    onClick={() => setEditIngredients(arr => arr.filter((_, i) => i !== idx))}
+                                    className="text-muted-foreground hover:text-destructive shrink-0 p-0.5"
+                                  ><X size={13} /></button>
+                                </div>
+                              ))}
+                              {editIngPending && (
+                                <div className="px-3 py-2.5 border-t bg-primary/5 space-y-2">
+                                  <p className="text-xs font-medium truncate text-primary">{editIngPending.description}</p>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-[10px] text-muted-foreground shrink-0">Servings:</label>
+                                    <input
+                                      type="number" min="0.25" step="0.25"
+                                      value={editIngPendingQty}
+                                      onChange={ev => setEditIngPendingQty(parseFloat(ev.target.value) || 1)}
+                                      className="w-16 text-xs border rounded-md px-2 py-1 bg-background"
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        const n = editIngPending.foodNutrients || [];
+                                        const get = (id: number) => (n.find((x: any) => x.nutrientId === id)?.value || 0);
+                                        setEditIngredients(arr => [...arr, {
+                                          id: editIngPending.fdcId,
+                                          name: editIngPending.description,
+                                          servingSize: editIngPending.servingSize || 100,
+                                          servingUnit: editIngPending.servingUnit || "g",
+                                          qty: editIngPendingQty,
+                                          nutrients: {
+                                            calories: get(1008), protein: get(1003), carbs: get(1005),
+                                            fat: get(1004), fiber: get(1079), sugar: get(2000), sodium: get(1093),
+                                          },
+                                        }]);
+                                        setEditIngPending(null); setEditIngPendingQty(1); setEditIngQuery(""); setEditIngResults([]);
+                                      }}
+                                      className="flex-1 text-xs font-semibold py-1 rounded-md bg-primary text-primary-foreground"
+                                    >Add</button>
+                                    <button onClick={() => setEditIngPending(null)} className="text-muted-foreground p-0.5"><X size={13} /></button>
+                                  </div>
+                                </div>
+                              )}
+                              {editIngResults.length > 0 && !editIngPending && (
+                                <div className="border-t divide-y max-h-40 overflow-y-auto">
+                                  {editIngResults.map((item: any) => (
+                                    <button
+                                      key={item.fdcId}
+                                      onClick={() => { setEditIngPending(item); setEditIngPendingQty(1); }}
+                                      className="w-full text-left px-3 py-2 hover:bg-secondary/40 text-xs"
+                                    >
+                                      <span className="font-medium block truncate">{item.description}</span>
+                                      {item.brandName && <span className="text-muted-foreground text-[10px]">{item.brandName}</span>}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {!editIngPending && (
+                                <div className="flex items-center gap-1.5 px-3 py-2 border-t bg-secondary/10">
+                                  <input
+                                    className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background"
+                                    placeholder="+ Search to add ingredient (USDA)…"
+                                    value={editIngQuery}
+                                    onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
+                                    onKeyDown={ev => ev.key === "Enter" && doEditIngSearch()}
+                                  />
+                                  <button
+                                    onClick={doEditIngSearch}
+                                    disabled={editIngSearching || !editIngQuery.trim()}
+                                    className="text-xs px-2.5 py-1.5 rounded-md bg-secondary text-foreground shrink-0 disabled:opacity-40"
+                                  >{editIngSearching ? "…" : "Search"}</button>
+                                </div>
+                              )}
+                            </div>
+                            {editIngredients.length > 0 ? (
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {([
+                                  { key: "calories", label: "kcal", val: editForm.calories },
+                                  { key: "protein",  label: "prot", val: editForm.protein  },
+                                  { key: "carbs",    label: "carbs", val: editForm.carbs   },
+                                  { key: "fat",      label: "fat",  val: editForm.fat      },
+                                ] as const).map(({ key, label, val }) => (
+                                  <div key={key} className="text-center rounded-md bg-secondary/30 py-1.5 px-1">
+                                    <p className="text-sm font-bold">{Math.round(parseFloat(val) || 0)}</p>
+                                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {(["calories","protein","carbs","fat"] as const).map(field => (
+                                  <div key={field}>
+                                    <label className="text-[10px] text-muted-foreground font-medium">{field === "calories" ? "kcal" : field}</label>
+                                    <input
+                                      type="number" min="0" step="1"
+                                      className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                                      value={editForm[field]}
+                                      onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-muted-foreground shrink-0">Servings logged:</label>
+                              <input
+                                type="number" min="0.1" step="0.1"
+                                className="w-20 text-sm border rounded-md px-2 py-1 bg-background"
+                                value={editForm.quantity}
+                                onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => updateMut.mutate({ id: e.id, data: {
+                                  foodName: editForm.foodName.trim(),
+                                  quantity: parseFloat(editForm.quantity) || 1,
+                                  mealType: editForm.mealType,
+                                  calories: parseFloat(editForm.calories) || 0,
+                                  protein:  parseFloat(editForm.protein)  || 0,
+                                  carbs:    parseFloat(editForm.carbs)    || 0,
+                                  fat:      parseFloat(editForm.fat)      || 0,
+                                  ingredientsJson: editIngredients.length > 0 ? JSON.stringify(editIngredients) : null,
+                                }})}
+                                disabled={updateMut.isPending || !editForm.foodName.trim()}
+                                className="flex-1 text-xs font-semibold py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+                              >
+                                {updateMut.isPending ? "Saving…" : "Save changes"}
+                              </button>
+                              <button
+                                onClick={() => setEditingEntryId(null)}
+                                className="flex-1 text-xs font-medium py-2 rounded-md bg-secondary text-secondary-foreground"
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Normal row ── */
+                          <div className="flex items-center gap-2 px-4 py-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{e.foodName}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {e.quantity}× {e.servingSize}{e.servingUnit} · P {Math.round(Number(e.protein) * Number(e.quantity))}g · C {Math.round(Number(e.carbs) * Number(e.quantity))}g · F {Math.round(Number(e.fat) * Number(e.quantity))}g
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold shrink-0">{Math.round(Number(e.calories) * Number(e.quantity))}</span>
+                            <button onClick={() => openEditEntry(e)} className="text-muted-foreground hover:text-primary shrink-0"><Pencil size={13} /></button>
+                            <button onClick={() => deleteMut.mutate(e.id)} className="text-muted-foreground hover:text-destructive shrink-0"><Trash2 size={13} /></button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
-          {foodLog.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">No food logged yet. Use the search above to add meals.</div>
-          )}
+
+          <button
+            onClick={() => { setLogMealPreset("snack"); setShowFoodLog(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className="fixed sm:hidden bottom-20 left-4 right-4 z-30 flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground py-3 text-sm font-semibold shadow-lg"
+          >
+            <Plus size={16} /> Log Food
+          </button>
         </div>
       )}
 
