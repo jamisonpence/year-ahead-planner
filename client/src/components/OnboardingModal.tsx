@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -366,6 +366,213 @@ function InterestForm({ onDone }: { onDone: (label: string) => void }) {
   );
 }
 
+// ── Health Goal quick-start config ────────────────────────────────────────────
+
+const QUICK_START_GOALS = [
+  // Running
+  { value: "run_5k",       label: "Run a 5K",                       planType: "endurance" as const, raceDistance: "5K",                    title: "Run a 5K" },
+  { value: "run_10k",      label: "Run a 10K",                      planType: "endurance" as const, raceDistance: "10K",                   title: "Run a 10K" },
+  { value: "run_half",     label: "Run a Half Marathon",            planType: "endurance" as const, raceDistance: "Half Marathon",          title: "Run a Half Marathon" },
+  { value: "run_marathon", label: "Run a Marathon",                 planType: "endurance" as const, raceDistance: "Marathon",              title: "Run a Marathon" },
+  { value: "run_50k",      label: "Run a 50K Ultra",                planType: "endurance" as const, raceDistance: "50K Ultra",             title: "Run a 50K Ultra" },
+  { value: "run_50mi",     label: "Run a 50 Mile Ultra",            planType: "endurance" as const, raceDistance: "50 Mile Ultra",         title: "Run a 50 Mile Ultra" },
+  // Triathlon
+  { value: "tri_sprint",   label: "Complete a Triathlon (Sprint)",  planType: "endurance" as const, raceDistance: "Triathlon (Sprint)",    title: "Complete a Sprint Triathlon" },
+  { value: "tri_olympic",  label: "Complete a Triathlon (Olympic)", planType: "endurance" as const, raceDistance: "Triathlon (Olympic)",   title: "Complete an Olympic Triathlon" },
+  { value: "tri_ironman",  label: "Complete a Triathlon (Ironman)", planType: "endurance" as const, raceDistance: "Triathlon (Ironman)",   title: "Complete an Ironman" },
+  // Strength PR
+  { value: "str_bench",    label: "Strength PR (Bench Press)",      planType: "strength_pr" as const, exercise: "Bench Press",             title: "Bench Press PR" },
+  { value: "str_squat",    label: "Strength PR (Squat)",            planType: "strength_pr" as const, exercise: "Squat",                  title: "Squat PR" },
+  { value: "str_dead",     label: "Strength PR (Deadlift)",         planType: "strength_pr" as const, exercise: "Deadlift",               title: "Deadlift PR" },
+  // Body Composition
+  { value: "body_weight",  label: "Body weight",                    planType: "body_composition" as const, metric: "weight",              title: "Reach My Goal Weight" },
+  { value: "body_fat",     label: "Body fat %",                     planType: "body_composition" as const, metric: "body_fat",            title: "Reduce Body Fat %" },
+  { value: "muscle_mass",  label: "Muscle Mass",                    planType: "body_composition" as const, metric: "muscle_mass",         title: "Build Muscle Mass" },
+  { value: "body_comp",    label: "Body composition",               planType: "body_composition" as const, metric: "weight",              title: "Improve Body Composition" },
+];
+
+function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+  const [quickStart, setQuickStart] = useState("");
+  const [title, setTitle] = useState("");
+  const [raceDate, setRaceDate] = useState("");
+  const [currentVal, setCurrentVal] = useState("");
+  const [targetVal, setTargetVal] = useState("");
+  const [unit, setUnit] = useState("lbs");
+  const [withPlan, setWithPlan] = useState(false);
+
+  const selected = QUICK_START_GOALS.find(g => g.value === quickStart);
+
+  useEffect(() => {
+    if (selected) {
+      setTitle(selected.title);
+      setCurrentVal(""); setTargetVal(""); setRaceDate(""); setWithPlan(false);
+      setUnit("metric" in selected && selected.metric === "body_fat" ? "%" : "lbs");
+    }
+  }, [quickStart]);
+
+  const effectiveTitle = title.trim() || selected?.title || "";
+  const isEndurance = selected?.planType === "endurance";
+  const isStrength  = selected?.planType === "strength_pr";
+  const isBodyComp  = selected?.planType === "body_composition";
+  const bodyFatMode = isBodyComp && "metric" in (selected ?? {}) && (selected as any).metric === "body_fat";
+  const unitOptions = bodyFatMode ? ["%"] : (isStrength || isBodyComp) ? ["lbs", "kg"] : [];
+
+  const mut = useMutation({
+    mutationFn: () => {
+      const progressType = (isStrength || isBodyComp) ? "numeric" : "boolean";
+      const metricObj: Record<string, any> = {};
+      if (isEndurance && selected && "raceDistance" in selected) {
+        metricObj.raceDistance = selected.raceDistance;
+        if (raceDate) metricObj.raceDate = raceDate;
+      } else if (isStrength && selected && "exercise" in selected) {
+        metricObj.exercise = selected.exercise;
+        if (currentVal) metricObj.currentValue = parseFloat(currentVal);
+        if (targetVal)  metricObj.targetValue  = parseFloat(targetVal);
+        metricObj.unit = unit;
+      } else if (isBodyComp && selected && "metric" in selected) {
+        metricObj.metric = (selected as any).metric;
+        if (currentVal) metricObj.currentValue = parseFloat(currentVal);
+        if (targetVal)  metricObj.targetValue  = parseFloat(targetVal);
+        metricObj.unit = unit;
+      }
+      return apiRequest("POST", "/api/goals", {
+        title: effectiveTitle,
+        horizon: "this_year",
+        progressType,
+        ...(Object.keys(metricObj).length ? { goalMetricJson: JSON.stringify(metricObj) } : {}),
+      });
+    },
+    onSuccess: () => {
+      if (withPlan && selected) {
+        sessionStorage.setItem("openPlanBuilder", "1");
+        sessionStorage.setItem("newPlanGoalType", selected.planType);
+        if (isEndurance && "raceDistance" in selected) {
+          sessionStorage.setItem("newPlanRaceDistance", (selected as any).raceDistance);
+          if (raceDate) sessionStorage.setItem("newPlanRaceDate", raceDate);
+        } else if (isStrength && "exercise" in selected) {
+          sessionStorage.setItem("newPlanExercise", (selected as any).exercise);
+          if (currentVal) sessionStorage.setItem("newPlanCurrentWeight", currentVal);
+          if (targetVal)  sessionStorage.setItem("newPlanTargetWeight",  targetVal);
+          sessionStorage.setItem("newPlanWeightUnit", unit);
+        } else if (isBodyComp && "metric" in selected) {
+          sessionStorage.setItem("newPlanBodyMetric", (selected as any).metric);
+          if (currentVal) sessionStorage.setItem("newPlanBodyCurrentValue", currentVal);
+          if (targetVal)  sessionStorage.setItem("newPlanBodyTargetValue",  targetVal);
+          sessionStorage.setItem("newPlanBodyUnit", unit);
+        }
+        onDone(effectiveTitle, "/health");
+      } else {
+        onDone(effectiveTitle, "/goals");
+      }
+    },
+  });
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); if (effectiveTitle) mut.mutate(); }} className="space-y-4">
+      {/* Quick start selector */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Quick start (optional)</label>
+        <select
+          value={quickStart}
+          onChange={e => setQuickStart(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+        >
+          <option value="">— Choose a goal template —</option>
+          <optgroup label="Endurance Running">
+            <option value="run_5k">Run a 5K</option>
+            <option value="run_10k">Run a 10K</option>
+            <option value="run_half">Run a Half Marathon</option>
+            <option value="run_marathon">Run a Marathon</option>
+            <option value="run_50k">Run a 50K Ultra</option>
+            <option value="run_50mi">Run a 50 Mile Ultra</option>
+          </optgroup>
+          <optgroup label="Triathlon">
+            <option value="tri_sprint">Complete a Triathlon (Sprint)</option>
+            <option value="tri_olympic">Complete a Triathlon (Olympic)</option>
+            <option value="tri_ironman">Complete a Triathlon (Ironman)</option>
+          </optgroup>
+          <optgroup label="Strength PR">
+            <option value="str_bench">Strength PR (Bench Press)</option>
+            <option value="str_squat">Strength PR (Squat)</option>
+            <option value="str_dead">Strength PR (Deadlift)</option>
+          </optgroup>
+          <optgroup label="Body Composition">
+            <option value="body_weight">Body weight</option>
+            <option value="body_fat">Body fat %</option>
+            <option value="muscle_mass">Muscle Mass</option>
+            <option value="body_comp">Body composition</option>
+          </optgroup>
+        </select>
+      </div>
+
+      {/* Goal name — always editable, pre-filled from quick start */}
+      <FieldInput
+        label="Goal name"
+        value={title}
+        onChange={setTitle}
+        placeholder={selected ? selected.title : "e.g. Run a 5K, Lose 20 lbs…"}
+        required={!selected}
+      />
+
+      {/* Dynamic fields */}
+      {isEndurance && (
+        <FieldInput label="Target race date (optional)" value={raceDate} onChange={setRaceDate} placeholder="e.g. 2025-10-05" />
+      )}
+      {(isStrength || isBodyComp) && (
+        <div className="grid grid-cols-2 gap-3">
+          <FieldInput
+            label={isStrength ? "Current max (optional)" : "Current value (optional)"}
+            value={currentVal} onChange={setCurrentVal}
+            placeholder={isStrength ? "e.g. 185" : "e.g. 200"}
+          />
+          <FieldInput
+            label={isStrength ? "Target max (optional)" : "Target value (optional)"}
+            value={targetVal} onChange={setTargetVal}
+            placeholder={isStrength ? "e.g. 225" : "e.g. 180"}
+          />
+        </div>
+      )}
+      {unitOptions.length > 1 && (
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Unit</label>
+          <div className="flex gap-2">
+            {unitOptions.map(u => (
+              <button key={u} type="button" onClick={() => setUnit(u)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
+                  ${unit === u ? "bg-primary border-primary text-primary-foreground" : "bg-secondary/50 border-transparent hover:bg-secondary"}`}
+              >{u}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Starter training plan toggle */}
+      {selected && (
+        <button
+          type="button"
+          onClick={() => setWithPlan(p => !p)}
+          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
+            withPlan ? "border-primary bg-primary/8 text-foreground" : "border-border hover:border-primary/50 hover:bg-primary/5"
+          }`}
+        >
+          <span className="text-xl shrink-0">📋</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Also create a Starter Training Plan</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Open the {isEndurance ? "Endurance" : isStrength ? "Strength PR" : "Body Composition"} plan builder pre-configured for this goal
+            </p>
+          </div>
+          <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${withPlan ? "border-primary bg-primary" : "border-border"}`}>
+            {withPlan && <Check size={10} className="text-primary-foreground" />}
+          </div>
+        </button>
+      )}
+
+      <CreateButton loading={mut.isPending} disabled={!effectiveTitle} />
+    </form>
+  );
+}
+
 // Generic create button (works as submit OR with onClick for non-form flows)
 function CreateButton({ loading, disabled, onClick }: { loading: boolean; disabled?: boolean; onClick?: () => void }) {
   const props = onClick ? { type: "button" as const, onClick } : { type: "submit" as const };
@@ -384,13 +591,13 @@ function CreateButton({ loading, disabled, onClick }: { loading: boolean; disabl
 
 // ── Form router ───────────────────────────────────────────────────────────────
 
-function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string) => void }) {
+function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string, href?: string) => void }) {
   switch (optionKey) {
     case "goal":          return <GoalForm onDone={onDone} />;
     case "task":          return <TaskForm onDone={onDone} />;
     case "habit":         return <HabitForm onDone={onDone} />;
     case "workout_log":   return <WorkoutLogForm onDone={onDone} />;
-    case "health_goal":   return <GoalForm onDone={onDone} />;
+    case "health_goal":   return <HealthGoalForm onDone={onDone} />;
     case "fitness_habit": return <HabitForm onDone={onDone} defaultCategory="fitness" />;
     case "book":          return <BookForm onDone={onDone} />;
     case "place":         return <PlaceForm onDone={onDone} />;

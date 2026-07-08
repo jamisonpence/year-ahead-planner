@@ -1411,6 +1411,27 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
       sessionStorage.removeItem("newPlanGoalType");
       setGoalType(preselected as GoalType);
       setStep("details");
+      // Pre-populate fields from health-goal onboarding quick start
+      const rdPre = sessionStorage.getItem("newPlanRaceDistance");
+      if (rdPre) { sessionStorage.removeItem("newPlanRaceDistance"); setRaceDistance(rdPre); }
+      const raceDatePre = sessionStorage.getItem("newPlanRaceDate");
+      if (raceDatePre) { sessionStorage.removeItem("newPlanRaceDate"); setRaceDate(raceDatePre); }
+      const exPre = sessionStorage.getItem("newPlanExercise");
+      if (exPre) { sessionStorage.removeItem("newPlanExercise"); setExercise(exPre); }
+      const cwPre = sessionStorage.getItem("newPlanCurrentWeight");
+      if (cwPre) { sessionStorage.removeItem("newPlanCurrentWeight"); setCurrentWeight(cwPre); }
+      const twPre = sessionStorage.getItem("newPlanTargetWeight");
+      if (twPre) { sessionStorage.removeItem("newPlanTargetWeight"); setTargetWeight(twPre); }
+      const wuPre = sessionStorage.getItem("newPlanWeightUnit");
+      if (wuPre) { sessionStorage.removeItem("newPlanWeightUnit"); setWeightUnit(wuPre); }
+      const bmPre = sessionStorage.getItem("newPlanBodyMetric");
+      if (bmPre) { sessionStorage.removeItem("newPlanBodyMetric"); setBodyMetric(bmPre); }
+      const bcPre = sessionStorage.getItem("newPlanBodyCurrentValue");
+      if (bcPre) { sessionStorage.removeItem("newPlanBodyCurrentValue"); setBodyCurrentValue(bcPre); }
+      const btPre = sessionStorage.getItem("newPlanBodyTargetValue");
+      if (btPre) { sessionStorage.removeItem("newPlanBodyTargetValue"); setBodyTargetValue(btPre); }
+      const buPre = sessionStorage.getItem("newPlanBodyUnit");
+      if (buPre) { sessionStorage.removeItem("newPlanBodyUnit"); setBodyUnit(buPre); }
     } else {
       setGoalType((editing?.goalType as GoalType) ?? "general");
       setStep(editing ? "details" : "goal");
