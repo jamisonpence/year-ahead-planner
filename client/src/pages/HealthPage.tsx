@@ -16,7 +16,7 @@ import {
   Activity, Pill, Moon, TrendingUp, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, Star, Stethoscope, Phone, MapPin, CalendarCheck, CalendarClock,
   Users, UtensilsCrossed, Search, Loader2, Heart, Target, ArrowRight,
-  BookOpen, Zap, BookMarked,
+  BookOpen, Zap, BookMarked, Lock, Share2, MessageCircle, NotebookPen, Dumbbell, Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input as UIInput } from "@/components/ui/input";
@@ -1134,6 +1134,21 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
     setRecentAdding(false);
   }
 
+  function saveRecentAsMeal(item: FoodLogEntry) {
+    setQaName(item.foodName);
+    setQaServingSize(String(item.servingSize || 1));
+    setQaServingUnit(item.servingUnit || "serving");
+    setQaCals(String(Math.round(Number(item.calories) || 0)));
+    setQaProt(String(Math.round(Number(item.protein) || 0)));
+    setQaCarbs(String(Math.round(Number(item.carbs) || 0)));
+    setQaFat(String(Math.round(Number(item.fat) || 0)));
+    setQaMeal(item.mealType || defaultMeal);
+    setQaQty(1);
+    setQaSaveRecipe(true);
+    setRecentSelected(null);
+    setMode("manual");
+  }
+
   // ── Manual entry handler ───────────────────────────────────────────────
   async function addQuickFood() {
     if (!qaName.trim() || !qaCals) return;
@@ -1368,8 +1383,14 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
                 <Button size="sm" onClick={addRecentFood} disabled={recentAdding} className="flex-1 h-7 text-xs">
                   {recentAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => saveRecentAsMeal(recentSelected)} className="h-7 text-xs">
+                  Save meal
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => setRecentSelected(null)} className="h-7 text-xs">Cancel</Button>
               </div>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Lock size={10} /> Food logs stay private. Saving creates a reusable meal item.
+              </p>
             </div>
           )}
 
@@ -1403,6 +1424,20 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedRecipe(null)} className="h-7 text-xs">Back</Button>
               </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <a href="#/people?tab=discover" className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
+                  Recommend
+                </a>
+                <a href="#/messenger" className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
+                  Ask about it
+                </a>
+                <a href="#/health?tab=nutrition" onClick={() => setSelectedRecipe(null)} className="text-[10px] rounded-lg border px-2 py-1.5 text-center hover:bg-secondary transition-colors">
+                  Add to plan
+                </a>
+              </div>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Lock size={10} /> Sharing sends recipe ideas only, never your private food log.
+              </p>
             </div>
           )}
 
@@ -1886,6 +1921,31 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
         <p className="text-xs text-muted-foreground mt-1">{adjustment}</p>
       </div>
 
+      <div className="rounded-xl border bg-card p-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold">Supportive social prompts</p>
+            <p className="text-[11px] text-muted-foreground">Share encouragement and recipe ideas, not private meal logs.</p>
+          </div>
+          <Lock size={13} className="text-muted-foreground shrink-0" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          {[
+            { label: "Cheer", href: "#/people", icon: Heart },
+            { label: "Ask about it", href: "#/messenger", icon: MessageCircle },
+            { label: "Save this", href: "#/mylifos", icon: Star },
+            { label: "Recommend back", href: "#/people?tab=discover", icon: Share2 },
+          ].map(item => {
+            const Icon = item.icon;
+            return (
+              <a key={item.label} href={item.href} className="flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary transition-colors">
+                <Icon size={11} /> {item.label}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="rounded-xl border bg-card p-4">
         <p className="text-xs font-semibold mb-3">Calorie Trend, Last 7 Days</p>
         <div className="flex items-end gap-1.5" style={{ height: "96px" }}>
@@ -2156,6 +2216,31 @@ function MealPlannerEmbed() {
         </div>
       </div>
 
+      <div className="rounded-xl border bg-card p-4 space-y-3 mt-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Shareable Meal Ideas</p>
+            <p className="text-xs text-muted-foreground">Recommend recipes or ask friends about meals without sharing your private nutrition log.</p>
+          </div>
+          <Lock size={14} className="text-muted-foreground shrink-0 mt-0.5" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: "Recommend recipe", href: "#/people?tab=discover", icon: Share2 },
+            { label: "Ask about recipe", href: "#/messenger", icon: MessageCircle },
+            { label: "Save meal idea", href: "#/recipes", icon: BookMarked },
+            { label: "Link to note", href: "#/journal", icon: Link2 },
+          ].map(item => {
+            const Icon = item.icon;
+            return (
+              <a key={item.label} href={item.href} className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors">
+                <Icon size={12} /> {item.label}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Sub-nav */}
       <div className="flex flex-wrap items-center gap-1.5 border-b pb-3 mb-4 mt-4">
         {PLANNER_SUB_NAV.map(item => (
@@ -2204,6 +2289,42 @@ function EmbeddedPlannerPlan({ onSave }: { onSave: () => void }) {
         </div>
       )}
       <PlannerPlan />
+    </div>
+  );
+}
+
+function NutritionConnectionsCard() {
+  const connections = [
+    { label: "Health goal", href: "#/goals", icon: Target },
+    { label: "Workout", href: "#/workouts", icon: Dumbbell },
+    { label: "Place", href: "#/places", icon: MapPin },
+    { label: "Person", href: "#/people", icon: Users },
+    { label: "Private note", href: "#/journal", icon: NotebookPen },
+  ];
+
+  return (
+    <div className="rounded-2xl border bg-card p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Saved in MyLifos</p>
+          <p className="text-xs text-muted-foreground">Recipes and saved meals can connect to your goals, workouts, places, people, and notes.</p>
+        </div>
+        <a href="#/mylifos" className="text-xs text-primary hover:underline shrink-0">Open MyLifos</a>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-0.5">
+        {connections.map(item => {
+          const Icon = item.icon;
+          return (
+            <a key={item.label} href={item.href} className="shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs hover:bg-secondary transition-colors">
+              <Icon size={12} /> {item.label}
+            </a>
+          );
+        })}
+      </div>
+      <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
+        <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
+        <p className="text-[11px] text-muted-foreground">Private by default: logged foods are for you. Shareable moments focus on recipes, meal ideas, encouragement, and recommendations.</p>
+      </div>
     </div>
   );
 }
@@ -2512,6 +2633,8 @@ export function NutritionTab({
           {activeBodyCompPlan && bodyCompMetric && (
             <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
           )}
+
+          <NutritionConnectionsCard />
 
           {/* ── Next-action nudge card ───────────────────────────────────── */}
           {(() => {
