@@ -3644,7 +3644,25 @@ export function NutritionTab({
             <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
           )}
 
-          <NutritionConnectionsCard />
+          <NutritionConnectionsCard
+            activePlan={activeBodyCompPlan}
+            metric={bodyCompMetric}
+            recipes={recipes}
+            friendsCount={friends.length}
+            proteinLeft={proteinLeft}
+            caloriesLeft={caloriesLeft}
+            goalsMatchPlan={!!goalsMatchPlan}
+            syncingTargets={syncGoalsMut.isPending}
+            onSyncTargets={() => syncGoalsMut.mutate()}
+            onChooseMeal={() => setActiveSection("meals")}
+            onAddRecoveryMeal={() => {
+              setLogMealPreset("snack");
+              setShowFoodLog(true);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onAskFriend={(item) => setFriendAction({ mode: "ask", item })}
+            onSaveNote={(item) => saveNutritionNoteMut.mutate(item)}
+          />
 
           {/* ── Next-action nudge card ───────────────────────────────────── */}
           {(() => {
