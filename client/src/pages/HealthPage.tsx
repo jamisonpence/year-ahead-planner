@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useContext, createContext, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useContext, createContext, useCallback } from "react";
 import PageShell from "@/components/PageShell";
 import { useLocation, Router, Switch, Route } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -2280,13 +2280,6 @@ function useEmbedLocation(): EmbedNav {
   return useContext(EmbedNavCtx);
 }
 
-const PLANNER_SUB_NAV = [
-  { path: "/meal-planner",             label: "Week"     },
-  { path: "/meal-planner/plan",        label: "Today"    },
-  { path: "/meal-planner/library",     label: "Saved"    },
-  { path: "/meal-planner/shopping",    label: "Shopping" },
-];
-
 function MealPlannerEmbed({
   onRecommendMeal,
   onAskMeal,
@@ -2297,28 +2290,16 @@ function MealPlannerEmbed({
   onSaveMealNote?: (item: NutritionMealActionItem) => void;
 } = {}) {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
+  const [openMealMenu, setOpenMealMenu] = useState<string | null>(null);
   const { plan, recipes, setPlan } = usePlanner();
   const { toast } = useToast();
   const qc = useQueryClient();
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Keep a history stack so Back works correctly
-  const historyRef = useRef<string[]>(["/meal-planner"]);
-
   const navigate = useCallback((to: string) => {
-    historyRef.current.push(to);
+    setOpenMealMenu(null);
     setEmbedPath(to);
   }, []);
-
-  const goBack = useCallback(() => {
-    historyRef.current.pop(); // remove current
-    const prev = historyRef.current[historyRef.current.length - 1] ?? "/meal-planner";
-    setEmbedPath(prev);
-  }, []);
-
-  const topLevelPath = PLANNER_SUB_NAV.some(n => n.path === embedPath)
-    ? embedPath
-    : PLANNER_SUB_NAV.find(n => embedPath.startsWith(n.path + "/"))?.path ?? "/meal-planner";
 
   function saveActivePlan() {
     if (!plan) return;
@@ -2348,6 +2329,34 @@ function MealPlannerEmbed({
   const quickSavedMeals = recipes.slice(0, 4);
   const firstPlannedMeal = plannedToday[0] ?? null;
   const firstPlannedMealAction = firstPlannedMeal ? mealActionFromPlannerRecipe(firstPlannedMeal.recipe, firstPlannedMeal.slot) : null;
+  const planSuggestion = !plan
+    ? null
+    : missingSlots > 0
+      ? {
+          title: "Fill open meal slots",
+          body: `You have ${missingSlots} open meal slot${missingSlots === 1 ? "" : "s"} this week. Fill the gaps before grocery shopping.`,
+          primaryLabel: "Fill gaps",
+          primaryPath: "/meal-planner/setup",
+          secondaryLabel: "Open saved meals",
+          secondaryPath: "/meal-planner/library",
+        }
+      : proteinCoverageDays < planLength
+        ? {
+            title: "Add more protein coverage",
+            body: "A few days are light on protein. Add one high-protein saved meal and repeat it.",
+            primaryLabel: "Add high-protein meal",
+            primaryPath: "/meal-planner/library",
+            secondaryLabel: "Edit plan",
+            secondaryPath: "/meal-planner/plan",
+          }
+        : {
+            title: "Plan is ready to use",
+            body: "Your week is covered. Log planned meals from Today and use Trends to adjust next week.",
+            primaryLabel: "Edit plan",
+            primaryPath: "/meal-planner/plan",
+            secondaryLabel: "Shopping list",
+            secondaryPath: "/meal-planner/shopping",
+          };
   const logPlannedMealMut = useMutation({
     mutationFn: (meal: (typeof plannedToday)[number]) => apiRequest("POST", "/api/nutrition/food-log", {
       foodName: meal.recipe.name,
@@ -2426,16 +2435,21 @@ function MealPlannerEmbed({
       <div className="rounded-2xl border bg-card p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">This Week's Meal Plan</p>
-            <p className="text-xs text-muted-foreground">Built from your stats, goals, dietary preferences, and saved meals.</p>
+            <p className="text-sm font-semibold">Plan Status</p>
+            <p className="text-xs text-muted-foreground">Know what to eat next, what needs attention, and what to buy.</p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" className="h-8 text-xs" onClick={() => navigate(plan ? "/meal-planner/plan" : "/meal-planner/setup")}>
-              {plan ? "View Week" : "Generate My Plan"}
+              {plan ? "Edit Plan" : "Generate My Plan"}
             </Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate("/meal-planner/setup")}>
-              Customize Plan
+              Rebuild Plan
             </Button>
+            {plan && (
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate("/meal-planner/shopping")}>
+                Shopping List
+              </Button>
+            )}
           </div>
         </div>
 
@@ -2469,26 +2483,31 @@ function MealPlannerEmbed({
             <div className="grid md:grid-cols-2 gap-3">
               <div className="rounded-xl border bg-background p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold">Today</p>
-                  <button onClick={() => navigate("/meal-planner/plan")} className="text-[11px] text-primary hover:underline">Open plan</button>
+                  <p className="text-xs font-semibold">Today's planned meals</p>
                 </div>
                 {plannedToday.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No meals planned for today.</p>
                 ) : plannedToday.slice(0, 3).map((meal, idx) => {
                   const mealIndex = plan.days[0].meals.indexOf(meal);
+                  const menuKey = `today-${meal.slot}-${meal.recipe.id}-${idx}`;
                   return (
                     <div key={`${meal.slot}-${meal.recipe.id}-${idx}`} className="rounded-lg border px-2.5 py-2 space-y-2">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold truncate">{meal.recipe.name}</p>
                         <p className="text-[10px] text-muted-foreground capitalize">{meal.slot} · {meal.recipe.macros.cal} kcal · P {meal.recipe.macros.p}g</p>
                       </div>
-                      <div className="grid grid-cols-5 gap-1">
-                        <button type="button" onClick={() => logPlannedMealMut.mutate(meal)} disabled={logPlannedMealMut.isPending} className="rounded-md bg-primary text-primary-foreground px-1.5 py-1 text-[10px] font-medium disabled:opacity-50">Log</button>
-                        <button type="button" onClick={() => navigate("/meal-planner/plan")} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Swap</button>
-                        <button type="button" onClick={() => movePlannedMealToTomorrow(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Move</button>
-                        <button type="button" onClick={() => removePlannedMeal(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Remove</button>
-                        <button type="button" onClick={() => onRecommendMeal?.(mealActionFromPlannerRecipe(meal.recipe, meal.slot))} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Rec</button>
+                      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+                        <button type="button" onClick={() => logPlannedMealMut.mutate(meal)} disabled={logPlannedMealMut.isPending} className="rounded-md bg-primary text-primary-foreground px-2 py-1.5 text-[11px] font-medium disabled:opacity-50">Log today</button>
+                        <button type="button" onClick={() => setOpenMealMenu(openMealMenu === menuKey ? null : menuKey)} className="rounded-md border px-2 py-1.5 text-[11px] hover:bg-secondary">More</button>
                       </div>
+                      {openMealMenu === menuKey && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                          <button type="button" onClick={() => navigate("/meal-planner/plan")} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Swap meal</button>
+                          <button type="button" onClick={() => movePlannedMealToTomorrow(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Move</button>
+                          <button type="button" onClick={() => removePlannedMeal(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Remove</button>
+                          <button type="button" onClick={() => onRecommendMeal?.(mealActionFromPlannerRecipe(meal.recipe, meal.slot))} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Recommend</button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2496,8 +2515,8 @@ function MealPlannerEmbed({
 
               <div className="rounded-xl border bg-background p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold">Tomorrow</p>
-                  <button onClick={() => navigate("/meal-planner/setup")} className="text-[11px] text-primary hover:underline">Regenerate</button>
+                  <p className="text-xs font-semibold">Tomorrow preview</p>
+                  <button onClick={() => navigate("/meal-planner/setup")} className="text-[11px] text-primary hover:underline">Rebuild</button>
                 </div>
                 {plannedTomorrow.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Tomorrow has room for meals.</p>
@@ -2519,7 +2538,7 @@ function MealPlannerEmbed({
       {plan && (
         <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
           <div className="rounded-xl border bg-card p-4 space-y-3">
-            <p className="text-sm font-semibold">Plan Health</p>
+            <p className="text-sm font-semibold">Weekly Coverage</p>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: "Protein coverage", value: `${proteinCoverageDays}/${planLength} days` },
@@ -2535,7 +2554,7 @@ function MealPlannerEmbed({
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               <button type="button" onClick={() => navigate("/meal-planner/setup")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Fill gaps</button>
-              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add protein meal</button>
+              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add high-protein meal</button>
               <button type="button" onClick={() => navigate("/meal-planner/shopping")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Shopping list</button>
             </div>
           </div>
@@ -2543,10 +2562,10 @@ function MealPlannerEmbed({
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold">Saved Meals</p>
-                <p className="text-xs text-muted-foreground">Pull reusable ideas into the week.</p>
+                <p className="text-sm font-semibold">Saved Meals & Recipes</p>
+                <p className="text-xs text-muted-foreground">Reusable meals you can add to this week or log today.</p>
               </div>
-              <button onClick={() => navigate("/meal-planner/library")} className="text-xs text-primary hover:underline shrink-0">View saved</button>
+              <button onClick={() => navigate("/meal-planner/library")} className="text-xs text-primary hover:underline shrink-0">Open saved meals</button>
             </div>
             {quickSavedMeals.length === 0 ? (
               <p className="text-xs text-muted-foreground">Saved meals will appear here after recipes load.</p>
@@ -2558,7 +2577,7 @@ function MealPlannerEmbed({
                       <p className="text-xs font-semibold truncate">{recipe.name}</p>
                       <p className="text-[10px] text-muted-foreground">{recipe.macros.cal} kcal · P {recipe.macros.p}g</p>
                     </div>
-                    <button type="button" onClick={() => navigate("/meal-planner/library")} className="text-[11px] text-primary hover:underline shrink-0">Add</button>
+                    <button type="button" onClick={() => navigate("/meal-planner/library")} className="text-[11px] text-primary hover:underline shrink-0">Add to plan</button>
                     <button type="button" onClick={() => apiRequest("POST", "/api/nutrition/food-log", {
                       foodName: recipe.name,
                       servingSize: 1,
@@ -2603,29 +2622,25 @@ function MealPlannerEmbed({
             </div>
           </div>
 
-          <div className="rounded-xl border bg-primary/5 border-primary/20 p-4 space-y-3">
-            <p className="text-sm font-semibold text-primary">Planning Assistant</p>
-            <p className="text-xs text-muted-foreground">
-              {missingSlots > 0
-                ? `You have ${missingSlots} open meal slot${missingSlots === 1 ? "" : "s"} this week. Fill the gaps before grocery shopping.`
-                : proteinCoverageDays < planLength
-                  ? "A few days are light on protein. Add one high-protein saved meal and repeat it."
-                  : "This plan is ready to execute. Log planned meals from Today and adjust next week from Trends."}
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              <button type="button" onClick={() => navigate("/meal-planner/setup")} className="rounded-lg bg-primary text-primary-foreground px-2 py-2 text-[11px] font-medium">Apply</button>
-              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Save meal</button>
-              <button type="button" onClick={() => toast({ title: "Suggestion dismissed" })} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Dismiss</button>
+          {planSuggestion && (
+            <div className="rounded-xl border bg-primary/5 border-primary/20 p-4 space-y-3">
+              <p className="text-sm font-semibold text-primary">{planSuggestion.title}</p>
+              <p className="text-xs text-muted-foreground">{planSuggestion.body}</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button type="button" onClick={() => navigate(planSuggestion.primaryPath)} className="rounded-lg bg-primary text-primary-foreground px-2 py-2 text-[11px] font-medium">{planSuggestion.primaryLabel}</button>
+                <button type="button" onClick={() => navigate(planSuggestion.secondaryPath)} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">{planSuggestion.secondaryLabel}</button>
+                <button type="button" onClick={() => toast({ title: "Suggestion dismissed" })} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Dismiss</button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       <div className="rounded-xl border bg-card p-4 space-y-3 mt-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Shareable Meal Ideas</p>
-            <p className="text-xs text-muted-foreground">Recommend recipes or ask friends about meals without sharing your private nutrition log.</p>
+            <p className="text-sm font-semibold">Share a Meal Idea</p>
+            <p className="text-xs text-muted-foreground">Send a planned recipe or question in Messages. Private food logs stay private.</p>
           </div>
           <Lock size={14} className="text-muted-foreground shrink-0 mt-0.5" />
         </div>
@@ -2646,10 +2661,10 @@ function MealPlannerEmbed({
           </button>
           <button
             type="button"
-            onClick={() => { navigate("/meal-planner/library"); toast({ title: "Saved meals opened", description: "Choose a reusable meal idea from your planner library." }); }}
+            onClick={() => navigate("/meal-planner/library")}
             className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
           >
-            <BookMarked size={12} /> Save meal idea
+            <BookMarked size={12} /> Open saved meals
           </button>
           <button
             type="button"
@@ -2659,24 +2674,6 @@ function MealPlannerEmbed({
             <Link2 size={12} /> Link to note
           </button>
         </div>
-      </div>
-
-      {/* Sub-nav */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b pb-3 mb-4 mt-4">
-        {PLANNER_SUB_NAV.map(item => (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              topLevelPath === item.path
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-
       </div>
 
       {/* Embedded wouter Router — intercepts all Link/navigate calls.
@@ -2713,34 +2710,133 @@ function EmbeddedPlannerPlan({ onSave }: { onSave: () => void }) {
   );
 }
 
-function NutritionConnectionsCard() {
-  const connections = [
-    { label: "Health goal", href: "#/goals", icon: Target },
-    { label: "Workout", href: "#/workouts", icon: Dumbbell },
-    { label: "Place", href: "#/places", icon: MapPin },
-    { label: "Person", href: "#/people", icon: Users },
-    { label: "Private note", href: "#/journal", icon: NotebookPen },
-  ];
+function NutritionConnectionsCard({
+  activePlan,
+  metric,
+  recipes,
+  friendsCount,
+  proteinLeft,
+  caloriesLeft,
+  goalsMatchPlan,
+  onSyncTargets,
+  onChooseMeal,
+  onAddRecoveryMeal,
+  onAskFriend,
+  onSaveNote,
+  syncingTargets,
+}: {
+  activePlan: WorkoutPlan | null;
+  metric: Record<string, any> | null;
+  recipes: Recipe[];
+  friendsCount: number;
+  proteinLeft: number;
+  caloriesLeft: number;
+  goalsMatchPlan: boolean;
+  onSyncTargets: () => void;
+  onChooseMeal: () => void;
+  onAddRecoveryMeal: () => void;
+  onAskFriend: (item: NutritionMealActionItem) => void;
+  onSaveNote: (item: NutritionMealActionItem) => void;
+  syncingTargets: boolean;
+}) {
+  const highProteinRecipe = recipes.find(recipe => (parseRecipeNutrition(recipe)?.protein ?? 0) >= 25) ?? recipes[0] ?? null;
+  const targetProtein = metric?.proteinGrams ? Math.round(metric.proteinGrams as number) : null;
+  const goalLabel = activePlan
+    ? `${activePlan.name}${targetProtein ? ` · ${targetProtein}g protein target` : ""}`
+    : "No active nutrition-linked goal yet";
+  const workoutDay = !!activePlan;
+  const contextNote: NutritionMealActionItem = {
+    id: "nutrition-context-note",
+    title: "Nutrition context",
+    subtitle: `${proteinLeft}g protein left · ${caloriesLeft} kcal left today`,
+    source: "recipe",
+  };
 
   return (
     <div className="rounded-2xl border bg-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold">Saved in MyLifos</p>
-          <p className="text-xs text-muted-foreground">Recipes and saved meals can connect to your goals, workouts, places, people, and notes.</p>
+          <p className="text-sm font-semibold">Connected to Today</p>
+          <p className="text-xs text-muted-foreground">Use goals, workouts, saved meals, and recommendations to decide what to eat next.</p>
         </div>
         <a href="#/mylifos" className="text-xs text-primary hover:underline shrink-0">Open MyLifos</a>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-0.5">
-        {connections.map(item => {
-          const Icon = item.icon;
-          return (
-            <a key={item.label} href={item.href} className="shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs hover:bg-secondary transition-colors">
-              <Icon size={12} /> {item.label}
-            </a>
-          );
-        })}
+
+      <div className="grid md:grid-cols-2 gap-2">
+        <div className="rounded-xl border bg-background p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Target size={14} className="mt-0.5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold">Goal context</p>
+              <p className="text-[11px] text-muted-foreground truncate">{goalLabel}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onSyncTargets}
+            disabled={!activePlan || goalsMatchPlan || syncingTargets}
+            className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary disabled:opacity-50"
+          >
+            {goalsMatchPlan ? "Targets synced" : syncingTargets ? "Syncing..." : "Use goal targets"}
+          </button>
+        </div>
+
+        <div className="rounded-xl border bg-background p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Dumbbell size={14} className="mt-0.5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Workout context</p>
+              <p className="text-[11px] text-muted-foreground">{workoutDay ? "Plan a recovery meal around your active training goal." : "Connect a workout goal to get recovery meal prompts."}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onAddRecoveryMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Add recovery meal</button>
+        </div>
+
+        <div className="rounded-xl border bg-background p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <BookMarked size={14} className="mt-0.5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Saved ideas</p>
+              <p className="text-[11px] text-muted-foreground">{recipes.length ? `${recipes.length} saved meal${recipes.length === 1 ? "" : "s"} available` : "Save meals to reuse them here."}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onChooseMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Choose meal</button>
+        </div>
+
+        <div className="rounded-xl border bg-background p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <MessageCircle size={14} className="mt-0.5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Social ideas</p>
+              <p className="text-[11px] text-muted-foreground">{friendsCount ? `Ask a friend about ${highProteinRecipe?.name ?? "a meal idea"}.` : "Add friends to exchange recipe ideas."}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => highProteinRecipe ? onAskFriend(mealActionFromRecipe(highProteinRecipe)) : onChooseMeal()}
+            className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary"
+          >
+            {friendsCount ? "Ask friend" : "Find meal idea"}
+          </button>
+        </div>
       </div>
+
+      <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-2">
+        <p className="text-xs font-semibold text-primary">Next useful action</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {proteinLeft > 25
+            ? `You're ${proteinLeft}g protein short. Choose a saved high-protein meal or add a recovery meal.`
+            : caloriesLeft > 400
+              ? `${caloriesLeft} kcal left today. Pick a planned or saved meal before the day gets away from you.`
+              : "Today is nearly covered. Save a note about what worked so you can repeat it."}
+        </p>
+        <div className="grid grid-cols-3 gap-1.5 mt-2">
+          <button type="button" onClick={onChooseMeal} className="rounded-lg bg-primary text-primary-foreground px-2 py-1.5 text-[11px] font-medium">Use meal</button>
+          <button type="button" onClick={onAddRecoveryMeal} className="rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Log food</button>
+          <button type="button" onClick={() => onSaveNote(contextNote)} className="rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Save note</button>
+        </div>
+      </div>
+
       <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
         <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
         <p className="text-[11px] text-muted-foreground">Private by default: logged foods are for you. Shareable moments focus on recipes, meal ideas, encouragement, and recommendations.</p>
