@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useContext, createContext, useCallback } from "react";
+import { useState, useMemo, useEffect, useContext, createContext, useCallback, useRef } from "react";
 import PageShell from "@/components/PageShell";
 import { useLocation, Router, Switch, Route } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -2800,7 +2800,7 @@ function NutritionConnectionsCard({
   const targetProtein = metric?.proteinGrams ? Math.round(metric.proteinGrams as number) : null;
   const goalLabel = activePlan
     ? `${activePlan.name}${targetProtein ? ` · ${targetProtein}g protein target` : ""}`
-    : "No active nutrition-linked goal yet";
+    : `${proteinLeft}g protein left · ${caloriesLeft} kcal left today`;
   const workoutDay = !!activePlan;
   const contextNote: NutritionMealActionItem = {
     id: "nutrition-context-note",
@@ -2840,17 +2840,15 @@ function NutritionConnectionsCard({
           </div>
           <button
             type="button"
-            onClick={!activePlan || goalsMatchPlan ? onConnectGoal : onSyncTargets}
+            onClick={activePlan && !goalsMatchPlan ? onSyncTargets : onConnectGoal}
             disabled={syncingTargets}
             className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary disabled:opacity-50"
           >
             {syncingTargets
               ? "Working..."
-              : !activePlan
-                ? "Connect goal"
-                : goalsMatchPlan
-                  ? "View goal"
-                  : "Use goal targets"}
+              : activePlan && !goalsMatchPlan
+                ? "Use workout targets"
+                : "Edit nutrition targets"}
           </button>
         </div>
 
@@ -2859,10 +2857,10 @@ function NutritionConnectionsCard({
             <Dumbbell size={14} className="mt-0.5 text-primary shrink-0" />
             <div>
               <p className="text-xs font-semibold">Workout context</p>
-              <p className="text-[11px] text-muted-foreground">{workoutDay ? "Plan a recovery meal around your active training goal." : "Connect a workout goal to get recovery meal prompts."}</p>
+              <p className="text-[11px] text-muted-foreground">{workoutDay ? "Plan a recovery meal around your active training goal." : "No active workout goal connected. You can still log a recovery meal."}</p>
             </div>
           </div>
-          <button type="button" onClick={onAddRecoveryMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Add recovery meal</button>
+          <button type="button" onClick={onAddRecoveryMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">{workoutDay ? "Add recovery meal" : "Log workout meal"}</button>
         </div>
 
         <div className="rounded-xl border bg-background p-3 space-y-2">
@@ -3424,6 +3422,7 @@ export function NutritionTab({
   // ── Today section: food log panel state ───────────────────────────────
   const [showFoodLog, setShowFoodLog] = useState(false);
   const [logMealPreset, setLogMealPreset] = useState("snack");
+  const foodLogPanelRef = useRef<HTMLDivElement | null>(null);
 
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
@@ -3458,10 +3457,9 @@ export function NutritionTab({
     queryFn: () => apiRequest("GET", "/api/workout-plans").then(r => r.json()),
   });
 
-  // Find a body composition plan — prefer active, fall back to most recent
+  // Find a body composition plan — prefer active for optional workout context only.
   const bodyCompPlans = workoutPlans.filter(p => p.goalType === "body_composition");
   const activeBodyCompPlan = bodyCompPlans.find(p => p.isActive) ?? null;
-  const inactiveBodyCompPlan = bodyCompPlans.find(p => !p.isActive) ?? null;
   const bodyCompMetric: Record<string, any> | null = (() => {
     try { return activeBodyCompPlan?.goalMetricJson ? JSON.parse(activeBodyCompPlan.goalMetricJson) : null; } catch { return null; }
   })();
@@ -3495,48 +3493,6 @@ export function NutritionTab({
       toast({ title: "Targets synced from active plan" });
     },
     onError: () => toast({ title: "Failed to sync goals", variant: "destructive" }),
-  });
-  const connectGoalMut = useMutation({
-    mutationFn: () => {
-      if (inactiveBodyCompPlan) {
-        return apiRequest("POST", `/api/workout-plans/${inactiveBodyCompPlan.id}/activate`).then(r => r.json());
-      }
-      return apiRequest("POST", "/api/workout-plans", {
-        name: "Nutrition Goal",
-        description: "Created from Nutrition to connect daily food choices with a health goal.",
-        durationWeeks: 12,
-        scheduleJson: "[]",
-        goalType: "body_composition",
-        goalMetricJson: JSON.stringify({
-          metric: "nutrition",
-          currentValue: 0,
-          targetValue: 0,
-          unit: "",
-          targetCalories: g.calories,
-          proteinGrams: g.protein,
-          carbsGrams: g.carbs,
-          fatGrams: g.fat,
-        }),
-        startDate: new Date().toISOString().slice(0, 10),
-        milestonesJson: JSON.stringify([
-          { week: 4, description: "Review nutrition consistency" },
-          { week: 8, description: "Adjust targets based on progress" },
-          { week: 12, description: "Complete nutrition goal review" },
-        ]),
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      }).then(r => r.json());
-    },
-    onSuccess: (_data) => {
-      qc.invalidateQueries({ queryKey: ["/api/workout-plans"] });
-      toast({
-        title: inactiveBodyCompPlan ? "Goal connected" : "Nutrition goal created",
-        description: inactiveBodyCompPlan
-          ? `${inactiveBodyCompPlan.name} is now connected to Nutrition.`
-          : "Your current targets are now connected to a health goal.",
-      });
-    },
-    onError: () => toast({ title: "Could not connect goal", variant: "destructive" }),
   });
   const waterGlasses = waterData?.glasses ?? 0;
 
@@ -3848,7 +3804,7 @@ export function NutritionTab({
 
           {/* ── Collapsible food log panel ─────────────────────────────── */}
           {showFoodLog && (
-            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+            <div ref={foodLogPanelRef} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-secondary/20">
                 <p className="text-sm font-semibold">Log Food</p>
                 <button onClick={() => setShowFoodLog(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors">
@@ -3882,21 +3838,17 @@ export function NutritionTab({
             proteinLeft={proteinLeft}
             caloriesLeft={caloriesLeft}
             goalsMatchPlan={!!goalsMatchPlan}
-            syncingTargets={syncGoalsMut.isPending || connectGoalMut.isPending}
+            syncingTargets={syncGoalsMut.isPending}
             onSyncTargets={() => syncGoalsMut.mutate()}
             onConnectGoal={() => {
-              if (activeBodyCompPlan) {
-                setActiveSection("targets");
-                toast({ title: "Goal context opened", description: "Review or adjust the targets connected to this goal." });
-              } else {
-                connectGoalMut.mutate();
-              }
+              setActiveSection("targets");
+              toast({ title: "Nutrition targets opened", description: "Edit calories, protein, macros, and water here." });
             }}
             onChooseMeal={() => setActiveSection("meals")}
             onAddRecoveryMeal={() => {
               setLogMealPreset("snack");
               setShowFoodLog(true);
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
             }}
             onAskFriend={(item) => setFriendAction({ mode: "ask", item })}
             onSaveNote={(item) => saveNutritionNoteMut.mutate(item)}
