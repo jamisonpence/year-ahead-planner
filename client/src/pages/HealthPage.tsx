@@ -895,11 +895,11 @@ function MacroPreview({ cal, p, c, f }: { cal: number; p: number; c: number; f: 
   );
 }
 
-// ── FoodSearchAdd (tabbed: Search / Quick Add / My Recipes) ───────────────
+// ── FoodSearchAdd (unified composer: search + saved + manual) ─────────────
 function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string; onAdded: () => void; defaultMeal?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [mode, setMode] = useState<"search" | "quick" | "recipes">("search");
+  const [mode, setMode] = useState<"search" | "manual">("search");
 
   // ── Search tab state ───────────────────────────────────────────────────
   const [searchSource, setSearchSource] = useState<"usda" | "restaurant">("usda");
@@ -931,7 +931,7 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
     queryFn: () => apiRequest("GET", "/api/nutrition/food-log/history").then(r => r.json()),
   });
 
-  // ── Quick Add tab state ────────────────────────────────────────────────
+  // ── Manual entry state ────────────────────────────────────────────────
   const [qaName, setQaName] = useState("");
   const [qaServingSize, setQaServingSize] = useState("1");
   const [qaServingUnit, setQaServingUnit] = useState("serving");
@@ -944,7 +944,7 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
   const [qaSaveRecipe, setQaSaveRecipe] = useState(false);
   const [qaAdding, setQaAdding] = useState(false);
 
-  // ── Ingredient builder (inside Quick Add) ─────────────────────────────
+  // ── Ingredient builder (inside Manual Entry) ──────────────────────────
   type QAIngredient = {
     id: number; name: string;
     servingSize: number; servingUnit: string;
@@ -1005,16 +1005,14 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
   }
 
   // ── My Recipes tab state ───────────────────────────────────────────────
-  const [recipeSearch, setRecipeSearch] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [recipeMeal, setRecipeMeal] = useState("snack");
+  const [recipeMeal, setRecipeMeal] = useState(defaultMeal);
   const [recipeQty, setRecipeQty] = useState(1);
   const [recipeAdding, setRecipeAdding] = useState(false);
 
   const { data: recipes = [] } = useQuery<Recipe[]>({
     queryKey: ["/api/recipes"],
     queryFn: () => apiRequest("GET", "/api/recipes").then(r => r.json()),
-    enabled: mode === "recipes",
   });
 
   // ── Search tab handlers ────────────────────────────────────────────────
@@ -1136,7 +1134,7 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
     setRecentAdding(false);
   }
 
-  // ── Quick Add handler ──────────────────────────────────────────────────
+  // ── Manual entry handler ───────────────────────────────────────────────
   async function addQuickFood() {
     if (!qaName.trim() || !qaCals) return;
     setQaAdding(true);
@@ -1222,34 +1220,32 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
     setRecipeAdding(false);
   }
 
+  const recipeFilter = query.trim().toLowerCase();
   const filteredRecipes = recipes.filter(r =>
-    !recipeSearch || r.name.toLowerCase().includes(recipeSearch.toLowerCase())
+    !recipeFilter || r.name.toLowerCase().includes(recipeFilter)
   );
-
-  const TAB_STYLES = (active: boolean) =>
-    `flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-      active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-    }`;
 
   return (
     <div className="rounded-xl border bg-card p-3 space-y-3">
-      {/* Tab bar */}
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold">Add Food</p>
-        <div className="flex gap-1">
-          <button className={TAB_STYLES(mode === "search")}  onClick={() => { setMode("search");  setSelected(null); setResults([]); }}>
-            <Search size={10} /> Search
-          </button>
-          <button className={TAB_STYLES(mode === "quick")}   onClick={() => setMode("quick")}>
-            <Zap size={10} /> Quick Add
-          </button>
-          <button className={TAB_STYLES(mode === "recipes")} onClick={() => { setMode("recipes"); setSelectedRecipe(null); }}>
-            <BookOpen size={10} /> Recipes
-          </button>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold">Log Food</p>
+          <p className="text-[10px] text-muted-foreground">Search recent meals, recipes, foods, and restaurants in one place.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setMode(mode === "manual" ? "search" : "manual")}
+          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+            mode === "manual"
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          }`}
+        >
+          <Zap size={10} /> Manual Entry
+        </button>
       </div>
 
-      {/* ── SEARCH TAB ─────────────────────────────────────────────── */}
+      {/* ── Unified search composer ────────────────────────────────── */}
       {mode === "search" && (
         <div className="space-y-2">
           {/* Source toggle */}
@@ -1281,9 +1277,9 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
           </div>
 
           {/* Recent foods — shown when query is empty and no item selected */}
-          {!query && !selected && !recentSelected && foodHistory.length > 0 && (
+          {!query && !selected && !recentSelected && !selectedRecipe && foodHistory.length > 0 && (
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Recently logged</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">Recent meals</p>
               <div className="space-y-1 max-h-52 overflow-y-auto">
                 {foodHistory.map(item => (
                   <button key={item.id} onClick={() => { setRecentSelected(item); setRecentMeal("snack"); setRecentQty(1); }}
@@ -1301,6 +1297,53 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Saved recipes surface in the same search flow */}
+          {!selected && !recentSelected && !selectedRecipe && filteredRecipes.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  {query ? "Recipes" : "Saved recipes"}
+                </p>
+                <a href="#/recipes" className="text-[10px] text-primary hover:underline shrink-0">Manage</a>
+              </div>
+              <div className="space-y-1 max-h-44 overflow-y-auto border rounded-lg p-1">
+                {filteredRecipes.slice(0, query ? 6 : 4).map(recipe => {
+                  let nutrition: NutritionSummary | null = null;
+                  try { nutrition = recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch {}
+                  return (
+                    <button key={recipe.id} onClick={() => { setSelectedRecipe(recipe); setRecipeMeal(defaultMeal); setRecipeQty(1); }}
+                      className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-secondary/60 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none">{recipe.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{recipe.name}</p>
+                          {nutrition ? (
+                            <p className="text-[10px] text-muted-foreground">
+                              {Math.round(nutrition.calories)} kcal · P {Math.round(nutrition.protein)}g · C {Math.round(nutrition.carbs)}g · F {Math.round(nutrition.fat)}g
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/60 italic">No nutrition data — logs as 0 kcal</p>
+                          )}
+                        </div>
+                        <Plus size={13} className="text-muted-foreground/40 shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {query && !searching && !selected && !recentSelected && !selectedRecipe && results.length === 0 && fsResults.length === 0 && filteredRecipes.length === 0 && (
+            <div className="rounded-xl border border-dashed px-3 py-4 text-center">
+              <p className="text-xs font-medium">No matches yet</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Search USDA or restaurants, or use Manual Entry for a custom meal.</p>
+              <button onClick={() => setMode("manual")} className="text-xs text-primary hover:underline font-medium mt-2">
+                Use Manual Entry
+              </button>
             </div>
           )}
 
@@ -1326,6 +1369,39 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
                   {recentAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setRecentSelected(null)} className="h-7 text-xs">Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {selectedRecipe && (
+            <div className="space-y-2 border rounded-xl p-3 bg-primary/5 border-primary/20">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{selectedRecipe.emoji}</span>
+                <p className="text-xs font-semibold flex-1 truncate">{selectedRecipe.name}</p>
+                <button onClick={() => setSelectedRecipe(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X size={13} /></button>
+              </div>
+              {(() => {
+                let nutrition: NutritionSummary | null = null;
+                try { nutrition = selectedRecipe.nutritionData ? JSON.parse(selectedRecipe.nutritionData as string) : null; } catch {}
+                return nutrition ? (
+                  <MacroPreview
+                    cal={nutrition.calories * recipeQty}
+                    p={nutrition.protein  * recipeQty}
+                    c={nutrition.carbs    * recipeQty}
+                    f={nutrition.fat      * recipeQty}
+                  />
+                ) : (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                    No nutrition data. Open Recipes to estimate it, or this will log as 0 kcal.
+                  </p>
+                );
+              })()}
+              <MealServingRow mealType={recipeMeal} setMealType={setRecipeMeal} qty={recipeQty} setQty={setRecipeQty} />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addRecipeFood} disabled={recipeAdding} className="flex-1 h-7 text-xs">
+                  {recipeAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedRecipe(null)} className="h-7 text-xs">Back</Button>
               </div>
             </div>
           )}
@@ -1450,8 +1526,8 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
         </div>
       )}
 
-      {/* ── QUICK ADD TAB ──────────────────────────────────────────── */}
-      {mode === "quick" && (
+      {/* ── Manual entry fallback ─────────────────────────────────── */}
+      {mode === "manual" && (
         <div className="space-y-2.5">
           {/* Food name */}
           <div className="space-y-1">
@@ -1638,92 +1714,6 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
             {qaAdding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
             {qaSaveRecipe ? "Log & Save as Recipe" : "Add to Log"}
           </Button>
-        </div>
-      )}
-
-      {/* ── MY RECIPES TAB ─────────────────────────────────────────── */}
-      {mode === "recipes" && (
-        <div className="space-y-2">
-          {!selectedRecipe ? (
-            <>
-              <div className="flex items-center gap-2">
-                <UIInput
-                  value={recipeSearch}
-                  onChange={e => setRecipeSearch(e.target.value)}
-                  placeholder="Search your recipes…"
-                  className="h-8 text-sm flex-1"
-                />
-                <a href="#/recipes" className="shrink-0 text-xs text-primary flex items-center gap-1 hover:underline whitespace-nowrap">
-                  Browse <ArrowRight size={11} />
-                </a>
-              </div>
-              {filteredRecipes.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  <BookOpen size={24} className="mx-auto mb-2 opacity-20" />
-                  <p className="text-xs">
-                    {recipes.length === 0
-                      ? <>No recipes yet. <a href="#/recipes" className="text-primary hover:underline">Add some in Recipes →</a></>
-                      : "No recipes match your search."}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1 max-h-52 overflow-y-auto border rounded-lg p-1">
-                  {filteredRecipes.map(recipe => {
-                    let nutrition: NutritionSummary | null = null;
-                    try { nutrition = recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null; } catch {}
-                    return (
-                      <button key={recipe.id} onClick={() => setSelectedRecipe(recipe)}
-                        className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-secondary/60 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base leading-none">{recipe.emoji}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{recipe.name}</p>
-                            {nutrition ? (
-                              <p className="text-[10px] text-muted-foreground">
-                                {Math.round(nutrition.calories)} kcal · P {Math.round(nutrition.protein)}g · C {Math.round(nutrition.carbs)}g · F {Math.round(nutrition.fat)}g per serving
-                              </p>
-                            ) : (
-                              <p className="text-[10px] text-muted-foreground/60 italic">No nutrition data — will log as 0 kcal</p>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-2 pt-1 border-t">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{selectedRecipe.emoji}</span>
-                <p className="text-xs font-semibold flex-1 truncate">{selectedRecipe.name}</p>
-              </div>
-              {(() => {
-                let nutrition: NutritionSummary | null = null;
-                try { nutrition = selectedRecipe.nutritionData ? JSON.parse(selectedRecipe.nutritionData as string) : null; } catch {}
-                return nutrition ? (
-                  <MacroPreview
-                    cal={nutrition.calories * recipeQty}
-                    p={nutrition.protein  * recipeQty}
-                    c={nutrition.carbs    * recipeQty}
-                    f={nutrition.fat      * recipeQty}
-                  />
-                ) : (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                    ⚠️ No nutrition data. Open the Recipes tab to estimate it, or it will log as 0 kcal.
-                  </p>
-                );
-              })()}
-              <MealServingRow mealType={recipeMeal} setMealType={setRecipeMeal} qty={recipeQty} setQty={setRecipeQty} />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={addRecipeFood} disabled={recipeAdding} className="flex-1 h-7 text-xs">
-                  {recipeAdding ? <Loader2 size={11} className="animate-spin mr-1" /> : null}Add to Log
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setSelectedRecipe(null)} className="h-7 text-xs">Back</Button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
