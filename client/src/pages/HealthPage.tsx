@@ -2845,7 +2845,7 @@ function NutritionConnectionsCard({
             className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary disabled:opacity-50"
           >
             {syncingTargets
-              ? "Syncing..."
+              ? "Working..."
               : !activePlan
                 ? "Connect goal"
                 : goalsMatchPlan
@@ -3461,6 +3461,7 @@ export function NutritionTab({
   // Find a body composition plan — prefer active, fall back to most recent
   const bodyCompPlans = workoutPlans.filter(p => p.goalType === "body_composition");
   const activeBodyCompPlan = bodyCompPlans.find(p => p.isActive) ?? null;
+  const inactiveBodyCompPlan = bodyCompPlans.find(p => !p.isActive) ?? null;
   const bodyCompMetric: Record<string, any> | null = (() => {
     try { return activeBodyCompPlan?.goalMetricJson ? JSON.parse(activeBodyCompPlan.goalMetricJson) : null; } catch { return null; }
   })();
@@ -3494,6 +3495,48 @@ export function NutritionTab({
       toast({ title: "Targets synced from active plan" });
     },
     onError: () => toast({ title: "Failed to sync goals", variant: "destructive" }),
+  });
+  const connectGoalMut = useMutation({
+    mutationFn: () => {
+      if (inactiveBodyCompPlan) {
+        return apiRequest("POST", `/api/workout-plans/${inactiveBodyCompPlan.id}/activate`).then(r => r.json());
+      }
+      return apiRequest("POST", "/api/workout-plans", {
+        name: "Nutrition Goal",
+        description: "Created from Nutrition to connect daily food choices with a health goal.",
+        durationWeeks: 12,
+        scheduleJson: "[]",
+        goalType: "body_composition",
+        goalMetricJson: JSON.stringify({
+          metric: "nutrition",
+          currentValue: 0,
+          targetValue: 0,
+          unit: "",
+          targetCalories: g.calories,
+          proteinGrams: g.protein,
+          carbsGrams: g.carbs,
+          fatGrams: g.fat,
+        }),
+        startDate: new Date().toISOString().slice(0, 10),
+        milestonesJson: JSON.stringify([
+          { week: 4, description: "Review nutrition consistency" },
+          { week: 8, description: "Adjust targets based on progress" },
+          { week: 12, description: "Complete nutrition goal review" },
+        ]),
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      }).then(r => r.json());
+    },
+    onSuccess: (_data) => {
+      qc.invalidateQueries({ queryKey: ["/api/workout-plans"] });
+      toast({
+        title: inactiveBodyCompPlan ? "Goal connected" : "Nutrition goal created",
+        description: inactiveBodyCompPlan
+          ? `${inactiveBodyCompPlan.name} is now connected to Nutrition.`
+          : "Your current targets are now connected to a health goal.",
+      });
+    },
+    onError: () => toast({ title: "Could not connect goal", variant: "destructive" }),
   });
   const waterGlasses = waterData?.glasses ?? 0;
 
@@ -3839,9 +3882,16 @@ export function NutritionTab({
             proteinLeft={proteinLeft}
             caloriesLeft={caloriesLeft}
             goalsMatchPlan={!!goalsMatchPlan}
-            syncingTargets={syncGoalsMut.isPending}
+            syncingTargets={syncGoalsMut.isPending || connectGoalMut.isPending}
             onSyncTargets={() => syncGoalsMut.mutate()}
-            onConnectGoal={() => { window.location.hash = "/workouts?goalType=body_composition"; }}
+            onConnectGoal={() => {
+              if (activeBodyCompPlan) {
+                setActiveSection("targets");
+                toast({ title: "Goal context opened", description: "Review or adjust the targets connected to this goal." });
+              } else {
+                connectGoalMut.mutate();
+              }
+            }}
             onChooseMeal={() => setActiveSection("meals")}
             onAddRecoveryMeal={() => {
               setLogMealPreset("snack");
