@@ -646,8 +646,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                         key={opt.key}
                         onClick={() => {
                           if (opt.key === "training_plan") {
-                            // Complete onboarding and let WorkoutsPage open the plan builder
-                            window.dispatchEvent(new CustomEvent("open-plan-builder"));
+                            // Set flag so WorkoutsPage opens the plan builder after navigation
+                            sessionStorage.setItem("openPlanBuilder", "1");
                             finishImmediate("/health");
                           } else if (opt.key === "meal_plan") {
                             setMealWizardOpen(true);

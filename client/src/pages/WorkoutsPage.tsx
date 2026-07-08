@@ -2282,7 +2282,12 @@ export default function WorkoutsPage() {
       }
       window.history.replaceState({}, "", url.toString());
     }
-    // Open plan builder when dispatched from onboarding
+    // Open plan builder via sessionStorage flag set by onboarding (fires after navigation/mount)
+    if (sessionStorage.getItem("openPlanBuilder") === "1") {
+      sessionStorage.removeItem("openPlanBuilder");
+      setEditPlan(null); setPlanModal(true); setTab("plans");
+    }
+    // Also support same-page event dispatch
     const openPlanBuilder = () => { setEditPlan(null); setPlanModal(true); setTab("plans"); };
     window.addEventListener("open-plan-builder", openPlanBuilder);
     return () => window.removeEventListener("open-plan-builder", openPlanBuilder);
