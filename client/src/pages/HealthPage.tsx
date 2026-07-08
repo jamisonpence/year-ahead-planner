@@ -2291,6 +2291,7 @@ function MealPlannerEmbed({
 } = {}) {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
   const [openMealMenu, setOpenMealMenu] = useState<string | null>(null);
+  const [selectedShareMealKey, setSelectedShareMealKey] = useState("");
   const { plan, recipes, setPlan } = usePlanner();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2327,8 +2328,19 @@ function MealPlannerEmbed({
   })();
   const shoppingPreview = plan ? buildShoppingList(plan, plan.days.map(day => day.day)) : null;
   const quickSavedMeals = recipes.slice(0, 4);
-  const firstPlannedMeal = plannedToday[0] ?? null;
-  const firstPlannedMealAction = firstPlannedMeal ? mealActionFromPlannerRecipe(firstPlannedMeal.recipe, firstPlannedMeal.slot) : null;
+  const shareablePlannedMeals = planDays.flatMap((day, dayIndex) =>
+    day.meals
+      .filter(meal => !meal.removed)
+      .map((meal, mealIndex) => ({
+        key: `${dayIndex}-${mealIndex}-${meal.slot}-${meal.recipe.id}`,
+        dayIndex,
+        mealIndex,
+        meal,
+        action: mealActionFromPlannerRecipe(meal.recipe, meal.slot),
+      }))
+  );
+  const selectedShareMeal = shareablePlannedMeals.find(item => item.key === selectedShareMealKey) ?? shareablePlannedMeals[0] ?? null;
+  const selectedShareMealAction = selectedShareMeal?.action ?? null;
   const planSuggestion = !plan
     ? null
     : missingSlots > 0
@@ -2357,6 +2369,15 @@ function MealPlannerEmbed({
             secondaryLabel: "Shopping list",
             secondaryPath: "/meal-planner/shopping",
           };
+  useEffect(() => {
+    if (shareablePlannedMeals.length === 0) {
+      if (selectedShareMealKey) setSelectedShareMealKey("");
+      return;
+    }
+    if (!selectedShareMealKey || !shareablePlannedMeals.some(item => item.key === selectedShareMealKey)) {
+      setSelectedShareMealKey(shareablePlannedMeals[0].key);
+    }
+  }, [selectedShareMealKey, shareablePlannedMeals]);
   const logPlannedMealMut = useMutation({
     mutationFn: (meal: (typeof plannedToday)[number]) => apiRequest("POST", "/api/nutrition/food-log", {
       foodName: meal.recipe.name,
@@ -2640,21 +2661,50 @@ function MealPlannerEmbed({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold">Share a Meal Idea</p>
-            <p className="text-xs text-muted-foreground">Send a planned recipe or question in Messages. Private food logs stay private.</p>
+            <p className="text-xs text-muted-foreground">Choose a planned meal, then send it in Messages. Private food logs stay private.</p>
           </div>
           <Lock size={14} className="text-muted-foreground shrink-0 mt-0.5" />
         </div>
+
+        {selectedShareMeal ? (
+          <div className="rounded-xl border bg-secondary/20 p-3 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Meal to share</p>
+                <p className="text-sm font-semibold truncate">{selectedShareMeal.meal.recipe.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">
+                  Day {selectedShareMeal.dayIndex + 1} · {selectedShareMeal.meal.slot} · {selectedShareMeal.meal.recipe.macros.cal} kcal · P {selectedShareMeal.meal.recipe.macros.p}g
+                </p>
+              </div>
+            </div>
+            {shareablePlannedMeals.length > 1 && (
+              <Select value={selectedShareMeal.key} onChange={setSelectedShareMealKey} className="h-8 text-xs">
+                {shareablePlannedMeals.map(item => (
+                  <option key={item.key} value={item.key}>
+                    Day {item.dayIndex + 1} · {item.meal.slot} · {item.meal.recipe.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed bg-secondary/10 p-3">
+            <p className="text-sm font-semibold">No planned meal selected</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Create or edit a meal plan first, then choose the meal you want to share.</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
-            onClick={() => firstPlannedMealAction ? onRecommendMeal?.(firstPlannedMealAction) : navigate("/meal-planner/library")}
+            onClick={() => selectedShareMealAction ? onRecommendMeal?.(selectedShareMealAction) : navigate("/meal-planner/library")}
             className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
           >
             <Share2 size={12} /> Recommend meal
           </button>
           <button
             type="button"
-            onClick={() => firstPlannedMealAction ? onAskMeal?.(firstPlannedMealAction) : navigate("/meal-planner/library")}
+            onClick={() => selectedShareMealAction ? onAskMeal?.(selectedShareMealAction) : navigate("/meal-planner/library")}
             className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
           >
             <MessageCircle size={12} /> Ask about meal
@@ -2668,7 +2718,7 @@ function MealPlannerEmbed({
           </button>
           <button
             type="button"
-            onClick={() => firstPlannedMealAction ? onSaveMealNote?.(firstPlannedMealAction) : toast({ title: "Plan a meal first", description: "Then MyLifos can create a private note from it." })}
+            onClick={() => selectedShareMealAction ? onSaveMealNote?.(selectedShareMealAction) : toast({ title: "Plan a meal first", description: "Then MyLifos can create a private note from it." })}
             className="flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs hover:bg-secondary transition-colors"
           >
             <Link2 size={12} /> Link to note
