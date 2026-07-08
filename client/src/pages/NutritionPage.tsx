@@ -2,17 +2,16 @@ import { useState } from "react";
 import PageShell from "@/components/PageShell";
 import { NutritionTab } from "@/pages/HealthPage";
 import {
-  UtensilsCrossed, CalendarDays, Target, Layers, BarChart2,
+  UtensilsCrossed, CalendarDays, Target, BarChart2,
 } from "lucide-react";
 
-type Section = "today" | "meals" | "targets" | "plan" | "trends";
+type Section = "today" | "plan" | "targets" | "insights";
 
 const TABS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "today",   label: "Today",   icon: UtensilsCrossed },
-  { id: "meals",   label: "Meals",   icon: Layers          },
-  { id: "targets", label: "Targets", icon: Target          },
   { id: "plan",    label: "Plan",    icon: CalendarDays    },
-  { id: "trends",  label: "Trends",  icon: BarChart2       },
+  { id: "targets", label: "Targets", icon: Target          },
+  { id: "insights", label: "Insights", icon: BarChart2     },
 ];
 
 export default function NutritionPage() {
@@ -22,7 +21,7 @@ export default function NutritionPage() {
     <PageShell
       size="sm"
       title="Nutrition"
-      subtitle="Today's food decisions, targets, meal planning, and trends"
+      subtitle="Today's food decisions, meal planning, targets, and weekly insights"
       controls={
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(tab => {

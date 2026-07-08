@@ -1758,6 +1758,14 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
 
 // ── TargetsEditor ────────────────────────────────────────────────────────────
 type NutritionTargets = { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number };
+type NutritionSection = "today" | "plan" | "targets" | "insights";
+type NutritionSectionInput = NutritionSection | "meals" | "trends";
+
+function normalizeNutritionSection(section?: NutritionSectionInput): NutritionSection {
+  if (section === "meals") return "plan";
+  if (section === "trends") return "insights";
+  return section ?? "today";
+}
 
 function TargetsEditor({
   goals,
@@ -1767,8 +1775,8 @@ function TargetsEditor({
   goalsMatchPlan,
   onSave,
   onApplyPlan,
-  onOpenMeals,
-  onOpenTrends,
+  onOpenPlan,
+  onOpenInsights,
 }: {
   goals: NutritionTargets;
   weeklyLog: FoodLogEntry[];
@@ -1777,8 +1785,8 @@ function TargetsEditor({
   goalsMatchPlan: boolean;
   onSave: (d: NutritionTargets) => Promise<void>;
   onApplyPlan: () => void;
-  onOpenMeals: () => void;
-  onOpenTrends: () => void;
+  onOpenPlan: () => void;
+  onOpenInsights: () => void;
 }) {
   const { toast } = useToast();
   const [cals,  setCals]  = useState(String(goals.calories));
@@ -1816,7 +1824,7 @@ function TargetsEditor({
     : strategy === "build"
       ? "Supports muscle gain with more calories, protein, and training fuel."
       : strategy === "maintain"
-        ? "Keeps targets steady while Trends learns your normal rhythm."
+        ? "Keeps targets steady while Insights learns your normal rhythm."
         : strategy === "energy"
           ? "Balances meals around steadier energy and hydration."
           : strategy === "protein"
@@ -1872,7 +1880,7 @@ function TargetsEditor({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold">Nutrition Strategy</p>
-            <p className="text-xs text-muted-foreground">Choose what MyLifos should coach Today and Trends against.</p>
+            <p className="text-xs text-muted-foreground">Choose what MyLifos should coach Today and Insights against.</p>
           </div>
           <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] font-semibold">Targets</span>
         </div>
@@ -1981,8 +1989,8 @@ function TargetsEditor({
               setProt(String(Math.round(nextProtein)));
               toast({ title: "Protein target adjusted", description: "Save targets when this feels right." });
             }} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Tune protein</button>
-            <button type="button" onClick={onOpenMeals} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add meal idea</button>
-            <button type="button" onClick={onOpenTrends} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Review trends</button>
+            <button type="button" onClick={onOpenPlan} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add meal idea</button>
+            <button type="button" onClick={onOpenInsights} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Review insights</button>
           </div>
         </div>
       </div>
@@ -2085,7 +2093,7 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
   ];
   const mostMissed = targetHits.reduce((miss, item) => item.hits < miss.hits ? item : miss, targetHits[0]);
   const adjustment = daysWithData.length === 0
-    ? "Log a few meals this week so Trends can make a real suggestion."
+    ? "Log a few meals this week so Insights can make a real suggestion."
     : proteinHitDays <= 2
       ? "Add one reliable protein meal to your plan and repeat it on busy days."
       : calorieTargetDays <= 2
@@ -2097,6 +2105,11 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border bg-card p-4">
+        <p className="text-sm font-semibold">Weekly Insights</p>
+        <p className="text-xs text-muted-foreground mt-1">Learn what worked, what slipped, and what to adjust next week.</p>
+      </div>
+
       <div className="grid sm:grid-cols-2 gap-2">
         {[
           { title: "Protein target", value: `${proteinHitDays}/7 days`, body: `Average ${Math.round(avg.protein)}g / ${goals.protein}g` },
@@ -2115,31 +2128,6 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
       <div className="rounded-xl border bg-primary/5 border-primary/20 p-3">
         <p className="text-xs font-semibold text-primary">Suggested adjustment for next week</p>
         <p className="text-xs text-muted-foreground mt-1">{adjustment}</p>
-      </div>
-
-      <div className="rounded-xl border bg-card p-3 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold">Supportive social prompts</p>
-            <p className="text-[11px] text-muted-foreground">Share encouragement and recipe ideas, not private meal logs.</p>
-          </div>
-          <Lock size={13} className="text-muted-foreground shrink-0" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-          {[
-            { label: "Cheer", href: "#/people", icon: Heart },
-            { label: "Ask about it", href: "#/messenger", icon: MessageCircle },
-            { label: "Save this", href: "#/mylifos", icon: Star },
-            { label: "Recommend back", href: "#/discover", icon: Share2 },
-          ].map(item => {
-            const Icon = item.icon;
-            return (
-              <a key={item.label} href={item.href} className="flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary transition-colors">
-                <Icon size={11} /> {item.label}
-              </a>
-            );
-          })}
-        </div>
       </div>
 
       <div className="rounded-xl border bg-card p-4">
@@ -2363,7 +2351,7 @@ function MealPlannerEmbed({
           }
         : {
             title: "Plan is ready to use",
-            body: "Your week is covered. Log planned meals from Today and use Trends to adjust next week.",
+            body: "Your week is covered. Log planned meals from Today and use Insights to adjust next week.",
             primaryLabel: "Edit plan",
             primaryPath: "/meal-planner/plan",
             secondaryLabel: "Shopping list",
@@ -3253,8 +3241,8 @@ function NutritionMealsLibrary({
       <div className="rounded-2xl border bg-card p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Meals Library</p>
-            <p className="text-xs text-muted-foreground">Reusable meals you can log, save, plan, and recommend.</p>
+            <p className="text-sm font-semibold">Meal Library</p>
+            <p className="text-xs text-muted-foreground">Reusable meals you can log, add to plans, and recommend.</p>
           </div>
           <a href="#/recipes" className="shrink-0 text-xs text-primary hover:underline">Manage recipes</a>
         </div>
@@ -3369,13 +3357,31 @@ function NutritionMealsLibrary({
 
       <div className="grid md:grid-cols-[1fr_1fr] gap-3">
         <div className="rounded-2xl border bg-card p-4 space-y-3">
-          <p className="text-sm font-semibold">Meal Collections</p>
-          <div className="flex gap-2 flex-wrap">
-            {["High protein", "Breakfasts", "Weeknight dinners", "Restaurants", "Post-workout", "Family favorites"].map(label => (
-              <span key={label} className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground">{label}</span>
-            ))}
+          <div>
+            <p className="text-sm font-semibold">High-Protein Options</p>
+            <p className="text-xs text-muted-foreground">Fast choices when Today says protein is the gap.</p>
           </div>
-          <p className="text-[11px] text-muted-foreground">Collections are ready as a UI pattern. Saved meals can be grouped here as the library grows.</p>
+          {highProteinMeals.length > 0 ? (
+            <div className="space-y-2">
+              {highProteinMeals.map(item => {
+                const isRecipe = "name" in item;
+                const title = isRecipe ? item.name : item.foodName;
+                const protein = isRecipe ? parseRecipeNutrition(item)?.protein ?? 0 : Number(item.protein) || 0;
+                const actionItem = isRecipe ? mealActionFromRecipe(item) : mealActionFromRecent(item);
+                return (
+                  <div key={`${isRecipe ? "recipe" : "recent"}-${item.id}`} className="flex items-center gap-2 rounded-xl border px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{title}</p>
+                      <p className="text-[11px] text-muted-foreground">{Math.round(protein)}g protein</p>
+                    </div>
+                    <button type="button" onClick={() => onAddToPlan(actionItem)} className="text-[11px] text-primary hover:underline shrink-0">Add to plan</button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Log or save a few protein-rich meals and they will appear here.</p>
+          )}
         </div>
         <div className="rounded-2xl border bg-card p-4 space-y-3">
           <p className="text-sm font-semibold">Smart Suggestions</p>
@@ -3406,16 +3412,21 @@ export function NutritionTab({
   section: externalSection,
   onSection: externalSetSection,
 }: {
-  section?: "today" | "meals" | "targets" | "plan" | "trends";
-  onSection?: (s: "today" | "meals" | "targets" | "plan" | "trends") => void;
+  section?: NutritionSectionInput;
+  onSection?: (s: NutritionSection) => void;
 } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { plan } = usePlanner();
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [internalSection, setInternalSection] = useState<"today" | "meals" | "targets" | "plan" | "trends">("today");
-  const activeSection = externalSection ?? internalSection;
-  const setActiveSection = externalSetSection ?? setInternalSection;
+  const [internalSection, setInternalSection] = useState<NutritionSection>("today");
+  const activeSection = normalizeNutritionSection(externalSection ?? internalSection);
+  const setActiveSection = useCallback((section: NutritionSectionInput) => {
+    const next = normalizeNutritionSection(section);
+    if (externalSetSection) externalSetSection(next);
+    else setInternalSection(next);
+  }, [externalSetSection]);
   const [planMealItem, setPlanMealItem] = useState<NutritionMealActionItem | null>(null);
   const [friendAction, setFriendAction] = useState<{ mode: "recommend" | "ask"; item: NutritionMealActionItem } | null>(null);
 
@@ -3752,6 +3763,35 @@ export function NutritionTab({
   });
 
   const circumference = 2 * Math.PI * 32;
+  const plannedTodayMeals = plan?.days?.[0]?.meals?.filter(meal => !meal.removed) ?? [];
+  const nextPlannedMeal = plannedTodayMeals.find(meal => !foodLog.some(entry => entry.mealType === meal.slot)) ?? plannedTodayMeals[0] ?? null;
+  const nextNutritionAction = nextPlannedMeal
+    ? {
+        title: `Log ${nextPlannedMeal.recipe.name}`,
+        body: `${nextPlannedMeal.slot} is planned for today: ${nextPlannedMeal.recipe.macros.cal} kcal and ${nextPlannedMeal.recipe.macros.p}g protein.`,
+        primary: "Log planned meal",
+        secondary: "View plan",
+      }
+    : proteinLeft >= 25
+      ? {
+          title: "Pick a high-protein meal",
+          body: `You are ${proteinLeft}g short on protein. Choose a saved meal or log what you ate.`,
+          primary: "Choose meal",
+          secondary: "Log food",
+        }
+      : caloriesLeft >= 400
+        ? {
+            title: "Choose your next meal",
+            body: `${caloriesLeft} kcal remain today. Use a saved meal, planned meal, or quick log.`,
+            primary: "Choose meal",
+            secondary: "Log food",
+          }
+        : {
+            title: "Capture what worked",
+            body: "Today is nearly covered. Save a meal note or review your insights later.",
+            primary: "Save note",
+            secondary: "Insights",
+          };
 
   return (
     <div className="space-y-5">
@@ -3759,12 +3799,12 @@ export function NutritionTab({
       {!externalSection && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-2 flex-wrap">
-            {(["today", "meals", "targets", "plan", "trends"] as const).map(s => (
+            {(["today", "plan", "targets", "insights"] as const).map(s => (
               <button key={s} onClick={() => setActiveSection(s)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all capitalize ${
                   activeSection === s ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}>
-                {s === "today" ? "Today" : s === "meals" ? "Meals" : s === "targets" ? "Targets" : s === "plan" ? "Plan" : "Trends"}
+                {s === "today" ? "Today" : s === "plan" ? "Plan" : s === "targets" ? "Targets" : "Insights"}
               </button>
             ))}
           </div>
@@ -3775,11 +3815,29 @@ export function NutritionTab({
       )}
 
       {activeSection === "plan" && (
-        <MealPlannerEmbed
-          onRecommendMeal={(item) => setFriendAction({ mode: "recommend", item })}
-          onAskMeal={(item) => setFriendAction({ mode: "ask", item })}
-          onSaveMealNote={(item) => saveNutritionNoteMut.mutate(item)}
-        />
+        <div className="space-y-4">
+          <MealPlannerEmbed
+            onRecommendMeal={(item) => setFriendAction({ mode: "recommend", item })}
+            onAskMeal={(item) => setFriendAction({ mode: "ask", item })}
+            onSaveMealNote={(item) => saveNutritionNoteMut.mutate(item)}
+          />
+          <NutritionMealsLibrary
+            recentFoods={recentFoods}
+            recipes={recipes}
+            goals={g}
+            onLogRecent={(item) => repeatFoodMut.mutate(item)}
+            onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
+            onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
+            onAddToPlan={setPlanMealItem}
+            onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
+            onAsk={(item) => setFriendAction({ mode: "ask", item })}
+            onOpenPlan={() => setActiveSection("plan")}
+            onOpenTargets={() => setActiveSection("targets")}
+            savingRecentId={savingRecentMealId}
+            loggingRecent={repeatFoodMut.isPending}
+            loggingRecipe={logRecipeMut.isPending}
+          />
+        </div>
       )}
 
       {activeSection === "today" && (
@@ -3825,6 +3883,74 @@ export function NutritionTab({
             </div>
           )}
 
+          <div className="rounded-2xl border bg-card p-4 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">What to eat next</p>
+                <p className="text-xs text-muted-foreground mt-1">{nextNutritionAction.body}</p>
+              </div>
+              <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] font-semibold shrink-0">Today</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (nextPlannedMeal) {
+                    apiRequest("POST", "/api/nutrition/food-log", {
+                      foodName: nextPlannedMeal.recipe.name,
+                      servingSize: 1,
+                      servingUnit: "serving",
+                      quantity: 1,
+                      mealType: nextPlannedMeal.slot,
+                      date: selectedDate,
+                      calories: nextPlannedMeal.recipe.macros.cal,
+                      protein: nextPlannedMeal.recipe.macros.p,
+                      carbs: nextPlannedMeal.recipe.macros.c,
+                      fat: nextPlannedMeal.recipe.macros.f,
+                      fiber: 0,
+                      sugar: 0,
+                      sodium: 0,
+                    }).then(() => {
+                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+                      toast({ title: `${nextPlannedMeal.recipe.name} logged for today` });
+                    }).catch(() => toast({ title: "Could not log planned meal", variant: "destructive" }));
+                    return;
+                  }
+                  if (nextNutritionAction.primary === "Save note") {
+                    saveNutritionNoteMut.mutate({
+                      id: "today-nutrition-summary",
+                      title: "Today's nutrition note",
+                      subtitle: `${Math.round(totals.calories)} kcal · ${Math.round(totals.protein)}g protein logged`,
+                      source: "recent",
+                    });
+                    return;
+                  }
+                  setActiveSection("plan");
+                }}
+                className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90"
+              >
+                {nextNutritionAction.primary}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (nextNutritionAction.secondary === "View plan" || nextNutritionAction.secondary === "Insights") setActiveSection(nextNutritionAction.secondary === "Insights" ? "insights" : "plan");
+                  else {
+                    setLogMealPreset("snack");
+                    setShowFoodLog(true);
+                    setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                  }
+                }}
+                className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary"
+              >
+                {nextNutritionAction.secondary}
+              </button>
+              <button type="button" onClick={() => setActiveSection("targets")} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">Targets</button>
+              <button type="button" onClick={() => setActiveSection("plan")} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">Meal library</button>
+            </div>
+          </div>
+
           {/* ── Body comp plan card ──────────────────────────────────────── */}
           {activeBodyCompPlan && bodyCompMetric && (
             <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
@@ -3844,7 +3970,7 @@ export function NutritionTab({
               setActiveSection("targets");
               toast({ title: "Nutrition targets opened", description: "Edit calories, protein, macros, and water here." });
             }}
-            onChooseMeal={() => setActiveSection("meals")}
+            onChooseMeal={() => setActiveSection("plan")}
             onAddRecoveryMeal={() => {
               setLogMealPreset("snack");
               setShowFoodLog(true);
@@ -4269,8 +4395,8 @@ export function NutritionTab({
           planName={activeBodyCompPlan?.name}
           goalsMatchPlan={!!goalsMatchPlan}
           onApplyPlan={() => syncGoalsMut.mutate()}
-          onOpenMeals={() => setActiveSection("meals")}
-          onOpenTrends={() => setActiveSection("trends")}
+          onOpenPlan={() => setActiveSection("plan")}
+          onOpenInsights={() => setActiveSection("insights")}
           onSave={async (data) => {
             await apiRequest("PATCH", "/api/nutrition/goals", data);
             qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
@@ -4279,26 +4405,7 @@ export function NutritionTab({
         />
       )}
 
-      {activeSection === "meals" && (
-        <NutritionMealsLibrary
-          recentFoods={recentFoods}
-          recipes={recipes}
-          goals={g}
-          onLogRecent={(item) => repeatFoodMut.mutate(item)}
-          onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
-          onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
-          onAddToPlan={setPlanMealItem}
-          onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
-          onAsk={(item) => setFriendAction({ mode: "ask", item })}
-          onOpenPlan={() => setActiveSection("plan")}
-          onOpenTargets={() => setActiveSection("targets")}
-          savingRecentId={savingRecentMealId}
-          loggingRecent={repeatFoodMut.isPending}
-          loggingRecipe={logRecipeMut.isPending}
-        />
-      )}
-
-      {activeSection === "trends" && (
+      {activeSection === "insights" && (
         <WeeklyNutritionView weekDays={weekDays} weeklyByDate={weeklyByDate} goals={g} weeklyLog={weeklyLog} />
       )}
 
