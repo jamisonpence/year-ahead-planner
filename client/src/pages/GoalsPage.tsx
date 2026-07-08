@@ -273,9 +273,6 @@ function InlineGoalEditor({ goal, friends, onSave }: {
             <Pencil size={10} /> Edit
           </button>
         </div>
-        {goal.description?.trim() && (
-          <p className="text-sm text-foreground/80 leading-relaxed mt-3">{goal.description.trim()}</p>
-        )}
         <div className="mt-3 flex items-center gap-3">
           <Progress value={pct} className="h-2 flex-1" />
           <span className="text-xs font-medium text-muted-foreground shrink-0">{pct}%</span>
@@ -867,6 +864,14 @@ export default function GoalsPage() {
   const updateGoal = useMutation({
     mutationFn: ({ id, ...data }: { id: number } & Partial<InsertGoal>) => apiRequest("PATCH", `/api/goals/${id}`, data),
     onSuccess: () => { inv(); toast({ title: "Goal updated" }); },
+  });
+  const completeProjectTask = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/project-tasks/${id}`, { completed: true }),
+    onSuccess: () => {
+      inv();
+      confettiBurst({ particles: 32, originY: 0.35 });
+      toast({ title: "Next action completed" });
+    },
   });
   const updateHobby = useMutation({
     mutationFn: ({ id, extraJson }: { id: number; extraJson: string }) => apiRequest("PATCH", `/api/hobbies/${id}`, { extraJson }),
@@ -1487,45 +1492,142 @@ export default function GoalsPage() {
                   const currentProject = getCurrentProject(selectedGoal);
                   const nextAction = getGoalNextAction(selectedGoal);
                   const pct = goalPct(selectedGoal);
+                  const buddy = friends.find((f) => f.id === ((selectedGoal as any).buddyUserId ?? null)) ?? null;
                   return (
-                    <div className="rounded-xl border bg-card p-4 mb-4 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-foreground">Action plan</p>
-                        <Link href="/tasks">
-                          <a className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline shrink-0">
-                            <ClipboardList size={11} /> Projects & tasks
-                          </a>
-                        </Link>
+                    <div className="space-y-3 mb-4">
+                      <div className="rounded-xl border bg-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Why it matters</p>
+                            {selectedGoal.description?.trim() ? (
+                              <p className="text-sm text-foreground/85 leading-relaxed mt-1.5">{selectedGoal.description.trim()}</p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground mt-1.5">Add a short why so this goal stays meaningful when the work gets busy.</p>
+                            )}
+                          </div>
+                          {!selectedGoal.description?.trim() && (
+                            <button
+                              type="button"
+                              onClick={() => setEditGoal(selectedGoal)}
+                              className="text-xs text-primary hover:underline shrink-0"
+                            >
+                              Add why
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div className="rounded-lg bg-secondary/30 px-3 py-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Progress</p>
-                          <div className="flex items-center gap-2">
-                            <Progress value={pct} className="h-1.5 flex-1" />
-                            <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
+
+                      <div className="rounded-xl border bg-card p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-foreground">Execution</p>
+                          <Link href="/tasks">
+                            <a className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline shrink-0">
+                              <ClipboardList size={11} /> Manage projects
+                            </a>
+                          </Link>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_.85fr] gap-3">
+                          <div className="rounded-xl border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-950/20 p-3 space-y-3">
+                            <div className="flex items-start gap-2">
+                              <ArrowRight size={15} className="text-violet-600 dark:text-violet-300 mt-0.5 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wider">Next action</p>
+                                {nextAction ? (
+                                  <>
+                                    <p className="text-base font-semibold leading-snug mt-1">{nextAction.task.title}</p>
+                                    <p className="text-xs text-muted-foreground truncate mt-0.5">{nextAction.project.title}</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-sm font-medium mt-1">No open next action yet</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Add one task to make this goal actionable today.</p>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {nextAction ? (
+                                <button
+                                  type="button"
+                                  onClick={() => completeProjectTask.mutate(nextAction.task.id)}
+                                  disabled={completeProjectTask.isPending}
+                                  className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                  Complete
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setQuickWinGoalId(selectedGoal.id)}
+                                  className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90"
+                                >
+                                  Add task
+                                </button>
+                              )}
+                              <Link href="/tasks">
+                                <a className="rounded-lg border px-3 py-2 text-xs font-medium text-center hover:bg-secondary">
+                                  Change
+                                </a>
+                              </Link>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border bg-secondary/20 p-3 space-y-3">
+                            <div>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current project</p>
+                              {currentProject ? (
+                                <>
+                                  <p className="text-sm font-semibold truncate mt-1">{currentProject.title}</p>
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Progress value={projectPct(currentProject)} className="h-1.5 flex-1" />
+                                    <span className="text-xs text-muted-foreground shrink-0">{projectPct(currentProject)}%</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground capitalize mt-1">{currentProject.status.replace(/_/g, " ")}</p>
+                                </>
+                              ) : (
+                                <p className="text-sm text-muted-foreground mt-1">No project linked yet.</p>
+                              )}
+                            </div>
+                            <div className="border-t pt-3">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal progress</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Progress value={pct} className="h-2 flex-1" />
+                                <span className="text-sm font-semibold shrink-0">{pct}%</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {selectedGoal.progressCurrent} / {selectedGoal.progressTarget}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                        <div className="rounded-lg bg-secondary/30 px-3 py-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Current project</p>
-                          {currentProject ? (
-                            <>
-                              <p className="text-sm font-medium truncate">{currentProject.title}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{currentProject.status.replace(/_/g, " ")}</p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No project linked yet.</p>
-                          )}
-                        </div>
-                        <div className="rounded-lg bg-violet-50/70 dark:bg-violet-950/20 border border-violet-200/70 dark:border-violet-800/60 px-3 py-2">
-                          <p className="text-xs font-semibold text-violet-600 dark:text-violet-300 uppercase tracking-wider mb-1">Next action</p>
-                          {nextAction ? (
-                            <>
-                              <p className="text-sm font-medium leading-snug">{nextAction.task.title}</p>
-                              <p className="text-xs text-muted-foreground truncate">{nextAction.project.title}</p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">Add one open task to a linked project.</p>
-                          )}
+                      </div>
+
+                      <div className="rounded-xl border bg-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                              <Users size={14} className="text-primary" /> Accountability
+                            </p>
+                            {buddy ? (
+                              <div className="flex items-center gap-2 mt-2">
+                                <BuddyAvatarSm user={buddy} size={26} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{buddy.name}</p>
+                                  <p className="text-xs text-muted-foreground">Accountabilibuddy</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground mt-1">Add a buddy to make progress easier to share and sustain.</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditGoal(selectedGoal)}
+                            className="text-xs text-primary hover:underline shrink-0"
+                          >
+                            {buddy ? "Change" : "Add buddy"}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1536,8 +1638,6 @@ export default function GoalsPage() {
                   goal={selectedGoal}
                   onSave={(milestonesJson) => updateGoal.mutate({ id: selectedGoal.id, milestonesJson } as any)}
                 />
-
-                <LifeGraphPanel entityType="goal" entityId={selectedGoal.id} />
 
                 {/* ── Horizon & parent goal ──────────────────────────── */}
                 {(() => {
@@ -1679,6 +1779,10 @@ export default function GoalsPage() {
                     </div>
                   );
                 })()}
+
+                <div className="mt-4">
+                  <LifeGraphPanel entityType="goal" entityId={selectedGoal.id} />
+                </div>
 
                 {/* Linked projects — read-only context */}
                 <div className="mt-4">
