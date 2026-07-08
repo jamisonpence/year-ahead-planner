@@ -2347,17 +2347,7 @@ function MealPlannerEmbed({
   const shoppingPreview = plan ? buildShoppingList(plan, plan.days.map(day => day.day)) : null;
   const quickSavedMeals = recipes.slice(0, 4);
   const firstPlannedMeal = plannedToday[0] ?? null;
-  const firstPlannedMealAction = firstPlannedMeal ? {
-    id: `planned-${firstPlannedMeal.recipe.id}`,
-    title: firstPlannedMeal.recipe.name,
-    subtitle: `${firstPlannedMeal.slot} · ${firstPlannedMeal.recipe.macros.cal} kcal · P ${firstPlannedMeal.recipe.macros.p}g`,
-    mealType: firstPlannedMeal.slot,
-    calories: firstPlannedMeal.recipe.macros.cal,
-    protein: firstPlannedMeal.recipe.macros.p,
-    carbs: firstPlannedMeal.recipe.macros.c,
-    fat: firstPlannedMeal.recipe.macros.f,
-    source: "recipe" as const,
-  } : null;
+  const firstPlannedMealAction = firstPlannedMeal ? mealActionFromPlannerRecipe(firstPlannedMeal.recipe, firstPlannedMeal.slot) : null;
   const logPlannedMealMut = useMutation({
     mutationFn: (meal: (typeof plannedToday)[number]) => apiRequest("POST", "/api/nutrition/food-log", {
       foodName: meal.recipe.name,
@@ -2497,17 +2487,7 @@ function MealPlannerEmbed({
                         <button type="button" onClick={() => navigate("/meal-planner/plan")} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Swap</button>
                         <button type="button" onClick={() => movePlannedMealToTomorrow(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Move</button>
                         <button type="button" onClick={() => removePlannedMeal(0, mealIndex)} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Remove</button>
-                        <button type="button" onClick={() => onRecommendMeal?.({
-                          id: `planned-${meal.recipe.id}`,
-                          title: meal.recipe.name,
-                          subtitle: `${meal.slot} · ${meal.recipe.macros.cal} kcal · P ${meal.recipe.macros.p}g`,
-                          mealType: meal.slot,
-                          calories: meal.recipe.macros.cal,
-                          protein: meal.recipe.macros.p,
-                          carbs: meal.recipe.macros.c,
-                          fat: meal.recipe.macros.f,
-                          source: "recipe",
-                        })} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Rec</button>
+                        <button type="button" onClick={() => onRecommendMeal?.(mealActionFromPlannerRecipe(meal.recipe, meal.slot))} className="rounded-md border px-1.5 py-1 text-[10px] hover:bg-secondary">Rec</button>
                       </div>
                     </div>
                   );
@@ -2782,10 +2762,13 @@ type NutritionMealActionItem = {
   title: string;
   subtitle?: string;
   mealType?: string | null;
+  emoji?: string;
+  imageUrl?: string | null;
   calories?: number;
   protein?: number;
   carbs?: number;
   fat?: number;
+  details?: Record<string, any>;
   source: "recent" | "recipe";
 };
 
@@ -2810,10 +2793,51 @@ function mealActionFromRecipe(recipe: Recipe): NutritionMealActionItem {
     title: recipe.name,
     subtitle: nutrition ? `${Math.round(nutrition.calories)} kcal · P ${Math.round(nutrition.protein)}g` : "Saved recipe",
     mealType: "dinner",
+    emoji: recipe.emoji || "🍽️",
+    imageUrl: recipe.imageUrl,
     calories: nutrition?.calories ?? 0,
     protein: nutrition?.protein ?? 0,
     carbs: nutrition?.carbs ?? 0,
     fat: nutrition?.fat ?? 0,
+    details: {
+      category: recipe.category ?? "Saved recipe",
+      prepTime: recipe.prepTime ?? 0,
+      cookTime: recipe.cookTime ?? 0,
+      servings: recipe.servings ?? 1,
+      ingredientsJson: recipe.ingredientsJson || "[]",
+      instructions: recipe.instructions ?? "",
+      calories: Math.round(nutrition?.calories ?? 0),
+      protein: Math.round(nutrition?.protein ?? 0),
+      carbs: Math.round(nutrition?.carbs ?? 0),
+      fat: Math.round(nutrition?.fat ?? 0),
+    },
+    source: "recipe",
+  };
+}
+
+function mealActionFromPlannerRecipe(recipe: PlannerRecipe, mealType?: MealSlot): NutritionMealActionItem {
+  return {
+    id: `planned-${recipe.id}`,
+    title: recipe.name,
+    subtitle: `${mealType ?? recipe.category} · ${recipe.macros.cal} kcal · P ${recipe.macros.p}g`,
+    mealType,
+    emoji: "🍽️",
+    calories: recipe.macros.cal,
+    protein: recipe.macros.p,
+    carbs: recipe.macros.c,
+    fat: recipe.macros.f,
+    details: {
+      category: recipe.category || "Planned meal",
+      prepTime: recipe.prepMin,
+      cookTime: recipe.cookMin,
+      servings: recipe.servings,
+      ingredientsJson: JSON.stringify(recipe.ingredients.map(name => ({ name, qty: "" }))),
+      instructions: recipe.instructions.join("\n"),
+      calories: recipe.macros.cal,
+      protein: recipe.macros.p,
+      carbs: recipe.macros.c,
+      fat: recipe.macros.f,
+    },
     source: "recipe",
   };
 }
@@ -3412,11 +3436,13 @@ export function NutritionTab({
           shareType: "recipe",
           name: item.title,
           subtitle: item.subtitle ?? (mode === "ask" ? "Nutrition question" : "Meal idea"),
-          emoji: "🍽️",
+          emoji: item.emoji ?? "🍽️",
+          imageUrl: item.imageUrl ?? undefined,
           note: messageNote,
           details: {
-            category: item.source === "recipe" ? "Saved recipe" : "Saved meal",
-            servings: 1,
+            ...(item.details ?? {}),
+            category: item.details?.category ?? (item.source === "recipe" ? "Saved recipe" : "Saved meal"),
+            servings: item.details?.servings ?? 1,
             calories: Math.round(item.calories ?? 0),
             protein: Math.round(item.protein ?? 0),
             carbs: Math.round(item.carbs ?? 0),
