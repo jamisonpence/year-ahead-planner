@@ -528,13 +528,30 @@ const DAY_LABELS: Record<string,string> = { monday:"Mon", tuesday:"Tue", wednesd
 // Proper component so useState is valid (rules of hooks)
 function PlanWeekAccordion({ weeks, currentWeek, templates }: { weeks: WeekScheduleV2[]; currentWeek: number; templates: WorkoutTemplate[] }) {
   const [expandedWeeks, setExpandedWeeks] = useState<number[]>([currentWeek]);
+  const [showFullPlan, setShowFullPlan] = useState(false);
+  const visibleWeeks = showFullPlan ? weeks : weeks.slice(0, 4);
+  const hiddenWeekCount = Math.max(0, weeks.length - visibleWeeks.length);
   return (
     <div className="bg-card border rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b bg-muted/30">
-        <p className="text-sm font-semibold">Full Plan — All {weeks.length} Weeks</p>
+      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">{showFullPlan ? `Full Plan — All ${weeks.length} Weeks` : "Plan Preview — First 4 Weeks"}</p>
+          {!showFullPlan && hiddenWeekCount > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">{hiddenWeekCount} more week{hiddenWeekCount === 1 ? "" : "s"} hidden</p>
+          )}
+        </div>
+        {weeks.length > 4 && (
+          <button
+            type="button"
+            onClick={() => setShowFullPlan(v => !v)}
+            className="rounded-lg border bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-secondary shrink-0"
+          >
+            {showFullPlan ? "Show less" : "Show full plan"}
+          </button>
+        )}
       </div>
       <div className="divide-y">
-        {weeks.map(wk => {
+        {visibleWeeks.map(wk => {
           const isCurrentWk = wk.week === currentWeek;
           const isPastWk = wk.week < currentWeek;
           const isOpen = expandedWeeks.includes(wk.week);
