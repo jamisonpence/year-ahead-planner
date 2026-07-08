@@ -2769,6 +2769,7 @@ function NutritionConnectionsCard({
   caloriesLeft,
   goalsMatchPlan,
   onSyncTargets,
+  onConnectGoal,
   onChooseMeal,
   onAddRecoveryMeal,
   onAskFriend,
@@ -2783,13 +2784,19 @@ function NutritionConnectionsCard({
   caloriesLeft: number;
   goalsMatchPlan: boolean;
   onSyncTargets: () => void;
+  onConnectGoal: () => void;
   onChooseMeal: () => void;
   onAddRecoveryMeal: () => void;
   onAskFriend: (item: NutritionMealActionItem) => void;
   onSaveNote: (item: NutritionMealActionItem) => void;
   syncingTargets: boolean;
 }) {
-  const highProteinRecipe = recipes.find(recipe => (parseRecipeNutrition(recipe)?.protein ?? 0) >= 25) ?? recipes[0] ?? null;
+  const socialRecipes = useMemo(() => recipes
+    .filter(recipe => !!recipe.name)
+    .sort((a, b) => (parseRecipeNutrition(b)?.protein ?? 0) - (parseRecipeNutrition(a)?.protein ?? 0))
+    .slice(0, 8), [recipes]);
+  const [selectedSocialRecipeId, setSelectedSocialRecipeId] = useState("");
+  const selectedSocialRecipe = socialRecipes.find(recipe => String(recipe.id) === selectedSocialRecipeId) ?? socialRecipes[0] ?? null;
   const targetProtein = metric?.proteinGrams ? Math.round(metric.proteinGrams as number) : null;
   const goalLabel = activePlan
     ? `${activePlan.name}${targetProtein ? ` · ${targetProtein}g protein target` : ""}`
@@ -2801,6 +2808,16 @@ function NutritionConnectionsCard({
     subtitle: `${proteinLeft}g protein left · ${caloriesLeft} kcal left today`,
     source: "recipe",
   };
+
+  useEffect(() => {
+    if (socialRecipes.length === 0) {
+      if (selectedSocialRecipeId) setSelectedSocialRecipeId("");
+      return;
+    }
+    if (!selectedSocialRecipeId || !socialRecipes.some(recipe => String(recipe.id) === selectedSocialRecipeId)) {
+      setSelectedSocialRecipeId(String(socialRecipes[0].id));
+    }
+  }, [selectedSocialRecipeId, socialRecipes]);
 
   return (
     <div className="rounded-2xl border bg-card p-4 space-y-3">
@@ -2823,11 +2840,17 @@ function NutritionConnectionsCard({
           </div>
           <button
             type="button"
-            onClick={onSyncTargets}
-            disabled={!activePlan || goalsMatchPlan || syncingTargets}
+            onClick={!activePlan || goalsMatchPlan ? onConnectGoal : onSyncTargets}
+            disabled={syncingTargets}
             className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary disabled:opacity-50"
           >
-            {goalsMatchPlan ? "Targets synced" : syncingTargets ? "Syncing..." : "Use goal targets"}
+            {syncingTargets
+              ? "Syncing..."
+              : !activePlan
+                ? "Connect goal"
+                : goalsMatchPlan
+                  ? "View goal"
+                  : "Use goal targets"}
           </button>
         </div>
 
@@ -2858,15 +2881,33 @@ function NutritionConnectionsCard({
             <MessageCircle size={14} className="mt-0.5 text-primary shrink-0" />
             <div>
               <p className="text-xs font-semibold">Social ideas</p>
-              <p className="text-[11px] text-muted-foreground">{friendsCount ? `Ask a friend about ${highProteinRecipe?.name ?? "a meal idea"}.` : "Add friends to exchange recipe ideas."}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {friendsCount
+                  ? selectedSocialRecipe
+                    ? `Ask a friend about ${selectedSocialRecipe.name}.`
+                    : "Choose a saved meal idea to ask about."
+                  : "Browse saved meal ideas, then add friends to ask about them."}
+              </p>
             </div>
           </div>
+          {friendsCount > 0 && socialRecipes.length > 0 && (
+            <Select value={String(selectedSocialRecipe?.id ?? "")} onChange={setSelectedSocialRecipeId} className="h-8 text-xs">
+              {socialRecipes.map(recipe => {
+                const nutrition = parseRecipeNutrition(recipe);
+                return (
+                  <option key={recipe.id} value={String(recipe.id)}>
+                    {recipe.name}{nutrition?.protein ? ` · P ${Math.round(nutrition.protein)}g` : ""}
+                  </option>
+                );
+              })}
+            </Select>
+          )}
           <button
             type="button"
-            onClick={() => highProteinRecipe ? onAskFriend(mealActionFromRecipe(highProteinRecipe)) : onChooseMeal()}
+            onClick={() => friendsCount && selectedSocialRecipe ? onAskFriend(mealActionFromRecipe(selectedSocialRecipe)) : onChooseMeal()}
             className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary"
           >
-            {friendsCount ? "Ask friend" : "Find meal idea"}
+            {friendsCount ? "Ask friend" : "Browse meal ideas"}
           </button>
         </div>
       </div>
@@ -3800,6 +3841,7 @@ export function NutritionTab({
             goalsMatchPlan={!!goalsMatchPlan}
             syncingTargets={syncGoalsMut.isPending}
             onSyncTargets={() => syncGoalsMut.mutate()}
+            onConnectGoal={() => { window.location.hash = "/workouts?goalType=body_composition"; }}
             onChooseMeal={() => setActiveSection("meals")}
             onAddRecoveryMeal={() => {
               setLogMealPreset("snack");
