@@ -1720,19 +1720,68 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
   );
 }
 
-// ── GoalsEditor ──────────────────────────────────────────────────────────────
-function GoalsEditor({ goals, onSave }: { goals: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }; onSave: (d: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }) => Promise<void> }) {
+// ── TargetsEditor ────────────────────────────────────────────────────────────
+function TargetsEditor({ goals, onSave }: { goals: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }; onSave: (d: { calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }) => Promise<void> }) {
   const [cals,  setCals]  = useState(String(goals.calories));
   const [prot,  setProt]  = useState(String(goals.protein));
   const [carb,  setCarb]  = useState(String(goals.carbs));
   const [fat,   setFat]   = useState(String(goals.fat));
   const [water, setWater] = useState(String(goals.waterGlasses));
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const caloriesNum = Math.max(1, Number(cals) || goals.calories || 2000);
+  const proteinNum = Number(prot) || 0;
+  const carbNum = Number(carb) || 0;
+  const fatNum = Number(fat) || 0;
+  const macroCalories = proteinNum * 4 + carbNum * 4 + fatNum * 9;
+  const macroSplit = macroCalories > 0
+    ? [
+        { label: "Protein", pct: Math.round((proteinNum * 4 / macroCalories) * 100), cls: "bg-blue-500" },
+        { label: "Carbs",   pct: Math.round((carbNum * 4 / macroCalories) * 100), cls: "bg-amber-500" },
+        { label: "Fat",     pct: Math.round((fatNum * 9 / macroCalories) * 100), cls: "bg-rose-500" },
+      ]
+    : [];
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-3 max-w-sm">
-      <p className="text-sm font-semibold">Daily Nutrition Goals</p>
+    <div className="rounded-xl border bg-card p-4 space-y-4 max-w-xl">
+      <div>
+        <p className="text-sm font-semibold">Daily Nutrition Targets</p>
+        <p className="text-xs text-muted-foreground">Set the numbers Today uses for calories, protein, macros, and water.</p>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[
+          { label: "Calories", value: caloriesNum, unit: "kcal" },
+          { label: "Protein",  value: proteinNum,  unit: "g" },
+          { label: "Water",    value: Number(water) || 0, unit: "glasses" },
+          { label: "Fiber",    value: "Tracked",   unit: "in food logs" },
+        ].map(item => (
+          <div key={item.label} className="rounded-xl border bg-secondary/20 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+            <p className="text-sm font-bold">
+              {item.value}
+              <span className="text-[10px] font-medium text-muted-foreground ml-1">{item.unit}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {macroSplit.length > 0 && (
+        <div className="rounded-xl border bg-background p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold">Macro Split</p>
+            <p className="text-[10px] text-muted-foreground">{Math.round((macroCalories / caloriesNum) * 100)}% of calorie target represented</p>
+          </div>
+          <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+            {macroSplit.map(item => (
+              <div key={item.label} className={item.cls} style={{ width: `${item.pct}%` }} />
+            ))}
+          </div>
+          <div className="flex gap-3 flex-wrap text-[10px] text-muted-foreground">
+            {macroSplit.map(item => <span key={item.label}>{item.label} {item.pct}%</span>)}
+          </div>
+        </div>
+      )}
+
       {[
         { label: "Calories (kcal)", val: cals, set: setCals },
         { label: "Protein (g)",     val: prot, set: setProt },
@@ -1750,9 +1799,9 @@ function GoalsEditor({ goals, onSave }: { goals: { calories: number; protein: nu
         await onSave({ calories: +cals, protein: +prot, carbs: +carb, fat: +fat, waterGlasses: +water });
         setSaving(false);
       }}>
-        {saving ? <Loader2 size={13} className="animate-spin mr-1" /> : null}Save Goals
+        {saving ? <Loader2 size={13} className="animate-spin mr-1" /> : null}Save Targets
       </Button>
-      <p className="text-[10px] text-muted-foreground">Defaults based on a 2,000 kcal diet. Customize to match your goals.</p>
+      <p className="text-[10px] text-muted-foreground">Fiber is tracked from logged foods. A dedicated fiber target can be added later if you want stricter tracking.</p>
     </div>
   );
 }
@@ -1765,24 +1814,83 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
   weeklyLog: FoodLogEntry[];
 }) {
   const maxCal = Math.max(...weekDays.map(d => weeklyByDate[d] || 0), goals.calories, 1);
-  const daysWithData = weekDays.filter(d => (weeklyByDate[d] || 0) > 0);
+  const dayTotals = weekDays.reduce((acc, d) => {
+    const entries = weeklyLog.filter(e => e.date === d);
+    acc[d] = entries.reduce((sum, e) => ({
+      calories: sum.calories + Number(e.calories) * Number(e.quantity),
+      protein:  sum.protein  + Number(e.protein)  * Number(e.quantity),
+      carbs:    sum.carbs    + Number(e.carbs)    * Number(e.quantity),
+      fat:      sum.fat      + Number(e.fat)      * Number(e.quantity),
+      fiber:    sum.fiber    + Number(e.fiber)    * Number(e.quantity),
+    }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    return acc;
+  }, {} as Record<string, { calories: number; protein: number; carbs: number; fat: number; fiber: number }>);
+  const daysWithData = weekDays.filter(d => dayTotals[d].calories > 0);
+  const proteinHitDays = weekDays.filter(d => dayTotals[d].protein >= goals.protein).length;
+  const calorieTargetDays = weekDays.filter(d => {
+    const cal = dayTotals[d].calories;
+    return cal > 0 && Math.abs(cal - goals.calories) / goals.calories <= 0.15;
+  }).length;
   const avg = {
-    calories: daysWithData.length ? daysWithData.reduce((s, d) => s + (weeklyByDate[d] || 0), 0) / daysWithData.length : 0,
+    calories: daysWithData.length ? daysWithData.reduce((s, d) => s + dayTotals[d].calories, 0) / daysWithData.length : 0,
     protein:  weeklyLog.reduce((s, e) => s + Number(e.protein) * Number(e.quantity), 0) / 7,
     carbs:    weeklyLog.reduce((s, e) => s + Number(e.carbs)   * Number(e.quantity), 0) / 7,
     fat:      weeklyLog.reduce((s, e) => s + Number(e.fat)     * Number(e.quantity), 0) / 7,
+    fiber:    weeklyLog.reduce((s, e) => s + Number(e.fiber)   * Number(e.quantity), 0) / 7,
   };
   const bestDay = daysWithData.length ? daysWithData.reduce((best, d) => {
-    return Math.abs((weeklyByDate[d] || 0) - goals.calories) < Math.abs((weeklyByDate[best] || 0) - goals.calories) ? d : best;
+    return Math.abs(dayTotals[d].calories - goals.calories) < Math.abs(dayTotals[best].calories - goals.calories) ? d : best;
   }, daysWithData[0]) : null;
+  const mealCoverage = (["breakfast", "lunch", "dinner", "snack"] as const).map(meal => ({
+    meal,
+    days: new Set(weeklyLog.filter(e => e.mealType === meal).map(e => e.date)).size,
+  }));
+  const mostConsistentMeal = mealCoverage.reduce((best, item) => item.days > best.days ? item : best, mealCoverage[0]);
+  const targetHits = [
+    { label: "Calories", hits: calorieTargetDays, target: goals.calories, avg: avg.calories, unit: "kcal" },
+    { label: "Protein",  hits: proteinHitDays,    target: goals.protein,  avg: avg.protein,  unit: "g" },
+    { label: "Carbs",    hits: weekDays.filter(d => dayTotals[d].carbs >= goals.carbs * 0.85 && dayTotals[d].carbs <= goals.carbs * 1.15).length, target: goals.carbs, avg: avg.carbs, unit: "g" },
+    { label: "Fat",      hits: weekDays.filter(d => dayTotals[d].fat >= goals.fat * 0.85 && dayTotals[d].fat <= goals.fat * 1.15).length, target: goals.fat, avg: avg.fat, unit: "g" },
+  ];
+  const mostMissed = targetHits.reduce((miss, item) => item.hits < miss.hits ? item : miss, targetHits[0]);
+  const adjustment = daysWithData.length === 0
+    ? "Log a few meals this week so Trends can make a real suggestion."
+    : proteinHitDays <= 2
+      ? "Add one reliable protein meal to your plan and repeat it on busy days."
+      : calorieTargetDays <= 2
+        ? avg.calories > goals.calories
+          ? "Consider slightly lighter dinners or pre-planned snacks next week."
+          : "Plan one more complete meal each day so calories do not fall short."
+        : "Keep repeating the meals that made this week consistent.";
+  const mealLabel: Record<string, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snacks" };
 
   return (
     <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-2">
+        {[
+          { title: "Protein target", value: `${proteinHitDays}/7 days`, body: `Average ${Math.round(avg.protein)}g / ${goals.protein}g` },
+          { title: "Calories on target", value: `${calorieTargetDays}/7 days`, body: `Average ${Math.round(avg.calories)} kcal / ${goals.calories}` },
+          { title: "Most consistent meal", value: mostConsistentMeal?.days ? mealLabel[mostConsistentMeal.meal] : "Not enough data", body: mostConsistentMeal?.days ? `Logged ${mostConsistentMeal.days} of 7 days` : "Log meals to see the pattern." },
+          { title: "Most missed target", value: mostMissed.label, body: `${mostMissed.hits}/7 days close to target` },
+        ].map(card => (
+          <div key={card.title} className="rounded-xl border bg-card p-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{card.title}</p>
+            <p className="text-lg font-bold leading-tight">{card.value}</p>
+            <p className="text-xs text-muted-foreground">{card.body}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border bg-primary/5 border-primary/20 p-3">
+        <p className="text-xs font-semibold text-primary">Suggested adjustment for next week</p>
+        <p className="text-xs text-muted-foreground mt-1">{adjustment}</p>
+      </div>
+
       <div className="rounded-xl border bg-card p-4">
-        <p className="text-xs font-semibold mb-3">Calorie Intake — Last 7 Days</p>
+        <p className="text-xs font-semibold mb-3">Calorie Trend, Last 7 Days</p>
         <div className="flex items-end gap-1.5" style={{ height: "96px" }}>
           {weekDays.map(d => {
-            const cal = weeklyByDate[d] || 0;
+            const cal = dayTotals[d].calories || weeklyByDate[d] || 0;
             const pct = (cal / maxCal) * 100;
             const onTarget = cal > 0 && Math.abs(cal - goals.calories) / goals.calories < 0.15;
             const over = cal > goals.calories * 1.15;
@@ -1815,6 +1923,7 @@ function WeeklyNutritionView({ weekDays, weeklyByDate, goals, weeklyLog }: {
           { label: "Protein",  val: Math.round(avg.protein),  unit: "g",    goal: goals.protein },
           { label: "Carbs",    val: Math.round(avg.carbs),    unit: "g",    goal: goals.carbs },
           { label: "Fat",      val: Math.round(avg.fat),      unit: "g",    goal: goals.fat },
+          { label: "Fiber",    val: Math.round(avg.fiber),    unit: "g",    goal: "tracked" },
         ].map(m => (
           <div key={m.label} className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">{m.label}</span>
@@ -1916,18 +2025,20 @@ function useEmbedLocation(): EmbedNav {
 }
 
 const PLANNER_SUB_NAV = [
-  { path: "/meal-planner",             label: "Home"        },
-  { path: "/meal-planner/setup",       label: "Setup"       },
-  { path: "/meal-planner/plan",        label: "My Plan"     },
-  { path: "/meal-planner/library",     label: "Library"     },
+  { path: "/meal-planner",             label: "Overview"    },
+  { path: "/meal-planner/setup",       label: "Build Plan"  },
+  { path: "/meal-planner/plan",        label: "Weekly Plan" },
+  { path: "/meal-planner/library",     label: "Saved Meals" },
   { path: "/meal-planner/shopping",    label: "Shopping"    },
   { path: "/meal-planner/preferences", label: "Preferences" },
 ];
 
 function MealPlannerEmbed() {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
-  const { plan } = usePlanner();
+  const { plan, recipes } = usePlanner();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   // Keep a history stack so Back works correctly
   const historyRef = useRef<string[]>(["/meal-planner"]);
@@ -1954,10 +2065,99 @@ function MealPlannerEmbed() {
     toast({ title: "Plan saved!", description: `${plan.days.length}-day plan locked in as your active plan.` });
   }
 
+  const plannedToday = plan?.days[0]?.meals.filter(m => !m.removed) ?? [];
+  const logPlannedMealMut = useMutation({
+    mutationFn: (meal: (typeof plannedToday)[number]) => apiRequest("POST", "/api/nutrition/food-log", {
+      foodName: meal.recipe.name,
+      servingSize: 1,
+      servingUnit: "serving",
+      quantity: 1,
+      mealType: meal.slot,
+      date: todayStr,
+      calories: meal.recipe.macros.cal,
+      protein: meal.recipe.macros.p,
+      carbs: meal.recipe.macros.c,
+      fat: meal.recipe.macros.f,
+      fiber: 0,
+      sugar: 0,
+      sodium: 0,
+    }).then(r => r.json()),
+    onSuccess: (_data, meal) => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", todayStr] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+      toast({ title: `${meal.recipe.name} logged for today` });
+    },
+    onError: () => toast({ title: "Failed to log planned meal", variant: "destructive" }),
+  });
+
   return (
     <EmbedNavCtx.Provider value={[embedPath, navigate]}>
+      <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-3">
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Meal Plan</p>
+              <p className="text-xs text-muted-foreground">Plan the week, reuse saved meals, and log planned meals into Today.</p>
+            </div>
+            <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => navigate("/meal-planner/setup")}>
+              Build Plan
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Plan length", value: plan ? `${plan.days.length} day${plan.days.length === 1 ? "" : "s"}` : "None" },
+              { label: "Saved meals", value: recipes.length || "Loading" },
+              { label: "Daily target", value: plan ? `${plan.target.cal} kcal` : "Not set" },
+            ].map(item => (
+              <div key={item.label} className="rounded-lg bg-secondary/20 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+                <p className="text-sm font-bold truncate">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Planned Today</p>
+              <p className="text-xs text-muted-foreground">Log planned meals with one click.</p>
+            </div>
+            <button onClick={() => navigate("/meal-planner/plan")} className="text-xs text-primary hover:underline shrink-0">View plan</button>
+          </div>
+          {plannedToday.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-3 text-center">
+              <p className="text-xs font-medium">No planned meals yet</p>
+              <button onClick={() => navigate("/meal-planner/setup")} className="text-xs text-primary hover:underline mt-1">Build a plan</button>
+            </div>
+          ) : (
+            <div className="space-y-1.5 max-h-52 overflow-y-auto">
+              {plannedToday.slice(0, 4).map((meal, idx) => (
+                <div key={`${meal.slot}-${meal.recipe.id}-${idx}`} className="flex items-center gap-2 rounded-lg border px-2.5 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">{meal.recipe.name}</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">
+                      {meal.slot} · {meal.recipe.macros.cal} kcal · P {meal.recipe.macros.p}g
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs shrink-0"
+                    onClick={() => logPlannedMealMut.mutate(meal)}
+                    disabled={logPlannedMealMut.isPending}
+                  >
+                    Log today
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Sub-nav */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b pb-3 mb-4">
+      <div className="flex flex-wrap items-center gap-1.5 border-b pb-3 mb-4 mt-4">
         {PLANNER_SUB_NAV.map(item => (
           <button
             key={item.path}
@@ -2088,7 +2288,7 @@ export function NutritionTab({
     }).then(r => r.json()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
-      toast({ title: "Goals synced from active plan" });
+      toast({ title: "Targets synced from active plan" });
     },
     onError: () => toast({ title: "Failed to sync goals", variant: "destructive" }),
   });
@@ -2733,7 +2933,7 @@ export function NutritionTab({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <Heart size={13} className={goalsMatchPlan ? "text-green-600 dark:text-green-400" : "text-primary"} />
                   <p className={`text-xs font-semibold ${goalsMatchPlan ? "text-green-700 dark:text-green-300" : "text-primary"}`}>
-                    {goalsMatchPlan ? "Goals synced with active plan" : "Active plan suggests updated targets"}
+                    {goalsMatchPlan ? "Targets synced with active plan" : "Active plan suggests updated targets"}
                   </p>
                 </div>
                 {goalsMatchPlan && <Check size={14} className="text-green-600 dark:text-green-400 shrink-0" />}
@@ -2764,15 +2964,15 @@ export function NutritionTab({
                   {syncGoalsMut.isPending
                     ? <Loader2 size={12} className="animate-spin" />
                     : <ArrowRight size={12} />}
-                  Apply Plan Targets to My Goals
+                  Apply Plan Targets
                 </Button>
               )}
             </div>
           )}
-          <GoalsEditor goals={g} onSave={async (data) => {
+          <TargetsEditor goals={g} onSave={async (data) => {
             await apiRequest("PATCH", "/api/nutrition/goals", data);
             qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
-            toast({ title: "Goals saved" });
+            toast({ title: "Targets saved" });
           }} />
         </div>
       )}
