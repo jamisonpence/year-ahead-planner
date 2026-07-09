@@ -1807,17 +1807,6 @@ function TargetsEditor({
   const waterNum = Number(water) || 0;
   const macroCalories = proteinNum * 4 + carbNum * 4 + fatNum * 9;
   const macroCoveragePct = Math.round((macroCalories / caloriesNum) * 100);
-  const strategyCopy = strategy === "lose"
-    ? "Supports a gentle calorie deficit while keeping protein high."
-    : strategy === "build"
-      ? "Supports muscle gain with more calories, protein, and training fuel."
-      : strategy === "maintain"
-        ? "Keeps targets steady while Insights learns your normal rhythm."
-        : strategy === "energy"
-          ? "Balances meals around steadier energy and hydration."
-          : strategy === "protein"
-            ? "Prioritizes a realistic protein floor before changing everything else."
-            : "Use custom targets when you already know the numbers you want.";
   const macroSplit = macroCalories > 0
     ? [
         { label: "Protein", pct: Math.round((proteinNum * 4 / macroCalories) * 100), cls: "bg-blue-500" },
@@ -1825,14 +1814,6 @@ function TargetsEditor({
         { label: "Fat",     pct: Math.round((fatNum * 9 / macroCalories) * 100), cls: "bg-rose-500" },
       ]
     : [];
-  const presets = [
-    { id: "lose", label: "Lose weight", apply: () => ({ calories: Math.round(goals.calories * 0.9), protein: Math.round(goals.protein * 1.08), carbs: Math.round(goals.carbs * 0.82), fat: Math.round(goals.fat * 0.9), waterGlasses: Math.max(goals.waterGlasses, 8) }) },
-    { id: "build", label: "Build muscle", apply: () => ({ calories: Math.round(goals.calories * 1.1), protein: Math.round(goals.protein * 1.12), carbs: Math.round(goals.carbs * 1.15), fat: Math.round(goals.fat * 1.05), waterGlasses: Math.max(goals.waterGlasses, 9) }) },
-    { id: "maintain", label: "Maintain", apply: () => ({ ...goals }) },
-    { id: "energy", label: "Improve energy", apply: () => ({ calories: goals.calories, protein: Math.round(goals.protein * 1.05), carbs: goals.carbs, fat: goals.fat, waterGlasses: Math.max(goals.waterGlasses, 8) }) },
-    { id: "protein", label: "Eat more protein", apply: () => ({ calories: goals.calories, protein: Math.max(goals.protein + 20, Math.round(goals.calories * 0.28 / 4)), carbs: Math.max(50, goals.carbs - 15), fat: goals.fat, waterGlasses: goals.waterGlasses }) },
-    { id: "hydrate", label: "Hydrate better", apply: () => ({ ...goals, waterGlasses: Math.max(goals.waterGlasses + 1, 8) }) },
-  ];
   const activityOptions = [
     { id: "sedentary", label: "Sedentary - little exercise", multiplier: 1.2 },
     { id: "light", label: "Light - exercise 1-3x/wk", multiplier: 1.375 },
@@ -1841,11 +1822,15 @@ function TargetsEditor({
     { id: "athlete", label: "Athlete - intense daily training", multiplier: 1.9 },
   ];
   const calculatorGoalOptions = [
-    { id: "lose", label: "Lose", calorieFactor: 0.85, proteinPerLb: 1 },
-    { id: "maintain", label: "Maintain", calorieFactor: 1, proteinPerLb: 0.8 },
-    { id: "build", label: "Build", calorieFactor: 1.1, proteinPerLb: 0.9 },
-    { id: "performance", label: "Performance", calorieFactor: 1.05, proteinPerLb: 0.85 },
+    { id: "lose", label: "Lose weight", calorieFactor: 0.85, proteinPerLb: 1, fatPct: 0.3, waterMin: 8, description: "Supports a gentle calorie deficit while keeping protein high." },
+    { id: "maintain", label: "Maintain", calorieFactor: 1, proteinPerLb: 0.8, fatPct: 0.3, waterMin: 8, description: "Keeps targets steady while Insights learns your normal rhythm." },
+    { id: "build", label: "Build muscle", calorieFactor: 1.1, proteinPerLb: 0.9, fatPct: 0.28, waterMin: 9, description: "Supports muscle gain with more calories, protein, and training fuel." },
+    { id: "energy", label: "Improve energy", calorieFactor: 1, proteinPerLb: 0.85, fatPct: 0.28, waterMin: 8, description: "Balances meals around steadier energy and hydration." },
+    { id: "protein", label: "Eat more protein", calorieFactor: 1, proteinPerLb: 0.95, fatPct: 0.28, waterMin: 8, description: "Prioritizes a realistic protein floor before changing everything else." },
+    { id: "hydrate", label: "Hydrate better", calorieFactor: 1, proteinPerLb: 0.8, fatPct: 0.3, waterMin: 10, description: "Keeps calories steady while making hydration the clearest target." },
+    { id: "performance", label: "Performance", calorieFactor: 1.05, proteinPerLb: 0.85, fatPct: 0.25, waterMin: 9, description: "Adds training fuel while keeping protein and hydration reliable." },
   ];
+  const strategyCopy = calculatorGoalOptions.find(option => option.id === strategy)?.description ?? "Use custom targets when you already know the numbers you want.";
   const calculatedTargets = useMemo(() => {
     const parsedAge = Math.max(14, Number(age) || 30);
     const parsedHeightCm = heightUnit === "metric"
@@ -1859,9 +1844,9 @@ function TargetsEditor({
     const maintenance = bmr * activity.multiplier;
     const calories = Math.max(1200, Math.round((maintenance * goalOption.calorieFactor) / 10) * 10);
     const protein = Math.max(70, Math.round(weightLb * goalOption.proteinPerLb));
-    const fat = Math.max(35, Math.round((calories * 0.3) / 9));
+    const fat = Math.max(35, Math.round((calories * goalOption.fatPct) / 9));
     const carbs = Math.max(50, Math.round((calories - protein * 4 - fat * 9) / 4));
-    const waterGlasses = Math.max(6, Math.round((weightLb * 0.5) / 8));
+    const waterGlasses = Math.max(goalOption.waterMin, Math.round((weightLb * 0.5) / 8));
     return {
       calories,
       protein,
@@ -2060,25 +2045,6 @@ function TargetsEditor({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border bg-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold">Goal-Based Presets</p>
-          <p className="text-xs text-muted-foreground">Start from an outcome, then tune the numbers below.</p>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {presets.map(preset => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => applyTargets(preset.apply(), preset.id)}
-              className={`rounded-xl border px-3 py-2 text-left transition-colors ${strategy === preset.id ? "border-primary bg-primary/10 text-primary" : "hover:bg-secondary"}`}
-            >
-              <p className="text-xs font-semibold">{preset.label}</p>
-            </button>
-          ))}
         </div>
       </div>
 
