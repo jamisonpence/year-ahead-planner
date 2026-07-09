@@ -852,6 +852,9 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
   const suggestedSections = getSuggestedSections(intentions);
   const persona = (() => { try { return localStorage.getItem("mylifos_onboarding_persona") ?? ""; } catch { return ""; } })();
   const orderedSections = getPersonaOrderedSections(persona);
+  const quickCaptureSections = new Set<SectionKey>(["task", "note"]);
+  const secondarySuggestedSections = suggestedSections.filter(key => !quickCaptureSections.has(key));
+  const secondaryOrderedSections = orderedSections.filter(sec => !quickCaptureSections.has(sec.key));
 
   // Slide-up animation state
   const [visible, setVisible] = useState(false);
@@ -952,12 +955,12 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
                   <button
                     key={sec.key}
                     onClick={() => setActiveSection(sec.key)}
-                    className="flex items-center gap-3 px-4 py-4 rounded-2xl bg-primary text-primary-foreground border border-primary transition-all active:scale-95 text-left shadow-sm"
+                    className="flex items-center gap-3 px-4 py-4 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border/60 hover:border-primary/30 transition-all active:scale-95 text-left"
                   >
                     <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
-                      <p className="text-[11px] text-primary-foreground/75 leading-tight truncate">{sec.sub}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
                     </div>
                   </button>
                 );
@@ -966,13 +969,13 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
           </div>
 
           {/* Suggested section (shown when user has intentions) */}
-          {suggestedSections.length > 0 && (
+          {secondarySuggestedSections.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
                 ✨ Suggested for You
               </p>
               <div className="grid grid-cols-2 gap-2.5">
-                {suggestedSections.map(key => {
+                {secondarySuggestedSections.map(key => {
                   const sec = SECTION_MAP[key];
                   if (!sec) return null;
                   return (
@@ -995,13 +998,13 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
 
           {/* All sections, ordered by persona */}
           <div>
-            {suggestedSections.length > 0 && (
+            {secondarySuggestedSections.length > 0 && (
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
                 All Options
               </p>
             )}
             <div className="grid grid-cols-2 gap-2.5">
-              {orderedSections.map(sec => (
+              {secondaryOrderedSections.map(sec => (
                 <button
                   key={sec.key}
                   onClick={() => setActiveSection(sec.key)}
