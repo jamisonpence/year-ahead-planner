@@ -101,6 +101,13 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function openHealthRecipeTab(recipeTab: "saved" | "library") {
+  localStorage.setItem("mylifos_health_tab_intent", "recipes");
+  localStorage.setItem("mylifos_recipe_tab_intent", recipeTab);
+  window.dispatchEvent(new CustomEvent("mylifos-open-health-tab", { detail: { tab: "recipes" } }));
+  window.location.hash = "#/health";
+}
+
 // ── MEDICATIONS TAB ────────────────────────────────────────────────────────────
 
 function MedicationsTab() {
@@ -1323,8 +1330,8 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
               <div className="flex items-center justify-between gap-2 px-0.5">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Saved recipes</p>
                 <a
-                  href="#/recipes"
-                  onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+                  href="#/health"
+                  onClick={() => openHealthRecipeTab("saved")}
                   className="text-[10px] text-primary hover:underline shrink-0"
                 >
                   Manage saved
@@ -3556,8 +3563,8 @@ function NutritionMealsLibrary({
             <p className="text-xs text-muted-foreground">Reusable meals you can log, add to plans, and recommend.</p>
           </div>
           <a
-            href="#/recipes"
-            onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+            href="#/health"
+            onClick={() => openHealthRecipeTab("saved")}
             className="shrink-0 text-xs text-primary hover:underline"
           >
             Manage saved
@@ -3591,8 +3598,8 @@ function NutritionMealsLibrary({
           <div className="flex justify-center gap-2 flex-wrap">
             <a href="#/nutrition" className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold">Log food</a>
             <a
-              href="#/recipes"
-              onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "library")}
+              href="#/health"
+              onClick={() => openHealthRecipeTab("library")}
               className="rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-secondary"
             >
               Open Recipe Library
@@ -3648,8 +3655,8 @@ function NutritionMealsLibrary({
               <p className="text-xs text-muted-foreground">Reusable MyLifos food items for logging, planning, and recommendations.</p>
             </div>
             <a
-              href="#/recipes"
-              onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+              href="#/health"
+              onClick={() => openHealthRecipeTab("saved")}
               className="text-xs text-primary hover:underline shrink-0"
             >
               View saved
@@ -4104,13 +4111,11 @@ export function NutritionTab({
   }
 
   function openSavedRecipes() {
-    localStorage.setItem("mylifos_recipe_tab_intent", "saved");
-    window.location.hash = "#/recipes";
+    openHealthRecipeTab("saved");
   }
 
   function openRecipeLibrary() {
-    localStorage.setItem("mylifos_recipe_tab_intent", "library");
-    window.location.hash = "#/recipes";
+    openHealthRecipeTab("library");
   }
 
   function logPlannedMeal() {
@@ -4204,8 +4209,8 @@ export function NutritionTab({
             ))}
           </div>
           <a
-            href="#/recipes"
-            onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+            href="#/health"
+            onClick={() => openHealthRecipeTab("saved")}
             className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors"
           >
             <BookOpen size={11} /> Saved Recipes <ArrowRight size={10} />

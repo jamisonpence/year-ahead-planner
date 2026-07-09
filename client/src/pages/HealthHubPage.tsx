@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dumbbell, UtensilsCrossed, Activity, ChefHat } from "lucide-react";
 import WorkoutsPage from "./WorkoutsPage";
 import NutritionPage from "./NutritionPage";
@@ -6,6 +6,7 @@ import HealthPage from "./HealthPage";
 import RecipesPage from "./RecipesPage";
 
 type HealthTab = "workouts" | "nutrition" | "vitals" | "recipes";
+const HEALTH_TAB_INTENT_KEY = "mylifos_health_tab_intent";
 
 const TABS: { id: HealthTab; label: string; icon: React.ElementType; beta?: boolean }[] = [
   { id: "workouts",  label: "Workouts",  icon: Dumbbell        },
@@ -15,7 +16,13 @@ const TABS: { id: HealthTab; label: string; icon: React.ElementType; beta?: bool
 ];
 
 function getInitialTab(): HealthTab {
-  const p = new URLSearchParams(window.location.search).get("tab") as HealthTab | null;
+  const storedTab = localStorage.getItem(HEALTH_TAB_INTENT_KEY) as HealthTab | null;
+  if (storedTab) {
+    localStorage.removeItem(HEALTH_TAB_INTENT_KEY);
+    if (storedTab === "workouts" || storedTab === "nutrition" || storedTab === "vitals" || storedTab === "recipes") return storedTab;
+  }
+  const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
+  const p = new URLSearchParams(hashQuery || window.location.search).get("tab") as HealthTab | null;
   if (p === "nutrition") return "nutrition";
   if (p === "vitals")    return "vitals";
   if (p === "recipes")   return "recipes";
@@ -24,6 +31,15 @@ function getInitialTab(): HealthTab {
 
 export default function HealthHubPage() {
   const [active, setActive] = useState<HealthTab>(getInitialTab);
+
+  useEffect(() => {
+    function handleOpenHealthTab(event: Event) {
+      const tab = (event as CustomEvent<{ tab?: HealthTab }>).detail?.tab;
+      if (tab === "workouts" || tab === "nutrition" || tab === "vitals" || tab === "recipes") setActive(tab);
+    }
+    window.addEventListener("mylifos-open-health-tab", handleOpenHealthTab);
+    return () => window.removeEventListener("mylifos-open-health-tab", handleOpenHealthTab);
+  }, []);
 
   function switchTab(tab: HealthTab) {
     setActive(tab);
