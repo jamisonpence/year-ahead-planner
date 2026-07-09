@@ -731,6 +731,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     .map((p) => ALL_TABS.find((t) => t.path === p.path))
     .filter(Boolean) as typeof ALL_TABS;
 
+  function openQuickAddMobile(section?: SectionKey) {
+    setQuickAddSection(section ?? null);
+    setQuickAddOpen(true);
+  }
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
@@ -969,7 +974,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setQuickAddOpen(true)}
+            onClick={() => openQuickAddMobile()}
             aria-label="Quick Add"
             className="p-2.5 rounded-lg hover:bg-secondary transition-colors"
           >
@@ -1001,6 +1006,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
       </div>
+
+      {/* Mobile quick capture button */}
+      {!quickAddOpen && (
+        <button
+          type="button"
+          onClick={() => openQuickAddMobile()}
+          className="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-[71] flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/25 active:scale-95 transition-transform"
+          aria-label="Quick Add"
+        >
+          <Plus size={18} />
+          Quick Add
+        </button>
+      )}
 
       {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-card border-t">

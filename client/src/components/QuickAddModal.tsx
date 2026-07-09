@@ -941,6 +941,30 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
       ) : (
         /* Persona-sorted single grid */
         <div className="px-4 pb-10 space-y-5 pt-2">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+              Quick Capture
+            </p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(["task", "note"] as SectionKey[]).map(key => {
+                const sec = SECTION_MAP[key];
+                return (
+                  <button
+                    key={sec.key}
+                    onClick={() => setActiveSection(sec.key)}
+                    className="flex items-center gap-3 px-4 py-4 rounded-2xl bg-primary text-primary-foreground border border-primary transition-all active:scale-95 text-left shadow-sm"
+                  >
+                    <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
+                      <p className="text-[11px] text-primary-foreground/75 leading-tight truncate">{sec.sub}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Suggested section (shown when user has intentions) */}
           {suggestedSections.length > 0 && (
             <div>
@@ -1010,7 +1034,7 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
         className={`lg:hidden fixed bottom-0 left-0 right-0 z-[80] bg-card rounded-t-3xl shadow-2xl
           transition-transform duration-300 ease-out flex flex-col
           ${visible ? "translate-y-0" : "translate-y-full"}`}
-        style={{ maxHeight: "calc(100dvh - 5rem)" }}
+        style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
