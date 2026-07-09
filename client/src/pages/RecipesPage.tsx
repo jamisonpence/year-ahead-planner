@@ -1999,8 +1999,8 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
   }, [recipes]);
 
   const subNavItems = [
-    { id: "library" as SubView, label: "Library", icon: <BookOpen size={14} />, count: recipes.length },
-    { id: "browse" as SubView, label: "Browse", icon: <Compass size={14} />, count: systemRecipes.length },
+    { id: "library" as SubView, label: "Saved", icon: <BookOpen size={14} />, count: recipes.length },
+    { id: "browse" as SubView, label: "Library", icon: <Compass size={14} />, count: systemRecipes.length },
     { id: "bundles" as SubView, label: "Bundles", icon: <Package size={14} />, count: bundles.length },
     { id: "week" as SubView, label: "This Week", icon: <CalendarDays size={14} />, count: weekPlan.length },
     { id: "grocery" as SubView, label: "Grocery", icon: <ShoppingCart size={14} />, count: totalGrocery },
@@ -2210,7 +2210,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
                   <p className="font-medium">No recipes yet</p>
-                  <p className="text-sm mt-1 mb-4">Browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Browse tab</button>, or quick-add one below</p>
+                  <p className="text-sm mt-1 mb-4">Browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Library tab</button>, or quick-add one below</p>
                   <button
                     onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "recipe" } }))}
                     className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
@@ -2434,7 +2434,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             <div className="bg-card border rounded-xl p-4">
               <p className="text-sm font-semibold mb-3 flex items-center gap-2"><ChefHat size={15} /> Assign a Recipe</p>
               {recipes.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Add recipes in the Library tab first.</p>
+                <p className="text-xs text-muted-foreground">Add recipes in the Saved tab first.</p>
               ) : (
                 <div className="space-y-1 max-h-56 overflow-y-auto">
                   {COMPONENT_TYPES.map(ct => {
