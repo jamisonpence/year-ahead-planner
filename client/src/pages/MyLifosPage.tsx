@@ -20,6 +20,7 @@ type SavedItem = {
   subtitle?: string | null;
   imageUrl?: string | null;
   createdAt?: string;
+  href?: string;
 };
 
 type Collection = {
@@ -85,6 +86,34 @@ function cardClass(extra = "") {
 
 function typeLabel(type: string) {
   return type.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function savedItemHref(item: SavedItem) {
+  const type = item.type?.toLowerCase();
+  const map: Record<string, string> = {
+    art: "/library?tab=art",
+    artist: "/library?tab=music",
+    book: "/library",
+    chore: "/housekeeping",
+    event: "/calendar",
+    goal: "/goals",
+    habit: "/habits",
+    hobby: "/hobbies",
+    interest: "/hobbies",
+    journal: "/journal",
+    movie: "/library?tab=watching",
+    note: "/journal",
+    person: "/people",
+    place: "/places",
+    quote: "/quotes",
+    recipe: "/health?tab=recipes",
+    song: "/library?tab=music",
+    spot: "/places",
+    task: "/tasks",
+    trip: "/places?tab=trips",
+    workout: "/health",
+  };
+  return item.href || map[type] || "/mylifos";
 }
 
 function SectionHeader({
@@ -207,24 +236,26 @@ function RecentlyScrollRow({ items }: { items: SavedItem[] }) {
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
         {items.slice(0, 5).map((item, idx) => (
-          <div
-            key={`${item.type}-${item.title}-${idx}`}
-            className="flex-none w-44 rounded-xl border bg-card hover:shadow-sm transition-shadow snap-start cursor-pointer"
-          >
-            {item.imageUrl ? (
-              <img src={item.imageUrl} alt={item.title} className="w-full h-24 object-cover rounded-t-xl" />
-            ) : (
-              <div className="w-full h-24 rounded-t-xl bg-secondary/50 flex items-center justify-center">
-                <Archive size={22} className="text-muted-foreground opacity-30" />
+          <Link key={`${item.type}-${item.title}-${idx}`} href={savedItemHref(item)}>
+            <a className="group flex-none w-44 rounded-xl border bg-card hover:shadow-sm hover:border-primary/30 transition-all snap-start cursor-pointer overflow-hidden">
+              {item.imageUrl ? (
+                <img src={item.imageUrl} alt={item.title} className="w-full h-24 object-cover" />
+              ) : (
+                <div className="w-full h-24 bg-secondary/50 flex items-center justify-center">
+                  <Archive size={22} className="text-muted-foreground opacity-30 group-hover:text-primary group-hover:opacity-60 transition-colors" />
+                </div>
+              )}
+              <div className="p-2.5">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium truncate leading-snug group-hover:text-primary transition-colors">{item.title}</p>
+                  <ChevronRight size={12} className="shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {typeLabel(item.type)}{item.subtitle ? ` · ${item.subtitle}` : ""}
+                </p>
               </div>
-            )}
-            <div className="p-2.5">
-              <p className="text-sm font-medium truncate leading-snug">{item.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                {typeLabel(item.type)}{item.subtitle ? ` · ${item.subtitle}` : ""}
-              </p>
-            </div>
-          </div>
+            </a>
+          </Link>
         ))}
       </div>
     </section>
