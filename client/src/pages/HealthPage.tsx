@@ -1796,6 +1796,7 @@ function TargetsEditor({
   const [water, setWater] = useState(String(goals.waterGlasses));
   const [saving, setSaving] = useState(false);
   const [strategy, setStrategy] = useState("custom");
+  const [showAdvancedNumbers, setShowAdvancedNumbers] = useState(false);
   const caloriesNum = Math.max(1, Number(cals) || goals.calories || 2000);
   const proteinNum = Number(prot) || 0;
   const carbNum = Number(carb) || 0;
@@ -1996,11 +1997,22 @@ function TargetsEditor({
       </div>
 
       <div className="rounded-2xl border bg-card p-4 space-y-4">
-        <div>
-          <p className="text-sm font-semibold">Manual Targets</p>
-          <p className="text-xs text-muted-foreground">Fine-tune the daily numbers Today uses for progress tracking.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Advanced Numbers</p>
+            <p className="text-xs text-muted-foreground">Fine-tune the daily numbers Today uses for progress tracking.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvancedNumbers(v => !v)}
+            className="rounded-lg border px-3 py-1.5 text-xs hover:bg-secondary shrink-0"
+          >
+            {showAdvancedNumbers ? "Hide" : "Edit"}
+          </button>
         </div>
 
+        {showAdvancedNumbers && (
+        <>
         {macroSplit.length > 0 && (
         <div className="rounded-xl border bg-background p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -2040,6 +2052,8 @@ function TargetsEditor({
           {saving ? <Loader2 size={13} className="animate-spin mr-1" /> : null}Save Targets
         </Button>
         <p className="text-[10px] text-muted-foreground">Fiber is tracked from logged foods. A dedicated fiber target can be added later if you want stricter tracking.</p>
+        </>
+        )}
       </div>
     </div>
   );
@@ -2280,6 +2294,7 @@ function MealPlannerEmbed({
   const [embedPath, setEmbedPath] = useState("/meal-planner");
   const [openMealMenu, setOpenMealMenu] = useState<string | null>(null);
   const [selectedShareMealKey, setSelectedShareMealKey] = useState("");
+  const [planView, setPlanView] = useState<"week" | "saved" | "shopping" | "share">("week");
   const { plan, recipes, setPlan } = usePlanner();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2455,12 +2470,32 @@ function MealPlannerEmbed({
               Rebuild Plan
             </Button>
             {plan && (
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate("/meal-planner/shopping")}>
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setPlanView("shopping"); navigate("/meal-planner/shopping"); }}>
                 Shopping List
               </Button>
             )}
           </div>
         </div>
+
+        {plan && (
+          <div className="grid grid-cols-4 gap-1.5 rounded-xl bg-secondary/20 p-1">
+            {[
+              { id: "week", label: "This Week" },
+              { id: "saved", label: "Saved Meals" },
+              { id: "shopping", label: "Shopping" },
+              { id: "share", label: "Share" },
+            ].map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPlanView(item.id as typeof planView)}
+                className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${planView === item.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!plan ? (
           <div className="rounded-xl border border-dashed p-5 text-center space-y-3">
@@ -2473,7 +2508,7 @@ function MealPlannerEmbed({
               <Button size="sm" variant="outline" onClick={() => navigate("/meal-planner/preferences")}>Diet & Preferences</Button>
             </div>
           </div>
-        ) : (
+        ) : planView === "week" ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
@@ -2541,10 +2576,10 @@ function MealPlannerEmbed({
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
-      {plan && (
+      {plan && planView === "week" && (
         <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <p className="text-sm font-semibold">Weekly Coverage</p>
@@ -2610,7 +2645,7 @@ function MealPlannerEmbed({
         </div>
       )}
 
-      {plan && (
+      {plan && planView === "shopping" && (
         <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -2645,6 +2680,7 @@ function MealPlannerEmbed({
         </div>
       )}
 
+      {planView === "share" && (
       <div className="rounded-xl border bg-card p-4 space-y-3 mt-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -2713,11 +2749,13 @@ function MealPlannerEmbed({
           </button>
         </div>
       </div>
+      )}
 
       {/* Embedded wouter Router — intercepts all Link/navigate calls.
           IMPORTANT: use the JSX children API (not `component` prop) so that
           React sees stable element types across re-renders and never unmounts
           pages mid-interaction (which would reset step state in Setup, etc.) */}
+      {(embedPath !== "/meal-planner" || planView === "shopping") && (
       <Router hook={useEmbedLocation}>
         <Switch>
           <Route path="/meal-planner/setup">       <PlannerSetup />         </Route>
@@ -2729,6 +2767,7 @@ function MealPlannerEmbed({
           <Route>                                  <PlannerHome />          </Route>
         </Switch>
       </Router>
+      )}
     </EmbedNavCtx.Provider>
   );
 }
@@ -3434,6 +3473,7 @@ export function NutritionTab({
   const [showFoodLog, setShowFoodLog] = useState(false);
   const [logMealPreset, setLogMealPreset] = useState("snack");
   const foodLogPanelRef = useRef<HTMLDivElement | null>(null);
+  const [showConnectedContext, setShowConnectedContext] = useState(false);
 
   const { data: foodLog = [] } = useQuery<FoodLogEntry[]>({
     queryKey: ["/api/nutrition/food-log", selectedDate],
@@ -3886,7 +3926,7 @@ export function NutritionTab({
           <div className="rounded-2xl border bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">What to eat next</p>
+                <p className="text-sm font-semibold">Nutrition Coach</p>
                 <p className="text-xs text-muted-foreground mt-1">{nextNutritionAction.body}</p>
               </div>
               <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] font-semibold shrink-0">Today</span>
@@ -3947,70 +3987,41 @@ export function NutritionTab({
                 {nextNutritionAction.secondary}
               </button>
               <button type="button" onClick={() => setActiveSection("targets")} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">Targets</button>
-              <button type="button" onClick={() => setActiveSection("plan")} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">Meal library</button>
+              <button type="button" onClick={() => setShowConnectedContext(v => !v)} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">
+                {showConnectedContext ? "Hide context" : "Context"}
+              </button>
             </div>
-          </div>
-
-          {/* ── Body comp plan card ──────────────────────────────────────── */}
-          {activeBodyCompPlan && bodyCompMetric && (
-            <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
-          )}
-
-          <NutritionConnectionsCard
-            activePlan={activeBodyCompPlan}
-            metric={bodyCompMetric}
-            recipes={recipes}
-            friendsCount={friends.length}
-            proteinLeft={proteinLeft}
-            caloriesLeft={caloriesLeft}
-            goalsMatchPlan={!!goalsMatchPlan}
-            syncingTargets={syncGoalsMut.isPending}
-            onSyncTargets={() => syncGoalsMut.mutate()}
-            onConnectGoal={() => {
-              setActiveSection("targets");
-              toast({ title: "Nutrition targets opened", description: "Edit calories, protein, macros, and water here." });
-            }}
-            onChooseMeal={() => setActiveSection("plan")}
-            onAddRecoveryMeal={() => {
-              setLogMealPreset("snack");
-              setShowFoodLog(true);
-              setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-            }}
-            onAskFriend={(item) => setFriendAction({ mode: "ask", item })}
-            onSaveNote={(item) => saveNutritionNoteMut.mutate(item)}
-          />
-
-          {/* ── Next-action nudge card ───────────────────────────────────── */}
-          {(() => {
-            const hour = new Date().getHours();
-            const proteinGap = Math.round(g.protein - totals.protein);
-            const calGap = Math.round(g.calories - totals.calories);
-            const waterGap = g.waterGlasses - waterGlasses;
-            const hasBreakfast = foodLog.some(e => e.mealType === "breakfast");
-            const hasLunch     = foodLog.some(e => e.mealType === "lunch");
-            const hasDinner    = foodLog.some(e => e.mealType === "dinner");
-            let nudge: { emoji: string; text: string; cls: string } | null = null;
-            if (!hasBreakfast && hour >= 5 && hour < 12)
-              nudge = { emoji: "🌅", text: "Start your day — log breakfast", cls: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200" };
-            else if (!hasLunch && hour >= 12 && hour < 15)
-              nudge = { emoji: "☀️", text: "It's lunchtime — log your meal", cls: "bg-sky-50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-200" };
-            else if (!hasDinner && hour >= 17 && hour < 21)
-              nudge = { emoji: "🌙", text: "Log dinner to complete your day", cls: "bg-indigo-50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200" };
-            else if (proteinGap >= 10)
-              nudge = { emoji: "💪", text: `You're ${proteinGap}g away from your protein target`, cls: "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200" };
-            else if (waterGap >= 3)
-              nudge = { emoji: "💧", text: `Drink ${waterGap} more glasses to hit your water goal`, cls: "bg-cyan-50 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800 text-cyan-800 dark:text-cyan-200" };
-            else if (calGap > 300 && hour < 20)
-              nudge = { emoji: "🍽️", text: `${calGap} kcal remaining — plan your next meal`, cls: "bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200" };
-            else if (totals.calories >= g.calories * 0.95 && g.calories > 0)
-              nudge = { emoji: "✅", text: "You've hit your calorie goal for today!", cls: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200" };
-            return nudge ? (
-              <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${nudge.cls}`}>
-                <span className="text-xl shrink-0">{nudge.emoji}</span>
-                <p className="text-sm font-medium">{nudge.text}</p>
+            {showConnectedContext && (
+              <div className="border-t pt-3 space-y-3">
+                {activeBodyCompPlan && bodyCompMetric && (
+                  <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
+                )}
+                <NutritionConnectionsCard
+                  activePlan={activeBodyCompPlan}
+                  metric={bodyCompMetric}
+                  recipes={recipes}
+                  friendsCount={friends.length}
+                  proteinLeft={proteinLeft}
+                  caloriesLeft={caloriesLeft}
+                  goalsMatchPlan={!!goalsMatchPlan}
+                  syncingTargets={syncGoalsMut.isPending}
+                  onSyncTargets={() => syncGoalsMut.mutate()}
+                  onConnectGoal={() => {
+                    setActiveSection("targets");
+                    toast({ title: "Nutrition targets opened", description: "Edit calories, protein, macros, and water here." });
+                  }}
+                  onChooseMeal={() => setActiveSection("plan")}
+                  onAddRecoveryMeal={() => {
+                    setLogMealPreset("snack");
+                    setShowFoodLog(true);
+                    setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                  }}
+                  onAskFriend={(item) => setFriendAction({ mode: "ask", item })}
+                  onSaveNote={(item) => saveNutritionNoteMut.mutate(item)}
+                />
               </div>
-            ) : null;
-          })()}
+            )}
+          </div>
 
           {/* ── Today at a glance ───────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
