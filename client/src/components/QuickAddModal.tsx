@@ -262,7 +262,7 @@ function ReadingForm({ onSuccess }: { onSuccess: () => void }) {
       genre: book.genre || undefined,
       totalPages: book.pageCount || undefined,
       coverUrl: book.coverUrl || undefined,
-      status: "want_to_read",
+      status: "backlog",
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/books"] }); qc.invalidateQueries({ queryKey: ["/api/feed/mine"] }); qc.invalidateQueries({ queryKey: ["/api/user/summary"] }); onSuccess(); },
     onSettled: () => setAddingId(null),
