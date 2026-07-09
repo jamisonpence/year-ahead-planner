@@ -46,15 +46,15 @@ export default function HealthHubPage() {
   }
 
   return (
-    <div>
+    <div className="w-full max-w-full overflow-x-hidden">
       {/* ── Sub-tab bar ─────────────────────────────────────────────────────── */}
-      <div className="border-b bg-background sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex">
+      <div className="border-b bg-background sticky top-0 z-10 w-full max-w-full overflow-x-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 flex gap-1 overflow-x-auto overscroll-x-contain scrollbar-none">
           {TABS.map(({ id, label, icon: Icon, beta }) => (
             <button
               key={id}
               onClick={() => switchTab(id)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 active === id
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
