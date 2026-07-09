@@ -207,15 +207,28 @@ export default function BookFormModal({ open, onClose, editBook }: {
 
   const isAdding = !editBook;
   const isBusy = createMut.isPending || updateMut.isPending;
+  const bookFormId = editBook ? `book-form-${editBook.id}` : "book-form-new";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="top-0 bottom-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-none p-0 gap-0 overflow-hidden sm:top-[50%] sm:bottom-auto sm:h-auto sm:max-h-[92dvh] sm:max-w-lg sm:rounded-lg">
-        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b">
-          <DialogTitle>{editBook ? "Edit Book" : "Add Book"}</DialogTitle>
+        <DialogHeader className="px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-3 shrink-0 border-b">
+          <div className="flex items-center justify-between gap-3 pr-10">
+            <DialogTitle>{editBook ? "Edit Book" : "Add Book"}</DialogTitle>
+            <Button
+              type="submit"
+              form={bookFormId}
+              size="sm"
+              disabled={isBusy || !title.trim()}
+              className="h-8 shrink-0 px-3"
+            >
+              {isBusy ? <Loader2 size={13} className="animate-spin mr-1" /> : null}
+              {editBook ? "Save" : "Add"}
+            </Button>
+          </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <form id={bookFormId} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-4">
 
             {/* ── Search (new books only) ─────────────────────────────────── */}
