@@ -85,8 +85,8 @@ function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-card border rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom,0px)]" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-card border sm:rounded-2xl w-full max-w-md shadow-xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom,0px)]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <h2 className="font-semibold">{title}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-secondary transition-colors"><X size={16} /></button>
