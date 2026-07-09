@@ -834,14 +834,38 @@ function NoteForm({ onSuccess }: { onSuccess: () => void }) {
   const [content, setContent] = useState("");
   const today = new Date().toISOString().split("T")[0];
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/journal", { title: title || "Quick Note", content, date: today, mood: "neutral", isPrivate: true }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/journal"] }); onSuccess(); },
+    mutationFn: () => apiRequest("POST", "/api/journal", {
+      title: title.trim() || "Quick Note",
+      content: content.trim(),
+      date: today,
+      mood: "neutral",
+      tags: null,
+      createdAt: new Date().toISOString(),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/journal"] });
+      qc.invalidateQueries({ queryKey: ["/api/feed/mine"] });
+      qc.invalidateQueries({ queryKey: ["/api/user/summary"] });
+      onSuccess();
+    },
   });
+  function saveNote() {
+    if (!content.trim() || mut.isPending) return;
+    mut.mutate();
+  }
   return (
-    <form onSubmit={e => { e.preventDefault(); if (content.trim()) mut.mutate(); }} className="space-y-4">
+    <form onSubmit={e => { e.preventDefault(); saveNote(); }} className="space-y-4">
       <FormInput label="Title (optional)" value={title} onChange={setTitle} placeholder="e.g. Meeting notes" />
       <FormInput label="Note" value={content} onChange={setContent} placeholder="What's on your mind?" required multiline />
-      <SubmitButton loading={mut.isPending} disabled={!content.trim()} label="Save Note" />
+      <button
+        type="button"
+        onClick={saveNote}
+        disabled={mut.isPending || !content.trim()}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
+      >
+        {mut.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+        {mut.isPending ? "Saving…" : "Save Note"}
+      </button>
     </form>
   );
 }
