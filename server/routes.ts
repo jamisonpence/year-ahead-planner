@@ -2765,20 +2765,43 @@ Return exactly this structure:
   });
 
   // ── Recipes ────────────────────────────────────────────────────────────────
-  function textFromHtml(html: string) {
-    return html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+  function decodeHtmlEntities(value: string) {
+    const named: Record<string, string> = {
+      amp: "&",
+      quot: "\"",
+      apos: "'",
+      nbsp: " ",
+      ndash: "-",
+      mdash: "-",
+      hellip: "...",
+      rsquo: "'",
+      lsquo: "'",
+      rdquo: "\"",
+      ldquo: "\"",
+    };
+    return value
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/&([a-z]+);/gi, (match, name) => named[String(name).toLowerCase()] ?? match);
+  }
+
+  function cleanRecipeText(value: string) {
+    return decodeHtmlEntities(value)
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/(p|li|div|h[1-6]|section|article)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, "\"")
-      .replace(/&#39;/g, "'")
-      .replace(/\n{3,}/g, "\n\n")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n\s+/g, "\n")
       .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
+  }
+
+  function textFromHtml(html: string) {
+    return cleanRecipeText(html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    );
   }
 
   function pickRecipeJsonLd(node: any): any | null {
@@ -2812,22 +2835,23 @@ Return exactly this structure:
   }
 
   function parseIngredientLine(line: string): { name: string; qty: string } {
-    const clean = line.replace(/^[-•*·✓]\s*/, "").trim();
+    const clean = cleanRecipeText(line).replace(/^[-•*·✓]\s*/, "").trim();
     const match = clean.match(/^([\d\s½⅓¼⅔¾\/.]+(?:\s*(?:cups?|tbsps?|tbsp|tsps?|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|g\b|kg\b|ml\b|liters?|cans?|cloves?|slices?|bunches?|pinch(?:es)?|dash(?:es)?|sprigs?|packages?|pkgs?|sticks?))?\s+)(.+)$/i);
     return match ? { qty: match[1].trim(), name: match[2].trim() } : { qty: "", name: clean };
   }
 
   function recipeInstructionsToText(value: any): string {
     if (!value) return "";
-    if (typeof value === "string") return value;
+    if (typeof value === "string") return cleanRecipeText(value);
     if (Array.isArray(value)) {
-      return value.map((step) => {
+      const steps = value.map((step) => {
         if (typeof step === "string") return step;
         if (Array.isArray(step.itemListElement)) return recipeInstructionsToText(step.itemListElement);
         return step.text || step.name || "";
       }).filter(Boolean).join("\n");
+      return cleanRecipeText(steps);
     }
-    return value.text || value.name || "";
+    return cleanRecipeText(value.text || value.name || "");
   }
 
   app.post("/api/recipes/import-url", async (req, res) => {
