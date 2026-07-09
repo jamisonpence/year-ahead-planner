@@ -1713,8 +1713,16 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }:
 // ── Main Page ─────────────────────────────────────────────────────────────────
 type SubView = "library" | "bundles" | "week" | "grocery" | "shared" | "browse";
 type LibFilter = ComponentType | "all" | "unclassified";
+const RECIPE_TAB_INTENT_KEY = "mylifos_recipe_tab_intent";
 
 function getRecipeSubViewFromUrl(): SubView {
+  const storedTab = localStorage.getItem(RECIPE_TAB_INTENT_KEY);
+  if (storedTab) {
+    localStorage.removeItem(RECIPE_TAB_INTENT_KEY);
+    if (storedTab === "saved") return "library";
+    if (storedTab === "library") return "browse";
+    if (storedTab === "bundles" || storedTab === "week" || storedTab === "grocery" || storedTab === "shared") return storedTab;
+  }
   const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
   const params = new URLSearchParams(hashQuery || window.location.search);
   if (params.get("shared") === "1") return "shared";

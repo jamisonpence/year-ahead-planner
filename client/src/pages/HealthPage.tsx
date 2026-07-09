@@ -1322,7 +1322,13 @@ function FoodSearchAdd({ date, onAdded, defaultMeal = "snack" }: { date: string;
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2 px-0.5">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Saved recipes</p>
-                <a href="#/recipes?tab=saved" className="text-[10px] text-primary hover:underline shrink-0">Manage saved</a>
+                <a
+                  href="#/recipes"
+                  onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+                  className="text-[10px] text-primary hover:underline shrink-0"
+                >
+                  Manage saved
+                </a>
               </div>
               <div className="space-y-1 max-h-44 overflow-y-auto border rounded-lg p-1">
                 {filteredRecipes.slice(0, query ? 6 : 4).map(recipe => {
@@ -3549,7 +3555,13 @@ function NutritionMealsLibrary({
             <p className="text-sm font-semibold">Saved Meals & Recipes</p>
             <p className="text-xs text-muted-foreground">Reusable meals you can log, add to plans, and recommend.</p>
           </div>
-          <a href="#/recipes?tab=saved" className="shrink-0 text-xs text-primary hover:underline">Manage saved</a>
+          <a
+            href="#/recipes"
+            onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+            className="shrink-0 text-xs text-primary hover:underline"
+          >
+            Manage saved
+          </a>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
@@ -3578,7 +3590,13 @@ function NutritionMealsLibrary({
           </div>
           <div className="flex justify-center gap-2 flex-wrap">
             <a href="#/nutrition" className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold">Log food</a>
-            <a href="#/recipes?tab=library" className="rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-secondary">Open Recipe Library</a>
+            <a
+              href="#/recipes"
+              onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "library")}
+              className="rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-secondary"
+            >
+              Open Recipe Library
+            </a>
           </div>
         </div>
       )}
@@ -3629,7 +3647,13 @@ function NutritionMealsLibrary({
               <p className="text-sm font-semibold">Saved Meals & Recipes</p>
               <p className="text-xs text-muted-foreground">Reusable MyLifos food items for logging, planning, and recommendations.</p>
             </div>
-            <a href="#/recipes?tab=saved" className="text-xs text-primary hover:underline shrink-0">View saved</a>
+            <a
+              href="#/recipes"
+              onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+              className="text-xs text-primary hover:underline shrink-0"
+            >
+              View saved
+            </a>
           </div>
           <div className="grid sm:grid-cols-2 gap-2">
             {savedMeals.map(recipe => {
@@ -4080,11 +4104,13 @@ export function NutritionTab({
   }
 
   function openSavedRecipes() {
-    window.location.hash = "#/recipes?tab=saved";
+    localStorage.setItem("mylifos_recipe_tab_intent", "saved");
+    window.location.hash = "#/recipes";
   }
 
   function openRecipeLibrary() {
-    window.location.hash = "#/recipes?tab=library";
+    localStorage.setItem("mylifos_recipe_tab_intent", "library");
+    window.location.hash = "#/recipes";
   }
 
   function logPlannedMeal() {
@@ -4177,7 +4203,11 @@ export function NutritionTab({
               </button>
             ))}
           </div>
-          <a href="#/recipes?tab=saved" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors">
+          <a
+            href="#/recipes"
+            onClick={() => localStorage.setItem("mylifos_recipe_tab_intent", "saved")}
+            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 shrink-0 transition-colors"
+          >
             <BookOpen size={11} /> Saved Recipes <ArrowRight size={10} />
           </a>
         </div>
