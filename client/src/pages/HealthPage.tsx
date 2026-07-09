@@ -2298,6 +2298,9 @@ function MealPlannerEmbed({
   const [openMealMenu, setOpenMealMenu] = useState<string | null>(null);
   const [selectedShareMealKey, setSelectedShareMealKey] = useState("");
   const [planView, setPlanView] = useState<"week" | "saved" | "shopping" | "share">("week");
+  const [removedShoppingKeys, setRemovedShoppingKeys] = useState<Set<string>>(() => new Set());
+  const [customShoppingItems, setCustomShoppingItems] = useState<{ id: string; display: string }[]>([]);
+  const [newShoppingItem, setNewShoppingItem] = useState("");
   const { plan, recipes, setPlan } = usePlanner();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2333,6 +2336,27 @@ function MealPlannerEmbed({
     return Array.from(counts.values()).filter(count => count > 1).length;
   })();
   const shoppingPreview = plan ? buildShoppingList(plan, plan.days.map(day => day.day)) : null;
+  const editableShoppingAisles = useMemo(() => {
+    const generated = (shoppingPreview?.aisles ?? []).map(aisle => ({
+      name: aisle.name,
+      items: aisle.items
+        .filter(item => !removedShoppingKeys.has(item.key))
+        .map(item => ({ ...item, custom: false })),
+    })).filter(aisle => aisle.items.length > 0);
+    if (customShoppingItems.length > 0) {
+      generated.push({
+        name: "Added",
+        items: customShoppingItems.map(item => ({
+          key: item.id,
+          display: item.display,
+          recipes: ["Added manually"],
+          count: 1,
+          custom: true,
+        })),
+      });
+    }
+    return generated;
+  }, [customShoppingItems, removedShoppingKeys, shoppingPreview]);
   const quickSavedMeals = recipes.slice(0, 4);
   const shareablePlannedMeals = planDays.flatMap((day, dayIndex) =>
     day.meals
@@ -2461,6 +2485,25 @@ function MealPlannerEmbed({
     };
     setPlan(nextPlan);
     toast({ title: "Meal moved", description: `${sourceMeal.recipe.name} moved to day ${targetIndex + 1}.` });
+  }
+
+  function addShoppingItem() {
+    const display = newShoppingItem.trim();
+    if (!display) return;
+    setCustomShoppingItems(items => [...items, { id: `custom-${Date.now()}`, display }]);
+    setNewShoppingItem("");
+  }
+
+  function removeShoppingItem(item: { key: string; custom?: boolean }) {
+    if (item.custom) {
+      setCustomShoppingItems(items => items.filter(existing => existing.id !== item.key));
+      return;
+    }
+    setRemovedShoppingKeys(keys => {
+      const next = new Set(keys);
+      next.add(item.key);
+      return next;
+    });
   }
 
   return (
@@ -2603,35 +2646,84 @@ function MealPlannerEmbed({
       )}
 
       {plan && planView === "shopping" && (
-        <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Prep & Shopping</p>
-                <p className="text-xs text-muted-foreground">What needs to happen before the meals are easy to eat.</p>
-              </div>
-              <button onClick={() => navigate("/meal-planner/shopping")} className="text-xs text-primary hover:underline shrink-0">Open list</button>
+        <div className="rounded-xl border bg-card p-4 space-y-4 mt-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Shopping List</p>
+              <p className="text-xs text-muted-foreground">Review what the plan generated, then add or remove anything you need.</p>
             </div>
-            <div className="space-y-1.5">
-              {(shoppingPreview?.aisles ?? []).slice(0, 3).map(aisle => (
-                <div key={aisle.name} className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2">
-                  <p className="text-xs font-medium">{aisle.name}</p>
-                  <span className="text-[11px] text-muted-foreground">{aisle.items.length} items</span>
-                </div>
-              ))}
-              {(!shoppingPreview || shoppingPreview.flat.length === 0) && <p className="text-xs text-muted-foreground">No shopping items yet.</p>}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setRemovedShoppingKeys(new Set());
+                setCustomShoppingItems([]);
+              }}
+              className="rounded-lg border px-3 py-1.5 text-xs hover:bg-secondary"
+            >
+              Reset
+            </button>
           </div>
 
-          {planSuggestion && (
-            <div className="rounded-xl border bg-primary/5 border-primary/20 p-4 space-y-3">
-              <p className="text-sm font-semibold text-primary">{planSuggestion.title}</p>
-              <p className="text-xs text-muted-foreground">{planSuggestion.body}</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <button type="button" onClick={() => navigate(planSuggestion.primaryPath)} className="rounded-lg bg-primary text-primary-foreground px-2 py-2 text-[11px] font-medium">{planSuggestion.primaryLabel}</button>
-                <button type="button" onClick={() => navigate(planSuggestion.secondaryPath)} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">{planSuggestion.secondaryLabel}</button>
-                <button type="button" onClick={() => toast({ title: "Suggestion dismissed" })} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Dismiss</button>
-              </div>
+          <div className="flex gap-2">
+            <input
+              value={newShoppingItem}
+              onChange={event => setNewShoppingItem(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addShoppingItem();
+                }
+              }}
+              placeholder="Add item..."
+              className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={addShoppingItem}
+              disabled={!newShoppingItem.trim()}
+              className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
+
+          {editableShoppingAisles.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-secondary/10 p-4 text-center">
+              <p className="text-sm font-semibold">No shopping items yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Add items manually or edit your meal plan to generate ingredients.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {editableShoppingAisles.map(aisle => (
+                <div key={aisle.name} className="rounded-xl border bg-background overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 border-b bg-secondary/20 px-3 py-2">
+                    <p className="text-xs font-semibold">{aisle.name}</p>
+                    <span className="text-[11px] text-muted-foreground">{aisle.items.length} item{aisle.items.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="divide-y">
+                    {aisle.items.map(item => (
+                      <div key={item.key} className="flex items-center gap-3 px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{item.display}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {item.custom ? "Added manually" : item.recipes.join(", ")}
+                          </p>
+                        </div>
+                        {!item.custom && item.count > 1 && (
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">x{item.count}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeShoppingItem(item)}
+                          className="rounded-md border px-2 py-1 text-[11px] hover:bg-secondary shrink-0"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
