@@ -1792,6 +1792,16 @@ function TargetsEditor({
   const [saving, setSaving] = useState(false);
   const [strategy, setStrategy] = useState("custom");
   const [showAdvancedNumbers, setShowAdvancedNumbers] = useState(false);
+  const [sex, setSex] = useState<"male" | "female">("male");
+  const [age, setAge] = useState("30");
+  const [heightUnit, setHeightUnit] = useState<"imperial" | "metric">("imperial");
+  const [heightFeet, setHeightFeet] = useState("5");
+  const [heightInches, setHeightInches] = useState("8");
+  const [heightCm, setHeightCm] = useState("173");
+  const [weightUnit, setWeightUnit] = useState<"lb" | "kg">("lb");
+  const [weight, setWeight] = useState("155");
+  const [calculatorActivity, setCalculatorActivity] = useState("moderate");
+  const [calculatorGoal, setCalculatorGoal] = useState("maintain");
   const caloriesNum = Math.max(1, Number(cals) || goals.calories || 2000);
   const proteinNum = Number(prot) || 0;
   const carbNum = Number(carb) || 0;
@@ -1825,6 +1835,47 @@ function TargetsEditor({
     { id: "protein", label: "Eat more protein", apply: () => ({ calories: goals.calories, protein: Math.max(goals.protein + 20, Math.round(goals.calories * 0.28 / 4)), carbs: Math.max(50, goals.carbs - 15), fat: goals.fat, waterGlasses: goals.waterGlasses }) },
     { id: "hydrate", label: "Hydrate better", apply: () => ({ ...goals, waterGlasses: Math.max(goals.waterGlasses + 1, 8) }) },
   ];
+  const activityOptions = [
+    { id: "sedentary", label: "Sedentary - little exercise", multiplier: 1.2 },
+    { id: "light", label: "Light - exercise 1-3x/wk", multiplier: 1.375 },
+    { id: "moderate", label: "Moderate - exercise 3-5x/wk", multiplier: 1.55 },
+    { id: "active", label: "Active - exercise 6-7x/wk", multiplier: 1.725 },
+    { id: "athlete", label: "Athlete - intense daily training", multiplier: 1.9 },
+  ];
+  const calculatorGoalOptions = [
+    { id: "lose", label: "Lose", calorieFactor: 0.85, proteinPerLb: 1 },
+    { id: "maintain", label: "Maintain", calorieFactor: 1, proteinPerLb: 0.8 },
+    { id: "build", label: "Build", calorieFactor: 1.1, proteinPerLb: 0.9 },
+    { id: "performance", label: "Performance", calorieFactor: 1.05, proteinPerLb: 0.85 },
+  ];
+  const calculatedTargets = useMemo(() => {
+    const parsedAge = Math.max(14, Number(age) || 30);
+    const parsedHeightCm = heightUnit === "metric"
+      ? Math.max(100, Number(heightCm) || 173)
+      : Math.max(100, (Number(heightFeet) || 5) * 30.48 + (Number(heightInches) || 8) * 2.54);
+    const weightLb = weightUnit === "kg" ? (Number(weight) || 70) * 2.20462 : Number(weight) || 155;
+    const weightKg = weightLb / 2.20462;
+    const activity = activityOptions.find(option => option.id === calculatorActivity) ?? activityOptions[2];
+    const goalOption = calculatorGoalOptions.find(option => option.id === calculatorGoal) ?? calculatorGoalOptions[1];
+    const bmr = 10 * weightKg + 6.25 * parsedHeightCm - 5 * parsedAge + (sex === "male" ? 5 : -161);
+    const maintenance = bmr * activity.multiplier;
+    const calories = Math.max(1200, Math.round((maintenance * goalOption.calorieFactor) / 10) * 10);
+    const protein = Math.max(70, Math.round(weightLb * goalOption.proteinPerLb));
+    const fat = Math.max(35, Math.round((calories * 0.3) / 9));
+    const carbs = Math.max(50, Math.round((calories - protein * 4 - fat * 9) / 4));
+    const waterGlasses = Math.max(6, Math.round((weightLb * 0.5) / 8));
+    return {
+      calories,
+      protein,
+      carbs,
+      fat,
+      waterGlasses,
+      bmr: Math.round(bmr),
+      maintenance: Math.round(maintenance),
+      activityLabel: activity.label,
+      goalLabel: goalOption.label,
+    };
+  }, [activityOptions, age, calculatorActivity, calculatorGoal, calculatorGoalOptions, heightCm, heightFeet, heightInches, heightUnit, sex, weight, weightUnit]);
 
   function applyTargets(next: NutritionTargets, id: string) {
     setStrategy(id);
@@ -1834,6 +1885,40 @@ function TargetsEditor({
     setFat(String(next.fat));
     setWater(String(next.waterGlasses));
     toast({ title: "Strategy loaded", description: "Review the numbers, then save when they feel right." });
+  }
+
+  function applyCalculatedTargets() {
+    applyTargets({
+      calories: calculatedTargets.calories,
+      protein: calculatedTargets.protein,
+      carbs: calculatedTargets.carbs,
+      fat: calculatedTargets.fat,
+      waterGlasses: calculatedTargets.waterGlasses,
+    }, calculatorGoal);
+    setShowAdvancedNumbers(true);
+  }
+
+  function toggleHeightUnit() {
+    if (heightUnit === "imperial") {
+      const cm = Math.round((Number(heightFeet) || 0) * 30.48 + (Number(heightInches) || 0) * 2.54);
+      setHeightCm(String(cm || 173));
+      setHeightUnit("metric");
+      return;
+    }
+    const totalInches = Math.round((Number(heightCm) || 173) / 2.54);
+    setHeightFeet(String(Math.floor(totalInches / 12)));
+    setHeightInches(String(totalInches % 12));
+    setHeightUnit("imperial");
+  }
+
+  function toggleWeightUnit() {
+    if (weightUnit === "lb") {
+      setWeight(String(Math.round((Number(weight) || 155) / 2.20462)));
+      setWeightUnit("kg");
+      return;
+    }
+    setWeight(String(Math.round((Number(weight) || 70) * 2.20462)));
+    setWeightUnit("lb");
   }
 
   return (
@@ -1866,6 +1951,117 @@ function TargetsEditor({
         <div className="rounded-xl bg-secondary/20 px-3 py-2">
           <p className="text-xs font-semibold">Current strategy</p>
           <p className="text-xs text-muted-foreground mt-0.5">{strategyCopy}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border bg-card p-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Calculate From Your Stats</p>
+            <p className="text-xs text-muted-foreground">Use body stats, activity, and goal to estimate targets. You can still edit any number before saving.</p>
+          </div>
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={applyCalculatedTargets}>
+            Recalculate
+          </Button>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label className="text-xs">Sex</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["male", "female"] as const).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setSex(option)}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm font-medium capitalize transition-colors ${
+                    sex === option ? "border-primary bg-primary/10 text-primary" : "hover:bg-secondary"
+                  }`}
+                >
+                  <span className={`mr-2 inline-flex h-3.5 w-3.5 rounded-full border align-[-2px] ${sex === option ? "border-primary bg-primary shadow-[inset_0_0_0_3px_hsl(var(--background))]" : "border-muted-foreground"}`} />
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Age</Label>
+            <UIInput type="number" min="14" value={age} onChange={e => setAge(e.target.value)} className="h-10 text-sm" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Height</Label>
+              <button type="button" onClick={toggleHeightUnit} className="text-[11px] text-muted-foreground hover:text-primary">
+                Switch to {heightUnit === "imperial" ? "cm" : "ft/in"}
+              </button>
+            </div>
+            {heightUnit === "imperial" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <UIInput type="number" min="0" value={heightFeet} onChange={e => setHeightFeet(e.target.value)} className="h-10 text-sm" placeholder="ft" />
+                <UIInput type="number" min="0" max="11" value={heightInches} onChange={e => setHeightInches(e.target.value)} className="h-10 text-sm" placeholder="in" />
+              </div>
+            ) : (
+              <UIInput type="number" min="100" value={heightCm} onChange={e => setHeightCm(e.target.value)} className="h-10 text-sm" placeholder="cm" />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Weight</Label>
+              <button type="button" onClick={toggleWeightUnit} className="text-[11px] text-muted-foreground hover:text-primary">
+                Switch to {weightUnit === "lb" ? "kg" : "lb"}
+              </button>
+            </div>
+            <UIInput type="number" min="1" value={weight} onChange={e => setWeight(e.target.value)} className="h-10 text-sm" placeholder={weightUnit} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Activity</Label>
+            <Select value={calculatorActivity} onChange={setCalculatorActivity} className="h-10">
+              {activityOptions.map(option => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Goal</Label>
+            <Select value={calculatorGoal} onChange={setCalculatorGoal} className="h-10">
+              {calculatorGoalOptions.map(option => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-secondary/20 p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold">Estimated daily target</p>
+              <p className="text-[11px] text-muted-foreground">
+                {calculatedTargets.goalLabel} goal · BMR {calculatedTargets.bmr} kcal · Maintenance {calculatedTargets.maintenance} kcal · {calculatedTargets.activityLabel}
+              </p>
+            </div>
+            <Button size="sm" className="h-8 text-xs" onClick={applyCalculatedTargets}>
+              Apply to targets
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {[
+              { label: "Calories", value: calculatedTargets.calories, unit: "kcal" },
+              { label: "Protein", value: calculatedTargets.protein, unit: "g" },
+              { label: "Carbs", value: calculatedTargets.carbs, unit: "g" },
+              { label: "Fat", value: calculatedTargets.fat, unit: "g" },
+              { label: "Water", value: calculatedTargets.waterGlasses, unit: "glasses" },
+            ].map(item => (
+              <div key={item.label} className="rounded-lg bg-background/70 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
+                <p className="text-sm font-bold">{item.value}<span className="text-[10px] font-medium text-muted-foreground ml-1">{item.unit}</span></p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
