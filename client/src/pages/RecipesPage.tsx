@@ -1714,12 +1714,23 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }:
 type SubView = "library" | "bundles" | "week" | "grocery" | "shared" | "browse";
 type LibFilter = ComponentType | "all" | "unclassified";
 
+function getRecipeSubViewFromUrl(): SubView {
+  const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
+  const params = new URLSearchParams(hashQuery || window.location.search);
+  if (params.get("shared") === "1") return "shared";
+  const tab = params.get("tab");
+  if (tab === "saved" || tab === "library") return tab === "saved" ? "library" : "browse";
+  if (tab === "browse") return "browse";
+  if (tab === "bundles" || tab === "week" || tab === "grocery" || tab === "shared") return tab;
+  return "library";
+}
+
 export default function RecipesPage() {
   const { toast } = useToast();
-  const [subView, setSubView] = useState<SubView>("library");
+  const [subView, setSubView] = useState<SubView>(getRecipeSubViewFromUrl);
   const [libFilter, setLibFilter] = useState<LibFilter>("all");
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("shared") === "1") setSubView("shared");
+    setSubView(getRecipeSubViewFromUrl());
   }, []);
   useEffect(() => {
     if (subView !== "shared") return;
