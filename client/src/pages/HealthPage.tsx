@@ -1770,24 +1770,18 @@ function normalizeNutritionSection(section?: NutritionSectionInput): NutritionSe
 
 function TargetsEditor({
   goals,
-  weeklyLog,
   planTargets,
   planName,
   goalsMatchPlan,
   onSave,
   onApplyPlan,
-  onOpenPlan,
-  onOpenInsights,
 }: {
   goals: NutritionTargets;
-  weeklyLog: FoodLogEntry[];
   planTargets: Omit<NutritionTargets, "waterGlasses"> | null;
   planName?: string | null;
   goalsMatchPlan: boolean;
   onSave: (d: NutritionTargets) => Promise<void>;
   onApplyPlan: () => void;
-  onOpenPlan: () => void;
-  onOpenInsights: () => void;
 }) {
   const { toast } = useToast();
   const [cals,  setCals]  = useState(String(goals.calories));
@@ -1804,22 +1798,6 @@ function TargetsEditor({
   const fatNum = Number(fat) || 0;
   const waterNum = Number(water) || 0;
   const macroCalories = proteinNum * 4 + carbNum * 4 + fatNum * 9;
-  const weeklyDays = Array.from(new Set(weeklyLog.map(e => e.date).filter(Boolean))).slice(-7);
-  const dayTotals = weeklyDays.map(date => {
-    const entries = weeklyLog.filter(e => e.date === date);
-    return entries.reduce((sum, e) => ({
-      calories: sum.calories + Number(e.calories) * Number(e.quantity),
-      protein: sum.protein + Number(e.protein) * Number(e.quantity),
-      carbs: sum.carbs + Number(e.carbs) * Number(e.quantity),
-      fat: sum.fat + Number(e.fat) * Number(e.quantity),
-      fiber: sum.fiber + Number(e.fiber) * Number(e.quantity),
-    }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-  });
-  const daysWithFood = dayTotals.filter(day => day.calories > 0);
-  const avgCalories = daysWithFood.length ? Math.round(daysWithFood.reduce((s, d) => s + d.calories, 0) / daysWithFood.length) : 0;
-  const avgProtein = daysWithFood.length ? Math.round(daysWithFood.reduce((s, d) => s + d.protein, 0) / daysWithFood.length) : 0;
-  const proteinHitDays = dayTotals.filter(day => day.protein >= goals.protein).length;
-  const calorieNearDays = dayTotals.filter(day => day.calories > 0 && Math.abs(day.calories - goals.calories) / goals.calories <= 0.15).length;
   const macroCoveragePct = Math.round((macroCalories / caloriesNum) * 100);
   const strategyCopy = strategy === "lose"
     ? "Supports a gentle calorie deficit while keeping protein high."
@@ -1839,24 +1817,6 @@ function TargetsEditor({
         { label: "Fat",     pct: Math.round((fatNum * 9 / macroCalories) * 100), cls: "bg-rose-500" },
       ]
     : [];
-  const confidence = [
-    {
-      label: "Calories",
-      value: avgCalories === 0 ? "Needs data" : Math.abs(avgCalories - caloriesNum) / caloriesNum <= 0.15 ? "Realistic" : avgCalories < caloriesNum * 0.75 ? "May be high" : "Aggressive",
-    },
-    {
-      label: "Protein",
-      value: proteinHitDays >= 4 ? "Realistic" : avgProtein > 0 && proteinNum - avgProtein <= 25 ? "Close" : "Needs meal support",
-    },
-    {
-      label: "Water",
-      value: waterNum <= 8 ? "Easy" : waterNum <= 12 ? "Moderate" : "Aggressive",
-    },
-    {
-      label: "Macros",
-      value: macroCoveragePct >= 90 && macroCoveragePct <= 110 ? "Balanced" : "Needs tuning",
-    },
-  ];
   const presets = [
     { id: "lose", label: "Lose weight", apply: () => ({ calories: Math.round(goals.calories * 0.9), protein: Math.round(goals.protein * 1.08), carbs: Math.round(goals.carbs * 0.82), fat: Math.round(goals.fat * 0.9), waterGlasses: Math.max(goals.waterGlasses, 8) }) },
     { id: "build", label: "Build muscle", apply: () => ({ calories: Math.round(goals.calories * 1.1), protein: Math.round(goals.protein * 1.12), carbs: Math.round(goals.carbs * 1.15), fat: Math.round(goals.fat * 1.05), waterGlasses: Math.max(goals.waterGlasses, 9) }) },
@@ -1963,39 +1923,6 @@ function TargetsEditor({
           )}
         </div>
       )}
-
-      <div className="grid md:grid-cols-2 gap-3">
-        <div className="rounded-2xl border bg-card p-4 space-y-3">
-          <p className="text-sm font-semibold">Target Confidence</p>
-          <div className="space-y-2">
-            {confidence.map(item => (
-              <div key={item.label} className="flex items-center justify-between gap-2 rounded-xl bg-secondary/20 px-3 py-2">
-                <p className="text-xs font-medium">{item.label}</p>
-                <span className="text-[11px] text-muted-foreground">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-2xl border bg-card p-4 space-y-3">
-          <div>
-            <p className="text-sm font-semibold">Weekly Adjustment</p>
-            <p className="text-xs text-muted-foreground">
-              {daysWithFood.length
-                ? `Protein hit ${proteinHitDays} of ${weeklyDays.length || 7} days. Calories were near target ${calorieNearDays} days.`
-                : "Log a few meals and MyLifos will recommend a useful adjustment."}
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            <button type="button" onClick={() => {
-              const nextProtein = Math.max(80, avgProtein ? avgProtein + 15 : proteinNum - 15);
-              setProt(String(Math.round(nextProtein)));
-              toast({ title: "Protein target adjusted", description: "Save targets when this feels right." });
-            }} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Tune protein</button>
-            <button type="button" onClick={onOpenPlan} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add meal idea</button>
-            <button type="button" onClick={onOpenInsights} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Review insights</button>
-          </div>
-        </div>
-      </div>
 
       <div className="rounded-2xl border bg-card p-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
@@ -3287,7 +3214,6 @@ function NutritionMealsLibrary({
   onRecommend,
   onAsk,
   onOpenPlan,
-  onOpenTargets,
   savingRecentId,
   loggingRecent,
   loggingRecipe,
@@ -3302,7 +3228,6 @@ function NutritionMealsLibrary({
   onRecommend: (item: NutritionMealActionItem) => void;
   onAsk: (item: NutritionMealActionItem) => void;
   onOpenPlan: () => void;
-  onOpenTargets: () => void;
   savingRecentId?: number | null;
   loggingRecent: boolean;
   loggingRecipe: boolean;
@@ -3317,10 +3242,6 @@ function NutritionMealsLibrary({
     }).slice(0, 8);
   }, [recentFoods]);
   const savedMeals = recipes.slice(0, 8);
-  const highProteinMeals = [
-    ...savedMeals.filter(recipe => (parseRecipeNutrition(recipe)?.protein ?? 0) >= Math.max(25, goals.protein * 0.2)),
-    ...uniqueRecent.filter(item => Number(item.protein) >= Math.max(20, goals.protein * 0.15)),
-  ].slice(0, 4);
   const topRepeat = uniqueRecent[0] ?? null;
   const hasMealData = uniqueRecent.length > 0 || savedMeals.length > 0;
 
@@ -3338,7 +3259,7 @@ function NutritionMealsLibrary({
           {[
             { label: "Saved meals", value: savedMeals.length },
             { label: "Recent meals", value: uniqueRecent.length },
-            { label: "High protein", value: highProteinMeals.length },
+            { label: "Recipes", value: recipes.length },
             { label: "Privacy", value: "Private" },
           ].map(item => (
             <div key={item.label} className="rounded-xl border bg-secondary/20 px-3 py-2">
@@ -3442,53 +3363,6 @@ function NutritionMealsLibrary({
           </div>
         </div>
       )}
-
-      <div className="grid md:grid-cols-[1fr_1fr] gap-3">
-        <div className="rounded-2xl border bg-card p-4 space-y-3">
-          <div>
-            <p className="text-sm font-semibold">High-Protein Options</p>
-            <p className="text-xs text-muted-foreground">Fast choices when Today says protein is the gap.</p>
-          </div>
-          {highProteinMeals.length > 0 ? (
-            <div className="space-y-2">
-              {highProteinMeals.map(item => {
-                const isRecipe = "name" in item;
-                const title = isRecipe ? item.name : item.foodName;
-                const protein = isRecipe ? parseRecipeNutrition(item)?.protein ?? 0 : Number(item.protein) || 0;
-                const actionItem = isRecipe ? mealActionFromRecipe(item) : mealActionFromRecent(item);
-                return (
-                  <div key={`${isRecipe ? "recipe" : "recent"}-${item.id}`} className="flex items-center gap-2 rounded-xl border px-3 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate">{title}</p>
-                      <p className="text-[11px] text-muted-foreground">{Math.round(protein)}g protein</p>
-                    </div>
-                    <button type="button" onClick={() => onAddToPlan(actionItem)} className="text-[11px] text-primary hover:underline shrink-0">Add to plan</button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Log or save a few protein-rich meals and they will appear here.</p>
-          )}
-        </div>
-        <div className="rounded-2xl border bg-card p-4 space-y-3">
-          <p className="text-sm font-semibold">Smart Suggestions</p>
-          <div className="space-y-2">
-            {topRepeat ? (
-              <button onClick={() => onSaveRecent(topRepeat)} className="w-full text-left rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
-                <p className="text-xs font-semibold">You repeat {topRepeat.foodName}</p>
-                <p className="text-[11px] text-muted-foreground">Save it as a meal so it is faster to log and add to plans.</p>
-              </button>
-            ) : (
-              <p className="text-xs text-muted-foreground">Log a few meals and MyLifos will suggest what to save.</p>
-            )}
-            <button type="button" onClick={onOpenTargets} className="block w-full text-left rounded-xl border px-3 py-2 hover:bg-secondary transition-colors">
-              <p className="text-xs font-semibold">Build around your protein target</p>
-              <p className="text-[11px] text-muted-foreground">Save one reliable high-protein meal for days when you fall short.</p>
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3921,7 +3795,6 @@ export function NutritionTab({
                 onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
                 onAsk={(item) => setFriendAction({ mode: "ask", item })}
                 onOpenPlan={() => setActiveSection("plan")}
-                onOpenTargets={() => setActiveSection("targets")}
                 savingRecentId={savingRecentMealId}
                 loggingRecent={repeatFoodMut.isPending}
                 loggingRecipe={logRecipeMut.isPending}
@@ -4452,13 +4325,10 @@ export function NutritionTab({
       {activeSection === "targets" && (
         <TargetsEditor
           goals={g}
-          weeklyLog={weeklyLog}
           planTargets={planTargets}
           planName={activeBodyCompPlan?.name}
           goalsMatchPlan={!!goalsMatchPlan}
           onApplyPlan={() => syncGoalsMut.mutate()}
-          onOpenPlan={() => setActiveSection("plan")}
-          onOpenInsights={() => setActiveSection("insights")}
           onSave={async (data) => {
             await apiRequest("PATCH", "/api/nutrition/goals", data);
             qc.invalidateQueries({ queryKey: ["/api/nutrition/goals"] });
