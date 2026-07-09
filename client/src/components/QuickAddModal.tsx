@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { X, ArrowLeft, Check, Loader2, Search, BookOpen, Film } from "lucide-react";
+import { X, ArrowLeft, Check, Loader2, Search, BookOpen, Film, ExternalLink } from "lucide-react";
 import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -540,14 +540,91 @@ function RecipesForm({ onSuccess }: { onSuccess: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🍽️");
+  const [recipeUrl, setRecipeUrl] = useState("");
+  const [category, setCategory] = useState("");
+  const [prepTime, setPrepTime] = useState("");
+  const [cookTime, setCookTime] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [ingredients, setIngredients] = useState<{ name: string; qty: string }[]>([]);
+  const [instructions, setInstructions] = useState("");
+  const [importError, setImportError] = useState("");
   const FOOD_EMOJIS = ["🍽️","🍕","🍜","🍱","🥗","🍝","🥘","🍛","🍣","🥙","🍔","🥞","🍰","☕","🍷"];
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/recipes", { name, emoji }),
+    mutationFn: () => apiRequest("POST", "/api/recipes", {
+      name: name.trim(),
+      emoji,
+      category: category.trim() || null,
+      prepTime: prepTime ? parseInt(prepTime) : null,
+      cookTime: cookTime ? parseInt(cookTime) : null,
+      ingredientsJson: JSON.stringify(ingredients.filter(i => i.name.trim())),
+      instructions: instructions.trim() || null,
+      imageUrl: imageUrl.trim() || null,
+      source: sourceUrl.trim() || null,
+    }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/recipes"] }); qc.invalidateQueries({ queryKey: ["/api/feed/mine"] }); qc.invalidateQueries({ queryKey: ["/api/user/summary"] }); onSuccess(); },
   });
+  const importMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/recipes/import-url", { url: recipeUrl.trim() });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImportError("");
+      if (data.name) setName(data.name);
+      if (data.category) setCategory(data.category);
+      if (data.prepTime != null) setPrepTime(String(data.prepTime));
+      if (data.cookTime != null) setCookTime(String(data.cookTime));
+      if (data.source) setSourceUrl(data.source);
+      if (data.imageUrl) setImageUrl(data.imageUrl);
+      if (Array.isArray(data.ingredients)) setIngredients(data.ingredients);
+      if (data.instructions) setInstructions(data.instructions);
+    },
+    onError: (err) => {
+      setImportError(err instanceof Error ? err.message : "Could not import that recipe. Try another URL.");
+    },
+  });
+  const hasImportedDetails = ingredients.length > 0 || instructions.trim() || sourceUrl.trim();
   return (
     <form onSubmit={e => { e.preventDefault(); if (name.trim()) mut.mutate(); }} className="space-y-4">
+      <div className="rounded-2xl border bg-secondary/30 p-3 space-y-2.5">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <ExternalLink size={15} className="text-violet-400" />
+          Import from recipe URL
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="min-w-0 flex-1 px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
+            value={recipeUrl}
+            onChange={e => { setRecipeUrl(e.target.value); setImportError(""); }}
+            placeholder="https://example.com/recipe"
+            inputMode="url"
+          />
+          <button
+            type="button"
+            disabled={!recipeUrl.trim() || importMut.isPending}
+            onClick={() => importMut.mutate()}
+            className="px-3 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {importMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+            Import
+          </button>
+        </div>
+        {importError && <p className="text-xs text-red-400">{importError}</p>}
+        {hasImportedDetails && (
+          <div className="rounded-xl bg-background/70 border p-2.5 text-xs text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground">Imported recipe details</p>
+            <p>{ingredients.length} ingredients{instructions ? " · Instructions included" : ""}</p>
+            {sourceUrl && <p className="truncate">Source: {sourceUrl}</p>}
+          </div>
+        )}
+      </div>
       <FormInput label="Recipe name" value={name} onChange={setName} placeholder="e.g. Lemon Pasta" required />
+      <div className="grid grid-cols-2 gap-3">
+        <FormInput label="Category" value={category} onChange={setCategory} placeholder="Dinner" />
+        <FormInput label="Prep min" value={prepTime} onChange={setPrepTime} placeholder="15" />
+      </div>
+      <FormInput label="Cook min" value={cookTime} onChange={setCookTime} placeholder="25" />
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Pick an emoji</label>
         <div className="flex flex-wrap gap-2">
@@ -564,6 +641,9 @@ function RecipesForm({ onSuccess }: { onSuccess: () => void }) {
           ))}
         </div>
       </div>
+      {instructions && (
+        <FormInput label="Instructions preview" value={instructions} onChange={setInstructions} multiline />
+      )}
       <SubmitButton loading={mut.isPending} disabled={!name.trim()} />
     </form>
   );
