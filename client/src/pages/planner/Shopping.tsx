@@ -101,7 +101,7 @@ export default function Shopping() {
                     <li key={it.key} className="flex flex-col gap-0.5" data-testid={`ingredient-${it.key}`}>
                       <div className="flex items-baseline justify-between gap-2">
                         <span>{it.display}</span>
-                        {it.count > 1 && <span className="text-[11px] text-muted-foreground tabular-nums">×{it.count}</span>}
+                        {!it.amount && it.count > 1 && <span className="text-[11px] text-muted-foreground tabular-nums">×{it.count}</span>}
                       </div>
                       <div className="text-[10.5px] text-muted-foreground line-clamp-1">{it.recipes.join(" · ")}</div>
                     </li>

@@ -2709,7 +2709,7 @@ function MealPlannerEmbed({
                             {item.custom ? "Added manually" : item.recipes.join(", ")}
                           </p>
                         </div>
-                        {!item.custom && item.count > 1 && (
+                        {!item.custom && !item.amount && item.count > 1 && (
                           <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">x{item.count}</span>
                         )}
                         <button
