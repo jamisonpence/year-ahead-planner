@@ -2937,6 +2937,140 @@ function NutritionConnectionsCard({
   );
 }
 
+function NutritionSetupContextCard({
+  hasMealPlan,
+  savedRecipeCount,
+  hasNutritionGoal,
+  activePlan,
+  metric,
+  goalsMatchPlan,
+  syncingTargets,
+  onCreatePlan,
+  onSaveRecipe,
+  onCreateGoal,
+  onEditTargets,
+  onSyncTargets,
+  onLogFood,
+}: {
+  hasMealPlan: boolean;
+  savedRecipeCount: number;
+  hasNutritionGoal: boolean;
+  activePlan: WorkoutPlan | null;
+  metric: Record<string, any> | null;
+  goalsMatchPlan: boolean;
+  syncingTargets: boolean;
+  onCreatePlan: () => void;
+  onSaveRecipe: () => void;
+  onCreateGoal: () => void;
+  onEditTargets: () => void;
+  onSyncTargets: () => void;
+  onLogFood: () => void;
+}) {
+  const targetProtein = metric?.proteinGrams ? Math.round(metric.proteinGrams as number) : null;
+  const setupRows = [
+    {
+      icon: CalendarCheck,
+      label: "Meal plan",
+      status: hasMealPlan ? "Connected" : "Missing",
+      body: hasMealPlan
+        ? "Today can recommend planned meals and build from your schedule."
+        : "Create a plan so Today knows what meal to recommend next.",
+      action: hasMealPlan ? "View plan" : "Create plan",
+      onClick: onCreatePlan,
+      done: hasMealPlan,
+    },
+    {
+      icon: BookMarked,
+      label: "Saved recipes",
+      status: savedRecipeCount ? `${savedRecipeCount} saved` : "Missing",
+      body: savedRecipeCount
+        ? "Saved meals can be reused in plans, messages, and MyLifos."
+        : "Save one recipe so planning has something personal to reuse.",
+      action: savedRecipeCount ? "Open recipes" : "Save recipe",
+      onClick: onSaveRecipe,
+      done: savedRecipeCount > 0,
+    },
+    {
+      icon: Target,
+      label: "Nutrition goal",
+      status: hasNutritionGoal ? "Set" : "Missing",
+      body: hasNutritionGoal
+        ? "Calories, protein, macros, and water are guiding Today."
+        : "Set targets so progress and recommendations have a clear outcome.",
+      action: hasNutritionGoal ? "Edit targets" : "Create goal",
+      onClick: hasNutritionGoal ? onEditTargets : onCreateGoal,
+      done: hasNutritionGoal,
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border bg-card p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Setup status</p>
+          <p className="text-xs text-muted-foreground">These are the pieces Today needs before it can make sharper recommendations.</p>
+        </div>
+        <button type="button" onClick={onLogFood} className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-secondary">
+          Log food
+        </button>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-2">
+        {setupRows.map(row => {
+          const Icon = row.icon;
+          return (
+            <div key={row.label} className={`rounded-xl border p-3 space-y-3 ${row.done ? "bg-green-500/5 border-green-500/20" : "bg-background"}`}>
+              <div className="flex items-start gap-2">
+                <Icon size={14} className={row.done ? "mt-0.5 text-green-600 dark:text-green-400 shrink-0" : "mt-0.5 text-primary shrink-0"} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold">{row.label}</p>
+                    {row.done && <Check size={12} className="text-green-600 dark:text-green-400" />}
+                  </div>
+                  <p className={`text-[11px] font-medium ${row.done ? "text-green-700 dark:text-green-300" : "text-primary"}`}>{row.status}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{row.body}</p>
+                </div>
+              </div>
+              <button type="button" onClick={row.onClick} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">
+                {row.action}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {activePlan && (
+        <div className="rounded-xl border bg-background p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <Dumbbell size={14} className="mt-0.5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs font-semibold">Workout context</p>
+              <p className="text-[11px] text-muted-foreground">
+                {targetProtein
+                  ? `${activePlan.name} suggests ${targetProtein}g protein.`
+                  : `${activePlan.name} can inform recovery meals and targets.`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={goalsMatchPlan ? onEditTargets : onSyncTargets}
+            disabled={syncingTargets}
+            className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-secondary disabled:opacity-50"
+          >
+            {syncingTargets ? "Working..." : goalsMatchPlan ? "Edit targets" : "Use workout targets"}
+          </button>
+        </div>
+      )}
+
+      <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
+        <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
+        <p className="text-[11px] text-muted-foreground">Private by default: food logs stay personal. Recipes, meal ideas, and encouragement are the shareable pieces.</p>
+      </div>
+    </div>
+  );
+}
+
 function parseRecipeNutrition(recipe: Recipe): NutritionSummary | null {
   try {
     return recipe.nutritionData ? JSON.parse(recipe.nutritionData as string) : null;
@@ -3402,7 +3536,7 @@ export function NutritionTab({
     queryKey: ["/api/nutrition/food-log", selectedDate],
     queryFn: () => apiRequest("GET", `/api/nutrition/food-log?date=${selectedDate}`).then(r => r.json()),
   });
-  const { data: goalsData } = useQuery<{ calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }>({
+  const { data: goalsData, isLoading: goalsLoading } = useQuery<{ calories: number; protein: number; carbs: number; fat: number; waterGlasses: number }>({
     queryKey: ["/api/nutrition/goals"],
     queryFn: () => apiRequest("GET", "/api/nutrition/goals").then(r => r.json()),
   });
@@ -3418,7 +3552,7 @@ export function NutritionTab({
     queryKey: ["/api/nutrition/food-log/history"],
     queryFn: () => apiRequest("GET", "/api/nutrition/food-log/history").then(r => r.json()),
   });
-  const { data: recipes = [] } = useQuery<Recipe[]>({
+  const { data: recipes = [], isLoading: recipesLoading } = useQuery<Recipe[]>({
     queryKey: ["/api/recipes"],
     queryFn: () => apiRequest("GET", "/api/recipes").then(r => r.json()),
   });
@@ -3718,33 +3852,149 @@ export function NutritionTab({
   const circumference = 2 * Math.PI * 32;
   const plannedTodayMeals = plan?.days?.[0]?.meals?.filter(meal => !meal.removed) ?? [];
   const nextPlannedMeal = plannedTodayMeals.find(meal => !foodLog.some(entry => entry.mealType === meal.slot)) ?? plannedTodayMeals[0] ?? null;
-  const nextNutritionAction = nextPlannedMeal
+  const hasMealPlan = plannedTodayMeals.length > 0;
+  const hasSavedRecipe = recipesLoading || recipes.length > 0;
+  const hasNutritionGoal = goalsLoading || !!goalsData;
+  const nextNutritionAction = !hasMealPlan
     ? {
-        title: `Log ${nextPlannedMeal.recipe.name}`,
-        body: `${nextPlannedMeal.slot} is planned for today: ${nextPlannedMeal.recipe.macros.cal} kcal and ${nextPlannedMeal.recipe.macros.p}g protein.`,
-        primary: "Log planned meal",
-        secondary: "View plan",
+        kind: "create-plan" as const,
+        title: "Create your first meal plan",
+        body: "A plan gives Today meals to recommend, meals to log, and a useful shopping list.",
+        primary: "Create plan",
+        secondary: "Log food instead",
       }
-    : proteinLeft >= 25
+    : !hasSavedRecipe
       ? {
-          title: "Pick a high-protein meal",
-          body: `You are ${proteinLeft}g short on protein. Choose a saved meal or log what you ate.`,
-          primary: "Choose meal",
-          secondary: "Log food",
+          kind: "save-recipe" as const,
+          title: "Save your first recipe",
+          body: "Saved recipes become reusable MyLifos items for planning, recommendations, and meal ideas.",
+          primary: "Save recipe",
+          secondary: "Log food instead",
         }
-      : caloriesLeft >= 400
+      : !hasNutritionGoal
         ? {
-            title: "Choose your next meal",
-            body: `${caloriesLeft} kcal remain today. Use a saved meal, planned meal, or quick log.`,
-            primary: "Choose meal",
-            secondary: "Log food",
+            kind: "create-goal" as const,
+            title: "Create your nutrition goal",
+            body: "Set calories, protein, macros, and water so Today can judge progress against the right target.",
+            primary: "Create goal",
+            secondary: "Use defaults for now",
           }
-        : {
-            title: "Capture what worked",
-            body: "Today is nearly covered. Save a meal note or review your insights later.",
-            primary: "Save note",
-            secondary: "Insights",
-          };
+        : nextPlannedMeal
+          ? {
+              kind: "log-planned-meal" as const,
+              title: `Log ${nextPlannedMeal.recipe.name}`,
+              body: `${nextPlannedMeal.slot} is planned for today: ${nextPlannedMeal.recipe.macros.cal} kcal and ${nextPlannedMeal.recipe.macros.p}g protein.`,
+              primary: "Log planned meal",
+              secondary: "View plan",
+            }
+          : proteinLeft >= 25
+            ? {
+                kind: "choose-meal" as const,
+                title: "Pick a high-protein meal",
+                body: `You are ${proteinLeft}g short on protein. Choose a saved meal or log what you ate.`,
+                primary: "Choose meal",
+                secondary: "Log food",
+              }
+            : caloriesLeft >= 400
+              ? {
+                  kind: "choose-meal" as const,
+                  title: "Choose your next meal",
+                  body: `${caloriesLeft} kcal remain today. Use a saved meal, planned meal, or quick log.`,
+                  primary: "Choose meal",
+                  secondary: "Log food",
+                }
+              : {
+                  kind: "save-note" as const,
+                  title: "Capture what worked",
+                  body: "Today is nearly covered. Save a meal note or review your insights later.",
+                  primary: "Save note",
+                  secondary: "Insights",
+                };
+
+  function openFoodLog(meal = "snack") {
+    setLogMealPreset(meal);
+    setShowFoodLog(true);
+    setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+
+  function openRecipes() {
+    window.location.hash = "#/recipes";
+  }
+
+  function logPlannedMeal() {
+    if (!nextPlannedMeal) return;
+    apiRequest("POST", "/api/nutrition/food-log", {
+      foodName: nextPlannedMeal.recipe.name,
+      servingSize: 1,
+      servingUnit: "serving",
+      quantity: 1,
+      mealType: nextPlannedMeal.slot,
+      date: selectedDate,
+      calories: nextPlannedMeal.recipe.macros.cal,
+      protein: nextPlannedMeal.recipe.macros.p,
+      carbs: nextPlannedMeal.recipe.macros.c,
+      fat: nextPlannedMeal.recipe.macros.f,
+      fiber: 0,
+      sugar: 0,
+      sodium: 0,
+    }).then(() => {
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
+      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
+      toast({ title: `${nextPlannedMeal.recipe.name} logged for today` });
+    }).catch(() => toast({ title: "Could not log planned meal", variant: "destructive" }));
+  }
+
+  function saveTodayNutritionNote() {
+    saveNutritionNoteMut.mutate({
+      id: "today-nutrition-summary",
+      title: "Today's nutrition note",
+      subtitle: `${Math.round(totals.calories)} kcal · ${Math.round(totals.protein)}g protein logged`,
+      source: "recent",
+    });
+  }
+
+  function handleNextNutritionPrimary() {
+    if (nextNutritionAction.kind === "create-plan") {
+      setActiveSection("plan");
+      setShowConnectedContext(true);
+      toast({ title: "Meal plan opened", description: "Start with your stats and preferences, then generate a plan." });
+      return;
+    }
+    if (nextNutritionAction.kind === "save-recipe") {
+      openRecipes();
+      return;
+    }
+    if (nextNutritionAction.kind === "create-goal") {
+      setActiveSection("targets");
+      toast({ title: "Nutrition targets opened", description: "Set calories, protein, macros, and water here." });
+      return;
+    }
+    if (nextNutritionAction.kind === "log-planned-meal") {
+      logPlannedMeal();
+      return;
+    }
+    if (nextNutritionAction.kind === "save-note") {
+      saveTodayNutritionNote();
+      return;
+    }
+    setActiveSection("plan");
+  }
+
+  function handleNextNutritionSecondary() {
+    if (nextNutritionAction.secondary === "View plan") {
+      setActiveSection("plan");
+      return;
+    }
+    if (nextNutritionAction.secondary === "Insights") {
+      setActiveSection("insights");
+      return;
+    }
+    if (nextNutritionAction.secondary === "Use defaults for now") {
+      toast({ title: "Default targets kept", description: "You can personalize them anytime from Targets." });
+      return;
+    }
+    openFoodLog();
+  }
 
   return (
     <div className="space-y-5">
@@ -3846,64 +4096,23 @@ export function NutritionTab({
               </div>
               <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] font-semibold shrink-0">Today</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (nextPlannedMeal) {
-                    apiRequest("POST", "/api/nutrition/food-log", {
-                      foodName: nextPlannedMeal.recipe.name,
-                      servingSize: 1,
-                      servingUnit: "serving",
-                      quantity: 1,
-                      mealType: nextPlannedMeal.slot,
-                      date: selectedDate,
-                      calories: nextPlannedMeal.recipe.macros.cal,
-                      protein: nextPlannedMeal.recipe.macros.p,
-                      carbs: nextPlannedMeal.recipe.macros.c,
-                      fat: nextPlannedMeal.recipe.macros.f,
-                      fiber: 0,
-                      sugar: 0,
-                      sodium: 0,
-                    }).then(() => {
-                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", selectedDate] });
-                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log/week"] });
-                      toast({ title: `${nextPlannedMeal.recipe.name} logged for today` });
-                    }).catch(() => toast({ title: "Could not log planned meal", variant: "destructive" }));
-                    return;
-                  }
-                  if (nextNutritionAction.primary === "Save note") {
-                    saveNutritionNoteMut.mutate({
-                      id: "today-nutrition-summary",
-                      title: "Today's nutrition note",
-                      subtitle: `${Math.round(totals.calories)} kcal · ${Math.round(totals.protein)}g protein logged`,
-                      source: "recent",
-                    });
-                    return;
-                  }
-                  setActiveSection("plan");
-                }}
+                onClick={handleNextNutritionPrimary}
                 className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90"
               >
                 {nextNutritionAction.primary}
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (nextNutritionAction.secondary === "View plan" || nextNutritionAction.secondary === "Insights") setActiveSection(nextNutritionAction.secondary === "Insights" ? "insights" : "plan");
-                  else {
-                    setLogMealPreset("snack");
-                    setShowFoodLog(true);
-                    setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                  }
-                }}
+                onClick={handleNextNutritionSecondary}
                 className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary"
               >
                 {nextNutritionAction.secondary}
               </button>
-              <button type="button" onClick={() => setActiveSection("targets")} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">Targets</button>
               <button type="button" onClick={() => setShowConnectedContext(v => !v)} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-secondary">
-                {showConnectedContext ? "Hide context" : "Context"}
+                {showConnectedContext ? "Hide setup" : "Setup status"}
               </button>
             </div>
             {showConnectedContext && (
@@ -3911,28 +4120,20 @@ export function NutritionTab({
                 {activeBodyCompPlan && bodyCompMetric && (
                   <BodyCompGoalCard plan={activeBodyCompPlan} metric={bodyCompMetric} />
                 )}
-                <NutritionConnectionsCard
+                <NutritionSetupContextCard
+                  hasMealPlan={hasMealPlan}
+                  savedRecipeCount={recipes.length}
+                  hasNutritionGoal={hasNutritionGoal}
                   activePlan={activeBodyCompPlan}
                   metric={bodyCompMetric}
-                  recipes={recipes}
-                  friendsCount={friends.length}
-                  proteinLeft={proteinLeft}
-                  caloriesLeft={caloriesLeft}
                   goalsMatchPlan={!!goalsMatchPlan}
                   syncingTargets={syncGoalsMut.isPending}
+                  onCreatePlan={() => setActiveSection("plan")}
+                  onSaveRecipe={openRecipes}
+                  onCreateGoal={() => setActiveSection("targets")}
+                  onEditTargets={() => setActiveSection("targets")}
                   onSyncTargets={() => syncGoalsMut.mutate()}
-                  onConnectGoal={() => {
-                    setActiveSection("targets");
-                    toast({ title: "Nutrition targets opened", description: "Edit calories, protein, macros, and water here." });
-                  }}
-                  onChooseMeal={() => setActiveSection("plan")}
-                  onAddRecoveryMeal={() => {
-                    setLogMealPreset("snack");
-                    setShowFoodLog(true);
-                    setTimeout(() => foodLogPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                  }}
-                  onAskFriend={(item) => setFriendAction({ mode: "ask", item })}
-                  onSaveNote={(item) => saveNutritionNoteMut.mutate(item)}
+                  onLogFood={() => openFoodLog()}
                 />
               </div>
             )}
