@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { X, ArrowLeft, Check, Loader2 } from "lucide-react";
+import { X, ArrowLeft, Check, Loader2, Search, BookOpen, Film } from "lucide-react";
 import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -196,42 +196,301 @@ function SubmitButton({ loading, disabled, label = "Add" }: { loading: boolean; 
 
 // ── Per-section forms ─────────────────────────────────────────────────────────
 
+interface QuickBookResult {
+  id: string;
+  title: string;
+  author: string;
+  year?: string;
+  pageCount?: number;
+  genre?: string;
+  coverUrl?: string;
+}
+
+interface QuickMovieResult {
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path?: string | null;
+  media_type?: "movie" | "tv";
+}
+
+const QUICK_TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w185";
+const QUICK_POSTER_COLORS = [
+  "hsl(210 80% 48%)", "hsl(25 85% 52%)", "hsl(340 75% 50%)",
+  "hsl(160 60% 40%)", "hsl(270 60% 50%)", "hsl(45 90% 48%)",
+  "hsl(195 75% 42%)", "hsl(0 70% 48%)",
+];
+
+function normalizeQuickBook(volume: any): QuickBookResult {
+  const info = volume.volumeInfo ?? {};
+  const rawThumb = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || "";
+  return {
+    id: volume.id ?? info.title ?? String(Math.random()),
+    title: info.title ?? "Unknown Title",
+    author: (info.authors ?? []).join(", "),
+    year: info.publishedDate?.slice(0, 4),
+    pageCount: info.pageCount ?? undefined,
+    genre: info.categories?.[0] ?? undefined,
+    coverUrl: rawThumb ? rawThumb.replace(/^http:\/\//, "https://") : undefined,
+  };
+}
+
+function quickMovieTitle(item: QuickMovieResult) {
+  return item.title || item.name || "Untitled";
+}
+
+function quickMovieYear(item: QuickMovieResult) {
+  return (item.release_date || item.first_air_date || "").slice(0, 4);
+}
+
 function ReadingForm({ onSuccess }: { onSuccess: () => void }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [author, setAuthor] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<QuickBookResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualAuthor, setManualAuthor] = useState("");
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/books", { title, author: author || undefined, status: "want_to_read" }),
+    mutationFn: (book: Partial<QuickBookResult> & { title: string }) => apiRequest("POST", "/api/books", {
+      title: book.title,
+      author: book.author || undefined,
+      genre: book.genre || undefined,
+      totalPages: book.pageCount || undefined,
+      coverUrl: book.coverUrl || undefined,
+      status: "want_to_read",
+    }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/books"] }); qc.invalidateQueries({ queryKey: ["/api/feed/mine"] }); qc.invalidateQueries({ queryKey: ["/api/user/summary"] }); onSuccess(); },
+    onSettled: () => setAddingId(null),
   });
+
+  function runSearch(nextQuery: string) {
+    setQuery(nextQuery);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!nextQuery.trim()) { setResults([]); setLoading(false); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await apiRequest("GET", `/api/gbooks/search?q=${encodeURIComponent(nextQuery.trim())}`);
+        const data = await res.json();
+        setResults((Array.isArray(data) ? data : []).slice(0, 8).map(normalizeQuickBook));
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+  }
+
+  function addBook(book: QuickBookResult) {
+    setAddingId(book.id);
+    mut.mutate(book);
+  }
+
   return (
-    <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
-      <FormInput label="Book title" value={title} onChange={setTitle} placeholder="e.g. Atomic Habits" required />
-      <FormInput label="Author" value={author} onChange={setAuthor} placeholder="e.g. James Clear" />
-      <SubmitButton loading={mut.isPending} disabled={!title.trim()} />
-    </form>
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Search books</label>
+        <div className="relative">
+          {loading
+            ? <Loader2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+            : <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />}
+          <input
+            value={query}
+            onChange={e => runSearch(e.target.value)}
+            placeholder="Title, author, or ISBN"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">Choose a result to save the real title, author, cover, and page count.</p>
+      </div>
+
+      {results.length > 0 && (
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {results.map(book => (
+            <button
+              key={book.id}
+              type="button"
+              onClick={() => addBook(book)}
+              disabled={mut.isPending}
+              className="w-full flex items-center gap-3 rounded-xl border bg-background p-2.5 text-left hover:bg-secondary/60 transition-colors disabled:opacity-60"
+            >
+              {book.coverUrl ? (
+                <img src={book.coverUrl} alt="" className="h-14 w-10 rounded object-cover shrink-0" />
+              ) : (
+                <div className="h-14 w-10 rounded bg-secondary flex items-center justify-center shrink-0">
+                  <BookOpen size={14} className="text-muted-foreground" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold truncate">{book.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{book.author || "Unknown author"}</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {[book.year, book.pageCount ? `${book.pageCount} pages` : null].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              {addingId === book.id ? <Loader2 size={15} className="animate-spin text-primary shrink-0" /> : <Check size={15} className="text-muted-foreground shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button type="button" onClick={() => setManualOpen(v => !v)} className="text-xs font-medium text-primary hover:underline">
+        {manualOpen ? "Hide manual entry" : "Can't find it? Add manually"}
+      </button>
+
+      {manualOpen && (
+        <form onSubmit={e => { e.preventDefault(); if (manualTitle.trim()) mut.mutate({ title: manualTitle.trim(), author: manualAuthor.trim() }); }} className="space-y-4 rounded-xl border bg-secondary/20 p-3">
+          <FormInput label="Book title" value={manualTitle} onChange={setManualTitle} placeholder="e.g. Atomic Habits" required />
+          <FormInput label="Author" value={manualAuthor} onChange={setManualAuthor} placeholder="e.g. James Clear" />
+          <SubmitButton loading={mut.isPending} disabled={!manualTitle.trim()} />
+        </form>
+      )}
+    </div>
   );
 }
 
 function MoviesForm({ onSuccess }: { onSuccess: () => void }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
   const [mediaType, setMediaType] = useState<"movie" | "show">("movie");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<QuickMovieResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [addingId, setAddingId] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/movies", { title, mediaType }),
+    mutationFn: (payload: any) => apiRequest("POST", "/api/movies", payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/movies"] }); qc.invalidateQueries({ queryKey: ["/api/feed/mine"] }); qc.invalidateQueries({ queryKey: ["/api/user/summary"] }); onSuccess(); },
+    onSettled: () => setAddingId(null),
   });
+
+  function runSearch(nextQuery: string, nextType = mediaType) {
+    setQuery(nextQuery);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!nextQuery.trim()) { setResults([]); setLoading(false); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const type = nextType === "show" ? "tv" : "movie";
+        const res = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(nextQuery.trim())}&type=${type}`);
+        const data = await res.json();
+        setResults((Array.isArray(data) ? data : []).slice(0, 8));
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+  }
+
+  async function addMovie(item: QuickMovieResult) {
+    setAddingId(item.id);
+    try {
+      const type = mediaType === "show" ? "tv" : "movie";
+      const detailRes = await apiRequest("GET", `/api/tmdb/${type}/${item.id}`);
+      const detail = await detailRes.json();
+      const isShow = mediaType === "show";
+      const title = detail.title || detail.name || quickMovieTitle(item);
+      const year = parseInt((detail.release_date || detail.first_air_date || "").slice(0, 4)) || null;
+      const director = isShow
+        ? (detail.credits?.created_by?.[0]?.name ?? null)
+        : (detail.credits?.crew?.find((c: any) => c.job === "Director")?.name ?? null);
+      mut.mutate({
+        mediaType,
+        title,
+        year,
+        director,
+        genres: (detail.genres ?? []).map((g: any) => g.name).join(",") || null,
+        status: "backlog",
+        rating: null,
+        notes: null,
+        listsJson: "[]",
+        isFavorite: false,
+        posterColor: QUICK_POSTER_COLORS[Math.floor(Math.random() * QUICK_POSTER_COLORS.length)],
+        streamingOn: null,
+        totalSeasons: isShow ? (detail.number_of_seasons ?? null) : null,
+        currentSeason: null,
+        videoUrl: null,
+        posterUrl: detail.poster_path ? `${QUICK_TMDB_IMG_BASE}${detail.poster_path}` : null,
+      });
+    } catch {
+      setAddingId(null);
+    }
+  }
+
   return (
-    <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
+    <div className="space-y-4">
       <SegmentPicker
         label="Type"
         options={[{ value: "movie", label: "Movie" }, { value: "show", label: "TV Show" }]}
         value={mediaType}
-        onChange={setMediaType}
+        onChange={(next) => { setMediaType(next); setResults([]); if (query.trim()) runSearch(query, next); }}
       />
-      <FormInput label="Title" value={title} onChange={setTitle} placeholder={mediaType === "movie" ? "e.g. Inception" : "e.g. Severance"} required />
-      <SubmitButton loading={mut.isPending} disabled={!title.trim()} />
-    </form>
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Search {mediaType === "show" ? "shows" : "movies"}</label>
+        <div className="relative">
+          {loading
+            ? <Loader2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+            : <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />}
+          <input
+            value={query}
+            onChange={e => runSearch(e.target.value)}
+            placeholder={mediaType === "show" ? "Search TV shows" : "Search movies"}
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">Choose a TMDB result to save poster, year, genre, and creator details.</p>
+      </div>
+
+      {results.length > 0 && (
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {results.map(item => {
+            const title = quickMovieTitle(item);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => addMovie(item)}
+                disabled={mut.isPending}
+                className="w-full flex items-center gap-3 rounded-xl border bg-background p-2.5 text-left hover:bg-secondary/60 transition-colors disabled:opacity-60"
+              >
+                {item.poster_path ? (
+                  <img src={`${QUICK_TMDB_IMG_BASE}${item.poster_path}`} alt="" className="h-14 w-10 rounded object-cover shrink-0" />
+                ) : (
+                  <div className="h-14 w-10 rounded bg-secondary flex items-center justify-center shrink-0">
+                    <Film size={14} className="text-muted-foreground" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">{title}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {mediaType === "show" ? "TV Show" : "Movie"}{quickMovieYear(item) ? ` · ${quickMovieYear(item)}` : ""}
+                  </p>
+                </div>
+                {addingId === item.id ? <Loader2 size={15} className="animate-spin text-primary shrink-0" /> : <Check size={15} className="text-muted-foreground shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <button type="button" onClick={() => setManualOpen(v => !v)} className="text-xs font-medium text-primary hover:underline">
+        {manualOpen ? "Hide manual entry" : "Can't find it? Add manually"}
+      </button>
+
+      {manualOpen && (
+        <form onSubmit={e => { e.preventDefault(); if (manualTitle.trim()) mut.mutate({ title: manualTitle.trim(), mediaType }); }} className="space-y-4 rounded-xl border bg-secondary/20 p-3">
+          <FormInput label="Title" value={manualTitle} onChange={setManualTitle} placeholder={mediaType === "movie" ? "e.g. Inception" : "e.g. Severance"} required />
+          <SubmitButton loading={mut.isPending} disabled={!manualTitle.trim()} />
+        </form>
+      )}
+    </div>
   );
 }
 
