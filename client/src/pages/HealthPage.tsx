@@ -3480,16 +3480,6 @@ export function NutritionTab({
   const caloriesLeft = Math.max(0, Math.round(g.calories - totals.calories));
   const proteinLeft = Math.max(0, Math.round(g.protein - totals.protein));
   const waterLeft = Math.max(0, g.waterGlasses - waterGlasses);
-  const recentShortcuts = useMemo(() => {
-    const seen = new Set<string>();
-    return recentFoods.filter(item => {
-      const key = item.foodName.trim().toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 6);
-  }, [recentFoods]);
-
   const calPct = Math.min(100, g.calories > 0 ? (totals.calories / g.calories) * 100 : 0);
 
   const waterMut = useMutation({
@@ -3850,7 +3840,8 @@ export function NutritionTab({
           <div className="rounded-2xl border bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Nutrition Coach</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Next best action</p>
+                <p className="text-sm font-semibold mt-0.5">{nextNutritionAction.title}</p>
                 <p className="text-xs text-muted-foreground mt-1">{nextNutritionAction.body}</p>
               </div>
               <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] font-semibold shrink-0">Today</span>
@@ -4027,39 +4018,6 @@ export function NutritionTab({
               </div>
             </div>
           </div>
-
-          {/* ── Repeat shortcuts ────────────────────────────────────────── */}
-          {recentShortcuts.length > 0 && (
-            <div className="rounded-2xl border bg-card p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Repeat a recent meal</p>
-                  <p className="text-xs text-muted-foreground">One tap adds it to today.</p>
-                </div>
-                <button
-                  onClick={() => setShowFoodLog(true)}
-                  className="text-xs font-medium text-primary hover:underline shrink-0"
-                >
-                  Search instead
-                </button>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
-                {recentShortcuts.map(item => (
-                  <button
-                    key={`${item.id}-${item.foodName}`}
-                    onClick={() => repeatFoodMut.mutate(item)}
-                    disabled={repeatFoodMut.isPending}
-                    className="min-w-[150px] max-w-[190px] text-left rounded-xl border bg-background hover:bg-secondary/50 px-3 py-2 transition-colors disabled:opacity-60"
-                  >
-                    <p className="text-xs font-semibold truncate">{item.foodName}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {Math.round(Number(item.calories))} kcal · P {Math.round(Number(item.protein))}g
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* ── Meal sections (always visible) ──────────────────────────── */}
           {(["breakfast", "lunch", "dinner", "snack"] as const).map(meal => {
