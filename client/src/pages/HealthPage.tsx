@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useContext, createContext, useCallback, useRef } from "react";
+import type { ReactNode } from "react";
 import PageShell from "@/components/PageShell";
 import { useLocation, Router, Switch, Route } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -2286,10 +2287,12 @@ function MealPlannerEmbed({
   onRecommendMeal,
   onAskMeal,
   onSaveMealNote,
+  savedMealsContent,
 }: {
   onRecommendMeal?: (item: NutritionMealActionItem) => void;
   onAskMeal?: (item: NutritionMealActionItem) => void;
   onSaveMealNote?: (item: NutritionMealActionItem) => void;
+  savedMealsContent?: ReactNode;
 } = {}) {
   const [embedPath, setEmbedPath] = useState("/meal-planner");
   const [openMealMenu, setOpenMealMenu] = useState<string | null>(null);
@@ -2372,6 +2375,12 @@ function MealPlannerEmbed({
             secondaryLabel: "Shopping list",
             secondaryPath: "/meal-planner/shopping",
           };
+  const planViewCopy = {
+    week: { title: "This Week", body: "What is planned, what is missing, and what to log next." },
+    saved: { title: "Saved Meals", body: "Reusable meals and recipes you can log or add to this week." },
+    shopping: { title: "Shopping", body: "What to buy or prep before the plan is easy to follow." },
+    share: { title: "Share", body: "Choose one planned meal idea to send in Messages." },
+  }[planView];
   useEffect(() => {
     if (shareablePlannedMeals.length === 0) {
       if (selectedShareMealKey) setSelectedShareMealKey("");
@@ -2459,8 +2468,8 @@ function MealPlannerEmbed({
       <div className="rounded-2xl border bg-card p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Plan Status</p>
-            <p className="text-xs text-muted-foreground">Know what to eat next, what needs attention, and what to buy.</p>
+            <p className="text-sm font-semibold">{planViewCopy.title}</p>
+            <p className="text-xs text-muted-foreground">{planViewCopy.body}</p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" className="h-8 text-xs" onClick={() => navigate(plan ? "/meal-planner/plan" : "/meal-planner/setup")}>
@@ -2488,7 +2497,10 @@ function MealPlannerEmbed({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setPlanView(item.id as typeof planView)}
+                onClick={() => {
+                  setPlanView(item.id as typeof planView);
+                  setEmbedPath("/meal-planner");
+                }}
                 className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${planView === item.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {item.label}
@@ -2579,69 +2591,14 @@ function MealPlannerEmbed({
         ) : null}
       </div>
 
-      {plan && planView === "week" && (
-        <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-3">
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <p className="text-sm font-semibold">Weekly Coverage</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Protein coverage", value: `${proteinCoverageDays}/${planLength} days` },
-                { label: "Breakfast planned", value: `${breakfastDays}/${planLength} days` },
-                { label: "Shopping items", value: shoppingPreview?.flat.length ?? 0 },
-                { label: "Repeats", value: repeatedMealCount },
-              ].map(item => (
-                <div key={item.label} className="rounded-lg bg-secondary/20 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{item.label}</p>
-                  <p className="text-sm font-bold">{item.value}</p>
-                </div>
-              ))}
+      {planView === "saved" && (
+        <div className="mt-3">
+          {savedMealsContent ?? (
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-sm font-semibold">Saved Meals</p>
+              <p className="text-xs text-muted-foreground mt-1">Saved meals and recipes will appear here.</p>
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <button type="button" onClick={() => navigate("/meal-planner/setup")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Fill gaps</button>
-              <button type="button" onClick={() => navigate("/meal-planner/library")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Add high-protein meal</button>
-              <button type="button" onClick={() => navigate("/meal-planner/shopping")} className="rounded-lg border px-2 py-2 text-[11px] hover:bg-secondary">Shopping list</button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold">Saved Meals & Recipes</p>
-                <p className="text-xs text-muted-foreground">Reusable meals you can add to this week or log today.</p>
-              </div>
-              <button onClick={() => navigate("/meal-planner/library")} className="text-xs text-primary hover:underline shrink-0">Open saved meals</button>
-            </div>
-            {quickSavedMeals.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Saved meals will appear here after recipes load.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {quickSavedMeals.map(recipe => (
-                  <div key={recipe.id} className="flex items-center gap-2 rounded-lg border px-2.5 py-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate">{recipe.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{recipe.macros.cal} kcal · P {recipe.macros.p}g</p>
-                    </div>
-                    <button type="button" onClick={() => navigate("/meal-planner/library")} className="text-[11px] text-primary hover:underline shrink-0">Add to plan</button>
-                    <button type="button" onClick={() => apiRequest("POST", "/api/nutrition/food-log", {
-                      foodName: recipe.name,
-                      servingSize: 1,
-                      servingUnit: "serving",
-                      quantity: 1,
-                      mealType: "snack",
-                      date: todayStr,
-                      calories: recipe.macros.cal,
-                      protein: recipe.macros.p,
-                      carbs: recipe.macros.c,
-                      fat: recipe.macros.f,
-                    }).then(() => {
-                      qc.invalidateQueries({ queryKey: ["/api/nutrition/food-log", todayStr] });
-                      toast({ title: `${recipe.name} logged for today` });
-                    })} className="text-[11px] text-primary hover:underline shrink-0">Log</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       )}
 
@@ -2755,7 +2712,7 @@ function MealPlannerEmbed({
           IMPORTANT: use the JSX children API (not `component` prop) so that
           React sees stable element types across re-renders and never unmounts
           pages mid-interaction (which would reset step state in Setup, etc.) */}
-      {(embedPath !== "/meal-planner" || planView === "shopping") && (
+      {embedPath !== "/meal-planner" && (
       <Router hook={useEmbedLocation}>
         <Switch>
           <Route path="/meal-planner/setup">       <PlannerSetup />         </Route>
@@ -3860,22 +3817,24 @@ export function NutritionTab({
             onRecommendMeal={(item) => setFriendAction({ mode: "recommend", item })}
             onAskMeal={(item) => setFriendAction({ mode: "ask", item })}
             onSaveMealNote={(item) => saveNutritionNoteMut.mutate(item)}
-          />
-          <NutritionMealsLibrary
-            recentFoods={recentFoods}
-            recipes={recipes}
-            goals={g}
-            onLogRecent={(item) => repeatFoodMut.mutate(item)}
-            onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
-            onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
-            onAddToPlan={setPlanMealItem}
-            onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
-            onAsk={(item) => setFriendAction({ mode: "ask", item })}
-            onOpenPlan={() => setActiveSection("plan")}
-            onOpenTargets={() => setActiveSection("targets")}
-            savingRecentId={savingRecentMealId}
-            loggingRecent={repeatFoodMut.isPending}
-            loggingRecipe={logRecipeMut.isPending}
+            savedMealsContent={
+              <NutritionMealsLibrary
+                recentFoods={recentFoods}
+                recipes={recipes}
+                goals={g}
+                onLogRecent={(item) => repeatFoodMut.mutate(item)}
+                onSaveRecent={(item) => saveRecentMealMut.mutate(item)}
+                onLogRecipe={(recipe) => logRecipeMut.mutate(recipe)}
+                onAddToPlan={setPlanMealItem}
+                onRecommend={(item) => setFriendAction({ mode: "recommend", item })}
+                onAsk={(item) => setFriendAction({ mode: "ask", item })}
+                onOpenPlan={() => setActiveSection("plan")}
+                onOpenTargets={() => setActiveSection("targets")}
+                savingRecentId={savingRecentMealId}
+                loggingRecent={repeatFoodMut.isPending}
+                loggingRecipe={logRecipeMut.isPending}
+              />
+            }
           />
         </div>
       )}
