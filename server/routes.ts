@@ -2765,6 +2765,142 @@ Return exactly this structure:
   });
 
   // ── Recipes ────────────────────────────────────────────────────────────────
+  function textFromHtml(html: string) {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|li|div|h[1-6]|section|article)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, "\"")
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+  }
+
+  function pickRecipeJsonLd(node: any): any | null {
+    if (!node) return null;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = pickRecipeJsonLd(item);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (node["@graph"]) {
+      const found = pickRecipeJsonLd(node["@graph"]);
+      if (found) return found;
+    }
+    const type = node["@type"];
+    const types = Array.isArray(type) ? type : [type];
+    if (types.some((t: any) => String(t).toLowerCase() === "recipe")) return node;
+    return null;
+  }
+
+  function parseDurationMinutes(value: any): number | null {
+    if (!value) return null;
+    const text = String(value);
+    const iso = text.match(/PT(?:(\d+)H)?(?:(\d+)M)?/i);
+    if (iso) return (parseInt(iso[1] || "0") * 60) + parseInt(iso[2] || "0");
+    const minutes = text.match(/(\d+)\s*(?:minutes?|mins?|m)\b/i);
+    const hours = text.match(/(\d+)\s*(?:hours?|hrs?|h)\b/i);
+    const total = (hours ? parseInt(hours[1]) * 60 : 0) + (minutes ? parseInt(minutes[1]) : 0);
+    return total || null;
+  }
+
+  function parseIngredientLine(line: string): { name: string; qty: string } {
+    const clean = line.replace(/^[-•*·✓]\s*/, "").trim();
+    const match = clean.match(/^([\d\s½⅓¼⅔¾\/.]+(?:\s*(?:cups?|tbsps?|tbsp|tsps?|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|g\b|kg\b|ml\b|liters?|cans?|cloves?|slices?|bunches?|pinch(?:es)?|dash(?:es)?|sprigs?|packages?|pkgs?|sticks?))?\s+)(.+)$/i);
+    return match ? { qty: match[1].trim(), name: match[2].trim() } : { qty: "", name: clean };
+  }
+
+  function recipeInstructionsToText(value: any): string {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) {
+      return value.map((step) => {
+        if (typeof step === "string") return step;
+        if (Array.isArray(step.itemListElement)) return recipeInstructionsToText(step.itemListElement);
+        return step.text || step.name || "";
+      }).filter(Boolean).join("\n");
+    }
+    return value.text || value.name || "";
+  }
+
+  app.post("/api/recipes/import-url", async (req, res) => {
+    try {
+      const rawUrl = String(req.body?.url || "").trim();
+      if (!rawUrl) return res.status(400).json({ error: "url is required" });
+      const parsedUrl = new URL(rawUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) return res.status(400).json({ error: "Only http and https URLs are supported" });
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12_000);
+      const response = await fetch(parsedUrl.toString(), {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "MyLifos Recipe Importer/1.0",
+          Accept: "text/html,application/xhtml+xml",
+        },
+      });
+      clearTimeout(timer);
+      if (!response.ok) return res.status(502).json({ error: `Could not fetch recipe page (${response.status})` });
+      const html = await response.text();
+
+      let recipe: any | null = null;
+      const scripts = Array.from(html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi));
+      for (const script of scripts) {
+        try {
+          const json = JSON.parse(script[1].trim());
+          recipe = pickRecipeJsonLd(json);
+          if (recipe) break;
+        } catch {}
+      }
+
+      const titleFallback = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+      const imageFromRecipe = Array.isArray(recipe?.image) ? recipe.image[0] : recipe?.image;
+      const imageUrl = typeof imageFromRecipe === "string" ? imageFromRecipe : imageFromRecipe?.url;
+      const ingredients = Array.isArray(recipe?.recipeIngredient)
+        ? recipe.recipeIngredient.map((line: string) => parseIngredientLine(String(line))).filter((i: any) => i.name)
+        : [];
+      const instructions = recipeInstructionsToText(recipe?.recipeInstructions);
+
+      const text = textFromHtml(html);
+      const fallbackParsed = ingredients.length || instructions
+        ? null
+        : (() => {
+            const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+            const ingStart = lines.findIndex(l => /^ingredients?$/i.test(l));
+            const instStart = lines.findIndex(l => /^(instructions?|directions?|method)$/i.test(l));
+            const ingLines = ingStart >= 0 ? lines.slice(ingStart + 1, instStart > ingStart ? instStart : ingStart + 25) : [];
+            const instLines = instStart >= 0 ? lines.slice(instStart + 1, instStart + 20) : [];
+            return {
+              ingredients: ingLines.slice(0, 30).map(parseIngredientLine).filter(i => i.name),
+              instructions: instLines.join("\n"),
+            };
+          })();
+
+      res.json({
+        name: recipe?.name || titleFallback.replace(/\s*[-|]\s*.+$/, "") || parsedUrl.hostname,
+        description: recipe?.description || null,
+        category: Array.isArray(recipe?.recipeCategory) ? recipe.recipeCategory[0] : recipe?.recipeCategory || null,
+        prepTime: parseDurationMinutes(recipe?.prepTime),
+        cookTime: parseDurationMinutes(recipe?.cookTime),
+        servings: recipe?.recipeYield ? parseInt(Array.isArray(recipe.recipeYield) ? recipe.recipeYield[0] : recipe.recipeYield) || null : null,
+        imageUrl: imageUrl || null,
+        ingredients: ingredients.length ? ingredients : fallbackParsed?.ingredients ?? [],
+        instructions: instructions || fallbackParsed?.instructions || "",
+        source: parsedUrl.toString(),
+      });
+    } catch (e: any) {
+      if (e?.name === "AbortError") return res.status(504).json({ error: "Recipe page took too long to respond" });
+      handleError(res, e);
+    }
+  });
+
   app.get("/api/recipes", async (req, res) => {
     try {
       const uid = (req.user as User).id;

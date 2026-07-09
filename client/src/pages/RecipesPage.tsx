@@ -183,9 +183,12 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
   const [cookTime, setCookTime] = useState("");
   const [instructions, setInstructions] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([{ name: "", qty: "" }]);
   const [pasteText, setPasteText] = useState("");
   const [showPaste, setShowPaste] = useState(false);
+  const [showUrlImport, setShowUrlImport] = useState(false);
+  const [recipeUrl, setRecipeUrl] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -197,9 +200,10 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
       setCookTime(editRecipe?.cookTime?.toString() ?? "");
       setInstructions(editRecipe?.instructions ?? "");
       setImageUrl(editRecipe?.imageUrl ?? "");
+      setSourceUrl(editRecipe?.source ?? "");
       const ings = editRecipe ? parseIngredients(editRecipe.ingredientsJson) : [];
       setIngredients(ings.length > 0 ? ings : [{ name: "", qty: "" }]);
-      setPasteText(""); setShowPaste(false);
+      setPasteText(""); setShowPaste(false); setRecipeUrl(""); setShowUrlImport(false);
     }
   }, [open, editRecipe]);
 
@@ -211,6 +215,32 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
   const updateMut = useMutation({
     mutationFn: (d: Partial<InsertRecipe>) => apiRequest("PATCH", `/api/recipes/${editRecipe?.id}`, d),
     onSuccess: () => { inv(); toast({ title: "Recipe updated" }); onClose(); },
+  });
+  const importUrlMut = useMutation({
+    mutationFn: async (url: string) => {
+      const res = await apiRequest("POST", "/api/recipes/import-url", { url });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.name) setName(data.name);
+      if (data.category) setCategory(data.category);
+      if (data.prepTime != null) setPrepTime(String(data.prepTime));
+      if (data.cookTime != null) setCookTime(String(data.cookTime));
+      if (data.instructions) setInstructions(data.instructions);
+      if (data.imageUrl) setImageUrl(data.imageUrl);
+      if (data.source) setSourceUrl(data.source);
+      if (Array.isArray(data.ingredients) && data.ingredients.length > 0) setIngredients(data.ingredients);
+      setShowUrlImport(false);
+      toast({
+        title: "Recipe imported",
+        description: `${Array.isArray(data.ingredients) ? data.ingredients.length : 0} ingredients found`,
+      });
+    },
+    onError: (err) => toast({
+      title: "Could not import recipe",
+      description: err instanceof Error ? err.message : "Try pasting the recipe text instead.",
+      variant: "destructive",
+    }),
   });
 
   const addIngRow = () => setIngredients(p => [...p, { name: "", qty: "" }]);
@@ -230,6 +260,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
       instructions: instructions.trim() || null,
       ingredientsJson: JSON.stringify(ingredients.filter(i => i.name.trim())),
       imageUrl: imageUrl.trim() || null,
+      source: sourceUrl.trim() || null,
     };
     editRecipe ? updateMut.mutate(payload) : createMut.mutate(payload);
   };
@@ -242,6 +273,39 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Import from URL */}
+          <div className="rounded-xl border border-dashed bg-secondary/20 overflow-hidden">
+            <button type="button" onClick={() => setShowUrlImport(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              <span className="flex items-center gap-1.5"><ExternalLink size={14} /> Import recipe from URL</span>
+              <ChevronRight size={14} className={`transition-transform ${showUrlImport ? "rotate-90" : ""}`} />
+            </button>
+            {showUrlImport && (
+              <div className="px-3 pb-3 space-y-2 border-t">
+                <Input
+                  value={recipeUrl}
+                  onChange={e => setRecipeUrl(e.target.value)}
+                  placeholder="https://example.com/recipe"
+                  className="text-xs mt-2"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!recipeUrl.trim() || importUrlMut.isPending}
+                  onClick={() => importUrlMut.mutate(recipeUrl.trim())}
+                  className="gap-1.5"
+                >
+                  {importUrlMut.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {importUrlMut.isPending ? "Importing..." : "Import Recipe"}
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  Works best with recipe sites that include structured recipe data. You can edit anything before saving.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Paste & Parse */}
           <div className="rounded-xl border border-dashed bg-secondary/20 overflow-hidden">
             <button type="button" onClick={() => setShowPaste(v => !v)}
@@ -317,6 +381,11 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
               </div>
             )}
             <Input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Source URL <span className="text-muted-foreground text-xs">(opt)</span></Label>
+            <Input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://example.com/recipe" />
           </div>
 
           <div className="space-y-2">
