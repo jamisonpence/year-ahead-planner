@@ -1241,7 +1241,11 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   function finish() {
-    persistOnboardingSetup(persona, intentions, browseRecipes ? ["/recipes"] : []);
+    const extras = browseRecipes ? ["/recipes"] : [];
+    const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, extras);
+    // Optimistically update the cache so AppShell sees correct sidebar state immediately
+    qc.setQueryData(["/api/nav-prefs"], navPrefs);
+    persistOnboardingSetup(persona, intentions, extras);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
     navigate(browseRecipes ? "/recipes" : "/dashboard");
@@ -1249,6 +1253,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
   /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
   function finishImmediate(href: string) {
+    const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, []);
+    qc.setQueryData(["/api/nav-prefs"], navPrefs);
     persistOnboardingSetup(persona, intentions);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
