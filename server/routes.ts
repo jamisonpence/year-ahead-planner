@@ -2950,6 +2950,58 @@ Return exactly this structure:
     (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
+  // POST /api/recipes/apply-image-csv
+  // Accepts a CSV body with columns "Recipe" and "Image Address" (same format as
+  // the manual upload sheet) and bulk-updates image_url on system recipes.
+  app.post("/api/recipes/apply-image-csv", async (req, res) => {
+    try {
+      const { csvText } = req.body as { csvText: string };
+      if (!csvText) return res.status(400).json({ error: "csvText required" });
+
+      const lines = csvText.split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) return res.status(400).json({ error: "CSV has no data rows" });
+
+      // Parse header
+      const parseRow = (line: string) => {
+        const cols: string[] = [];
+        let cur = "", inQ = false;
+        for (const ch of line) {
+          if (ch === '"') { inQ = !inQ; continue; }
+          if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ""; continue; }
+          cur += ch;
+        }
+        cols.push(cur.trim());
+        return cols;
+      };
+
+      const headers = parseRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ''));
+      const nameIdx = headers.findIndex(h => h === 'recipe' || h === 'name');
+      const urlIdx  = headers.findIndex(h => h.includes('image') || h.includes('url'));
+      if (nameIdx === -1 || urlIdx === -1) {
+        return res.status(400).json({ error: "CSV must have 'Recipe' and 'Image Address' columns" });
+      }
+
+      let updated = 0, skipped = 0;
+      for (const line of lines.slice(1)) {
+        const cols = parseRow(line);
+        const name = cols[nameIdx]?.trim();
+        const url  = cols[urlIdx]?.trim();
+        if (!name || !url) { skipped++; continue; }
+        const result = await pool.query(
+          `UPDATE recipes SET image_url = $1 WHERE name = $2 AND user_id IS NULL`,
+          [url, name]
+        );
+        if ((result.rowCount ?? 0) > 0) updated++; else skipped++;
+      }
+
+      console.log(`[apply-image-csv] Updated ${updated} recipes, skipped ${skipped}.`);
+      res.json({ ok: true, updated, skipped });
+    } catch (err: any) {
+      console.error("[apply-image-csv] error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── USDA Nutrition search ────────────────────────────────────────────────────
   app.get("/api/nutrition/usda-search", requireAuth, async (req, res) => {
     try {
