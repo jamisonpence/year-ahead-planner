@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import PlantsPage from "@/pages/PlantsPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock, Check, X, Circle,
-  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users, Leaf,
+  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users, Leaf, Sparkles,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -236,6 +237,8 @@ function ChoresTab() {
   const [form, setForm] = useState({ ...EMPTY_CHORE });
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [collapsedTemplateGroups, setCollapsedTemplateGroups] = useState<Set<string>>(new Set(["Indoor Cleaning", "Safety and Supplies"]));
+  const [suggOpen, setSuggOpen] = useState(false);
+  const [suggSearch, setSuggSearch] = useState("");
 
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
@@ -402,115 +405,73 @@ function ChoresTab() {
             </Select>
           )}
         </div>
-        <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Chore</Button>
-      </div>
-
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b bg-secondary/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-sm flex items-center gap-2"><Home size={15} /> Suggested Home Chores</h3>
-            <p className="text-xs text-muted-foreground">Add common household maintenance and recurring chores with one tap.</p>
-          </div>
-          <span className="text-xs text-muted-foreground">{HOUSEHOLD_CHORE_TEMPLATES.reduce((sum, group) => sum + group.templates.length, 0)} templates</span>
-        </div>
-        <div className="divide-y">
-          {HOUSEHOLD_CHORE_TEMPLATES.map((group) => {
-            const isCollapsed = collapsedTemplateGroups.has(group.group);
-            const remaining = group.templates.filter((template) => !choreExists(template.title)).length;
-            return (
-              <div key={group.group}>
-                <button
-                  type="button"
-                  onClick={() => toggleTemplateGroup(group.group)}
-                  className="w-full flex items-center gap-2 text-left px-4 py-3 hover:bg-secondary/40 transition-colors"
-                >
-                  {isCollapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{group.group}</p>
-                    <p className="text-xs text-muted-foreground">{group.description}</p>
-                  </div>
-                  <Badge variant="secondary" className="text-xs shrink-0">{remaining} left</Badge>
-                </button>
-                {!isCollapsed && (
-                  <div className="px-4 pb-4 space-y-3">
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addTemplateGroup(group)}
-                        disabled={remaining === 0}
-                      >
-                        <Plus size={13} className="mr-1" />Add Group
-                      </Button>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-2">
-                      {group.templates.map((template) => {
+        <div className="flex items-center gap-2">
+          <Popover open={suggOpen} onOpenChange={(o) => { setSuggOpen(o); if (!o) setSuggSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <Sparkles size={13} />Suggested
+                <ChevronDown size={11} className="text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="p-2 border-b">
+                <input
+                  autoFocus
+                  value={suggSearch}
+                  onChange={e => setSuggSearch(e.target.value)}
+                  placeholder="Search templates…"
+                  className="w-full text-sm px-2 py-1.5 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {(() => {
+                  const q = suggSearch.toLowerCase();
+                  const allTemplates = [
+                    ...HOUSEHOLD_CHORE_TEMPLATES.flatMap(g => g.templates.map(t => ({ ...t, group: g.group }))),
+                    ...APPLIANCE_CHORE_TEMPLATES.map(t => ({ ...t, group: "Appliances" })),
+                  ].filter(t => !q || t.title.toLowerCase().includes(q) || (t.group || "").toLowerCase().includes(q));
+                  if (allTemplates.length === 0) return (
+                    <p className="text-sm text-muted-foreground text-center py-6">No templates match</p>
+                  );
+                  // Group by section
+                  const groups = allTemplates.reduce<Record<string, typeof allTemplates>>((acc, t) => {
+                    const g = t.group || "Other";
+                    (acc[g] ??= []).push(t);
+                    return acc;
+                  }, {});
+                  return Object.entries(groups).map(([groupName, templates]) => (
+                    <div key={groupName}>
+                      <div className="px-3 pt-2 pb-1">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupName}</span>
+                      </div>
+                      {templates.map(template => {
                         const exists = choreExists(template.title);
                         return (
-                          <div key={template.title} className={`rounded-lg border p-3 bg-background ${exists ? "opacity-60" : ""}`}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium">{template.title}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">{frequencyLabel(template.frequency, template.customFrequencyDays)} · {CHORE_CATEGORIES.find((c) => c.value === template.category)?.label}</p>
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={exists ? "ghost" : "outline"}
-                                className="h-7 shrink-0"
-                                onClick={() => addTemplate(template)}
-                                disabled={exists || templateMut.isPending}
-                              >
-                                {exists ? <Check size={13} /> : <Plus size={13} />}
-                              </Button>
+                          <div key={template.title} className={`flex items-center justify-between px-3 py-2 hover:bg-accent/40 transition-colors ${exists ? "opacity-50" : ""}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm truncate">{template.title}</p>
+                              <p className="text-xs text-muted-foreground">{frequencyLabel(template.frequency, template.customFrequencyDays)}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{template.notes}</p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={exists ? "ghost" : "outline"}
+                              className="h-7 shrink-0 ml-2"
+                              onClick={() => addTemplate(template)}
+                              disabled={exists || templateMut.isPending}
+                            >
+                              {exists ? <Check size={13} /> : <Plus size={13} />}
+                            </Button>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                  ));
+                })()}
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b bg-secondary/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-sm flex items-center gap-2"><Package size={15} /> Appliance Maintenance Templates</h3>
-            <p className="text-xs text-muted-foreground">Quickly add common appliance care tasks, then link them to a specific appliance if needed.</p>
-          </div>
-          <Badge variant="secondary" className="w-fit">{APPLIANCE_CHORE_TEMPLATES.filter((template) => !choreExists(template.title)).length} available</Badge>
-        </div>
-        <div className="p-4 grid md:grid-cols-2 xl:grid-cols-3 gap-2">
-          {APPLIANCE_CHORE_TEMPLATES.map((template) => {
-            const exists = choreExists(template.title);
-            return (
-              <div key={template.title} className={`rounded-lg border p-3 bg-background ${exists ? "opacity-60" : ""}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{template.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{frequencyLabel(template.frequency, template.customFrequencyDays)}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={exists ? "ghost" : "outline"}
-                    className="h-7 shrink-0"
-                    onClick={() => addTemplate(template)}
-                    disabled={exists || templateMut.isPending}
-                  >
-                    {exists ? <Check size={13} /> : <Plus size={13} />}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{template.notes}</p>
-              </div>
-            );
-          })}
+            </PopoverContent>
+          </Popover>
+          <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Chore</Button>
         </div>
       </div>
 
