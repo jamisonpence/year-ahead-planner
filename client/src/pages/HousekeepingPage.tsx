@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Home, Plus, Pencil, Trash2, Search, CheckCircle2, Clock, Check, X, Circle,
-  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, Users, Leaf, Sparkles,
+  AlertTriangle, Wrench, RefreshCw, Package, Tag, ChevronDown, ChevronRight, ChevronLeft, Users, Leaf, Sparkles,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -222,197 +222,241 @@ const APPLIANCE_CHORE_TEMPLATES: ChoreTemplate[] = [
   { title: "Replace air purifier filter", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Air Purifier, Filter", notes: "Replace filter based on indicator or manufacturer schedule." },
 ];
 
-const SUGGESTED_APPLIANCES: { group: string; items: { name: string; location: string; tags: string }[] }[] = [
+type SuggestedChore = { title: string; category: string; frequency: string; customFrequencyDays?: number; priority: "low" | "medium" | "high"; tags: string; notes: string; };
+type SuggestedApplianceItem = { name: string; location: string; tags: string; chores: SuggestedChore[]; };
+
+const SUGGESTED_APPLIANCES: { group: string; items: SuggestedApplianceItem[] }[] = [
   {
     group: "Kitchen",
     items: [
-      { name: "Refrigerator", location: "kitchen", tags: "Kitchen, Cooling" },
-      { name: "Dishwasher", location: "kitchen", tags: "Kitchen, Cleaning" },
-      { name: "Range / Oven", location: "kitchen", tags: "Kitchen, Cooking" },
-      { name: "Cooktop (Induction)", location: "kitchen", tags: "Kitchen, Cooking" },
-      { name: "Microwave", location: "kitchen", tags: "Kitchen, Cooking" },
-      { name: "Range Hood", location: "kitchen", tags: "Kitchen, Ventilation" },
-      { name: "Wall Oven", location: "kitchen", tags: "Kitchen, Cooking" },
-      { name: "Coffee Maker", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Espresso Machine", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Toaster Oven", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Toaster", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Blender", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Food Processor", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Stand Mixer", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Instant Pot / Pressure Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Air Fryer", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Slow Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Electric Kettle", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Rice Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Waffle Maker", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Indoor Grill / Griddle", location: "kitchen", tags: "Kitchen, Small Appliance" },
-      { name: "Garbage Disposal", location: "kitchen", tags: "Kitchen, Plumbing" },
-      { name: "Wine Cooler / Beverage Fridge", location: "kitchen", tags: "Kitchen, Cooling" },
-      { name: "Ice Maker (Countertop)", location: "kitchen", tags: "Kitchen, Cooling" },
+      {
+        name: "Refrigerator", location: "kitchen", tags: "Kitchen, Cooling",
+        chores: [
+          { title: "Vacuum refrigerator coils", category: "maintenance", frequency: "biweekly", priority: "medium", tags: "Appliance, Refrigerator, Kitchen", notes: "Vacuum coils underneath or behind and clear dust around the unit for better efficiency." },
+          { title: "Replace refrigerator water filter", category: "maintenance", frequency: "custom", customFrequencyDays: 180, priority: "medium", tags: "Appliance, Refrigerator, Filter", notes: "Replace filter and reset the indicator light if your fridge has one." },
+          { title: "Clean refrigerator door gaskets", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Refrigerator, Kitchen", notes: "Wipe door seals with warm soapy water to prevent mold and maintain a tight seal." },
+        ],
+      },
+      {
+        name: "Dishwasher", location: "kitchen", tags: "Kitchen, Cleaning",
+        chores: [
+          { title: "Clean dishwasher filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Dishwasher, Kitchen", notes: "Remove and rinse the filter under running water. Wipe the door gasket and run a cleaning cycle." },
+          { title: "Run dishwasher cleaning cycle", category: "maintenance", frequency: "monthly", priority: "low", tags: "Appliance, Dishwasher, Kitchen", notes: "Use a dishwasher cleaner tablet or run a hot cycle with a cup of white vinegar on the top rack." },
+        ],
+      },
+      {
+        name: "Range / Oven", location: "kitchen", tags: "Kitchen, Cooking",
+        chores: [
+          { title: "Clean oven interior", category: "cleaning", frequency: "quarterly", priority: "low", tags: "Appliance, Oven, Kitchen", notes: "Remove racks, clean spills and grease, run self-clean cycle only when appropriate." },
+          { title: "Clean oven door glass", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Oven, Kitchen", notes: "Wipe interior and exterior glass with appropriate cleaner to maintain visibility." },
+          { title: "Clean stovetop burners and drip pans", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Oven, Kitchen", notes: "Remove grates or burner caps and soak in soapy water. Scrub and replace when dry." },
+        ],
+      },
+      {
+        name: "Range Hood", location: "kitchen", tags: "Kitchen, Ventilation",
+        chores: [
+          { title: "Clean range hood filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Range Hood, Kitchen", notes: "Degrease metal mesh filters in the dishwasher or with hot soapy water. Replace charcoal filters as needed." },
+        ],
+      },
+      {
+        name: "Microwave", location: "kitchen", tags: "Kitchen, Cooking",
+        chores: [
+          { title: "Clean microwave interior and vent", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Microwave, Kitchen", notes: "Steam-clean interior by microwaving water with lemon, wipe turntable, and clear vent area." },
+        ],
+      },
+      {
+        name: "Coffee Maker", location: "kitchen", tags: "Kitchen, Small Appliance",
+        chores: [
+          { title: "Descale coffee maker", category: "maintenance", frequency: "monthly", priority: "low", tags: "Appliance, Coffee, Kitchen", notes: "Run a descaling solution or white vinegar cycle according to manufacturer guidance to remove mineral buildup." },
+          { title: "Clean coffee maker carafe and basket", category: "cleaning", frequency: "weekly", priority: "low", tags: "Appliance, Coffee, Kitchen", notes: "Wash carafe, basket, and lid with warm soapy water to prevent coffee residue and bacteria." },
+        ],
+      },
+      {
+        name: "Garbage Disposal", location: "kitchen", tags: "Kitchen, Plumbing",
+        chores: [
+          { title: "Clean and deodorize garbage disposal", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Garbage Disposal, Kitchen", notes: "Run ice cubes and rock salt to clean blades, then flush with baking soda and vinegar to deodorize." },
+          { title: "Inspect garbage disposal for leaks", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Garbage Disposal, Plumbing", notes: "Check under the sink for drips from the disposal body, reset button, and drain connections." },
+        ],
+      },
     ],
   },
   {
     group: "Laundry",
     items: [
-      { name: "Washing Machine", location: "laundry", tags: "Laundry" },
-      { name: "Dryer", location: "laundry", tags: "Laundry" },
-      { name: "Washer-Dryer Combo", location: "laundry", tags: "Laundry" },
-      { name: "Iron", location: "laundry", tags: "Laundry, Small Appliance" },
-      { name: "Garment Steamer", location: "laundry", tags: "Laundry, Small Appliance" },
-      { name: "Clothes Drying Rack (Heated)", location: "laundry", tags: "Laundry, Small Appliance" },
+      {
+        name: "Washing Machine", location: "laundry", tags: "Laundry",
+        chores: [
+          { title: "Clean washing machine gasket and run clean cycle", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Washer, Laundry", notes: "Wipe the door gasket and drum interior, leave door open to dry, and run the tub-clean cycle." },
+          { title: "Clean washing machine detergent drawer", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Washer, Laundry", notes: "Remove and rinse the detergent dispenser drawer to prevent mold and soap buildup." },
+          { title: "Inspect washing machine hoses for cracks", category: "maintenance", frequency: "yearly", priority: "high", tags: "Appliance, Washer, Laundry, Plumbing", notes: "Check hot and cold supply hoses for bulges, cracks, or leaks. Replace every 5 years or sooner if worn." },
+        ],
+      },
+      {
+        name: "Dryer", location: "laundry", tags: "Laundry",
+        chores: [
+          { title: "Clean dryer lint trap and duct", category: "maintenance", frequency: "quarterly", priority: "high", tags: "Appliance, Dryer, Fire Safety", notes: "Clean lint screen after every use. Clear the full vent duct and exterior vent flap quarterly to reduce fire risk." },
+          { title: "Inspect dryer vent for blockages", category: "maintenance", frequency: "yearly", priority: "high", tags: "Appliance, Dryer, Fire Safety", notes: "Use a vent brush to clear the full duct run and confirm exhaust exits freely at the exterior vent cap." },
+        ],
+      },
     ],
   },
   {
     group: "HVAC & Climate",
     items: [
-      { name: "HVAC System", location: "other", tags: "HVAC, Climate" },
-      { name: "Furnace", location: "other", tags: "HVAC, Heating" },
-      { name: "Central Air Conditioner", location: "other", tags: "HVAC, Cooling" },
-      { name: "Heat Pump", location: "other", tags: "HVAC, Climate" },
-      { name: "Boiler", location: "other", tags: "HVAC, Heating" },
-      { name: "Water Heater (Tank)", location: "other", tags: "HVAC, Plumbing" },
-      { name: "Tankless Water Heater", location: "other", tags: "HVAC, Plumbing" },
-      { name: "Heat Pump Water Heater", location: "other", tags: "HVAC, Plumbing" },
-      { name: "Whole-House Humidifier", location: "other", tags: "HVAC, Climate" },
-      { name: "Whole-House Dehumidifier", location: "other", tags: "HVAC, Climate" },
-      { name: "Air Purifier", location: "living_room", tags: "Climate, Air Quality" },
-      { name: "Portable Air Conditioner", location: "bedroom", tags: "Cooling, Climate" },
-      { name: "Window AC Unit", location: "bedroom", tags: "Cooling, Climate" },
-      { name: "Ceiling Fan", location: "living_room", tags: "Climate, Electrical" },
-      { name: "Electric Fireplace", location: "living_room", tags: "Heating, Climate" },
-      { name: "Space Heater", location: "bedroom", tags: "Heating, Small Appliance" },
-      { name: "Attic Fan", location: "other", tags: "HVAC, Ventilation" },
-      { name: "ERV / HRV Ventilator", location: "other", tags: "HVAC, Ventilation" },
+      {
+        name: "HVAC System", location: "other", tags: "HVAC, Climate",
+        chores: [
+          { title: "Replace HVAC air filter", category: "maintenance", frequency: "monthly", priority: "high", tags: "HVAC, Filter, Air Quality", notes: "Replace 1-inch filters monthly; thicker media filters every 3–6 months. Check manufacturer's recommendation." },
+          { title: "Schedule HVAC annual tune-up", category: "maintenance", frequency: "yearly", priority: "high", tags: "HVAC, Climate", notes: "Have a technician inspect and service the full system — check refrigerant, coils, belts, and electrical connections." },
+          { title: "Clear debris from outdoor HVAC unit", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "HVAC, Outdoor", notes: "Remove leaves, grass clippings, and dirt from around the condenser unit. Keep at least 2 feet clear on all sides." },
+        ],
+      },
+      {
+        name: "Furnace", location: "other", tags: "HVAC, Heating",
+        chores: [
+          { title: "Replace furnace air filter", category: "maintenance", frequency: "monthly", priority: "high", tags: "HVAC, Furnace, Filter", notes: "A clogged filter strains the blower and reduces efficiency. Replace standard 1-inch filters monthly." },
+          { title: "Schedule furnace annual inspection", category: "maintenance", frequency: "yearly", priority: "high", tags: "HVAC, Furnace, Safety", notes: "Have a technician check burners, heat exchanger, flue, and CO levels before heating season." },
+          { title: "Inspect furnace flue pipe", category: "maintenance", frequency: "yearly", priority: "high", tags: "HVAC, Furnace, Safety", notes: "Check the flue pipe for corrosion, gaps, or obstructions that could allow CO to enter the home." },
+        ],
+      },
+      {
+        name: "Central Air Conditioner", location: "other", tags: "HVAC, Cooling",
+        chores: [
+          { title: "Clean AC condenser coils", category: "maintenance", frequency: "yearly", priority: "medium", tags: "HVAC, AC, Cooling", notes: "Rinse outdoor condenser coils with a garden hose (no pressure washer). Remove built-up dirt and debris." },
+          { title: "Clear AC condensate drain line", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "HVAC, AC, Plumbing", notes: "Flush the condensate drain with diluted bleach or vinegar to prevent algae clogs and water damage." },
+          { title: "Schedule AC annual service", category: "maintenance", frequency: "yearly", priority: "high", tags: "HVAC, AC, Cooling", notes: "Have a technician check refrigerant levels, electrical connections, and overall system performance before summer." },
+        ],
+      },
+      {
+        name: "Water Heater", location: "other", tags: "HVAC, Plumbing",
+        chores: [
+          { title: "Flush water heater sediment", category: "maintenance", frequency: "yearly", priority: "medium", tags: "HVAC, Water Heater, Plumbing", notes: "Attach a hose to the drain valve and flush until water runs clear to remove mineral sediment buildup." },
+          { title: "Test water heater pressure relief valve", category: "maintenance", frequency: "yearly", priority: "high", tags: "HVAC, Water Heater, Safety", notes: "Lift the T&P relief valve lever briefly to verify it opens and snaps shut. Replace if it drips afterward." },
+          { title: "Inspect water heater anode rod", category: "maintenance", frequency: "custom", customFrequencyDays: 730, priority: "medium", tags: "HVAC, Water Heater, Plumbing", notes: "Check the sacrificial anode rod every 2–3 years and replace when more than half depleted to extend tank life." },
+        ],
+      },
+      {
+        name: "Whole-House Humidifier", location: "other", tags: "HVAC, Climate",
+        chores: [
+          { title: "Change humidifier water panel / filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Humidifier, Filter", notes: "Replace the water panel or evaporator pad each heating season, or more often if water is hard." },
+          { title: "Clean humidifier reservoir and distribute tray", category: "cleaning", frequency: "monthly", priority: "medium", tags: "Appliance, Humidifier", notes: "Disinfect the reservoir and tray with diluted bleach to prevent mold and bacterial growth." },
+        ],
+      },
+      {
+        name: "Dehumidifier", location: "other", tags: "HVAC, Climate",
+        chores: [
+          { title: "Clean dehumidifier filter and bucket", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Dehumidifier", notes: "Rinse the air filter, clean the water collection bucket, and check the drain hose if attached." },
+        ],
+      },
+      {
+        name: "Air Purifier", location: "living_room", tags: "Climate, Air Quality",
+        chores: [
+          { title: "Replace air purifier HEPA filter", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Air Purifier, Filter", notes: "Replace HEPA and carbon filters based on the indicator light or manufacturer's schedule (typically every 6–12 months)." },
+          { title: "Clean air purifier pre-filter", category: "maintenance", frequency: "monthly", priority: "low", tags: "Appliance, Air Purifier, Filter", notes: "Vacuum or rinse the washable pre-filter monthly to extend the life of the main HEPA filter." },
+        ],
+      },
     ],
   },
   {
     group: "Bathroom",
     items: [
-      { name: "Electric Toothbrush", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Water Flosser", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Hair Dryer", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Hair Straightener", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Curling Iron", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Electric Shaver / Razor", location: "bathroom", tags: "Bathroom, Personal Care" },
-      { name: "Exhaust Fan", location: "bathroom", tags: "Bathroom, Ventilation" },
-      { name: "Heated Towel Rack", location: "bathroom", tags: "Bathroom, Heating" },
-      { name: "Bidet Seat", location: "bathroom", tags: "Bathroom, Plumbing" },
-      { name: "Bathroom Heater / Heat Lamp", location: "bathroom", tags: "Bathroom, Heating" },
+      {
+        name: "Bathroom Exhaust Fan", location: "bathroom", tags: "Bathroom, Ventilation",
+        chores: [
+          { title: "Clean bathroom exhaust fan cover and blades", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Exhaust Fan, Bathroom", notes: "Remove the cover, vacuum dust from blades and motor, and wipe the cover before reinstalling. A clogged fan strains the motor and increases fire risk." },
+        ],
+      },
     ],
   },
   {
-    group: "Garage & Workshop",
+    group: "Garage & Utility",
     items: [
-      { name: "Garage Door Opener", location: "garage", tags: "Garage, Safety" },
-      { name: "Chest Freezer", location: "garage", tags: "Garage, Cooling" },
-      { name: "Air Compressor", location: "garage", tags: "Garage, Tools" },
-      { name: "Shop Vac / Wet-Dry Vacuum", location: "garage", tags: "Garage, Cleaning" },
-      { name: "EV Charger (Level 2)", location: "garage", tags: "Garage, Electrical, EV" },
-      { name: "Generator (Portable)", location: "garage", tags: "Garage, Electrical, Emergency" },
-      { name: "Standby Generator", location: "other", tags: "Electrical, Emergency" },
-      { name: "Sump Pump", location: "other", tags: "Plumbing, Safety" },
-      { name: "Battery Backup Sump Pump", location: "other", tags: "Plumbing, Safety, Emergency" },
-      { name: "Table Saw", location: "garage", tags: "Garage, Tools" },
-      { name: "Miter Saw", location: "garage", tags: "Garage, Tools" },
-      { name: "Band Saw", location: "garage", tags: "Garage, Tools" },
-      { name: "Drill Press", location: "garage", tags: "Garage, Tools" },
-      { name: "Belt Sander", location: "garage", tags: "Garage, Tools" },
-      { name: "Angle Grinder", location: "garage", tags: "Garage, Tools" },
-      { name: "Welder", location: "garage", tags: "Garage, Tools" },
-      { name: "Work Light / LED Shop Light", location: "garage", tags: "Garage, Electrical" },
+      {
+        name: "Garage Door Opener", location: "garage", tags: "Garage, Safety",
+        chores: [
+          { title: "Lubricate garage door springs, rollers, and tracks", category: "maintenance", frequency: "biweekly", priority: "medium", tags: "Appliance, Garage Door, Garage", notes: "Apply garage door lubricant (not WD-40) to springs, rollers, hinges, and tracks. Avoid the rubber weather seal." },
+          { title: "Test garage door auto-reverse safety sensors", category: "maintenance", frequency: "monthly", priority: "high", tags: "Appliance, Garage Door, Safety", notes: "Place a 2x4 flat on the ground in the door's path. The door should reverse immediately upon contact." },
+        ],
+      },
+      {
+        name: "Sump Pump", location: "other", tags: "Plumbing, Safety",
+        chores: [
+          { title: "Test and clean sump pump", category: "maintenance", frequency: "quarterly", priority: "high", tags: "Appliance, Sump Pump, Plumbing", notes: "Pour water into the pit to confirm the pump activates and discharges properly. Remove debris from the pit and check the float switch." },
+          { title: "Inspect sump pump discharge line", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Appliance, Sump Pump, Plumbing", notes: "Verify the discharge pipe is clear, routed away from the foundation, and the check valve is functioning." },
+        ],
+      },
+      {
+        name: "Generator", location: "garage", tags: "Garage, Electrical, Emergency",
+        chores: [
+          { title: "Run generator monthly test", category: "maintenance", frequency: "monthly", priority: "high", tags: "Appliance, Generator, Emergency", notes: "Run the generator under load for 20–30 minutes monthly to keep the engine lubricated and battery charged." },
+          { title: "Change generator oil and air filter", category: "maintenance", frequency: "yearly", priority: "high", tags: "Appliance, Generator, Maintenance", notes: "Change oil and inspect or replace the air filter annually or after every 100 hours of use per manufacturer guidance." },
+          { title: "Stabilize or replace generator fuel", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Generator, Emergency", notes: "Add fuel stabilizer to stored gasoline or run the carburetor dry if storing for more than 30 days to prevent gumming." },
+        ],
+      },
+      {
+        name: "EV Charger (Level 2)", location: "garage", tags: "Garage, Electrical, EV",
+        chores: [
+          { title: "Inspect EV charger cable and connector", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Appliance, EV Charger, Garage", notes: "Check the charging cable for fraying, kinks, or damage. Inspect the connector pins and housing for corrosion." },
+          { title: "Clean EV charger connector and port", category: "cleaning", frequency: "quarterly", priority: "low", tags: "Appliance, EV Charger, Garage", notes: "Wipe the connector contacts with a dry cloth. Keep the connector holstered or covered when not in use." },
+        ],
+      },
     ],
   },
   {
     group: "Outdoor",
     items: [
-      { name: "Lawn Mower (Gas)", location: "garage", tags: "Outdoor, Yard" },
-      { name: "Lawn Mower (Electric)", location: "garage", tags: "Outdoor, Yard" },
-      { name: "Riding Lawn Mower", location: "garage", tags: "Outdoor, Yard" },
-      { name: "Robot Lawn Mower", location: "garage", tags: "Outdoor, Yard, Smart Home" },
-      { name: "Leaf Blower", location: "garage", tags: "Outdoor, Yard" },
-      { name: "String Trimmer / Weed Whacker", location: "garage", tags: "Outdoor, Yard" },
-      { name: "Chainsaw", location: "garage", tags: "Outdoor, Yard, Tools" },
-      { name: "Hedge Trimmer", location: "garage", tags: "Outdoor, Yard" },
-      { name: "Pressure Washer", location: "garage", tags: "Outdoor, Cleaning" },
-      { name: "Gas Grill", location: "other", tags: "Outdoor, Cooking" },
-      { name: "Electric Grill", location: "other", tags: "Outdoor, Cooking" },
-      { name: "Pellet Grill / Smoker", location: "other", tags: "Outdoor, Cooking" },
-      { name: "Outdoor Pizza Oven", location: "other", tags: "Outdoor, Cooking" },
-      { name: "Irrigation / Sprinkler Controller", location: "other", tags: "Outdoor, Yard, Irrigation" },
-      { name: "Hot Tub / Spa", location: "other", tags: "Outdoor, Plumbing" },
-      { name: "Pool Pump", location: "other", tags: "Outdoor, Pool, Plumbing" },
-      { name: "Pool Heater", location: "other", tags: "Outdoor, Pool, Heating" },
-      { name: "Pool Robot / Cleaner", location: "other", tags: "Outdoor, Pool" },
-      { name: "Outdoor Lighting (Smart)", location: "other", tags: "Outdoor, Smart Home, Electrical" },
+      {
+        name: "Lawn Mower", location: "garage", tags: "Outdoor, Yard",
+        chores: [
+          { title: "Sharpen lawn mower blade", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Appliance, Lawn Mower, Yard", notes: "Sharpen or replace the blade at the start of each mowing season for a clean cut and healthier lawn." },
+          { title: "Change lawn mower oil and air filter", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Appliance, Lawn Mower, Yard", notes: "Change engine oil and inspect/replace the air filter and spark plug annually per manufacturer guidance." },
+          { title: "Clean lawn mower undercarriage", category: "cleaning", frequency: "monthly", priority: "low", tags: "Appliance, Lawn Mower, Yard", notes: "Scrape grass clippings from the deck undercarriage to prevent corrosion and ensure proper airflow." },
+        ],
+      },
+      {
+        name: "Gas Grill", location: "other", tags: "Outdoor, Cooking",
+        chores: [
+          { title: "Clean gas grill grates", category: "cleaning", frequency: "monthly", priority: "medium", tags: "Appliance, Gas Grill, Outdoor", notes: "Preheat grill on high, brush grates, then scrub with a grill brush. Oil grates lightly after cleaning." },
+          { title: "Clean gas grill burners and grease tray", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Gas Grill, Outdoor", notes: "Remove and clean burner tubes with a wire brush, clear any clogged ports, and empty and clean the grease collection tray." },
+          { title: "Inspect gas grill connections and hose", category: "maintenance", frequency: "yearly", priority: "high", tags: "Appliance, Gas Grill, Safety", notes: "Apply soapy water to all gas connections and the hose while the gas is on. Bubbles indicate a leak — replace the hose immediately." },
+        ],
+      },
+      {
+        name: "Pool Pump", location: "other", tags: "Outdoor, Pool, Plumbing",
+        chores: [
+          { title: "Clean pool pump strainer basket", category: "maintenance", frequency: "weekly", priority: "medium", tags: "Appliance, Pool Pump, Pool", notes: "Turn off the pump, remove the strainer basket lid, empty debris, and reinstall. A clogged basket strains the motor." },
+          { title: "Backwash or clean pool filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Pool Pump, Pool", notes: "Backwash sand/DE filters when pressure rises 8–10 PSI above clean baseline. Rinse cartridge filters with a hose." },
+          { title: "Schedule pool pump annual inspection", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Appliance, Pool Pump, Pool", notes: "Have a technician inspect pump motor, seals, and impeller. Check for leaks at all fittings and unions." },
+        ],
+      },
+      {
+        name: "Hot Tub / Spa", location: "other", tags: "Outdoor, Plumbing",
+        chores: [
+          { title: "Test hot tub water chemistry", category: "maintenance", frequency: "weekly", priority: "high", tags: "Appliance, Hot Tub, Pool", notes: "Test pH (7.4–7.6), alkalinity (80–120 ppm), and sanitizer levels. Adjust as needed to prevent scaling and bacteria." },
+          { title: "Clean hot tub filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Hot Tub, Filter", notes: "Rinse filter cartridge with a hose. Deep clean with a filter cleaner solution quarterly." },
+          { title: "Drain and refill hot tub", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Hot Tub, Pool", notes: "Drain, clean the shell with a spa surface cleaner, and refill with fresh water every 3–4 months." },
+        ],
+      },
     ],
   },
   {
-    group: "Entertainment & AV",
+    group: "Vacuums",
     items: [
-      { name: "Smart TV", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Soundbar", location: "living_room", tags: "Entertainment, AV" },
-      { name: "AV Receiver / Home Theater", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Projector", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Projector Screen (Motorized)", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Gaming Console", location: "living_room", tags: "Entertainment, Gaming" },
-      { name: "Streaming Media Player", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Subwoofer", location: "living_room", tags: "Entertainment, AV" },
-      { name: "Turntable / Record Player", location: "living_room", tags: "Entertainment, AV" },
-      { name: "TV in Bedroom", location: "bedroom", tags: "Entertainment, AV, Bedroom" },
-      { name: "Network-Attached Storage (NAS)", location: "other", tags: "Tech, Storage, Networking" },
-    ],
-  },
-  {
-    group: "Smart Home & Security",
-    items: [
-      { name: "Smart Thermostat", location: "living_room", tags: "Smart Home, Climate" },
-      { name: "Wi-Fi Router", location: "other", tags: "Smart Home, Networking" },
-      { name: "Wi-Fi Mesh System", location: "other", tags: "Smart Home, Networking" },
-      { name: "Network Switch", location: "other", tags: "Smart Home, Networking" },
-      { name: "Smart Doorbell / Video Doorbell", location: "other", tags: "Smart Home, Security" },
-      { name: "Smart Lock", location: "other", tags: "Smart Home, Security" },
-      { name: "Security System / Alarm Panel", location: "other", tags: "Smart Home, Security" },
-      { name: "Indoor Security Camera", location: "other", tags: "Smart Home, Security" },
-      { name: "Outdoor Security Camera", location: "other", tags: "Outdoor, Smart Home, Security" },
-      { name: "Smart Hub / Home Controller", location: "living_room", tags: "Smart Home" },
-      { name: "Smart Speaker (Echo / Google Home)", location: "living_room", tags: "Smart Home, Entertainment" },
-      { name: "Smoke & CO Detector (Smart)", location: "other", tags: "Smart Home, Safety" },
-      { name: "Smart Garage Door Controller", location: "garage", tags: "Smart Home, Garage" },
-      { name: "Smart Irrigation Controller", location: "other", tags: "Smart Home, Outdoor, Irrigation" },
-      { name: "Smart Lighting Hub", location: "other", tags: "Smart Home, Electrical" },
-      { name: "Home Battery Backup (Powerwall)", location: "garage", tags: "Smart Home, Electrical, Emergency" },
-      { name: "Solar Panel System", location: "other", tags: "Smart Home, Electrical, Solar" },
-    ],
-  },
-  {
-    group: "Home Office",
-    items: [
-      { name: "Desktop Computer", location: "other", tags: "Office, Tech" },
-      { name: "Laptop", location: "other", tags: "Office, Tech" },
-      { name: "Monitor", location: "other", tags: "Office, Tech" },
-      { name: "Printer / Scanner", location: "other", tags: "Office, Tech" },
-      { name: "All-in-One Printer", location: "other", tags: "Office, Tech" },
-      { name: "UPS / Battery Backup", location: "other", tags: "Office, Electrical" },
-      { name: "Shredder", location: "other", tags: "Office, Small Appliance" },
-      { name: "Label Maker", location: "other", tags: "Office, Small Appliance" },
-      { name: "Desk Fan", location: "other", tags: "Office, Climate" },
-    ],
-  },
-  {
-    group: "Vacuum & Floor Care",
-    items: [
-      { name: "Upright Vacuum", location: "other", tags: "Cleaning, Vacuum" },
-      { name: "Canister Vacuum", location: "other", tags: "Cleaning, Vacuum" },
-      { name: "Robot Vacuum", location: "living_room", tags: "Cleaning, Smart Home, Vacuum" },
-      { name: "Robot Mop", location: "living_room", tags: "Cleaning, Smart Home, Floor" },
-      { name: "Robot Vacuum + Mop Combo", location: "living_room", tags: "Cleaning, Smart Home, Vacuum" },
-      { name: "Handheld Vacuum", location: "other", tags: "Cleaning, Vacuum" },
-      { name: "Cordless Stick Vacuum", location: "other", tags: "Cleaning, Vacuum" },
-      { name: "Carpet Cleaner / Extractor", location: "other", tags: "Cleaning, Carpet" },
-      { name: "Steam Mop", location: "other", tags: "Cleaning, Floor" },
-      { name: "Window Vac", location: "other", tags: "Cleaning, Vacuum" },
-      { name: "Central Vacuum System", location: "other", tags: "Cleaning, Vacuum" },
+      {
+        name: "Robot Vacuum", location: "living_room", tags: "Cleaning, Smart Home, Vacuum",
+        chores: [
+          { title: "Empty robot vacuum dustbin", category: "cleaning", frequency: "weekly", priority: "medium", tags: "Appliance, Robot Vacuum, Cleaning", notes: "Empty the dustbin after each run or at least weekly to maintain suction and prevent motor strain." },
+          { title: "Clean robot vacuum brushes and sensors", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Robot Vacuum, Cleaning", notes: "Remove hair and debris from the main brush roll and side brushes. Wipe cliff and bump sensors with a dry cloth." },
+          { title: "Replace robot vacuum filter", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Robot Vacuum, Filter", notes: "Replace the HEPA filter every 2–3 months (or more often in pet homes) to maintain air quality and suction." },
+        ],
+      },
+      {
+        name: "Upright / Canister Vacuum", location: "other", tags: "Cleaning, Vacuum",
+        chores: [
+          { title: "Empty vacuum bag or bin and check filter", category: "maintenance", frequency: "monthly", priority: "medium", tags: "Appliance, Vacuum, Cleaning", notes: "Replace the bag when 2/3 full or empty the bagless bin. Rinse or replace the filter per manufacturer schedule." },
+          { title: "Clean vacuum brush roll", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Vacuum, Cleaning", notes: "Cut and remove tangled hair from the brush roll and wipe the roller area to maintain proper agitation." },
+        ],
+      },
     ],
   },
 ];
@@ -1336,6 +1380,9 @@ function AppliancesTab() {
   const [choreModalAppliance, setChoreModalAppliance] = useState<Appliance | null>(null);
   const [suggOpen, setSuggOpen] = useState(false);
   const [suggSearch, setSuggSearch] = useState("");
+  const [suggPreview, setSuggPreview] = useState<SuggestedApplianceItem | null>(null);
+  const [suggChecked, setSuggChecked] = useState<Set<string>>(new Set());
+  const [quickAdding, setQuickAdding] = useState(false);
 
   const { data: appliances = [] } = useQuery<Appliance[]>({ queryKey: ["/api/appliances"] });
   const { data: allChores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
@@ -1360,12 +1407,45 @@ function AppliancesTab() {
   });
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_APPLIANCE }); setModalOpen(true); }
-  function openSuggested(item: { name: string; location: string; tags: string }) {
-    setEditing(null);
-    setForm({ ...EMPTY_APPLIANCE, name: item.name, location: item.location, tags: item.tags });
-    setSuggOpen(false);
-    setSuggSearch("");
-    setModalOpen(true);
+
+  function previewSuggested(item: SuggestedApplianceItem) {
+    setSuggPreview(item);
+    setSuggChecked(new Set(item.chores.map(c => c.title)));
+  }
+
+  async function quickAddAppliance() {
+    if (!suggPreview) return;
+    setQuickAdding(true);
+    try {
+      const newAppliance: Appliance = await apiRequest("POST", "/api/appliances", {
+        name: suggPreview.name,
+        location: suggPreview.location || null,
+        tags: suggPreview.tags || null,
+        brand: null, model: null, serialNumber: null,
+        purchaseDate: null, purchasePrice: null, warrantyExpiry: null,
+        lastServiced: null, serviceFrequencyMonths: null, nextServiceDue: null, notes: null,
+      });
+      const choresToAdd = suggPreview.chores.filter(c => suggChecked.has(c.title));
+      await Promise.all(choresToAdd.map(c => apiRequest("POST", "/api/chores", {
+        title: c.title, category: c.category, frequency: c.frequency,
+        customFrequencyDays: c.customFrequencyDays ?? null,
+        priority: c.priority, tags: c.tags, notes: c.notes,
+        applianceId: newAppliance.id, sortOrder: 0,
+        nextDue: null, completedDate: null,
+      })));
+      qc.invalidateQueries({ queryKey: ["/api/appliances"] });
+      qc.invalidateQueries({ queryKey: ["/api/chores"] });
+      const n = choresToAdd.length;
+      toast({ title: `${suggPreview.name} added${n > 0 ? ` with ${n} maintenance chore${n > 1 ? "s" : ""}` : ""}` });
+      setSuggOpen(false);
+      setSuggSearch("");
+      setSuggPreview(null);
+      setSuggChecked(new Set());
+    } catch {
+      toast({ title: "Failed to add appliance", variant: "destructive" });
+    } finally {
+      setQuickAdding(false);
+    }
   }
   function openEdit(a: Appliance) {
     setEditing(a);
@@ -1447,7 +1527,7 @@ function AppliancesTab() {
           )}
         </div>
         <div className="flex gap-2">
-          <Popover open={suggOpen} onOpenChange={(o) => { setSuggOpen(o); if (!o) setSuggSearch(""); }}>
+          <Popover open={suggOpen} onOpenChange={(o) => { setSuggOpen(o); if (!o) { setSuggSearch(""); setSuggPreview(null); setSuggChecked(new Set()); } }}>
             <PopoverTrigger asChild>
               <Button size="sm" variant="outline" className="gap-1.5">
                 <Sparkles size={13} />Suggested
@@ -1455,42 +1535,86 @@ function AppliancesTab() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="end">
-              <div className="p-2 border-b">
-                <input
-                  autoFocus
-                  value={suggSearch}
-                  onChange={e => setSuggSearch(e.target.value)}
-                  placeholder="Search appliances…"
-                  className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {SUGGESTED_APPLIANCES.map(g => {
-                  const q = suggSearch.toLowerCase();
-                  const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q));
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={g.group}>
-                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-secondary/40 sticky top-0">{g.group}</p>
-                      {items.map(i => (
-                        <button
-                          key={i.name}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-secondary/60 transition-colors"
-                          onClick={() => openSuggested(i)}
-                        >
-                          {i.name}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-                {SUGGESTED_APPLIANCES.every(g => {
-                  const q = suggSearch.toLowerCase();
-                  return g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q)).length === 0;
-                }) && (
-                  <p className="p-4 text-sm text-center text-muted-foreground">No results for "{suggSearch}"</p>
-                )}
-              </div>
+              {suggPreview ? (
+                /* ── Detail panel ── */
+                <>
+                  <div className="flex items-center gap-1.5 px-2 py-2 border-b">
+                    <button onClick={() => { setSuggPreview(null); setSuggChecked(new Set()); }} className="p-1 rounded hover:bg-secondary/60 transition-colors text-muted-foreground">
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-sm font-medium truncate">{suggPreview.name}</span>
+                  </div>
+                  <div className="px-3 pt-2 pb-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Recommended maintenance</p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto px-2 pb-2 space-y-0.5">
+                    {suggPreview.chores.map(c => (
+                      <label key={c.title} className="flex items-start gap-2.5 cursor-pointer rounded-md px-2 py-2 hover:bg-secondary/40 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={suggChecked.has(c.title)}
+                          onChange={e => {
+                            const next = new Set(suggChecked);
+                            if (e.target.checked) next.add(c.title); else next.delete(c.title);
+                            setSuggChecked(next);
+                          }}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium leading-snug">{c.title}</p>
+                          <p className="text-[11px] text-muted-foreground">{FREQUENCIES.find(f => f.value === c.frequency)?.label ?? c.frequency}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="p-2 border-t">
+                    <Button size="sm" className="w-full" onClick={quickAddAppliance} disabled={quickAdding}>
+                      {quickAdding ? "Adding…" : `Add Appliance${suggChecked.size > 0 ? ` + ${suggChecked.size} Chore${suggChecked.size > 1 ? "s" : ""}` : ""}`}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                /* ── List panel ── */
+                <>
+                  <div className="p-2 border-b">
+                    <input
+                      autoFocus
+                      value={suggSearch}
+                      onChange={e => setSuggSearch(e.target.value)}
+                      placeholder="Search appliances…"
+                      className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {SUGGESTED_APPLIANCES.map(g => {
+                      const q = suggSearch.toLowerCase();
+                      const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q));
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={g.group}>
+                          <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-secondary/40 sticky top-0">{g.group}</p>
+                          {items.map(i => (
+                            <button
+                              key={i.name}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-secondary/60 transition-colors flex items-center justify-between group"
+                              onClick={() => previewSuggested(i)}
+                            >
+                              <span>{i.name}</span>
+                              <ChevronRight size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                    {SUGGESTED_APPLIANCES.every(g => {
+                      const q = suggSearch.toLowerCase();
+                      return g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q)).length === 0;
+                    }) && (
+                      <p className="p-4 text-sm text-center text-muted-foreground">No results for "{suggSearch}"</p>
+                    )}
+                  </div>
+                </>
+              )}
             </PopoverContent>
           </Popover>
           <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Appliance</Button>
