@@ -467,17 +467,63 @@ function PersonForm({ onDone }: { onDone: (label: string) => void }) {
   );
 }
 
+const INTEREST_PRESETS: { cat: string; emoji: string; type: string; hobbies: string[] }[] = [
+  { cat: "Creative",    emoji: "🎨", type: "creative",    hobbies: ["Photography", "Painting", "Drawing", "Pottery", "Knitting / Crochet", "Woodworking", "Jewelry Making", "Sculpting"] },
+  { cat: "Outdoor",     emoji: "🏔️", type: "outdoor",     hobbies: ["Hiking", "Cycling", "Fishing", "Gardening", "Rock Climbing", "Bird Watching", "Surfing", "Running"] },
+  { cat: "Games",       emoji: "🎮", type: "games",       hobbies: ["Chess", "Board Games", "Video Games", "Puzzles", "Poker", "Dungeons & Dragons"] },
+  { cat: "Learning",    emoji: "🔬", type: "learning",    hobbies: ["Coding", "Electronics", "3D Printing", "Brewing / Winemaking", "Cooking", "Language Learning"] },
+  { cat: "Performance", emoji: "🎭", type: "performance", hobbies: ["Playing an Instrument", "Singing", "Acting", "Dancing", "Comedy"] },
+  { cat: "Collection",  emoji: "🪙", type: "collection",  hobbies: ["Coins", "Stamps", "Vinyl Records", "Trading Cards", "Sneakers", "Watches", "Comic Books", "Antiques"] },
+];
+
 function InterestForm({ onDone }: { onDone: (label: string) => void }) {
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const preset = INTEREST_PRESETS.find(p => p.cat === selectedCat);
   const mut = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/hobbies", { name, hobbyType: "other", skillLevel: "beginner", status: "active" }),
+    mutationFn: () => apiRequest("POST", "/api/hobbies", {
+      name,
+      hobbyType: preset?.type ?? "creative",
+      skillLevel: "beginner",
+      status: "active",
+    }),
     onSuccess: () => onDone(name),
   });
   return (
-    <form onSubmit={e => { e.preventDefault(); if (name.trim()) mut.mutate(); }} className="space-y-4">
-      <FieldInput label="Interest or hobby" value={name} onChange={setName} placeholder="e.g. Photography" required />
-      <CreateButton loading={mut.isPending} disabled={!name.trim()} />
-    </form>
+    <div className="space-y-4">
+      {/* Category buttons */}
+      <div className="flex flex-wrap gap-1.5">
+        {INTEREST_PRESETS.map(p => (
+          <button key={p.cat} type="button"
+            onClick={() => { setSelectedCat(selectedCat === p.cat ? null : p.cat); setName(""); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
+              ${selectedCat === p.cat ? "bg-primary border-primary text-primary-foreground" : "bg-secondary/50 border-transparent hover:bg-secondary"}`}>
+            {p.emoji} {p.cat}
+          </button>
+        ))}
+      </div>
+      {/* Preset hobby chips */}
+      {preset && (
+        <div className="flex flex-wrap gap-1.5">
+          {preset.hobbies.map(h => (
+            <button key={h} type="button" onClick={() => setName(h)}
+              className={`px-3 py-1.5 rounded-xl text-xs border transition-colors
+                ${name === h ? "bg-primary/15 border-primary/60 text-primary font-medium" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}>
+              {h}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Custom name input */}
+      <FieldInput
+        label={selectedCat ? "Or type a custom interest" : "Interest or hobby"}
+        value={name}
+        onChange={setName}
+        placeholder={selectedCat ? "Something else…" : "e.g. Photography, Hiking…"}
+        required
+      />
+      <CreateButton loading={mut.isPending} disabled={!name.trim()} onClick={() => { if (name.trim()) mut.mutate(); }} />
+    </div>
   );
 }
 
@@ -706,9 +752,57 @@ function CreateButton({ loading, disabled, onClick }: { loading: boolean; disabl
 
 // ── Search-based forms for explore_life ──────────────────────────────────────
 
+type BookResult = { id: string; title: string; author: string; year: string; coverUrl: string };
+
+async function searchBooksApi(q: string): Promise<BookResult[]> {
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+  // Try Google Books first
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(trimmed)}&maxResults=8&printType=books`,
+      { signal: ctrl.signal },
+    );
+    clearTimeout(t);
+    if (res.ok) {
+      const data = await res.json();
+      return (data.items ?? []).map((v: any) => ({
+        id: v.id,
+        title: v.volumeInfo?.title ?? "Unknown Title",
+        author: (v.volumeInfo?.authors ?? []).join(", "),
+        year: v.volumeInfo?.publishedDate?.slice(0, 4) ?? "",
+        coverUrl: (v.volumeInfo?.imageLinks?.thumbnail || v.volumeInfo?.imageLinks?.smallThumbnail || "").replace(/^http:\/\//, "https://"),
+      }));
+    }
+  } catch { /* fall through to Open Library */ }
+  // Open Library fallback
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(trimmed)}&limit=8`,
+      { signal: ctrl.signal },
+    );
+    clearTimeout(t);
+    if (res.ok) {
+      const data = await res.json();
+      return (data.docs ?? []).slice(0, 8).map((doc: any) => ({
+        id: doc.key ?? String(Math.random()),
+        title: doc.title ?? "Unknown Title",
+        author: (doc.author_name ?? []).join(", "),
+        year: doc.first_publish_year ? String(doc.first_publish_year) : "",
+        coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "",
+      }));
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
 function BookSearchForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ id: string; title: string; author: string; year: string; coverUrl: string }[]>([]);
+  const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -721,17 +815,8 @@ function BookSearchForm({ onDone }: { onDone: (label: string, href?: string) => 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(val.trim())}&maxResults=6&printType=books`);
-        if (res.ok) {
-          const data = await res.json();
-          setResults((data.items ?? []).map((v: any) => ({
-            id: v.id,
-            title: v.volumeInfo?.title ?? "",
-            author: (v.volumeInfo?.authors ?? []).join(", "),
-            year: v.volumeInfo?.publishedDate?.slice(0, 4) ?? "",
-            coverUrl: (v.volumeInfo?.imageLinks?.thumbnail ?? "").replace(/^http:/, "https:"),
-          })));
-        }
+        const hits = await searchBooksApi(val);
+        setResults(hits);
       } catch { /* ignore */ } finally { setLoading(false); }
     }, 400);
   }
@@ -918,10 +1003,26 @@ function MovieShowForm({ onDone }: { onDone: (label: string, href?: string) => v
   );
 }
 
+const RECIPE_CAT_CHIPS = [
+  { label: "All",       emoji: "🍽️" },
+  { label: "Chicken",   emoji: "🍗" },
+  { label: "Beef",      emoji: "🥩" },
+  { label: "Seafood",   emoji: "🐟" },
+  { label: "Pasta",     emoji: "🍝" },
+  { label: "Vegetarian",emoji: "🥦" },
+  { label: "Breakfast", emoji: "🍳" },
+  { label: "Dessert",   emoji: "🍰" },
+  { label: "Soup",      emoji: "🍲" },
+  { label: "Salad",     emoji: "🥗" },
+  { label: "Lamb",      emoji: "🍖" },
+  { label: "Pork",      emoji: "🥓" },
+];
+
 function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
   const qc = useQueryClient();
   const [mode, setMode] = useState<"browse" | "url">("browse");
   const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("All");
   const [saving, setSaving] = useState<number | null>(null);
   const [url, setUrl] = useState("");
   const [importing, setImporting] = useState(false);
@@ -930,28 +1031,29 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
   const systemRecipes = useMemo(() => allRecipes.filter((r: any) => r.userId == null), [allRecipes]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return systemRecipes.slice(0, 18);
-    const q = search.toLowerCase();
-    return systemRecipes.filter((r: any) =>
-      r.name.toLowerCase().includes(q) || (r.category ?? "").toLowerCase().includes(q)
-    ).slice(0, 18);
-  }, [systemRecipes, search]);
+    let list = systemRecipes;
+    if (catFilter !== "All") {
+      const cat = catFilter.toLowerCase();
+      list = list.filter((r: any) => (r.category ?? "").toLowerCase().includes(cat));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((r: any) =>
+        r.name.toLowerCase().includes(q) || (r.category ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list.slice(0, 24);
+  }, [systemRecipes, search, catFilter]);
 
   async function saveRecipe(recipe: any) {
     setSaving(recipe.id);
     try {
       await apiRequest("POST", "/api/recipes", {
-        name: recipe.name,
-        emoji: recipe.emoji,
-        category: recipe.category,
-        componentType: recipe.componentType,
-        prepTime: recipe.prepTime,
-        cookTime: recipe.cookTime,
-        ingredientsJson: recipe.ingredientsJson,
-        instructions: recipe.instructions,
-        imageUrl: recipe.imageUrl,
-        description: recipe.description,
-        source: recipe.source,
+        name: recipe.name, emoji: recipe.emoji, category: recipe.category,
+        componentType: recipe.componentType, prepTime: recipe.prepTime,
+        cookTime: recipe.cookTime, ingredientsJson: recipe.ingredientsJson,
+        instructions: recipe.instructions, imageUrl: recipe.imageUrl,
+        description: recipe.description, source: recipe.source,
       });
       qc.invalidateQueries({ queryKey: ["/api/recipes"] });
       onDone(recipe.name, "/recipes");
@@ -972,7 +1074,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Browse / URL toggle */}
       <div className="flex gap-2">
         {(["browse", "url"] as const).map(m => (
@@ -986,39 +1088,49 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
 
       {mode === "browse" ? (
         <>
+          {/* Category chips */}
+          <div className="flex gap-1.5 flex-wrap">
+            {RECIPE_CAT_CHIPS.map(chip => (
+              <button key={chip.label} type="button" onClick={() => { setCatFilter(chip.label); setSearch(""); }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
+                  ${catFilter === chip.label ? "bg-primary border-primary text-primary-foreground" : "bg-secondary/40 border-transparent hover:bg-secondary"}`}>
+                {chip.emoji} {chip.label}
+              </button>
+            ))}
+          </div>
+          {/* Search */}
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
+            <Search size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
             <input
-              autoFocus
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
-              placeholder="Search 1,600+ recipes…"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+              placeholder="Search by name…"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); if (e.target.value) setCatFilter("All"); }}
             />
           </div>
           {isLoading ? (
             <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
               {filtered.map((recipe: any) => (
                 <button key={recipe.id} onClick={() => saveRecipe(recipe)} disabled={!!saving}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
                   {recipe.imageUrl
-                    ? <img src={recipe.imageUrl} alt="" className="w-10 h-10 object-cover rounded shrink-0" />
-                    : <span className="text-2xl shrink-0 leading-none">{recipe.emoji || "🍽️"}</span>
+                    ? <img src={recipe.imageUrl} alt="" className="w-9 h-9 object-cover rounded shrink-0" />
+                    : <span className="text-xl shrink-0 leading-none w-9 text-center">{recipe.emoji || "🍽️"}</span>
                   }
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{recipe.name}</p>
-                    {recipe.category && <p className="text-xs text-muted-foreground">{recipe.category}</p>}
+                    {recipe.category && <p className="text-[11px] text-muted-foreground">{recipe.category}</p>}
                   </div>
                   {saving === recipe.id
-                    ? <Loader2 size={14} className="animate-spin shrink-0 text-muted-foreground" />
-                    : <Plus size={14} className="text-muted-foreground shrink-0" />
+                    ? <Loader2 size={13} className="animate-spin shrink-0 text-muted-foreground" />
+                    : <Plus size={13} className="text-muted-foreground shrink-0" />
                   }
                 </button>
               ))}
-              {filtered.length === 0 && search && (
-                <p className="text-sm text-muted-foreground text-center py-4">No recipes matching "{search}"</p>
+              {filtered.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No recipes found</p>
               )}
             </div>
           )}
@@ -1035,12 +1147,8 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
           <p className="text-xs text-muted-foreground">
             Paste any recipe URL and we'll import the ingredients and instructions automatically.
           </p>
-          <button
-            type="button"
-            disabled={!url.trim() || importing}
-            onClick={importUrl}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
-          >
+          <button type="button" disabled={!url.trim() || importing} onClick={importUrl}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm">
             {importing ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
             {importing ? "Importing…" : "Import Recipe"}
           </button>
