@@ -1042,7 +1042,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
         r.name.toLowerCase().includes(q) || (r.category ?? "").toLowerCase().includes(q)
       );
     }
-    return list.slice(0, 24);
+    return list;
   }, [systemRecipes, search, catFilter]);
 
   async function saveRecipe(recipe: any) {
@@ -1111,7 +1111,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
           {isLoading ? (
             <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
           ) : (
-            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {filtered.map((recipe: any) => (
                 <button key={recipe.id} onClick={() => saveRecipe(recipe)} disabled={!!saving}
                   className="w-full flex items-center gap-3 p-2.5 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
