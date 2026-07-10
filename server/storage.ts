@@ -647,6 +647,9 @@ export async function initializeStorage() {
   // Image URL for recipes
   await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
+  // Meal slot for week plan (breakfast / lunch / dinner)
+  await pool.query(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS slot TEXT NOT NULL DEFAULT 'dinner'`);
+
   // Photo URL for plants (from Perenual API)
   await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS photo_url TEXT`);
 

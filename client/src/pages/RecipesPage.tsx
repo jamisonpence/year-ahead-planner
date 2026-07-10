@@ -1276,11 +1276,17 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
 }
 
 // ── Assign Day Modal ──────────────────────────────────────────────────────────
+const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+type MealSlot = typeof MEAL_SLOTS[number];
+const SLOT_LABEL: Record<MealSlot, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner" };
+const SLOT_EMOJI: Record<MealSlot, string> = { breakfast: "🌅", lunch: "☀️", dinner: "🌙" };
+
 function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
   recipe?: Recipe; bundle?: MealBundle; weekStart: string; onClose: () => void; existingPlan: WeekPlan[];
 }) {
   const { toast } = useToast();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<MealSlot>("dinner");
 
   const assignMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/week-plan", {
@@ -1288,11 +1294,12 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
       weekStart,
       recipeId: recipe?.id ?? null,
       bundleId: bundle?.id ?? null,
+      slot: selectedSlot,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/week-plan", weekStart] });
       const name = recipe?.name ?? bundle?.name ?? "";
-      toast({ title: `${name} added to ${SHORT_DAYS[selectedDay!]}` });
+      toast({ title: `${name} added to ${SHORT_DAYS[selectedDay!]} ${SLOT_LABEL[selectedSlot].toLowerCase()}` });
       onClose();
     },
   });
@@ -1305,7 +1312,7 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
           <p className="text-sm text-muted-foreground">Pick a day for <strong>{recipe?.name ?? bundle?.name}</strong>:</p>
           <div className="flex flex-wrap gap-2">
             {DAYS.map((day, i) => {
-              const taken = existingPlan.some(p => p.dayIndex === i);
+              const taken = existingPlan.some(p => p.dayIndex === i && p.slot === selectedSlot);
               return (
                 <button key={i} type="button" onClick={() => setSelectedDay(i)}
                   className={["px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
@@ -1316,6 +1323,27 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
                 </button>
               );
             })}
+          </div>
+          {/* Slot picker */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Meal slot:</p>
+            <div className="flex gap-2">
+              {MEAL_SLOTS.map(slot => (
+                <button
+                  key={slot}
+                  type="button"
+                  onClick={() => setSelectedSlot(slot)}
+                  className={["flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg border text-xs font-medium transition-colors",
+                    selectedSlot === slot
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border hover:border-primary hover:text-primary"
+                  ].join(" ")}
+                >
+                  <span>{SLOT_EMOJI[slot]}</span>
+                  <span>{SLOT_LABEL[slot]}</span>
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={() => assignMut.mutate()} disabled={selectedDay === null || assignMut.isPending} className="flex-1">
@@ -1329,401 +1357,12 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
   );
 }
 
-// ── MealDB Search Modal ───────────────────────────────────────────────────────
-
-const MEALDB_CATEGORY_EMOJI: Record<string, string> = {
-  beef: "🥩", chicken: "🍗", dessert: "🍰", lamb: "🍖", miscellaneous: "🍽️",
-  pasta: "🍝", pork: "🥓", seafood: "🐟", side: "🥗", starter: "🥗",
-  vegan: "🌿", vegetarian: "🥦", breakfast: "🍳", goat: "🐐",
-};
-const MEALDB_COMPONENT_MAP: Record<string, string> = {
-  dessert: "dessert", starter: "side", side: "side",
-  beef: "main", chicken: "main", lamb: "main", pasta: "main", pork: "main",
-  seafood: "main", vegan: "main", vegetarian: "main", breakfast: "main",
-  goat: "main", miscellaneous: "main",
-};
-
-interface MealDBMeal {
-  idMeal: string; strMeal: string; strCategory: string; strArea: string;
-  strInstructions: string; strMealThumb: string; [key: string]: string;
-}
-
-function extractIngredients(meal: MealDBMeal) {
-  const ings: { name: string; qty: string }[] = [];
-  for (let i = 1; i <= 20; i++) {
-    const name = (meal[`strIngredient${i}`] ?? "").trim();
-    const qty  = (meal[`strMeasure${i}`]   ?? "").trim();
-    if (name) ings.push({ name, qty });
-  }
-  return ings;
-}
-
-function MealDBSearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MealDBMeal[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState<Set<string>>(new Set());
-  const [added, setAdded] = useState<Set<string>>(new Set());
-  const [categories, setCategories] = useState<{ strCategory: string; strCategoryThumb: string; strCategoryDescription: string }[]>([]);
-  const [browseCategory, setBrowseCategory] = useState<string | null>(null);
-  const [catLoading, setCatLoading] = useState(false);
-  const [mode, setMode] = useState<"search" | "browse">("search");
-  const [preview, setPreview] = useState<MealDBMeal | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
-  async function openPreview(meal: MealDBMeal) {
-    // If browse result (no instructions), fetch full details first
-    if (!meal.strInstructions) {
-      setPreviewLoading(true);
-      setPreview({ ...meal }); // show panel immediately with loading state
-      try {
-        const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
-        const d = await r.json();
-        setPreview(d.meals?.[0] ?? meal);
-      } catch {
-        toast({ title: "Could not load recipe details", variant: "destructive" });
-      } finally { setPreviewLoading(false); }
-    } else {
-      setPreview(meal);
-    }
-  }
-
-  // Load categories once on open
-  useEffect(() => {
-    if (!open || categories.length > 0) return;
-    fetch("https://www.themealdb.com/api/json/v1/1/categories.php")
-      .then(r => r.json())
-      .then(d => setCategories(d.categories ?? []))
-      .catch(() => {});
-  }, [open]);
-
-  async function doSearch() {
-    if (!query.trim()) return;
-    setLoading(true); setResults([]);
-    try {
-      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query.trim())}`);
-      const d = await r.json();
-      setResults(d.meals ?? []);
-      if (!d.meals) toast({ title: "No results found", description: `Nothing matched "${query}"` });
-    } catch {
-      toast({ title: "Search failed", description: "Could not reach TheMealDB", variant: "destructive" });
-    } finally { setLoading(false); }
-  }
-
-  async function browseByCategory(cat: string) {
-    setBrowseCategory(cat); setCatLoading(true); setResults([]);
-    try {
-      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(cat)}`);
-      const d = await r.json();
-      // filter results only have id/name/thumb — we'll do full lookup on add
-      setResults((d.meals ?? []).map((m: any) => ({
-        idMeal: m.idMeal, strMeal: m.strMeal, strMealThumb: m.strMealThumb,
-        strCategory: cat, strArea: "", strInstructions: "",
-      })));
-    } catch {
-      toast({ title: "Browse failed", variant: "destructive" });
-    } finally { setCatLoading(false); }
-  }
-
-  async function addMeal(meal: MealDBMeal) {
-    setAdding(prev => new Set([...prev, meal.idMeal]));
-    try {
-      let fullMeal = meal;
-      // If browsed (no instructions), do a full lookup first
-      if (!meal.strInstructions) {
-        const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
-        const d = await r.json();
-        fullMeal = d.meals?.[0] ?? meal;
-      }
-      const catKey = (fullMeal.strCategory ?? "").toLowerCase();
-      await apiRequest("POST", "/api/recipes", {
-        name: fullMeal.strMeal,
-        emoji: MEALDB_CATEGORY_EMOJI[catKey] ?? "🍽️",
-        category: fullMeal.strArea || null,
-        componentType: MEALDB_COMPONENT_MAP[catKey] ?? "main",
-        ingredientsJson: JSON.stringify(extractIngredients(fullMeal)),
-        instructions: fullMeal.strInstructions || null,
-        imageUrl: fullMeal.strMealThumb || null,
-        prepTime: null,
-        cookTime: null,
-      });
-      setAdded(prev => new Set([...prev, meal.idMeal]));
-      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
-      toast({ title: `"${fullMeal.strMeal}" added to your recipes ✓` });
-    } catch {
-      toast({ title: "Failed to add recipe", variant: "destructive" });
-    } finally {
-      setAdding(prev => { const n = new Set(prev); n.delete(meal.idMeal); return n; });
-    }
-  }
-
-  function handleClose() {
-    setQuery(""); setResults([]); setAdded(new Set()); setBrowseCategory(null); setMode("search"); setPreview(null);
-    onClose();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className={`${preview ? "max-w-5xl" : "max-w-3xl"} sm:max-h-[88vh] flex flex-col p-0 gap-0 transition-all duration-200`}>
-        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <ChefHat size={18} /> Find Recipes from MealDB
-          </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-0.5">Search thousands of recipes and add them to your library in one click.</p>
-        </DialogHeader>
-
-        {/* Mode toggle + search */}
-        <div className="px-6 pt-4 pb-3 space-y-3 shrink-0 border-b">
-          <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
-            {[{ id: "search", label: "Search" }, { id: "browse", label: "Browse by Category" }].map(m => (
-              <button
-                key={m.id}
-                onClick={() => { setMode(m.id as any); setResults([]); setBrowseCategory(null); }}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >{m.label}</button>
-            ))}
-          </div>
-          {mode === "search" && (
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  placeholder="e.g. chicken tikka, chocolate cake, pasta…"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && doSearch()}
-                />
-              </div>
-              <Button onClick={doSearch} disabled={loading || !query.trim()} className="gap-1.5">
-                {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-                Search
-              </Button>
-            </div>
-          )}
-          {mode === "browse" && browseCategory && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setBrowseCategory(null); setResults([]); }} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
-                <ChevronRight size={14} className="rotate-180" /> All Categories
-              </button>
-              <span className="text-sm font-medium">{browseCategory}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Content area — splits into results + preview when a recipe is selected */}
-        <div className="flex flex-1 min-h-0">
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {/* Browse: category grid */}
-          {mode === "browse" && !browseCategory && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {categories.map(cat => (
-                <button
-                  key={cat.strCategory}
-                  onClick={() => browseByCategory(cat.strCategory)}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl border bg-card hover:bg-accent/40 transition-colors text-center"
-                >
-                  <img src={cat.strCategoryThumb} alt={cat.strCategory} className="w-14 h-14 rounded-lg object-cover" />
-                  <span className="text-xs font-medium leading-tight">{cat.strCategory}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Loading */}
-          {(loading || catLoading) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[1,2,3,4].map(n => (
-                <div key={n} className="flex gap-3 p-3 rounded-xl border bg-card animate-pulse">
-                  <div className="w-20 h-20 rounded-lg bg-muted shrink-0" />
-                  <div className="flex-1 space-y-2 pt-1">
-                    <div className="h-4 bg-muted rounded w-3/4" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
-                    <div className="h-7 bg-muted rounded w-24 mt-2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Results */}
-          {!loading && !catLoading && results.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {results.map(meal => {
-                const isAdded = added.has(meal.idMeal);
-                const isAdding = adding.has(meal.idMeal);
-                return (
-                  <div key={meal.idMeal} className="flex gap-3 p-3 rounded-xl border bg-card hover:bg-accent/20 transition-colors">
-                    <img
-                      src={meal.strMealThumb}
-                      alt={meal.strMeal}
-                      className="w-20 h-20 rounded-lg object-cover shrink-0"
-                    />
-                    <div className="flex-1 min-w-0 flex flex-col justify-between">
-                      <div>
-                        <p className="font-medium text-sm leading-snug line-clamp-2">{meal.strMeal}</p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {meal.strCategory && <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{meal.strCategory}</span>}
-                          {meal.strArea && <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{meal.strArea}</span>}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        <button
-                          onClick={() => openPreview(meal)}
-                          className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
-                            preview?.idMeal === meal.idMeal
-                              ? "bg-secondary border-foreground/20 text-foreground"
-                              : "hover:bg-secondary border-border text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          <BookOpen size={11} /> Preview
-                        </button>
-                        <button
-                          onClick={() => !isAdded && !isAdding && addMeal(meal)}
-                          disabled={isAdded || isAdding}
-                          className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                            isAdded
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
-                              : "bg-primary text-primary-foreground hover:bg-primary/90"
-                          }`}
-                        >
-                          {isAdding
-                            ? <><RefreshCw size={11} className="animate-spin" /> Adding…</>
-                            : isAdded
-                            ? <><Check size={11} /> Added</>
-                            : <><Plus size={11} /> Add</>
-                          }
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Empty state after search */}
-          {!loading && !catLoading && results.length === 0 && mode === "search" && query && (
-            <div className="text-center py-12 text-muted-foreground">
-              <ChefHat size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No recipes found for "{query}"</p>
-              <p className="text-xs mt-1">Try a different search term</p>
-            </div>
-          )}
-
-          {/* Initial search prompt */}
-          {!loading && results.length === 0 && mode === "search" && !query && (
-            <div className="text-center py-12 text-muted-foreground">
-              <Search size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Search for any dish to get started</p>
-              <p className="text-xs mt-1">e.g. "pasta", "chicken", "chocolate cake"</p>
-            </div>
-          )}
-        </div>{/* end results column */}
-
-        {/* Preview panel */}
-        {preview && (
-          <div className="w-80 shrink-0 border-l flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
-              <span className="text-sm font-semibold">Preview</span>
-              <button onClick={() => setPreview(null)} className="p-1 rounded hover:bg-secondary transition-colors">
-                <X size={14} className="text-muted-foreground" />
-              </button>
-            </div>
-            {previewLoading ? (
-              <div className="flex-1 flex items-center justify-center">
-                <RefreshCw size={20} className="animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto">
-                {/* Hero image */}
-                {preview.strMealThumb && (
-                  <div className="relative h-44 shrink-0">
-                    <img src={preview.strMealThumb} alt={preview.strMeal} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    <div className="absolute bottom-2 left-3 right-3">
-                      <p className="text-white font-semibold text-sm leading-tight line-clamp-2">{preview.strMeal}</p>
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {preview.strCategory && <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full">{preview.strCategory}</span>}
-                        {preview.strArea && <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full">{preview.strArea}</span>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-4 space-y-4">
-                  {/* Ingredients */}
-                  {extractIngredients(preview).length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Ingredients</p>
-                      <ul className="space-y-1">
-                        {extractIngredients(preview).map((ing, i) => (
-                          <li key={i} className="flex justify-between text-xs gap-2">
-                            <span className="text-foreground">{ing.name}</span>
-                            <span className="text-muted-foreground shrink-0">{ing.qty}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Instructions */}
-                  {preview.strInstructions && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Instructions</p>
-                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">{preview.strInstructions}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Add button */}
-            <div className="p-3 border-t shrink-0">
-              <button
-                onClick={() => { addMeal(preview); }}
-                disabled={added.has(preview.idMeal) || adding.has(preview.idMeal)}
-                className={`w-full flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg transition-colors ${
-                  added.has(preview.idMeal)
-                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-              >
-                {adding.has(preview.idMeal)
-                  ? <><RefreshCw size={13} className="animate-spin" /> Adding…</>
-                  : added.has(preview.idMeal)
-                  ? <><Check size={13} /> Added</>
-                  : <><Plus size={13} /> Add to My Recipes</>
-                }
-              </button>
-            </div>
-          </div>
-        )}
-        </div>{/* end flex row */}
-
-        <div className="px-6 py-3 border-t shrink-0 flex justify-between items-center">
-          <p className="text-xs text-muted-foreground">Powered by <a href="https://www.themealdb.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">TheMealDB</a></p>
-          <Button variant="outline" size="sm" onClick={handleClose}>Done</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── Browse helpers ────────────────────────────────────────────────────────────
 const BROWSE_CATEGORY_EMOJI: Record<string, string> = {
-  "Baking": "🥧", "Bread Machine": "🍞", "Breakfast for Dinner": "🍳",
-  "Chicken": "🍗", "Desserts": "🍰", "Vegan": "🥗", "Vegetarian": "🥦",
-  "Seafood": "🐟", "Pasta": "🍝", "Mexican": "🌮", "Asian": "🍜",
-  "Indian": "🍛", "Italian Regional": "🍕", "Mediterranean": "🫒",
-  "Soups & Stews": "🥣", "Slow Cooker": "🍲", "Instant Pot": "⚡",
-  "Sides & Vegetables": "🥕", "Steak": "🥩", "BBQ & Grilling": "🔥",
-  "Keto": "🥑", "Whole30": "🥙", "Healthy Dinner": "🥗",
-  "Healthy Breakfast": "🥞", "Healthy Lunch": "🥙", "Healthy Kids": "🌟",
-  "Kid-Friendly": "🧒", "Game Day": "🏈", "Holiday Feasts": "🎄",
-  "Jewish": "✡️",
+  "Beef": "🥩", "Chicken": "🍗", "Dessert": "🍰", "Lamb": "🍖",
+  "Miscellaneous": "🍽️", "Pasta": "🍝", "Pork": "🥓", "Seafood": "🐟",
+  "Side": "🥗", "Starter": "🥙", "Vegan": "🌿", "Vegetarian": "🥦",
+  "Breakfast": "🍳", "Goat": "🐐",
 };
 
 function parseMacros(nutritionData: string | null) {
@@ -1917,13 +1556,10 @@ export default function RecipesPage() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set([...COMPONENT_TYPES.map(ct => ct.value), "unclassified"])
   );
-const [mealDbOpen, setMealDbOpen] = useState(false);
   const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null);
   const [browseSearch, setBrowseSearch] = useState("");
   const [browseCategoryFilter, setBrowseCategoryFilter] = useState<string>("All");
   const [browseTagFilter, setBrowseTagFilter] = useState<string | null>(null);
-  const [browseDifficultyFilter, setBrowseDifficultyFilter] = useState<string>("all");
-  const [browseTimeFilter, setBrowseTimeFilter] = useState<string>("all");
   const [browseDetailRecipe, setBrowseDetailRecipe] = useState<Recipe | null>(null);
   const weekStart = getWeekStart();
 
@@ -2114,6 +1750,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
       description: r.description,
       source: r.source,
       nutritionData: r.nutritionData,
+      imageUrl: r.imageUrl,
     }),
     onSuccess: (_, r) => {
       queryClient.invalidateQueries({ queryKey: ["/api/recipes"] });
@@ -2126,16 +1763,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     let list = systemRecipes;
     if (browseCategoryFilter !== "All") list = list.filter(r => r.category === browseCategoryFilter);
     if (browseTagFilter) list = list.filter(r => r.tags?.toLowerCase().includes(browseTagFilter.toLowerCase()));
-    if (browseDifficultyFilter !== "all") list = list.filter(r => (r as any).difficulty === browseDifficultyFilter);
-    if (browseTimeFilter !== "all") {
-      list = list.filter(r => {
-        const total = (r.prepTime ?? 0) + (r.cookTime ?? 0);
-        if (browseTimeFilter === "under30") return total < 30;
-        if (browseTimeFilter === "30to60") return total >= 30 && total <= 60;
-        if (browseTimeFilter === "over60") return total > 60;
-        return true;
-      });
-    }
+
     if (browseSearch.trim()) {
       const q = browseSearch.toLowerCase();
       list = list.filter(r =>
@@ -2146,7 +1774,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
       );
     }
     return list;
-  }, [systemRecipes, browseCategoryFilter, browseTagFilter, browseSearch, browseDifficultyFilter, browseTimeFilter]);
+  }, [systemRecipes, browseCategoryFilter, browseTagFilter, browseSearch]);
 
   // Build grocery list from week's recipe assignments + bundle expansions
   const weekRecipes = useMemo(() => {
@@ -2670,52 +2298,54 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               <ShoppingCart size={13} /> Open Shopping
             </Button>
           </div>
-          {/* 7-day grid */}
+          {/* 7-day grid with Breakfast / Lunch / Dinner slots */}
           <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
             {DAYS.map((day, i) => {
-              const assignment = weekPlan.find(p => p.dayIndex === i);
-              const recipe = assignment?.recipeId ? recipes.find(r => r.id === assignment.recipeId) : null;
-              const bundle = assignment?.bundleId ? bundles.find(b => b.id === assignment.bundleId) : null;
               const isToday = new Date().getDay() === i;
-              const bundleRecipes = bundle ? (JSON.parse(bundle.recipeIdsJson) as number[]).map(id => recipes.find(r => r.id === id)).filter(Boolean) as Recipe[] : [];
               return (
                 <div key={i} className={`bg-card border rounded-xl overflow-hidden ${isToday ? "border-primary/40 shadow-sm" : ""}`}>
                   <div className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wide border-b ${isToday ? "bg-primary/10 text-primary border-primary/20" : "bg-secondary/50 text-muted-foreground"}`}>
                     {SHORT_DAYS[i]}
                   </div>
-                  <div className="p-2.5 min-h-[80px]">
-                    {recipe && (
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="min-w-0">
-                          <span className="text-base">{recipe.emoji}</span>
-                          <p className="text-xs font-semibold leading-tight mt-0.5 truncate">{recipe.name}</p>
-                          {recipe.componentType && <p className={`text-xs ${getComponentInfo(recipe.componentType)?.color}`}>{getComponentInfo(recipe.componentType)?.label}</p>}
+                  <div className="divide-y">
+                    {MEAL_SLOTS.map(slot => {
+                      const assignment = weekPlan.find(p => p.dayIndex === i && (p as any).slot === slot);
+                      const recipe = assignment?.recipeId ? recipes.find(r => r.id === assignment.recipeId) : null;
+                      const bundle = assignment?.bundleId ? bundles.find(b => b.id === assignment.bundleId) : null;
+                      const bundleRecipes = bundle ? (JSON.parse(bundle.recipeIdsJson) as number[]).map(id => recipes.find(r => r.id === id)).filter(Boolean) as Recipe[] : [];
+                      return (
+                        <div key={slot} className="p-2 min-h-[56px]">
+                          <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60 mb-1">
+                            {SLOT_EMOJI[slot]} {SLOT_LABEL[slot]}
+                          </p>
+                          {recipe && (
+                            <div className="flex items-start justify-between gap-0.5">
+                              <p className="text-[10px] font-semibold leading-tight truncate flex-1">{recipe.emoji} {recipe.name}</p>
+                              <button onClick={() => removeAssignMut.mutate(assignment!.id)} className="text-muted-foreground hover:text-destructive shrink-0"><X size={10} /></button>
+                            </div>
+                          )}
+                          {bundle && (
+                            <div className="flex items-start justify-between gap-0.5">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-semibold leading-tight truncate">{bundle.emoji} {bundle.name}</p>
+                                {bundleRecipes.slice(0, 2).map(r => (
+                                  <p key={r.id} className="text-[9px] text-muted-foreground truncate">{r.name}</p>
+                                ))}
+                              </div>
+                              <button onClick={() => removeAssignMut.mutate(assignment!.id)} className="text-muted-foreground hover:text-destructive shrink-0"><X size={10} /></button>
+                            </div>
+                          )}
+                          {!recipe && !bundle && (
+                            <button
+                              onClick={() => setSubView("library")}
+                              className="text-[9px] text-muted-foreground/40 hover:text-primary flex items-center gap-0.5 transition-colors"
+                            >
+                              <Plus size={9} /> Add
+                            </button>
+                          )}
                         </div>
-                        <button onClick={() => removeAssignMut.mutate(assignment!.id)} className="text-muted-foreground hover:text-destructive shrink-0 mt-0.5"><X size={12} /></button>
-                      </div>
-                    )}
-                    {bundle && (
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1">
-                            <span className="text-base">{bundle.emoji}</span>
-                            <p className="text-xs font-semibold leading-tight truncate">{bundle.name}</p>
-                          </div>
-                          <div className="mt-0.5 space-y-0.5">
-                            {bundleRecipes.slice(0, 3).map(r => (
-                              <p key={r.id} className="text-xs text-muted-foreground truncate">{r.emoji} {r.name}</p>
-                            ))}
-                            {bundleRecipes.length > 3 && <p className="text-xs text-muted-foreground">+{bundleRecipes.length - 3} more</p>}
-                          </div>
-                        </div>
-                        <button onClick={() => removeAssignMut.mutate(assignment!.id)} className="text-muted-foreground hover:text-destructive shrink-0 mt-0.5"><X size={12} /></button>
-                      </div>
-                    )}
-                    {!recipe && !bundle && (
-                      <button onClick={() => setSubView("library")} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors mt-1">
-                        <Plus size={11} /> Choose recipe
-                      </button>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -2939,8 +2569,8 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             </div>
           </div>
 
-          {/* Tag + difficulty + time filters */}
-          <div className="flex gap-2 flex-wrap">
+          {/* Tag filter */}
+          <div className="flex gap-2 flex-wrap items-center">
             {browseTagFilter && (
               <button
                 onClick={() => setBrowseTagFilter(null)}
@@ -2949,27 +2579,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                 #{browseTagFilter} <X size={10} />
               </button>
             )}
-            <select
-              value={browseDifficultyFilter}
-              onChange={e => setBrowseDifficultyFilter(e.target.value)}
-              className="text-xs px-2.5 py-1 border rounded-full bg-background text-muted-foreground focus:outline-none"
-            >
-              <option value="all">Any difficulty</option>
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
-            </select>
-            <select
-              value={browseTimeFilter}
-              onChange={e => setBrowseTimeFilter(e.target.value)}
-              className="text-xs px-2.5 py-1 border rounded-full bg-background text-muted-foreground focus:outline-none"
-            >
-              <option value="all">Any time</option>
-              <option value="under30">Under 30 min</option>
-              <option value="30to60">30–60 min</option>
-              <option value="over60">Over 1 hour</option>
-            </select>
-            <span className="text-xs text-muted-foreground self-center ml-auto">{filteredBrowse.length} recipes</span>
+            <span className="text-xs text-muted-foreground ml-auto">{filteredBrowse.length} recipes</span>
           </div>
 
           {/* Recipe grid */}
@@ -2980,69 +2590,50 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               <p className="text-sm mt-1">Try adjusting your search or filters</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredBrowse.map(recipe => {
-                const macros = parseMacros(recipe.nutritionData ?? null);
-                const tags = recipe.tags ? recipe.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+                const tags = recipe.tags
+                  ? recipe.tags.split(",").map(t => t.trim()).filter(t => t && t !== "mealdb")
+                  : [];
                 const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
-                const diff = (recipe as any).difficulty as string | undefined;
+                const isSaved = recipes.some(r => r.name === recipe.name);
                 return (
                   <div
                     key={recipe.id}
-                    className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer"
+                    className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer flex flex-col"
                     onClick={() => setBrowseDetailRecipe(recipe)}
                   >
-                    {/* Card header */}
-                    <div className="px-3 pt-3 pb-2 flex items-start gap-2">
-                      <span className="text-2xl shrink-0">{recipe.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm leading-tight line-clamp-2">{recipe.name}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{recipe.category}</p>
+                    {/* Photo or emoji header */}
+                    {recipe.imageUrl ? (
+                      <div className="relative w-full aspect-video overflow-hidden bg-muted">
+                        <img
+                          src={recipe.imageUrl}
+                          alt={recipe.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       </div>
-                      {diff && (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 ${
-                          diff === "Easy" ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" :
-                          diff === "Hard" ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800" :
-                          "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
-                        }`}>{diff}</span>
-                      )}
-                    </div>
-
-                    {/* Macros bar */}
-                    {macros.calories && (
-                      <div className="px-3 pb-1.5">
-                        <div className="flex gap-2 text-[10px] text-muted-foreground">
-                          <span className="font-medium text-foreground">{macros.calories} cal</span>
-                          {macros.protein != null && <span>P {macros.protein}g</span>}
-                          {macros.carbs != null && <span>C {macros.carbs}g</span>}
-                          {macros.fat != null && <span>F {macros.fat}g</span>}
-                        </div>
-                        {macros.protein != null && macros.carbs != null && macros.fat != null && (() => {
-                          const tot = macros.protein + macros.carbs + macros.fat;
-                          const pp = tot > 0 ? (macros.protein / tot) * 100 : 33;
-                          const cp = tot > 0 ? (macros.carbs / tot) * 100 : 34;
-                          const fp = tot > 0 ? (macros.fat / tot) * 100 : 33;
-                          return (
-                            <div className="h-1 mt-1 rounded-full overflow-hidden flex">
-                              <div className="bg-blue-500 h-full" style={{ width: `${pp}%` }} />
-                              <div className="bg-amber-500 h-full" style={{ width: `${cp}%` }} />
-                              <div className="bg-rose-500 h-full" style={{ width: `${fp}%` }} />
-                            </div>
-                          );
-                        })()}
+                    ) : (
+                      <div className="w-full aspect-video bg-muted flex items-center justify-center text-4xl">
+                        {recipe.emoji}
                       </div>
                     )}
 
-                    {/* Time + tags */}
-                    <div className="px-3 pb-3 space-y-1.5">
-                      {totalTime > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock size={10} /> {totalTime} min
-                        </span>
-                      )}
+                    {/* Body */}
+                    <div className="flex flex-col flex-1 p-2.5 gap-1.5">
+                      <p className="font-semibold text-xs leading-tight line-clamp-2">{recipe.name}</p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground flex-wrap">
+                        {recipe.category && <span>{recipe.category}</span>}
+                        {totalTime > 0 && (
+                          <>
+                            <span>·</span>
+                            <span className="flex items-center gap-0.5"><Clock size={9} /> {totalTime}m</span>
+                          </>
+                        )}
+                      </div>
                       {tags.length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {tags.slice(0, 4).map(t => (
+                          {tags.slice(0, 3).map(t => (
                             <button
                               key={t}
                               onClick={e => { e.stopPropagation(); setBrowseTagFilter(t); setBrowseCategoryFilter("All"); }}
@@ -3053,16 +2644,18 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                           ))}
                         </div>
                       )}
-                    </div>
 
-                    {/* Footer */}
-                    <div className="border-t px-3 py-2">
+                      {/* Save button */}
                       <button
-                        className="text-xs font-medium text-primary flex items-center gap-1 hover:underline"
-                        onClick={e => { e.stopPropagation(); saveToLibraryMut.mutate(recipe); }}
-                        disabled={saveToLibraryMut.isPending}
+                        className={`mt-auto w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          isSaved
+                            ? "bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800 cursor-default"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        }`}
+                        onClick={e => { e.stopPropagation(); if (!isSaved) saveToLibraryMut.mutate(recipe); }}
+                        disabled={isSaved || saveToLibraryMut.isPending}
                       >
-                        <Plus size={11} /> Save to My Recipes
+                        {isSaved ? <><Check size={11} /> Saved</> : <><Plus size={11} /> Save</>}
                       </button>
                     </div>
                   </div>
@@ -3096,7 +2689,6 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
           }}
         />
       )}
-      <MealDBSearchModal open={mealDbOpen} onClose={() => setMealDbOpen(false)} />
       <RecipeFormModal open={recipeModal} onClose={() => { setRecipeModal(false); setEditRecipe(null); }} editRecipe={editRecipe} />
       <BundleFormModal open={bundleModal} onClose={() => { setBundleModal(false); setEditBundle(null); }} editBundle={editBundle} recipes={recipes} />
       {detailRecipe && (

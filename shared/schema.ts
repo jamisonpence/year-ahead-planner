@@ -308,6 +308,7 @@ export const weekPlan = pgTable("week_plan", {
   recipeId: integer("recipe_id"),   // set for single-recipe assignments
   bundleId: integer("bundle_id"),   // set for bundle assignments
   weekStart: text("week_start").notNull(), // ISO "YYYY-MM-DD" of the Sunday
+  slot: text("slot").notNull().default("dinner"), // "breakfast" | "lunch" | "dinner"
 });
 
 export const groceryChecks = pgTable("grocery_checks", {
