@@ -222,6 +222,201 @@ const APPLIANCE_CHORE_TEMPLATES: ChoreTemplate[] = [
   { title: "Replace air purifier filter", category: "maintenance", frequency: "quarterly", priority: "medium", tags: "Appliance, Air Purifier, Filter", notes: "Replace filter based on indicator or manufacturer schedule." },
 ];
 
+const SUGGESTED_APPLIANCES: { group: string; items: { name: string; location: string; tags: string }[] }[] = [
+  {
+    group: "Kitchen",
+    items: [
+      { name: "Refrigerator", location: "kitchen", tags: "Kitchen, Cooling" },
+      { name: "Dishwasher", location: "kitchen", tags: "Kitchen, Cleaning" },
+      { name: "Range / Oven", location: "kitchen", tags: "Kitchen, Cooking" },
+      { name: "Cooktop (Induction)", location: "kitchen", tags: "Kitchen, Cooking" },
+      { name: "Microwave", location: "kitchen", tags: "Kitchen, Cooking" },
+      { name: "Range Hood", location: "kitchen", tags: "Kitchen, Ventilation" },
+      { name: "Wall Oven", location: "kitchen", tags: "Kitchen, Cooking" },
+      { name: "Coffee Maker", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Espresso Machine", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Toaster Oven", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Toaster", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Blender", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Food Processor", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Stand Mixer", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Instant Pot / Pressure Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Air Fryer", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Slow Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Electric Kettle", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Rice Cooker", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Waffle Maker", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Indoor Grill / Griddle", location: "kitchen", tags: "Kitchen, Small Appliance" },
+      { name: "Garbage Disposal", location: "kitchen", tags: "Kitchen, Plumbing" },
+      { name: "Wine Cooler / Beverage Fridge", location: "kitchen", tags: "Kitchen, Cooling" },
+      { name: "Ice Maker (Countertop)", location: "kitchen", tags: "Kitchen, Cooling" },
+    ],
+  },
+  {
+    group: "Laundry",
+    items: [
+      { name: "Washing Machine", location: "laundry", tags: "Laundry" },
+      { name: "Dryer", location: "laundry", tags: "Laundry" },
+      { name: "Washer-Dryer Combo", location: "laundry", tags: "Laundry" },
+      { name: "Iron", location: "laundry", tags: "Laundry, Small Appliance" },
+      { name: "Garment Steamer", location: "laundry", tags: "Laundry, Small Appliance" },
+      { name: "Clothes Drying Rack (Heated)", location: "laundry", tags: "Laundry, Small Appliance" },
+    ],
+  },
+  {
+    group: "HVAC & Climate",
+    items: [
+      { name: "HVAC System", location: "other", tags: "HVAC, Climate" },
+      { name: "Furnace", location: "other", tags: "HVAC, Heating" },
+      { name: "Central Air Conditioner", location: "other", tags: "HVAC, Cooling" },
+      { name: "Heat Pump", location: "other", tags: "HVAC, Climate" },
+      { name: "Boiler", location: "other", tags: "HVAC, Heating" },
+      { name: "Water Heater (Tank)", location: "other", tags: "HVAC, Plumbing" },
+      { name: "Tankless Water Heater", location: "other", tags: "HVAC, Plumbing" },
+      { name: "Heat Pump Water Heater", location: "other", tags: "HVAC, Plumbing" },
+      { name: "Whole-House Humidifier", location: "other", tags: "HVAC, Climate" },
+      { name: "Whole-House Dehumidifier", location: "other", tags: "HVAC, Climate" },
+      { name: "Air Purifier", location: "living_room", tags: "Climate, Air Quality" },
+      { name: "Portable Air Conditioner", location: "bedroom", tags: "Cooling, Climate" },
+      { name: "Window AC Unit", location: "bedroom", tags: "Cooling, Climate" },
+      { name: "Ceiling Fan", location: "living_room", tags: "Climate, Electrical" },
+      { name: "Electric Fireplace", location: "living_room", tags: "Heating, Climate" },
+      { name: "Space Heater", location: "bedroom", tags: "Heating, Small Appliance" },
+      { name: "Attic Fan", location: "other", tags: "HVAC, Ventilation" },
+      { name: "ERV / HRV Ventilator", location: "other", tags: "HVAC, Ventilation" },
+    ],
+  },
+  {
+    group: "Bathroom",
+    items: [
+      { name: "Electric Toothbrush", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Water Flosser", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Hair Dryer", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Hair Straightener", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Curling Iron", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Electric Shaver / Razor", location: "bathroom", tags: "Bathroom, Personal Care" },
+      { name: "Exhaust Fan", location: "bathroom", tags: "Bathroom, Ventilation" },
+      { name: "Heated Towel Rack", location: "bathroom", tags: "Bathroom, Heating" },
+      { name: "Bidet Seat", location: "bathroom", tags: "Bathroom, Plumbing" },
+      { name: "Bathroom Heater / Heat Lamp", location: "bathroom", tags: "Bathroom, Heating" },
+    ],
+  },
+  {
+    group: "Garage & Workshop",
+    items: [
+      { name: "Garage Door Opener", location: "garage", tags: "Garage, Safety" },
+      { name: "Chest Freezer", location: "garage", tags: "Garage, Cooling" },
+      { name: "Air Compressor", location: "garage", tags: "Garage, Tools" },
+      { name: "Shop Vac / Wet-Dry Vacuum", location: "garage", tags: "Garage, Cleaning" },
+      { name: "EV Charger (Level 2)", location: "garage", tags: "Garage, Electrical, EV" },
+      { name: "Generator (Portable)", location: "garage", tags: "Garage, Electrical, Emergency" },
+      { name: "Standby Generator", location: "other", tags: "Electrical, Emergency" },
+      { name: "Sump Pump", location: "other", tags: "Plumbing, Safety" },
+      { name: "Battery Backup Sump Pump", location: "other", tags: "Plumbing, Safety, Emergency" },
+      { name: "Table Saw", location: "garage", tags: "Garage, Tools" },
+      { name: "Miter Saw", location: "garage", tags: "Garage, Tools" },
+      { name: "Band Saw", location: "garage", tags: "Garage, Tools" },
+      { name: "Drill Press", location: "garage", tags: "Garage, Tools" },
+      { name: "Belt Sander", location: "garage", tags: "Garage, Tools" },
+      { name: "Angle Grinder", location: "garage", tags: "Garage, Tools" },
+      { name: "Welder", location: "garage", tags: "Garage, Tools" },
+      { name: "Work Light / LED Shop Light", location: "garage", tags: "Garage, Electrical" },
+    ],
+  },
+  {
+    group: "Outdoor",
+    items: [
+      { name: "Lawn Mower (Gas)", location: "garage", tags: "Outdoor, Yard" },
+      { name: "Lawn Mower (Electric)", location: "garage", tags: "Outdoor, Yard" },
+      { name: "Riding Lawn Mower", location: "garage", tags: "Outdoor, Yard" },
+      { name: "Robot Lawn Mower", location: "garage", tags: "Outdoor, Yard, Smart Home" },
+      { name: "Leaf Blower", location: "garage", tags: "Outdoor, Yard" },
+      { name: "String Trimmer / Weed Whacker", location: "garage", tags: "Outdoor, Yard" },
+      { name: "Chainsaw", location: "garage", tags: "Outdoor, Yard, Tools" },
+      { name: "Hedge Trimmer", location: "garage", tags: "Outdoor, Yard" },
+      { name: "Pressure Washer", location: "garage", tags: "Outdoor, Cleaning" },
+      { name: "Gas Grill", location: "other", tags: "Outdoor, Cooking" },
+      { name: "Electric Grill", location: "other", tags: "Outdoor, Cooking" },
+      { name: "Pellet Grill / Smoker", location: "other", tags: "Outdoor, Cooking" },
+      { name: "Outdoor Pizza Oven", location: "other", tags: "Outdoor, Cooking" },
+      { name: "Irrigation / Sprinkler Controller", location: "other", tags: "Outdoor, Yard, Irrigation" },
+      { name: "Hot Tub / Spa", location: "other", tags: "Outdoor, Plumbing" },
+      { name: "Pool Pump", location: "other", tags: "Outdoor, Pool, Plumbing" },
+      { name: "Pool Heater", location: "other", tags: "Outdoor, Pool, Heating" },
+      { name: "Pool Robot / Cleaner", location: "other", tags: "Outdoor, Pool" },
+      { name: "Outdoor Lighting (Smart)", location: "other", tags: "Outdoor, Smart Home, Electrical" },
+    ],
+  },
+  {
+    group: "Entertainment & AV",
+    items: [
+      { name: "Smart TV", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Soundbar", location: "living_room", tags: "Entertainment, AV" },
+      { name: "AV Receiver / Home Theater", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Projector", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Projector Screen (Motorized)", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Gaming Console", location: "living_room", tags: "Entertainment, Gaming" },
+      { name: "Streaming Media Player", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Subwoofer", location: "living_room", tags: "Entertainment, AV" },
+      { name: "Turntable / Record Player", location: "living_room", tags: "Entertainment, AV" },
+      { name: "TV in Bedroom", location: "bedroom", tags: "Entertainment, AV, Bedroom" },
+      { name: "Network-Attached Storage (NAS)", location: "other", tags: "Tech, Storage, Networking" },
+    ],
+  },
+  {
+    group: "Smart Home & Security",
+    items: [
+      { name: "Smart Thermostat", location: "living_room", tags: "Smart Home, Climate" },
+      { name: "Wi-Fi Router", location: "other", tags: "Smart Home, Networking" },
+      { name: "Wi-Fi Mesh System", location: "other", tags: "Smart Home, Networking" },
+      { name: "Network Switch", location: "other", tags: "Smart Home, Networking" },
+      { name: "Smart Doorbell / Video Doorbell", location: "other", tags: "Smart Home, Security" },
+      { name: "Smart Lock", location: "other", tags: "Smart Home, Security" },
+      { name: "Security System / Alarm Panel", location: "other", tags: "Smart Home, Security" },
+      { name: "Indoor Security Camera", location: "other", tags: "Smart Home, Security" },
+      { name: "Outdoor Security Camera", location: "other", tags: "Outdoor, Smart Home, Security" },
+      { name: "Smart Hub / Home Controller", location: "living_room", tags: "Smart Home" },
+      { name: "Smart Speaker (Echo / Google Home)", location: "living_room", tags: "Smart Home, Entertainment" },
+      { name: "Smoke & CO Detector (Smart)", location: "other", tags: "Smart Home, Safety" },
+      { name: "Smart Garage Door Controller", location: "garage", tags: "Smart Home, Garage" },
+      { name: "Smart Irrigation Controller", location: "other", tags: "Smart Home, Outdoor, Irrigation" },
+      { name: "Smart Lighting Hub", location: "other", tags: "Smart Home, Electrical" },
+      { name: "Home Battery Backup (Powerwall)", location: "garage", tags: "Smart Home, Electrical, Emergency" },
+      { name: "Solar Panel System", location: "other", tags: "Smart Home, Electrical, Solar" },
+    ],
+  },
+  {
+    group: "Home Office",
+    items: [
+      { name: "Desktop Computer", location: "other", tags: "Office, Tech" },
+      { name: "Laptop", location: "other", tags: "Office, Tech" },
+      { name: "Monitor", location: "other", tags: "Office, Tech" },
+      { name: "Printer / Scanner", location: "other", tags: "Office, Tech" },
+      { name: "All-in-One Printer", location: "other", tags: "Office, Tech" },
+      { name: "UPS / Battery Backup", location: "other", tags: "Office, Electrical" },
+      { name: "Shredder", location: "other", tags: "Office, Small Appliance" },
+      { name: "Label Maker", location: "other", tags: "Office, Small Appliance" },
+      { name: "Desk Fan", location: "other", tags: "Office, Climate" },
+    ],
+  },
+  {
+    group: "Vacuum & Floor Care",
+    items: [
+      { name: "Upright Vacuum", location: "other", tags: "Cleaning, Vacuum" },
+      { name: "Canister Vacuum", location: "other", tags: "Cleaning, Vacuum" },
+      { name: "Robot Vacuum", location: "living_room", tags: "Cleaning, Smart Home, Vacuum" },
+      { name: "Robot Mop", location: "living_room", tags: "Cleaning, Smart Home, Floor" },
+      { name: "Robot Vacuum + Mop Combo", location: "living_room", tags: "Cleaning, Smart Home, Vacuum" },
+      { name: "Handheld Vacuum", location: "other", tags: "Cleaning, Vacuum" },
+      { name: "Cordless Stick Vacuum", location: "other", tags: "Cleaning, Vacuum" },
+      { name: "Carpet Cleaner / Extractor", location: "other", tags: "Cleaning, Carpet" },
+      { name: "Steam Mop", location: "other", tags: "Cleaning, Floor" },
+      { name: "Window Vac", location: "other", tags: "Cleaning, Vacuum" },
+      { name: "Central Vacuum System", location: "other", tags: "Cleaning, Vacuum" },
+    ],
+  },
+];
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── CHORES TAB ────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1139,6 +1334,8 @@ function AppliancesTab() {
   const [editing, setEditing] = useState<Appliance | null>(null);
   const [form, setForm] = useState({ ...EMPTY_APPLIANCE });
   const [choreModalAppliance, setChoreModalAppliance] = useState<Appliance | null>(null);
+  const [suggOpen, setSuggOpen] = useState(false);
+  const [suggSearch, setSuggSearch] = useState("");
 
   const { data: appliances = [] } = useQuery<Appliance[]>({ queryKey: ["/api/appliances"] });
   const { data: allChores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
@@ -1163,6 +1360,13 @@ function AppliancesTab() {
   });
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_APPLIANCE }); setModalOpen(true); }
+  function openSuggested(item: { name: string; location: string; tags: string }) {
+    setEditing(null);
+    setForm({ ...EMPTY_APPLIANCE, name: item.name, location: item.location, tags: item.tags });
+    setSuggOpen(false);
+    setSuggSearch("");
+    setModalOpen(true);
+  }
   function openEdit(a: Appliance) {
     setEditing(a);
     setForm({
@@ -1242,7 +1446,55 @@ function AppliancesTab() {
             </Select>
           )}
         </div>
-        <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Appliance</Button>
+        <div className="flex gap-2">
+          <Popover open={suggOpen} onOpenChange={(o) => { setSuggOpen(o); if (!o) setSuggSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <Sparkles size={13} />Suggested
+                <ChevronDown size={11} className="text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="p-2 border-b">
+                <input
+                  autoFocus
+                  value={suggSearch}
+                  onChange={e => setSuggSearch(e.target.value)}
+                  placeholder="Search appliances…"
+                  className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {SUGGESTED_APPLIANCES.map(g => {
+                  const q = suggSearch.toLowerCase();
+                  const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q));
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={g.group}>
+                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-secondary/40 sticky top-0">{g.group}</p>
+                      {items.map(i => (
+                        <button
+                          key={i.name}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-secondary/60 transition-colors"
+                          onClick={() => openSuggested(i)}
+                        >
+                          {i.name}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+                {SUGGESTED_APPLIANCES.every(g => {
+                  const q = suggSearch.toLowerCase();
+                  return g.items.filter(i => !q || i.name.toLowerCase().includes(q) || g.group.toLowerCase().includes(q)).length === 0;
+                }) && (
+                  <p className="p-4 text-sm text-center text-muted-foreground">No results for "{suggSearch}"</p>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Appliance</Button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
