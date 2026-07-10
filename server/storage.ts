@@ -6741,6 +6741,40 @@ export async function seedMealDBRecipes() {
   console.log(`Seeded ${data.length} MealDB recipes`);
 }
 
+// ── Manual Recipe Images ──────────────────────────────────────────────────────
+// Hand-curated name → image URL mappings. Applied on every startup (overwrites).
+const MANUAL_RECIPE_IMAGES: { name: string; imageUrl: string }[] = [
+  { name: "100% Whole Wheat Bread", imageUrl: "https://www.kingarthurbaking.com/sites/default/files/styles/featured_image_2x/public/recipe_legacy/5997-3-large.jpg?itok=9NikFeli" },
+  { name: "30-Minute Cashew Alfredo", imageUrl: "https://minimalistbaker.com/wp-content/uploads/2017/08/AMAZING-30-Minute-Vegan-Alfredo-Creamy-cheesy-SO-tasty-pasta-alfredo-zoodles-recipe-vegan-glutenfree-minimalistbaker-oilfree-12.jpg" },
+  { name: "4th of July Baby Back Ribs", imageUrl: "https://ayearatthetable.com/wp-content/uploads/2011/06/IMG_33561.jpg" },
+  { name: "5-Alarm Competition Chili", imageUrl: "https://spicysouthernkitchen.com/wp-content/uploads/5-alarm-chili-4.jpg" },
+  { name: "Abbacchio Scottadito", imageUrl: "https://www.giallozafferano.it/images/3-326/Abbacchio-A-Scottadito_780x520_wm.jpg" },
+  { name: "Aglio e Olio", imageUrl: "https://www.allrecipes.com/thmb/gqWs6X3LQQUQiqENYtphs32W-Po=/0x512/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/AR-222000-spaghetti-aglio-e-olio-DDMFS-beauty-3x4-8d8d06ed371c4c17a29f2aa7eb500e9e.jpg" },
+  { name: "Air Fryer Egg Cups", imageUrl: "https://www.eazypeazymealz.com/wp-content/uploads/2016/06/air-fryer-egg-cups-6.jpg" },
+  { name: "Air Fryer Garlic Butter Steak Bites", imageUrl: "https://www.thecountrycook.net/wp-content/uploads/2023/06/1st-image-Air-Fryer-Garlic-Butter-Steak-Bites-scaled.jpg" },
+  { name: "Air Fryer Garlic Parmesan Wings", imageUrl: "https://drdavinahseats.com/wp-content/uploads/2021/05/Air-Fryer-Garlic-Parmesan-Chicken-Wings-2-V4-1200-X-1800.jpg" },
+  { name: "Air Fryer Roasted Cauliflower", imageUrl: "https://www.allrecipes.com/thmb/Xi360DVVJSOBQzgoWGk01QTKsDc=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/267304-air-fryer-roasted-cauliflower-ddmfs-step-4x3-64dd8aa5047348d7b3ec887860222f63.jpg" },
+  { name: "Air Fryer Sweet Potato Fries", imageUrl: "https://natashaskitchen.com/wp-content/uploads/2022/01/Air-Fryer-Sweet-Potato-Fries-5.jpg" },
+  { name: "Alabama White Sauce Smoked Chicken", imageUrl: "https://bamagrillmaster.com/cdn/shop/articles/20240302205543-img_1765.jpg?v=1729624932&width=2200" },
+  { name: "All-American Beef Stew", imageUrl: "https://www.seriouseats.com/thmb/vjjDTUANmCqADYHyhzbv3p4oYyQ=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/__opt__aboutcom__coeus__resources__content_migration__serious_eats__seriouseats.com__recipes__images__2016__01__20160116-american-beef-stew-recipe-34-bafc948f10ba4d49a8bfb1dd6502c911.jpg" },
+  { name: "Aloo Paratha", imageUrl: "https://www.seriouseats.com/thmb/rUJE0u39M7K-_UCHQeQ0vyM-yLI=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/__opt__aboutcom__coeus__resources__content_migration__serious_eats__seriouseats.com__2021__01__20210106-aloo-parathas-nik-sharma-13-52b77ba4cbad4c4f844f2f88910b2b53.jpg" },
+  { name: "Al Pastor Tacos", imageUrl: "https://www.seriouseats.com/thmb/phKX03D3YWbjHp9ZoelmXYWag-0=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/20260609-SEA-tacos-al-pastor-Lorena-Masso-03-051d44b9937346dcb3f818e853b9c20b.jpg" },
+  { name: "Anadama Bread", imageUrl: "https://www.seriouseats.com/thmb/TsBNLZUb1GFsLIuxxYCSuajCMAU=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/20250129-SEA-AnadamaBread-DebbieWee-Beauty2-24-538335cc8ae94e79a563006ff9be44f3.jpg" },
+  { name: "Andalusian Gazpacho", imageUrl: "https://www.seriouseats.com/thmb/4r5EDLcD3I9S3SKXgEqk4Ha7ccU=/750x0/filters:no_upscale():max_bytes(150000):strip_icc():format(webp)/andalusian-gazpacho-recipe-hero-04_1-a7207c6562c543fa9d5c4d1c53996f46.JPG" },
+];
+
+export async function applyManualRecipeImages() {
+  let updated = 0;
+  for (const { name, imageUrl } of MANUAL_RECIPE_IMAGES) {
+    const result = await pool.query(
+      `UPDATE recipes SET image_url = $1 WHERE name = $2`,
+      [imageUrl, name]
+    );
+    if ((result.rowCount ?? 0) > 0) updated++;
+  }
+  if (updated > 0) console.log(`[manual-images] Applied ${updated} manual recipe images.`);
+}
+
 // ── Recipe Image Enrichment ────────────────────────────────────────────────────
 // Fetches og:image from each system recipe's source URL and stores it in the DB.
 // Runs once at startup; idempotent (skips recipes that already have image_url).

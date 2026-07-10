@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
-import { initializeStorage, seedSystemRecipes, seedMealDBRecipes, seedRecipeImages, runMigrations } from "./storage";
+import { initializeStorage, seedSystemRecipes, seedMealDBRecipes, seedRecipeImages, applyManualRecipeImages, runMigrations } from "./storage";
 import { createMcpRouter, createOAuthRouter, createOAuthEndpoints } from "./mylifos-mcp-server";
 
 const app = express();
@@ -85,9 +85,11 @@ app.use((req, res, next) => {
     await seedSystemRecipes();
     log("System recipes seeded — seeding MealDB recipes…");
     await seedMealDBRecipes();
-    log("MealDB recipes seeded — registering routes…");
+    log("MealDB recipes seeded — applying manual recipe images…");
+    await applyManualRecipeImages();
+    log("Manual images applied — registering routes…");
     await registerRoutes(httpServer, app);
-    // Enrich system recipe images in the background (non-blocking)
+    // Enrich remaining system recipe images in the background (non-blocking)
     seedRecipeImages().catch(e => console.error("[recipe-images] error:", e));
     log("Routes registered.");
 
