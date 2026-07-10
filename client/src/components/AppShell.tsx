@@ -719,11 +719,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
   function handleDragEnd() {
     dragIdx.current = null;
+    // Optimistically sync cache so sidebar re-orders immediately on Done
+    qc.setQueryData(["/api/nav-prefs"], localPrefs);
     save(localPrefs);
   }
   function handleToggleHidden(path: string) {
     const next = localPrefs.map((p) => p.path === path ? { ...p, hidden: !p.hidden } : p);
     setLocalPrefs(next);
+    // Optimistically sync cache so sidebar shows/hides immediately
+    qc.setQueryData(["/api/nav-prefs"], next);
     save(next);
   }
 
@@ -794,8 +798,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ) : (
             <div>
               {SIDEBAR_GROUPS.map(group => {
-                // Use SIDEBAR_GROUPS.paths order (not user-saved tab order) so group layout is always intentional
-                const groupTabs = group.paths.map(p => visibleTabs.find(t => t.path === p)).filter(Boolean) as typeof visibleTabs;
+                // Filter visibleTabs by group membership — preserves user-saved drag order
+                const groupTabs = visibleTabs.filter(t => group.paths.includes(t.path));
                 if (groupTabs.length === 0) return null;
                 return (
                   <div key={group.key} className={group.label ? "mt-4" : ""}>
