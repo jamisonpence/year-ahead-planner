@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, ReactNode } from "react";
 import PlantsPage from "@/pages/PlantsPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -461,6 +461,285 @@ const SUGGESTED_APPLIANCES: { group: string; items: SuggestedApplianceItem[] }[]
   },
 ];
 
+// ── Seasonal maintenance data ─────────────────────────────────────────────────
+
+const SEASONAL_CHORES: Record<string, { season: string; emoji: string; tasks: ChoreTemplate[] }> = {
+  winter: {
+    season: "Winter", emoji: "❄️",
+    tasks: [
+      { title: "Check and insulate exposed pipes", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Winter, Plumbing", notes: "Insulate pipes in unheated spaces. Let faucets drip slowly during deep freezes to prevent bursting." },
+      { title: "Test generator before winter storms", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Winter, Emergency", notes: "Run the generator under load for 20–30 minutes and confirm fuel supply and oil are adequate." },
+      { title: "Check roof and attic for ice dams", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Winter, Roof", notes: "Icicles at eaves can indicate poor insulation. Ensure attic ventilation is clear." },
+      { title: "Stock winter emergency kit", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Winter, Emergency", notes: "Check salt/ice melt, snow shovel, flashlights, batteries, bottled water, and warm blankets." },
+    ],
+  },
+  spring: {
+    season: "Spring", emoji: "🌱",
+    tasks: [
+      { title: "Schedule AC tune-up before summer", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Spring, HVAC", notes: "Have a technician service the AC before hot weather arrives to catch refrigerant or coil problems early." },
+      { title: "Inspect roof and gutters after winter", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Spring, Exterior", notes: "Look for loose shingles, damaged flashing, and gutters clogged with winter debris." },
+      { title: "Check deck or patio for winter damage", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Spring, Exterior", notes: "Inspect for loose boards, popped nails, or cracked concrete. Apply stain or sealant as needed." },
+      { title: "Reconnect and test outdoor hoses and irrigation", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Spring, Yard, Irrigation", notes: "Remove faucet covers, reconnect hoses, and test each irrigation zone for coverage and leaks." },
+      { title: "Service lawn mower for mowing season", category: "yard", frequency: "yearly", priority: "medium", tags: "Seasonal, Spring, Yard", notes: "Sharpen blade, change oil, replace air filter, and charge battery before the first mow." },
+    ],
+  },
+  summer: {
+    season: "Summer", emoji: "☀️",
+    tasks: [
+      { title: "Check AC filter and refrigerant", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Summer, HVAC", notes: "Replace the AC filter and have refrigerant checked if cooling seems weak or the unit runs longer than usual." },
+      { title: "Clear debris from around outdoor AC unit", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Summer, HVAC", notes: "Trim vegetation and clear leaves from the condenser. Keep 2 feet clear on all sides for airflow." },
+      { title: "Inspect window and door screens", category: "maintenance", frequency: "yearly", priority: "low", tags: "Seasonal, Summer, Exterior", notes: "Check for tears or holes and repair or replace screens to keep insects out." },
+      { title: "Test and adjust irrigation system", category: "yard", frequency: "yearly", priority: "medium", tags: "Seasonal, Summer, Yard, Irrigation", notes: "Check all heads for clogs or misalignment. Adjust run times for summer heat and drought conditions." },
+    ],
+  },
+  fall: {
+    season: "Fall", emoji: "🍂",
+    tasks: [
+      { title: "Winterize outdoor faucets and hoses", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Fall, Plumbing", notes: "Disconnect hoses, drain outdoor bibs, and install insulated covers before the first freeze." },
+      { title: "Schedule furnace tune-up before heating season", category: "maintenance", frequency: "yearly", priority: "high", tags: "Seasonal, Fall, HVAC", notes: "Have a technician inspect the furnace before cold weather. Check burners, heat exchanger, and flue." },
+      { title: "Clean gutters after leaves fall", category: "yard", frequency: "yearly", priority: "high", tags: "Seasonal, Fall, Exterior, Drainage", notes: "Clear leaves from gutters and downspouts. Confirm water drains well away from the foundation." },
+      { title: "Check weatherstripping and door seals", category: "maintenance", frequency: "yearly", priority: "medium", tags: "Seasonal, Fall, Weatherproofing", notes: "Replace worn weatherstripping and re-caulk gaps around windows and doors before cold arrives." },
+      { title: "Reverse ceiling fans to clockwise for winter", category: "maintenance", frequency: "yearly", priority: "low", tags: "Seasonal, Fall, Climate", notes: "Switch fans to rotate clockwise on low speed to push warm air down from the ceiling." },
+    ],
+  },
+};
+
+function getCurrentSeason(): string {
+  const m = new Date().getMonth();
+  if (m >= 2 && m <= 4) return "spring";
+  if (m >= 5 && m <= 7) return "summer";
+  if (m >= 8 && m <= 10) return "fall";
+  return "winter";
+}
+
+// ── Shared helpers (used by Dashboard + Appliances) ───────────────────────────
+
+function serviceStatus(a: Appliance): { label: string; color: string } {
+  if (!a.nextServiceDue) return { label: "No service scheduled", color: "text-muted-foreground" };
+  const days = daysUntil(a.nextServiceDue);
+  if (days === null) return { label: "No service scheduled", color: "text-muted-foreground" };
+  if (days < 0) return { label: `Service ${Math.abs(days)}d overdue`, color: "text-red-600" };
+  if (days <= 30) return { label: `Service in ${days}d`, color: "text-yellow-600" };
+  return { label: `Service in ${days}d`, color: "text-muted-foreground" };
+}
+
+function warrantyStatus(a: Appliance): { label: string; color: string } {
+  if (!a.warrantyExpiry) return { label: "", color: "" };
+  const days = daysUntil(a.warrantyExpiry);
+  if (days === null) return { label: "", color: "" };
+  if (days < 0) return { label: "Warranty expired", color: "text-red-500" };
+  if (days <= 90) return { label: `Warranty expires in ${days}d`, color: "text-yellow-600" };
+  return { label: `Warranty until ${formatDate(a.warrantyExpiry)}`, color: "text-muted-foreground" };
+}
+
+function payloadFromTemplate(template: ChoreTemplate) {
+  return {
+    title: template.title, category: template.category, frequency: template.frequency,
+    customFrequencyDays: template.frequency === "custom" ? template.customFrequencyDays ?? null : null,
+    nextDue: template.frequency === "as_needed" ? null : todayStr(),
+    notes: template.notes, isActive: true, priority: template.priority,
+    assignee: "", tags: template.tags, sortOrder: 0,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── DASHBOARD TAB ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DashboardSection({ title, count, accent, children }: {
+  title: string; count?: number; accent?: "red" | "amber"; children: ReactNode;
+}) {
+  const cls = accent === "red"
+    ? "border-red-200 bg-red-50/50 dark:bg-red-950/10 dark:border-red-900"
+    : accent === "amber"
+    ? "border-amber-200 bg-amber-50/40 dark:bg-amber-950/10 dark:border-amber-900"
+    : "border-border bg-card";
+  return (
+    <div className={`rounded-lg border p-4 ${cls}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {count !== undefined && <Badge variant="secondary" className="text-xs">{count}</Badge>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DashboardChoreRow({ chore, onComplete, onDefer }: {
+  chore: Chore; onComplete: () => void; onDefer?: () => void;
+}) {
+  const status = choreStatus(chore);
+  const StatusIcon = status.icon;
+  return (
+    <div className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
+      <button
+        onClick={onComplete}
+        className="shrink-0 w-7 h-7 rounded-full border-2 border-border flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
+        title="Mark complete"
+      >
+        <CheckCircle2 size={13} className="text-muted-foreground/40" />
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{chore.title}</p>
+        <p className={`text-xs flex items-center gap-1 ${status.color}`}>
+          <StatusIcon size={10} />{status.label}{chore.assignee ? ` · ${chore.assignee}` : ""}
+        </p>
+      </div>
+      {onDefer && (
+        <button onClick={onDefer} className="text-xs text-muted-foreground hover:text-foreground border rounded px-2 py-0.5 transition-colors shrink-0">
+          Defer 1w
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DashboardTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
+  const { data: projects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
+  const { data: appliances = [] } = useQuery<Appliance[]>({ queryKey: ["/api/appliances"] });
+
+  const completeMut = useMutation({
+    mutationFn: (chore: Chore) => apiRequest("PATCH", `/api/chores/${chore.id}`, {
+      lastCompleted: todayStr(),
+      nextDue: chore.frequency === "as_needed" ? chore.nextDue : nextDueAfterComplete(chore.frequency, chore.customFrequencyDays),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Marked complete ✓" }); },
+  });
+
+  const snoozeMut = useMutation({
+    mutationFn: ({ id, days }: { id: number; days: number }) => {
+      const base = new Date(); base.setHours(0, 0, 0, 0);
+      return apiRequest("PATCH", `/api/chores/${id}`, { nextDue: new Date(base.getTime() + days * 86400000).toISOString().slice(0, 10) });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Deferred 1 week" }); },
+  });
+
+  const addChoreMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/chores", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Chore added" }); },
+  });
+
+  const overdueChores = chores
+    .filter(c => c.isActive && c.nextDue && (daysUntil(c.nextDue) ?? 1) < 0)
+    .sort((a, b) => (daysUntil(a.nextDue) ?? 0) - (daysUntil(b.nextDue) ?? 0));
+
+  const thisWeekChores = chores
+    .filter(c => { if (!c.isActive || !c.nextDue) return false; const d = daysUntil(c.nextDue) ?? 999; return d >= 0 && d <= 7; })
+    .sort((a, b) => (daysUntil(a.nextDue) ?? 0) - (daysUntil(b.nextDue) ?? 0));
+
+  const activeProjects = projects.filter(p => ["in_progress", "blocked"].includes(p.status));
+
+  const applianceAlerts = appliances.filter(a => {
+    const svc = daysUntil(a.nextServiceDue);
+    const warr = daysUntil(a.warrantyExpiry);
+    return (svc !== null && svc <= 14) || (warr !== null && warr >= 0 && warr <= 90);
+  }).sort((a, b) => (daysUntil(a.nextServiceDue) ?? 999) - (daysUntil(b.nextServiceDue) ?? 999));
+
+  const season = getCurrentSeason();
+  const { season: seasonName, emoji: seasonEmoji, tasks: seasonalTasks } = SEASONAL_CHORES[season];
+  const pendingSeasonalTasks = seasonalTasks.filter(t =>
+    !chores.some(c => c.title.trim().toLowerCase() === t.title.trim().toLowerCase())
+  );
+
+  const allClear = overdueChores.length === 0 && thisWeekChores.length === 0 && activeProjects.length === 0 && applianceAlerts.length === 0;
+
+  return (
+    <div className="space-y-4">
+      {allClear && (
+        <div className="text-center py-12 text-muted-foreground">
+          <CheckCircle2 size={36} className="mx-auto mb-3 text-green-500 opacity-60" />
+          <p className="text-sm font-medium">Your home is in good shape!</p>
+          <p className="text-xs mt-1">No overdue chores, active projects, or appliance alerts.</p>
+        </div>
+      )}
+
+      {overdueChores.length > 0 && (
+        <DashboardSection title="Needs Attention" count={overdueChores.length} accent="red">
+          {overdueChores.map(c => (
+            <DashboardChoreRow key={c.id} chore={c}
+              onComplete={() => completeMut.mutate(c)}
+              onDefer={() => snoozeMut.mutate({ id: c.id, days: 7 })}
+            />
+          ))}
+        </DashboardSection>
+      )}
+
+      {thisWeekChores.length > 0 && (
+        <DashboardSection title="Due This Week" count={thisWeekChores.length} accent="amber">
+          {thisWeekChores.map(c => (
+            <DashboardChoreRow key={c.id} chore={c} onComplete={() => completeMut.mutate(c)} />
+          ))}
+        </DashboardSection>
+      )}
+
+      {activeProjects.length > 0 && (
+        <DashboardSection title="Active Projects" count={activeProjects.length}>
+          {activeProjects.map(p => {
+            const daysLeft = daysUntil(p.dueDate);
+            const doneTasks = p.tasks.filter(t => t.completed).length;
+            return (
+              <div key={p.id} className="flex items-start gap-3 py-2.5 border-b border-border/40 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{p.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <Badge className={`text-xs ${STATUS_COLORS[p.status]}`}>{PROJECT_STATUSES.find(s => s.value === p.status)?.label}</Badge>
+                    {p.estimatedCost && <span className="text-xs text-muted-foreground">Est. ${Number(p.estimatedCost).toLocaleString()}</span>}
+                    {p.dueDate && <span className={`text-xs ${daysLeft !== null && daysLeft < 0 ? "text-red-600 font-medium" : "text-muted-foreground"}`}>Due {formatDate(p.dueDate)}</span>}
+                  </div>
+                </div>
+                {p.tasks.length > 0 && <span className="text-xs text-muted-foreground shrink-0 mt-0.5">{doneTasks}/{p.tasks.length} tasks</span>}
+              </div>
+            );
+          })}
+        </DashboardSection>
+      )}
+
+      {applianceAlerts.length > 0 && (
+        <DashboardSection title="Appliance Alerts" count={applianceAlerts.length} accent="amber">
+          {applianceAlerts.map(a => {
+            const svc = serviceStatus(a);
+            const warr = warrantyStatus(a);
+            const svcDays = daysUntil(a.nextServiceDue);
+            return (
+              <div key={a.id} className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{a.name}</p>
+                  <div className="mt-0.5 space-y-0.5">
+                    {svcDays !== null && svcDays <= 14 && <p className={`text-xs ${svc.color}`}>{svc.label}</p>}
+                    {warr.label && <p className={`text-xs ${warr.color}`}>{warr.label}</p>}
+                  </div>
+                </div>
+                {a.location && <Badge variant="outline" className="text-xs shrink-0">{APPLIANCE_LOCATIONS.find(l => l.value === a.location)?.label ?? a.location}</Badge>}
+              </div>
+            );
+          })}
+        </DashboardSection>
+      )}
+
+      {pendingSeasonalTasks.length > 0 && (
+        <DashboardSection title={`${seasonEmoji} ${seasonName} Checklist`} count={pendingSeasonalTasks.length}>
+          {pendingSeasonalTasks.map(t => (
+            <div key={t.title} className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate">{t.title}</p>
+                <p className="text-xs text-muted-foreground">{frequencyLabel(t.frequency, t.customFrequencyDays)}</p>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1"
+                onClick={() => addChoreMut.mutate(payloadFromTemplate(t))}
+              >
+                <Plus size={11} /> Add
+              </Button>
+            </div>
+          ))}
+        </DashboardSection>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── CHORES TAB ────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -478,6 +757,7 @@ function ChoresTab() {
   const [collapsedTemplateGroups, setCollapsedTemplateGroups] = useState<Set<string>>(new Set(["Indoor Cleaning", "Safety and Supplies"]));
   const [suggOpen, setSuggOpen] = useState(false);
   const [suggSearch, setSuggSearch] = useState("");
+  const [showThisWeek, setShowThisWeek] = useState(false);
 
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
 
@@ -511,6 +791,14 @@ function ChoresTab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Marked complete ✓" }); },
   });
 
+  const snoozeMut = useMutation({
+    mutationFn: ({ id, days }: { id: number; days: number }) => {
+      const base = new Date(); base.setHours(0, 0, 0, 0);
+      return apiRequest("PATCH", `/api/chores/${id}`, { nextDue: new Date(base.getTime() + days * 86400000).toISOString().slice(0, 10) });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Deferred 1 week" }); },
+  });
+
   function openNew() { setEditing(null); setForm({ ...EMPTY_CHORE }); setModalOpen(true); }
   function openEdit(c: Chore) {
     setEditing(c);
@@ -536,22 +824,6 @@ function ChoresTab() {
 
   function choreExists(title: string) {
     return chores.some((c) => c.title.trim().toLowerCase() === title.trim().toLowerCase());
-  }
-
-  function payloadFromTemplate(template: ChoreTemplate) {
-    return {
-      title: template.title,
-      category: template.category,
-      frequency: template.frequency,
-      customFrequencyDays: template.frequency === "custom" ? template.customFrequencyDays ?? null : null,
-      nextDue: template.frequency === "as_needed" ? null : todayStr(),
-      notes: template.notes,
-      isActive: true,
-      priority: template.priority,
-      assignee: "",
-      tags: template.tags,
-      sortOrder: 0,
-    };
   }
 
   function addTemplate(template: ChoreTemplate) {
@@ -585,7 +857,19 @@ function ChoresTab() {
     return matchSearch && matchCat && matchTag;
   });
 
-  const sorted = [...filtered].sort((a, b) => {
+  const overdueChores = filtered.filter(c => c.isActive && c.nextDue && (daysUntil(c.nextDue) ?? 1) < 0)
+    .sort((a, b) => (daysUntil(a.nextDue) ?? 0) - (daysUntil(b.nextDue) ?? 0));
+
+  const thisWeekChores = filtered.filter(c => {
+    if (!c.isActive || !c.nextDue) return false;
+    const d = daysUntil(c.nextDue) ?? 999;
+    return d >= 0 && d <= 7;
+  }).sort((a, b) => (daysUntil(a.nextDue) ?? 0) - (daysUntil(b.nextDue) ?? 0));
+
+  // Exclude overdue from grouped view (they show in the pinned section)
+  const nonOverdue = filtered.filter(c => !c.nextDue || (daysUntil(c.nextDue) ?? 0) >= 0);
+
+  const sorted = [...nonOverdue].sort((a, b) => {
     const da = daysUntil(a.nextDue) ?? 9999;
     const db = daysUntil(b.nextDue) ?? 9999;
     return da - db;
@@ -645,6 +929,15 @@ function ChoresTab() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={showThisWeek ? "default" : "outline"}
+            onClick={() => setShowThisWeek(v => !v)}
+            className="gap-1.5"
+          >
+            <Clock size={13} />This Week
+            {showThisWeek && thisWeekChores.length > 0 && <Badge variant="secondary" className="text-xs ml-0.5 bg-white/20 text-white">{thisWeekChores.length}</Badge>}
+          </Button>
           <Popover open={suggOpen} onOpenChange={(o) => { setSuggOpen(o); if (!o) setSuggSearch(""); }}>
             <PopoverTrigger asChild>
               <Button size="sm" variant="outline" className="gap-1.5">
@@ -714,7 +1007,78 @@ function ChoresTab() {
         </div>
       </div>
 
-      {grouped.length === 0 ? (
+      {/* This Week flat view */}
+      {showThisWeek ? (
+        thisWeekChores.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <CheckCircle2 size={32} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Nothing due this week — you're all caught up!</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {thisWeekChores.map((chore) => {
+              const status = choreStatus(chore);
+              const StatusIcon = status.icon;
+              const freqLabel = FREQUENCIES.find((f) => f.value === chore.frequency)?.label ?? chore.frequency;
+              const tags = (chore.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+              return (
+                <div key={chore.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                  <button onClick={() => completeMut.mutate(chore)} className="shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors" title="Mark complete">
+                    <CheckCircle2 size={16} className="text-muted-foreground/40 hover:text-green-500" />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{chore.title}</span>
+                      <Badge variant="outline" className="text-xs">{freqLabel}</Badge>
+                      {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs"><Tag size={10} className="mr-0.5" />{t}</Badge>)}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs flex-wrap">
+                      {chore.assignee && <span className="text-muted-foreground">→ {chore.assignee}</span>}
+                      <span className={`flex items-center gap-1 font-medium ${status.color}`}><StatusIcon size={11} />{status.label}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => openEdit(chore)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+      <>
+      {/* Overdue pinned section */}
+      {overdueChores.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/10 dark:border-red-900 p-3 space-y-1.5">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={14} className="text-red-600" />
+            <span className="text-sm font-semibold text-red-700 dark:text-red-400">Overdue</span>
+            <Badge variant="secondary" className="text-xs ml-auto">{overdueChores.length}</Badge>
+          </div>
+          {overdueChores.map((chore) => {
+            const status = choreStatus(chore);
+            const StatusIcon = status.icon;
+            return (
+              <div key={chore.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/60 dark:bg-background/40 border border-red-100 dark:border-red-900/50">
+                <button onClick={() => completeMut.mutate(chore)} className="shrink-0 w-7 h-7 rounded-full border-2 border-red-200 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors" title="Mark complete">
+                  <CheckCircle2 size={13} className="text-red-300 hover:text-green-500" />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm">{chore.title}</span>
+                  <p className={`text-xs flex items-center gap-1 ${status.color}`}><StatusIcon size={10} />{status.label}{chore.assignee ? ` · ${chore.assignee}` : ""}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => snoozeMut.mutate({ id: chore.id, days: 7 })} className="text-xs text-muted-foreground hover:text-foreground border rounded px-2 py-0.5 transition-colors bg-white dark:bg-background">Defer 1w</button>
+                  <button onClick={() => openEdit(chore)} className="p-1.5 rounded hover:bg-secondary transition-colors"><Pencil size={13} /></button>
+                  <button onClick={() => deleteMut.mutate(chore.id)} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {grouped.length === 0 && overdueChores.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <RefreshCw size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No chores yet. Add your first one!</p>
@@ -778,6 +1142,8 @@ function ChoresTab() {
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -993,6 +1359,40 @@ function ProjectsTab() {
         </div>
         <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />Add Project</Button>
       </div>
+
+      {projects.length > 0 && (() => {
+        const active = projects.filter(p => p.status !== "completed" && p.status !== "cancelled");
+        const totalEst = projects.reduce((s, p) => s + (p.estimatedCost ? Number(p.estimatedCost) : 0), 0);
+        const totalAct = projects.reduce((s, p) => s + (p.actualCost ? Number(p.actualCost) : 0), 0);
+        return (
+          <div className="flex flex-wrap gap-4 rounded-lg border bg-card/60 px-4 py-3 text-sm">
+            <div>
+              <span className="text-muted-foreground text-xs uppercase tracking-wide">Active</span>
+              <p className="font-semibold">{active.length} project{active.length !== 1 ? "s" : ""}</p>
+            </div>
+            {totalEst > 0 && (
+              <div>
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">Estimated</span>
+                <p className="font-semibold">${totalEst.toLocaleString()}</p>
+              </div>
+            )}
+            {totalAct > 0 && (
+              <div>
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">Spent</span>
+                <p className={`font-semibold ${totalEst > 0 && totalAct > totalEst ? "text-red-600" : ""}`}>${totalAct.toLocaleString()}</p>
+              </div>
+            )}
+            {totalEst > 0 && totalAct > 0 && (
+              <div>
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">Remaining</span>
+                <p className={`font-semibold ${totalAct > totalEst ? "text-red-600" : "text-green-700 dark:text-green-400"}`}>
+                  {totalAct > totalEst ? `-$${(totalAct - totalEst).toLocaleString()}` : `$${(totalEst - totalAct).toLocaleString()}`}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -1405,6 +1805,13 @@ function AppliancesTab() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/appliances/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/appliances"] }); toast({ title: "Appliance deleted" }); },
   });
+  const completeChore = useMutation({
+    mutationFn: (chore: Chore) => apiRequest("PATCH", `/api/chores/${chore.id}`, {
+      lastCompleted: todayStr(),
+      nextDue: chore.frequency === "as_needed" ? chore.nextDue : nextDueAfterComplete(chore.frequency, chore.customFrequencyDays),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/chores"] }); toast({ title: "Chore marked complete ✓" }); },
+  });
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_APPLIANCE }); setModalOpen(true); }
 
@@ -1674,7 +2081,12 @@ function AppliancesTab() {
                         </button>
                       </div>
                       {linkedChores.length === 0 ? (
-                        <p className="text-xs text-muted-foreground/60 italic">No chores attached yet.</p>
+                        <button
+                          onClick={() => setChoreModalAppliance(appl)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1 py-1"
+                        >
+                          <Plus size={11} />Add maintenance chores →
+                        </button>
                       ) : (
                         linkedChores.map(c => {
                           const cs = choreStatus(c);
@@ -1682,6 +2094,13 @@ function AppliancesTab() {
                           const freqLabel = FREQUENCIES.find(f => f.value === c.frequency)?.label ?? c.frequency;
                           return (
                             <div key={c.id} className="flex items-center gap-2 rounded-lg bg-secondary/40 px-2.5 py-2">
+                              <button
+                                onClick={() => completeChore.mutate(c)}
+                                className="shrink-0 w-6 h-6 rounded-full border-2 border-border flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors"
+                                title="Mark complete"
+                              >
+                                <Check size={11} className="text-muted-foreground/40" />
+                              </button>
                               <Icon size={13} className={cs.color} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate">{c.title}</p>
@@ -1690,7 +2109,6 @@ function AppliancesTab() {
                               <button
                                 onClick={() => {
                                   if (confirm(`Unlink "${c.title}" from ${appl.name}?`)) {
-                                    qc.invalidateQueries({ queryKey: ["/api/chores"] });
                                     apiRequest("PATCH", `/api/chores/${c.id}`, { applianceId: null })
                                       .then(() => qc.invalidateQueries({ queryKey: ["/api/chores"] }));
                                   }
@@ -1819,7 +2237,7 @@ export default function HousekeepingPage() {
   }).length;
 
   return (
-    <Tabs defaultValue="chores">
+    <Tabs defaultValue="dashboard">
       <PageShell
         size="sm"
         title={
@@ -1832,6 +2250,7 @@ export default function HousekeepingPage() {
         subtitle="Chores, projects & appliances"
         controls={
           <TabsList className="h-9 text-xs gap-0.5">
+            <TabsTrigger value="dashboard">Overview</TabsTrigger>
             <TabsTrigger value="chores">Chores</TabsTrigger>
             <TabsTrigger value="projects">Projects</TabsTrigger>
             <TabsTrigger value="appliances">Appliances</TabsTrigger>
@@ -1849,6 +2268,7 @@ export default function HousekeepingPage() {
           </div>
         )}
 
+        <TabsContent value="dashboard"><DashboardTab /></TabsContent>
         <TabsContent value="chores"><ChoresTab /></TabsContent>
         <TabsContent value="projects"><ProjectsTab /></TabsContent>
         <TabsContent value="appliances"><AppliancesTab /></TabsContent>
