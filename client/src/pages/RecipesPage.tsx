@@ -420,7 +420,7 @@ function RecipeFormModal({ open, onClose, editRecipe }: {
   );
 }
 
-// ── Bundle Form Modal ─────────────────────────────────────────────────────────
+// ── Meal Form Modal ───────────────────────────────────────────────────────────
 function BundleFormModal({ open, onClose, editBundle, recipes }: {
   open: boolean; onClose: () => void; editBundle: MealBundle | null; recipes: Recipe[];
 }) {
@@ -444,11 +444,11 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
   const inv = () => queryClient.invalidateQueries({ queryKey: ["/api/meal-bundles"] });
   const createMut = useMutation({
     mutationFn: (d: InsertMealBundle) => apiRequest("POST", "/api/meal-bundles", d),
-    onSuccess: () => { inv(); toast({ title: "Bundle saved" }); onClose(); },
+    onSuccess: () => { inv(); toast({ title: "Meal saved" }); onClose(); },
   });
   const updateMut = useMutation({
     mutationFn: (d: Partial<InsertMealBundle>) => apiRequest("PATCH", `/api/meal-bundles/${editBundle?.id}`, d),
-    onSuccess: () => { inv(); toast({ title: "Bundle updated" }); onClose(); },
+    onSuccess: () => { inv(); toast({ title: "Meal updated" }); onClose(); },
   });
 
   const toggleRecipe = (id: number) =>
@@ -471,7 +471,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-2xl flex flex-col h-[90vh] max-h-[90vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b">
-          <DialogTitle>{editBundle ? "Edit Bundle" : "Create Meal Bundle"}</DialogTitle>
+          <DialogTitle>{editBundle ? "Edit Meal" : "Create Meal"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -481,7 +481,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
               <Input value={emoji} onChange={e => setEmoji(e.target.value)} placeholder="🍽️" maxLength={4} />
             </div>
             <div className="col-span-2 space-y-1.5">
-              <Label>Bundle Name *</Label>
+              <Label>Meal Name *</Label>
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Steak Night" required />
             </div>
           </div>
@@ -528,7 +528,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
           {/* Selected preview */}
           {selectedIds.length > 0 && (
             <div className="p-3 rounded-xl bg-secondary/30 border">
-              <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Bundle Preview</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Meal Preview</p>
               <div className="flex flex-wrap gap-2">
                 {selectedIds.map(id => {
                   const r = recipes.find(x => x.id === id);
@@ -547,7 +547,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
           </div>
           <div className="flex gap-2 px-5 py-4 border-t shrink-0">
             <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="flex-1">
-              {createMut.isPending || updateMut.isPending ? "Saving..." : editBundle ? "Save Bundle" : "Create Bundle"}
+              {createMut.isPending || updateMut.isPending ? "Saving..." : editBundle ? "Save Meal" : "Create Meal"}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
@@ -794,7 +794,7 @@ function SharedRecipesTab() {
                         onClick={() => addToLibraryMut.mutate(share)}
                         disabled={addToLibraryMut.isPending}
                       >
-                        <Plus size={11} /> Add to Library
+                        <Plus size={11} /> Add to My Recipes
                       </Button>
                       <Button
                         size="icon"
@@ -914,9 +914,15 @@ function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, onShare, isO
           </div>
         )}
       </div>
-      <div className="border-t px-3 py-2 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 flex-1" onClick={onAssign}>
-          <CalendarDays size={11} /> Add to Week
+      <div className="border-t px-2 py-2 flex items-center gap-1" onClick={e => e.stopPropagation()}>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 flex-1 px-2" onClick={onDetail}>
+          <BookOpen size={11} /> View
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 flex-1 px-2" onClick={onAssign}>
+          <CalendarDays size={11} /> Plan
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 flex-1 px-2" onClick={onShare}>
+          <Send size={11} /> Share
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -924,8 +930,6 @@ function RecipeCard({ recipe, onDetail, onAssign, onEdit, onDelete, onShare, isO
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}><Pencil size={12} className="mr-2" />Edit</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onShare}><Send size={12} className="mr-2" />Share with Friend</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
               <Trash2 size={12} className="mr-2" />Delete
@@ -1218,7 +1222,7 @@ function AssignDayModal({ recipe, bundle, weekStart, onClose, existingPlan }: {
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-sm">
-        <DialogHeader><DialogTitle>Add to Week</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add to Meal Plan</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">Pick a day for <strong>{recipe?.name ?? bundle?.name}</strong>:</p>
           <div className="flex flex-wrap gap-2">
@@ -1789,15 +1793,21 @@ function getRecipeSubViewFromUrl(): SubView {
   if (storedTab) {
     localStorage.removeItem(RECIPE_TAB_INTENT_KEY);
     if (storedTab === "saved") return "library";
-    if (storedTab === "library") return "browse";
+    if (storedTab === "library" || storedTab === "discover" || storedTab === "browse") return "browse";
+    if (storedTab === "meals") return "bundles";
+    if (storedTab === "plan") return "week";
+    if (storedTab === "shopping") return "grocery";
     if (storedTab === "bundles" || storedTab === "week" || storedTab === "grocery" || storedTab === "shared") return storedTab;
   }
   const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
   const params = new URLSearchParams(hashQuery || window.location.search);
   if (params.get("shared") === "1") return "shared";
   const tab = params.get("tab");
-  if (tab === "saved" || tab === "library") return tab === "saved" ? "library" : "browse";
-  if (tab === "browse") return "browse";
+  if (tab === "saved" || tab === "my-recipes") return "library";
+  if (tab === "library" || tab === "discover" || tab === "browse") return "browse";
+  if (tab === "meals") return "bundles";
+  if (tab === "plan" || tab === "meal-plan") return "week";
+  if (tab === "shopping") return "grocery";
   if (tab === "bundles" || tab === "week" || tab === "grocery" || tab === "shared") return tab;
   return "library";
 }
@@ -1806,6 +1816,7 @@ export default function RecipesPage() {
   const { toast } = useToast();
   const [subView, setSubView] = useState<SubView>(getRecipeSubViewFromUrl);
   const [libFilter, setLibFilter] = useState<LibFilter>("all");
+  const [libSearch, setLibSearch] = useState("");
   useEffect(() => {
     setSubView(getRecipeSubViewFromUrl());
   }, []);
@@ -1956,7 +1967,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
   });
   const deleteBundleMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/meal-bundles/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/meal-bundles"] }); toast({ title: "Bundle deleted" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/meal-bundles"] }); toast({ title: "Meal deleted" }); },
   });
   const removeAssignMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/week-plan/${id}`),
@@ -1985,12 +1996,23 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/custom-grocery-items", weekStart] }),
   });
 
-  // Filtered recipes for library view (user recipes only)
+  const searchedRecipes = useMemo(() => {
+    const q = libSearch.trim().toLowerCase();
+    if (!q) return recipes;
+    return recipes.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      (r.category ?? "").toLowerCase().includes(q) ||
+      (r.tags ?? "").toLowerCase().includes(q) ||
+      parseIngredients(r.ingredientsJson).some(ing => ing.name.toLowerCase().includes(q))
+    );
+  }, [recipes, libSearch]);
+
+  // Filtered recipes for My Recipes view (user recipes only)
   const filteredRecipes = useMemo(() => {
-    if (libFilter === "all") return recipes;
-    if (libFilter === "unclassified") return recipes.filter(r => !r.componentType);
-    return recipes.filter(r => r.componentType === libFilter);
-  }, [recipes, libFilter]);
+    if (libFilter === "all") return searchedRecipes;
+    if (libFilter === "unclassified") return searchedRecipes.filter(r => !r.componentType);
+    return searchedRecipes.filter(r => r.componentType === libFilter);
+  }, [searchedRecipes, libFilter]);
 
   // Browse tab: filtered system recipes
   const browseCategories = useMemo(() => {
@@ -2076,8 +2098,17 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     sum + items.filter(item => checkedKeys.has(item.name.toLowerCase())).length, 0) +
     customItems.filter(i => i.checked).length;
 
-  // Group user recipes by component type for the library section view
+  // Group user recipes by component type for the My Recipes section view
   const recipesByType = useMemo(() => {
+    const result: Record<string, Recipe[]> = {};
+    COMPONENT_TYPES.forEach(ct => {
+      result[ct.value] = searchedRecipes.filter(r => r.componentType === ct.value);
+    });
+    result["unclassified"] = searchedRecipes.filter(r => !r.componentType);
+    return result;
+  }, [searchedRecipes]);
+
+  const allRecipesByType = useMemo(() => {
     const result: Record<string, Recipe[]> = {};
     COMPONENT_TYPES.forEach(ct => {
       result[ct.value] = recipes.filter(r => r.componentType === ct.value);
@@ -2087,11 +2118,11 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
   }, [recipes]);
 
   const subNavItems = [
-    { id: "library" as SubView, label: "Saved", icon: <BookOpen size={14} />, count: recipes.length },
-    { id: "browse" as SubView, label: "Library", icon: <Compass size={14} />, count: systemRecipes.length },
-    { id: "bundles" as SubView, label: "Bundles", icon: <Package size={14} />, count: bundles.length },
-    { id: "week" as SubView, label: "This Week", icon: <CalendarDays size={14} />, count: weekPlan.length },
-    { id: "grocery" as SubView, label: "Grocery", icon: <ShoppingCart size={14} />, count: totalGrocery },
+    { id: "library" as SubView, label: "My Recipes", icon: <BookOpen size={14} />, count: recipes.length },
+    { id: "browse" as SubView, label: "Discover", icon: <Compass size={14} />, count: systemRecipes.length },
+    { id: "bundles" as SubView, label: "Meals", icon: <Package size={14} />, count: bundles.length },
+    { id: "week" as SubView, label: "Meal Plan", icon: <CalendarDays size={14} />, count: weekPlan.length },
+    { id: "grocery" as SubView, label: "Shopping", icon: <ShoppingCart size={14} />, count: totalGrocery },
     { id: "shared" as SubView, label: "Shared", icon: <Send size={14} />, count: null },
   ];
 
@@ -2099,20 +2130,20 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     <PageShell
       size="wide"
       title="Recipes"
-      subtitle={`${recipes.length} recipe${recipes.length !== 1 ? "s" : ""} · plan meals, build bundles, and manage your grocery list`}
+      subtitle={`${recipes.length} recipe${recipes.length !== 1 ? "s" : ""} · save recipes, plan meals, shop smarter, and share ideas`}
       action={
         <div className="flex gap-2 flex-wrap">
           {subView === "library" && (<>
-            <Button size="sm" variant="outline" onClick={() => setMealDbOpen(true)} className="gap-1.5">
-              <Search size={13} /> Find Recipes
-            </Button>
             <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5">
               <Plus size={13} /><ChefHat size={13} /> Add Recipe
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSubView("browse")} className="gap-1.5">
+              <Compass size={13} /> Discover
             </Button>
           </>)}
           {subView === "bundles" && (
             <Button size="sm" onClick={() => { setEditBundle(null); setBundleModal(true); }} className="gap-1.5">
-              <Plus size={13} /><Package size={13} /> Create Bundle
+              <Plus size={13} /><Package size={13} /> Create Meal
             </Button>
           )}
           {subView === "week" && (
@@ -2162,6 +2193,69 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
       {/* ── LIBRARY ── */}
       {subView === "library" && (
         <div className="space-y-6">
+          <div className="grid lg:grid-cols-[1.3fr_0.7fr] gap-4">
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">My Recipes</h3>
+                  <p className="text-sm text-muted-foreground">Save recipes once, then reuse them for cooking, meal planning, shopping, and sharing.</p>
+                </div>
+                <Button size="sm" onClick={() => { setEditRecipe(null); setRecipeModal(true); }} className="gap-1.5 shrink-0">
+                  <Plus size={13} /> Add Recipe
+                </Button>
+              </div>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={libSearch}
+                  onChange={e => setLibSearch(e.target.value)}
+                  placeholder="Search your recipes, ingredients, or tags..."
+                  className="pl-9"
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Button type="button" variant="outline" size="sm" className="justify-start gap-1.5" onClick={() => { setEditRecipe(null); setRecipeModal(true); }}>
+                  <ExternalLink size={13} /> Import URL
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="justify-start gap-1.5" onClick={() => setSubView("browse")}>
+                  <Compass size={13} /> Discover
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="justify-start gap-1.5" onClick={() => setSubView("week")}>
+                  <CalendarDays size={13} /> Plan
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="justify-start gap-1.5" onClick={() => setSubView("grocery")}>
+                  <ShoppingCart size={13} /> Shop
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-secondary/20 p-4">
+              <h3 className="font-semibold text-sm">This week</h3>
+              <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                <div>
+                  <p className="text-xl font-bold">{weekPlan.length}</p>
+                  <p className="text-xs text-muted-foreground">planned</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{bundles.length}</p>
+                  <p className="text-xs text-muted-foreground">meals</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{totalGrocery}</p>
+                  <p className="text-xs text-muted-foreground">items</p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                <Button type="button" variant="ghost" size="sm" className="w-full justify-between" onClick={() => setSubView("week")}>
+                  Open meal plan <ChevronRight size={14} />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="w-full justify-between" onClick={() => setSubView("grocery")}>
+                  Open shopping list <ChevronRight size={14} />
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Component type filter */}
           <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
             <div className="flex gap-2 w-max sm:flex-wrap sm:w-auto">
@@ -2294,13 +2388,19 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                   </div>
                 );
               })()}
-              {recipes.length === 0 && (
+              {searchedRecipes.length === 0 && (
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
-                  <p className="font-medium">No recipes yet</p>
-                  <p className="text-sm mt-1 mb-4">Browse 930+ recipes in the <button onClick={() => setSubView("browse")} className="text-primary underline">Library tab</button>, or quick-add one below</p>
+                  <p className="font-medium">{recipes.length === 0 ? "No recipes yet" : "No recipes match your search"}</p>
+                  <p className="text-sm mt-1 mb-4">
+                    {recipes.length === 0 ? (
+                      <>Browse recipes in <button onClick={() => setSubView("browse")} className="text-primary underline">Discover</button>, or add one from a URL.</>
+                    ) : (
+                      "Try another search, clear filters, or add a new recipe."
+                    )}
+                  </p>
                   <button
-                    onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "recipe" } }))}
+                    onClick={() => { setEditRecipe(null); setRecipeModal(true); }}
                     className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
                   >
                     + Save a Recipe
@@ -2314,8 +2414,8 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               {filteredRecipes.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground">
                   <ChefHat size={40} className="mx-auto mb-4 opacity-20" />
-                  <p className="font-medium">No recipes here yet</p>
-                  <p className="text-sm mt-1">Add a recipe and set its Component Type to add it to this section</p>
+                  <p className="font-medium">{searchedRecipes.length === 0 ? "No recipes match your search" : "No recipes here yet"}</p>
+                  <p className="text-sm mt-1">{searchedRecipes.length === 0 ? "Try another search or clear the search box." : "Add a recipe and set its Component Type to add it to this section."}</p>
                 </div>
               ) : (() => {
                 const buckets = groupByCategory(filteredRecipes);
@@ -2378,14 +2478,14 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
         </div>
       )}
 
-      {/* ── BUNDLES ── */}
+      {/* ── MEALS ── */}
       {subView === "bundles" && (
         <div className="space-y-4">
           {bundles.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Package size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="font-medium">No meal bundles yet</p>
-              <p className="text-sm mt-1">Create a bundle to save full-meal combinations like "Steak Night" or "Taco Tuesday"</p>
+              <p className="font-medium">No reusable meals yet</p>
+              <p className="text-sm mt-1">Create meals to save combinations like Steak Night, Taco Tuesday, or meal prep lunches.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -2450,7 +2550,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                     </div>
                     <div className="border-t px-3 py-2">
                       <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 w-full" onClick={() => setAssignBundle(bundle)}>
-                        <CalendarDays size={11} /> Add to Week
+                        <CalendarDays size={11} /> Add to Meal Plan
                       </Button>
                     </div>
                   </div>
@@ -2461,9 +2561,18 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
         </div>
       )}
 
-      {/* ── THIS WEEK ── */}
+      {/* ── MEAL PLAN ── */}
       {subView === "week" && (
         <div className="space-y-6">
+          <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Meal Plan</h3>
+              <p className="text-sm text-muted-foreground">Pick recipes or meals for the week, then generate your shopping list from the plan.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSubView("grocery")} className="gap-1.5 shrink-0">
+              <ShoppingCart size={13} /> Open Shopping
+            </Button>
+          </div>
           {/* 7-day grid */}
           <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
             {DAYS.map((day, i) => {
@@ -2507,7 +2616,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                     )}
                     {!recipe && !bundle && (
                       <button onClick={() => setSubView("library")} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors mt-1">
-                        <Plus size={11} /> Add meal
+                        <Plus size={11} /> Choose recipe
                       </button>
                     )}
                   </div>
@@ -2522,11 +2631,11 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             <div className="bg-card border rounded-xl p-4">
               <p className="text-sm font-semibold mb-3 flex items-center gap-2"><ChefHat size={15} /> Assign a Recipe</p>
               {recipes.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Add recipes in the Saved tab first.</p>
+                <p className="text-xs text-muted-foreground">Add recipes in My Recipes first.</p>
               ) : (
                 <div className="space-y-1 max-h-56 overflow-y-auto">
                   {COMPONENT_TYPES.map(ct => {
-                    const group = recipesByType[ct.value];
+                    const group = allRecipesByType[ct.value];
                     if (group.length === 0) return null;
                     return (
                       <div key={ct.value} className="mb-2">
@@ -2546,9 +2655,9 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             </div>
             {/* Bundles */}
             <div className="bg-card border rounded-xl p-4">
-              <p className="text-sm font-semibold mb-3 flex items-center gap-2"><Package size={15} /> Assign a Bundle</p>
+              <p className="text-sm font-semibold mb-3 flex items-center gap-2"><Package size={15} /> Assign a Meal</p>
               {bundles.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Create bundles in the Bundles tab first.</p>
+                <p className="text-xs text-muted-foreground">Create reusable meals in the Meals tab first.</p>
               ) : (
                 <div className="space-y-1 max-h-56 overflow-y-auto">
                   {bundles.map(b => (
@@ -2568,9 +2677,18 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
         </div>
       )}
 
-      {/* ── GROCERY ── */}
+      {/* ── SHOPPING ── */}
       {subView === "grocery" && (
         <div className="space-y-5">
+          <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Shopping</h3>
+              <p className="text-sm text-muted-foreground">Generated from your Meal Plan, with extra items you can add or remove manually.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSubView("week")} className="gap-1.5 shrink-0">
+              <CalendarDays size={13} /> Edit Meal Plan
+            </Button>
+          </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-card border rounded-xl p-4 text-center">
               <p className="text-2xl font-bold text-primary">{totalGrocery}</p>
@@ -2633,7 +2751,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
             <div className="text-center py-12 text-muted-foreground">
               <ShoppingCart size={40} className="mx-auto mb-4 opacity-20" />
               <p className="font-medium">No items yet</p>
-              <p className="text-sm mt-1">Assign recipes to this week, or tap <strong>Add Item</strong> to add items manually</p>
+              <p className="text-sm mt-1">Add recipes to your Meal Plan, or tap <strong>Add Item</strong> to add items manually.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -2692,6 +2810,15 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
       {/* ── BROWSE ── */}
       {subView === "browse" && (
         <div className="space-y-4">
+          <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Discover Recipes</h3>
+              <p className="text-sm text-muted-foreground">Browse ideas to save into My Recipes, then add them to your meal plan or shopping list.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setMealDbOpen(true)} className="gap-1.5 shrink-0">
+              <Search size={13} /> Search MealDB
+            </Button>
+          </div>
           {/* Search bar */}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
