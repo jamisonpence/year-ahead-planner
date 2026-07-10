@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { ArrowRight, Check, Loader2, X } from "lucide-react";
+import { ArrowRight, Check, Loader2, X, Search, Plus } from "lucide-react";
 import PlannerSetup from "@/pages/planner/Setup";
 
 // ── Persona definitions ───────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 type CreateOptionKey =
   | "goal" | "task" | "habit"
   | "workout_log" | "health_goal" | "fitness_habit" | "training_plan" | "meal_plan"
-  | "book" | "place" | "recipe"
+  | "book" | "place" | "recipe" | "movie_show"
   | "person" | "interest" | "book_share";
 
 interface CreateOption {
@@ -96,9 +96,9 @@ const CREATE_OPTIONS: Record<PersonaKey, CreateOption[]> = {
     { key: "fitness_habit", emoji: "🔥", label: "Create a fitness habit", sub: "A daily movement or wellness habit",   href: "/habits"               },
   ],
   explore_life: [
-    { key: "book",   emoji: "📚", label: "Save a book",   sub: "Something you want to read",          href: "/library" },
-    { key: "place",  emoji: "📍", label: "Add a place",   sub: "A spot worth saving",                 href: "/places"  },
-    { key: "recipe", emoji: "🍽️", label: "Save a recipe", sub: "A dish you want to make",             href: "/health?tab=recipes" },
+    { key: "book",       emoji: "📚", label: "Save a book",         sub: "Search by title or author",                        href: "/library"          },
+    { key: "movie_show", emoji: "🎬", label: "Add a Movie/Show",    sub: "Search 1M+ titles and save to your watchlist",     href: "/library?tab=watching" },
+    { key: "recipe",     emoji: "🍽️", label: "Save a recipe",       sub: "Browse 1,600+ recipes or import from a link",      href: "/recipes"          },
   ],
   connect: [
     { key: "person",     emoji: "👤", label: "Add a person",   sub: "Someone important to you",           href: "/people"  },
@@ -704,6 +704,352 @@ function CreateButton({ loading, disabled, onClick }: { loading: boolean; disabl
   );
 }
 
+// ── Search-based forms for explore_life ──────────────────────────────────────
+
+function BookSearchForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: string; title: string; author: string; year: string; coverUrl: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSearch(val: string) {
+    setQuery(val);
+    setResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val.trim()) return;
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(val.trim())}&maxResults=6&printType=books`);
+        if (res.ok) {
+          const data = await res.json();
+          setResults((data.items ?? []).map((v: any) => ({
+            id: v.id,
+            title: v.volumeInfo?.title ?? "",
+            author: (v.volumeInfo?.authors ?? []).join(", "),
+            year: v.volumeInfo?.publishedDate?.slice(0, 4) ?? "",
+            coverUrl: (v.volumeInfo?.imageLinks?.thumbnail ?? "").replace(/^http:/, "https:"),
+          })));
+        }
+      } catch { /* ignore */ } finally { setLoading(false); }
+    }, 400);
+  }
+
+  async function saveBook(book: { id: string; title: string; author: string; year: string; coverUrl: string }) {
+    setAdding(book.id);
+    try {
+      await apiRequest("POST", "/api/books", {
+        title: book.title,
+        author: book.author || undefined,
+        status: "want_to_read",
+        coverUrl: book.coverUrl || undefined,
+      });
+      onDone(book.title, "/library");
+    } catch { /* ignore */ } finally { setAdding(null); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
+        <input
+          autoFocus
+          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+          placeholder="Search by title or author…"
+          value={query}
+          onChange={e => handleSearch(e.target.value)}
+        />
+        {loading && <Loader2 size={14} className="absolute right-3 top-3 animate-spin text-muted-foreground" />}
+      </div>
+      {results.length > 0 && (
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {results.map(book => (
+            <button key={book.id} onClick={() => saveBook(book)} disabled={!!adding}
+              className="w-full flex items-center gap-3 p-3 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+              {book.coverUrl
+                ? <img src={book.coverUrl} alt="" className="w-9 h-13 object-cover rounded shrink-0" style={{ height: "3.25rem" }} />
+                : <div className="w-9 rounded shrink-0 flex items-center justify-center text-xl" style={{ height: "3.25rem" }}>📚</div>
+              }
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm leading-snug truncate">{book.title}</p>
+                {book.author && <p className="text-xs text-muted-foreground truncate">{book.author}</p>}
+                {book.year && <p className="text-xs text-muted-foreground">{book.year}</p>}
+              </div>
+              {adding === book.id
+                ? <Loader2 size={14} className="animate-spin shrink-0 text-muted-foreground" />
+                : <Plus size={14} className="text-muted-foreground shrink-0" />
+              }
+            </button>
+          ))}
+        </div>
+      )}
+      {query && !loading && results.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">No results for "{query}"</p>
+      )}
+      {!query && (
+        <p className="text-xs text-muted-foreground text-center py-2">Type a title or author to search</p>
+      )}
+    </div>
+  );
+}
+
+function MovieShowForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+  const [mediaType, setMediaType] = useState<"movie" | "tv">("movie");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TMDB_IMG = "https://image.tmdb.org/t/p/w185";
+  const POSTER_COLORS = ["hsl(210 80% 48%)", "hsl(25 85% 52%)", "hsl(340 75% 50%)", "hsl(160 60% 40%)", "hsl(270 60% 50%)"];
+
+  function doSearch(val: string, type: "movie" | "tv") {
+    setResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val.trim()) return;
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await apiRequest("GET", `/api/tmdb/search?q=${encodeURIComponent(val.trim())}&type=${type}`);
+        const data = await res.json();
+        setResults(Array.isArray(data) ? data.slice(0, 6) : []);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    }, 400);
+  }
+
+  function handleSearch(val: string) {
+    setQuery(val);
+    doSearch(val, mediaType);
+  }
+
+  function switchType(t: "movie" | "tv") {
+    setMediaType(t);
+    if (query.trim()) doSearch(query, t);
+  }
+
+  async function saveItem(item: any) {
+    setAdding(item.id);
+    const isTV = mediaType === "tv";
+    try {
+      const detail = await apiRequest("GET", `/api/tmdb/${mediaType}/${item.id}`).then(r => r.json());
+      const title = detail.title || detail.name || "";
+      await apiRequest("POST", "/api/movies", {
+        mediaType: isTV ? "show" : "movie",
+        title,
+        year: parseInt((detail.release_date || detail.first_air_date || "").slice(0, 4)) || null,
+        director: isTV
+          ? (detail.credits?.created_by?.[0]?.name ?? null)
+          : (detail.credits?.crew?.find((c: any) => c.job === "Director")?.name ?? null),
+        genres: (detail.genres ?? []).map((g: any) => g.name).join(",") || null,
+        status: "backlog",
+        rating: null,
+        notes: null,
+        listsJson: "[]",
+        isFavorite: false,
+        posterColor: POSTER_COLORS[Math.floor(Math.random() * POSTER_COLORS.length)],
+        streamingOn: null,
+        totalSeasons: isTV ? (detail.number_of_seasons ?? null) : null,
+        currentSeason: null,
+        videoUrl: null,
+        posterUrl: detail.poster_path ? `https://image.tmdb.org/t/p/w342${detail.poster_path}` : null,
+      });
+      onDone(title, "/library?tab=watching");
+    } catch { /* ignore */ } finally { setAdding(null); }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Movie / TV toggle */}
+      <div className="flex gap-2">
+        {(["movie", "tv"] as const).map(t => (
+          <button key={t} type="button" onClick={() => switchType(t)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
+              ${mediaType === t ? "bg-primary border-primary text-primary-foreground" : "bg-secondary/50 border-transparent hover:bg-secondary"}`}>
+            {t === "movie" ? "🎬 Movie" : "📺 TV Show"}
+          </button>
+        ))}
+      </div>
+      {/* Search input */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
+        <input
+          autoFocus
+          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+          placeholder={`Search ${mediaType === "movie" ? "movies" : "TV shows"}…`}
+          value={query}
+          onChange={e => handleSearch(e.target.value)}
+        />
+        {loading && <Loader2 size={14} className="absolute right-3 top-3 animate-spin text-muted-foreground" />}
+      </div>
+      {results.length > 0 && (
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {results.map((item: any) => {
+            const title = item.title || item.name;
+            const year = (item.release_date || item.first_air_date || "").slice(0, 4);
+            return (
+              <button key={item.id} onClick={() => saveItem(item)} disabled={!!adding}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                {item.poster_path
+                  ? <img src={`${TMDB_IMG}${item.poster_path}`} alt="" className="w-9 rounded object-cover shrink-0" style={{ height: "3.25rem" }} />
+                  : <div className="w-9 rounded shrink-0 flex items-center justify-center text-xl bg-secondary/60" style={{ height: "3.25rem" }}>🎬</div>
+                }
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm leading-snug truncate">{title}</p>
+                  {year && <p className="text-xs text-muted-foreground">{year}</p>}
+                  {item.overview && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.overview}</p>}
+                </div>
+                {adding === item.id
+                  ? <Loader2 size={14} className="animate-spin shrink-0 text-muted-foreground" />
+                  : <Plus size={14} className="text-muted-foreground shrink-0" />
+                }
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {query && !loading && results.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">No results for "{query}"</p>
+      )}
+      {!query && (
+        <p className="text-xs text-muted-foreground text-center py-2">Search any movie or show to add it</p>
+      )}
+    </div>
+  );
+}
+
+function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<"browse" | "url">("browse");
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState<number | null>(null);
+  const [url, setUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const { data: allRecipes = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/recipes"] });
+  const systemRecipes = useMemo(() => allRecipes.filter((r: any) => r.userId == null), [allRecipes]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return systemRecipes.slice(0, 18);
+    const q = search.toLowerCase();
+    return systemRecipes.filter((r: any) =>
+      r.name.toLowerCase().includes(q) || (r.category ?? "").toLowerCase().includes(q)
+    ).slice(0, 18);
+  }, [systemRecipes, search]);
+
+  async function saveRecipe(recipe: any) {
+    setSaving(recipe.id);
+    try {
+      await apiRequest("POST", "/api/recipes", {
+        name: recipe.name,
+        emoji: recipe.emoji,
+        category: recipe.category,
+        componentType: recipe.componentType,
+        prepTime: recipe.prepTime,
+        cookTime: recipe.cookTime,
+        ingredientsJson: recipe.ingredientsJson,
+        instructions: recipe.instructions,
+        imageUrl: recipe.imageUrl,
+        description: recipe.description,
+        source: recipe.source,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+      onDone(recipe.name, "/recipes");
+    } catch { /* ignore */ } finally { setSaving(null); }
+  }
+
+  async function importUrl() {
+    if (!url.trim()) return;
+    setImporting(true);
+    try {
+      const data = await apiRequest("POST", "/api/recipes/import-url", { url: url.trim() }).then(r => r.json());
+      if (data?.name) {
+        await apiRequest("POST", "/api/recipes", data);
+        qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+        onDone(data.name, "/recipes");
+      }
+    } catch { /* ignore */ } finally { setImporting(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Browse / URL toggle */}
+      <div className="flex gap-2">
+        {(["browse", "url"] as const).map(m => (
+          <button key={m} type="button" onClick={() => setMode(m)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
+              ${mode === m ? "bg-primary border-primary text-primary-foreground" : "bg-secondary/50 border-transparent hover:bg-secondary"}`}>
+            {m === "browse" ? "🍽️ Browse Recipes" : "🔗 Import from Link"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "browse" ? (
+        <>
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
+            <input
+              autoFocus
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+              placeholder="Search 1,600+ recipes…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          {isLoading ? (
+            <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {filtered.map((recipe: any) => (
+                <button key={recipe.id} onClick={() => saveRecipe(recipe)} disabled={!!saving}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                  {recipe.imageUrl
+                    ? <img src={recipe.imageUrl} alt="" className="w-10 h-10 object-cover rounded shrink-0" />
+                    : <span className="text-2xl shrink-0 leading-none">{recipe.emoji || "🍽️"}</span>
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{recipe.name}</p>
+                    {recipe.category && <p className="text-xs text-muted-foreground">{recipe.category}</p>}
+                  </div>
+                  {saving === recipe.id
+                    ? <Loader2 size={14} className="animate-spin shrink-0 text-muted-foreground" />
+                    : <Plus size={14} className="text-muted-foreground shrink-0" />
+                  }
+                </button>
+              ))}
+              {filtered.length === 0 && search && (
+                <p className="text-sm text-muted-foreground text-center py-4">No recipes matching "{search}"</p>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-3">
+          <input
+            autoFocus
+            className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+            placeholder="https://example.com/recipe"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Paste any recipe URL and we'll import the ingredients and instructions automatically.
+          </p>
+          <button
+            type="button"
+            disabled={!url.trim() || importing}
+            onClick={importUrl}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
+          >
+            {importing ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+            {importing ? "Importing…" : "Import Recipe"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Form router ───────────────────────────────────────────────────────────────
 
 function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string, href?: string) => void }) {
@@ -714,12 +1060,13 @@ function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone:
     case "workout_log":   return <WorkoutLogForm onDone={onDone} />;
     case "health_goal":   return <HealthGoalForm onDone={onDone} />;
     case "fitness_habit": return <HabitForm onDone={onDone} defaultCategory="fitness" />;
-    case "book":          return <BookForm onDone={onDone} />;
+    case "book":          return <BookSearchForm onDone={onDone} />;
+    case "movie_show":    return <MovieShowForm onDone={onDone} />;
+    case "recipe":        return <RecipeDiscoverForm onDone={onDone} />;
     case "place":         return <PlaceForm onDone={onDone} />;
-    case "recipe":        return <RecipeForm onDone={onDone} />;
     case "person":        return <PersonForm onDone={onDone} />;
     case "interest":      return <InterestForm onDone={onDone} />;
-    case "book_share":    return <BookForm onDone={onDone} />;
+    case "book_share":    return <BookSearchForm onDone={onDone} />;
     default:              return null;
   }
 }
