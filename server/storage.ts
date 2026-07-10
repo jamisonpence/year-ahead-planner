@@ -6703,6 +6703,40 @@ export async function seedSystemRecipes() {
   console.log(`Seeded ${SYSTEM_RECIPES.length} system recipes`);
 }
 
+// ── MealDB Recipe Seeding ─────────────────────────────────────────────────────
+import mealdbData from "./mealdbData.json";
+
+type MealDBEntry = {
+  mealdbId: string; name: string; emoji: string; category: string | null;
+  componentType: string; ingredientsJson: string; instructions: string | null;
+  imageUrl: string | null; tags: string | null; source: string | null;
+};
+
+export async function seedMealDBRecipes() {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*) FROM recipes WHERE user_id IS NULL AND tags LIKE '%mealdb%'`
+  );
+  if (parseInt(rows[0].count) > 0) return; // Already seeded
+
+  const data = mealdbData as MealDBEntry[];
+  const batch = 50;
+  for (let i = 0; i < data.length; i += batch) {
+    const slice = data.slice(i, i + batch);
+    await db.insert(recipes).values(slice.map(r => ({
+      userId: null,
+      name: r.name,
+      emoji: r.emoji,
+      category: r.category,
+      componentType: r.componentType,
+      ingredientsJson: r.ingredientsJson,
+      instructions: r.instructions,
+      imageUrl: r.imageUrl,
+      tags: [r.tags, "mealdb"].filter(Boolean).join(","),
+      source: r.source,
+    })));
+  }
+  console.log(`Seeded ${data.length} MealDB recipes`);
+}
 
 export { pool };
 
