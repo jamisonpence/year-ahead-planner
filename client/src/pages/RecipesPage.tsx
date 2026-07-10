@@ -1783,6 +1783,306 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }:
   );
 }
 
+// ── MealDB Inline Browser ─────────────────────────────────────────────────────
+function MealDBInlineBrowser() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  type MealCat = { strCategory: string; strCategoryThumb: string; strCategoryDescription: string };
+  const [categories, setCategories] = useState<MealCat[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [meals, setMeals] = useState<MealDBMeal[]>([]);
+  const [loadingCats, setLoadingCats] = useState(true);
+  const [loadingMeals, setLoadingMeals] = useState(false);
+  const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<MealDBMeal | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [mealSearch, setMealSearch] = useState("");
+
+  useEffect(() => {
+    fetch("https://www.themealdb.com/api/json/v1/1/categories.php")
+      .then(r => r.json())
+      .then(d => setCategories(d.categories ?? []))
+      .catch(() => toast({ title: "Could not load MealDB categories", variant: "destructive" }))
+      .finally(() => setLoadingCats(false));
+  }, []);
+
+  async function loadCategory(catName: string) {
+    setSelectedCategory(catName);
+    setMeals([]); setPreview(null); setMealSearch("");
+    setLoadingMeals(true);
+    try {
+      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(catName)}`);
+      const d = await r.json();
+      setMeals((d.meals ?? []).map((m: any) => ({
+        idMeal: m.idMeal, strMeal: m.strMeal, strMealThumb: m.strMealThumb,
+        strCategory: catName, strArea: "", strInstructions: "",
+      })));
+    } catch {
+      toast({ title: "Could not load category meals", variant: "destructive" });
+    } finally { setLoadingMeals(false); }
+  }
+
+  async function openPreview(meal: MealDBMeal) {
+    setPreviewLoading(true);
+    setPreview(meal);
+    try {
+      const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
+      const d = await r.json();
+      setPreview(d.meals?.[0] ?? meal);
+    } catch {
+      toast({ title: "Could not load details", variant: "destructive" });
+    } finally { setPreviewLoading(false); }
+  }
+
+  async function addMeal(meal: MealDBMeal) {
+    setAdding(prev => new Set([...prev, meal.idMeal]));
+    try {
+      let fullMeal = meal;
+      if (!meal.strInstructions) {
+        const r = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${meal.idMeal}`);
+        const d = await r.json();
+        fullMeal = d.meals?.[0] ?? meal;
+      }
+      const catKey = (fullMeal.strCategory ?? "").toLowerCase();
+      await apiRequest("POST", "/api/recipes", {
+        name: fullMeal.strMeal,
+        emoji: MEALDB_CATEGORY_EMOJI[catKey] ?? "🍽️",
+        category: fullMeal.strArea || fullMeal.strCategory || null,
+        componentType: MEALDB_COMPONENT_MAP[catKey] ?? "main",
+        ingredientsJson: JSON.stringify(extractIngredients(fullMeal)),
+        instructions: fullMeal.strInstructions || null,
+        imageUrl: fullMeal.strMealThumb || null,
+        prepTime: null, cookTime: null,
+      });
+      setAdded(prev => new Set([...prev, meal.idMeal]));
+      qc.invalidateQueries({ queryKey: ["/api/recipes"] });
+      toast({ title: `"${fullMeal.strMeal}" added to your recipes ✓` });
+    } catch {
+      toast({ title: "Failed to add recipe", variant: "destructive" });
+    } finally {
+      setAdding(prev => { const n = new Set(prev); n.delete(meal.idMeal); return n; });
+    }
+  }
+
+  const filteredMeals = mealSearch.trim()
+    ? meals.filter(m => m.strMeal.toLowerCase().includes(mealSearch.toLowerCase()))
+    : meals;
+
+  // ── Category grid ──
+  if (!selectedCategory) {
+    return (
+      <div className="space-y-4">
+        {loadingCats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="animate-pulse flex flex-col items-center gap-2 p-3 rounded-xl border bg-card">
+                <div className="w-14 h-14 rounded-lg bg-muted" />
+                <div className="h-3 bg-muted rounded w-16" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {categories.map(cat => (
+              <button
+                key={cat.strCategory}
+                onClick={() => loadCategory(cat.strCategory)}
+                className="flex flex-col items-center gap-2 p-3 rounded-xl border bg-card hover:bg-accent/40 hover:shadow-sm transition-all text-center"
+              >
+                <img src={cat.strCategoryThumb} alt={cat.strCategory} className="w-14 h-14 rounded-lg object-cover" />
+                <div>
+                  <p className="text-xs font-semibold">{cat.strCategory}</p>
+                  <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 leading-tight">
+                    {cat.strCategoryDescription?.split(".")[0]}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-center text-muted-foreground">
+          Powered by{" "}
+          <a href="https://www.themealdb.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+            TheMealDB
+          </a>
+        </p>
+      </div>
+    );
+  }
+
+  // ── Meals grid + preview ──
+  return (
+    <div className="space-y-3">
+      {/* Breadcrumb + search */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => { setSelectedCategory(null); setMeals([]); setPreview(null); setMealSearch(""); }}
+          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+        >
+          <ChevronRight size={14} className="rotate-180" /> All Categories
+        </button>
+        <span className="text-muted-foreground text-sm">/</span>
+        <span className="text-sm font-semibold">{selectedCategory}</span>
+        {!loadingMeals && <span className="text-xs text-muted-foreground ml-auto">{filteredMeals.length} meals</span>}
+      </div>
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="pl-8 text-sm"
+          placeholder={`Search in ${selectedCategory}…`}
+          value={mealSearch}
+          onChange={e => setMealSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="flex gap-4 items-start">
+        {/* Meals grid */}
+        <div className="flex-1 min-w-0">
+          {loadingMeals ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[...Array(9)].map((_, i) => (
+                <div key={i} className="animate-pulse rounded-xl border bg-card overflow-hidden">
+                  <div className="h-28 bg-muted" />
+                  <div className="p-2.5 space-y-2">
+                    <div className="h-3.5 bg-muted rounded w-3/4" />
+                    <div className="h-6 bg-muted rounded w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredMeals.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <Search size={28} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm">No meals match "{mealSearch}"</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {filteredMeals.map(meal => {
+                const isAdded = added.has(meal.idMeal);
+                const isAdding = adding.has(meal.idMeal);
+                return (
+                  <div
+                    key={meal.idMeal}
+                    className={`rounded-xl border bg-card overflow-hidden cursor-pointer hover:shadow-md transition-all ${
+                      preview?.idMeal === meal.idMeal ? "ring-2 ring-primary" : ""
+                    }`}
+                    onClick={() => openPreview(meal)}
+                  >
+                    <div className="relative h-28 overflow-hidden">
+                      <img src={meal.strMealThumb} alt={meal.strMeal} className="w-full h-full object-cover" />
+                      {isAdded && (
+                        <div className="absolute inset-0 bg-green-900/50 flex items-center justify-center">
+                          <Check size={24} className="text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-semibold leading-tight line-clamp-2">{meal.strMeal}</p>
+                      <button
+                        onClick={e => { e.stopPropagation(); if (!isAdded && !isAdding) addMeal(meal); }}
+                        disabled={isAdded || isAdding}
+                        className={`text-[11px] font-medium px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors ${
+                          isAdded
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        }`}
+                      >
+                        {isAdding ? <><RefreshCw size={10} className="animate-spin" /> Adding…</> :
+                         isAdded  ? <><Check size={10} /> Added</> :
+                                    <><Plus size={10} /> Save</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Preview panel */}
+        {preview && (
+          <div className="w-72 shrink-0 border rounded-xl overflow-hidden flex flex-col bg-card sticky top-0 self-start max-h-[70vh]">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b shrink-0">
+              <span className="text-sm font-semibold">Preview</span>
+              <button onClick={() => setPreview(null)} className="p-1 rounded hover:bg-secondary transition-colors">
+                <X size={13} className="text-muted-foreground" />
+              </button>
+            </div>
+            {previewLoading ? (
+              <div className="flex-1 flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto">
+                {preview.strMealThumb && (
+                  <img src={preview.strMealThumb} alt={preview.strMeal} className="w-full h-36 object-cover" />
+                )}
+                <div className="p-3 space-y-2.5">
+                  <h3 className="font-bold text-sm leading-snug">{preview.strMeal}</h3>
+                  <div className="flex gap-1 flex-wrap">
+                    {preview.strCategory && (
+                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{preview.strCategory}</span>
+                    )}
+                    {preview.strArea && (
+                      <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{preview.strArea}</span>
+                    )}
+                  </div>
+                  {extractIngredients(preview).length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1.5">Ingredients</p>
+                      <div className="space-y-1">
+                        {extractIngredients(preview).map((ing, i) => (
+                          <div key={i} className="flex items-center justify-between py-1 px-2 bg-secondary/30 rounded-lg">
+                            <span className="text-xs">{ing.name}</span>
+                            {ing.qty && <span className="text-[10px] text-muted-foreground">{ing.qty}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {preview.strInstructions && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1.5">Instructions</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap line-clamp-12">
+                        {preview.strInstructions}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="p-3 border-t shrink-0">
+              <button
+                onClick={() => addMeal(preview)}
+                disabled={added.has(preview.idMeal) || adding.has(preview.idMeal)}
+                className={`w-full flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg transition-colors ${
+                  added.has(preview.idMeal)
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+              >
+                {adding.has(preview.idMeal)
+                  ? <><RefreshCw size={13} className="animate-spin" /> Adding…</>
+                  : added.has(preview.idMeal)
+                  ? <><Check size={13} /> Added</>
+                  : <><Plus size={13} /> Add to My Recipes</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-center text-muted-foreground">
+        Powered by{" "}
+        <a href="https://www.themealdb.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+          TheMealDB
+        </a>
+      </p>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 type SubView = "library" | "bundles" | "week" | "grocery" | "shared" | "browse";
 type LibFilter = ComponentType | "all" | "unclassified";
@@ -1846,6 +2146,7 @@ const [mealDbOpen, setMealDbOpen] = useState(false);
   const [browseDifficultyFilter, setBrowseDifficultyFilter] = useState<string>("all");
   const [browseTimeFilter, setBrowseTimeFilter] = useState<string>("all");
   const [browseDetailRecipe, setBrowseDetailRecipe] = useState<Recipe | null>(null);
+  const [discoverSource, setDiscoverSource] = useState<"curated" | "mealdb">("mealdb");
   const weekStart = getWeekStart();
 
   function toggleBucket(key: string) {
@@ -2815,10 +3116,29 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               <h3 className="font-semibold">Discover Recipes</h3>
               <p className="text-sm text-muted-foreground">Browse ideas to save into My Recipes, then add them to your meal plan or shopping list.</p>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => setMealDbOpen(true)} className="gap-1.5 shrink-0">
-              <Search size={13} /> Search MealDB
-            </Button>
+            {/* Source toggle */}
+            <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 shrink-0 self-start sm:self-auto">
+              {(["mealdb", "curated"] as const).map(src => (
+                <button
+                  key={src}
+                  onClick={() => setDiscoverSource(src)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    discoverSource === src
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {src === "mealdb" ? "MealDB" : "Curated"}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* MealDB inline browser */}
+          {discoverSource === "mealdb" && <MealDBInlineBrowser />}
+
+          {/* Curated (system recipes) */}
+          {discoverSource === "curated" && (<>
           {/* Search bar */}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -2982,6 +3302,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               })}
             </div>
           )}
+          </>)}
         </div>
       )}
 
