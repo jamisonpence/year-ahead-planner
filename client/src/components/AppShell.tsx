@@ -161,7 +161,8 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── Repository ──
   { path: "/mylifos",       label: "MyLifos",                 icon: Archive         },
   // ── Wellness ──
-  { path: "/health",        label: "Health",                  icon: Activity,       defaultHidden: true, matchPaths: ["/workouts", "/nutrition", "/recipes"] },
+  { path: "/health",        label: "Health",                  icon: Activity,       defaultHidden: true, matchPaths: ["/workouts", "/nutrition"] },
+  { path: "/recipes",       label: "Recipes",                 icon: UtensilsCrossed, defaultHidden: true },
   // ── Culture ──
   { path: "/library",       label: "Media",                   icon: Library,        defaultHidden: true, matchPaths: ["/reading", "/movies", "/music", "/art"] },
   { path: "/hobbies",       label: "Interests",               icon: Sparkles,       defaultHidden: true },
@@ -177,7 +178,7 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
   { key: "main",      label: null,                paths: ["/dashboard", "/goals", "/people", "/messenger", "/mylifos"] },
-  { key: "pinned",    label: "Pinned",            paths: ["/calendar", "/tasks", "/habits", "/journal", "/review", "/health", "/library", "/hobbies", "/places", "/budget", "/housekeeping", "/beliefs"] },
+  { key: "pinned",    label: "Pinned",            paths: ["/calendar", "/tasks", "/habits", "/journal", "/review", "/health", "/recipes", "/library", "/hobbies", "/places", "/budget", "/housekeeping", "/beliefs"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];

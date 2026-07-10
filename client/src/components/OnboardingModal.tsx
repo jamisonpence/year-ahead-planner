@@ -161,7 +161,7 @@ export function saveIntentions(intentions: IntentionKey[]) {
 const DASHBOARD_SECTIONS_KEY = "dashboard_sections_v2";
 const NAV_PATHS = [
   "/dashboard", "/calendar", "/goals", "/tasks", "/habits", "/journal", "/review",
-  "/people", "/messenger", "/mylifos", "/health", "/library", "/hobbies",
+  "/people", "/messenger", "/mylifos", "/health", "/recipes", "/library", "/hobbies",
   "/places", "/budget", "/housekeeping", "/beliefs",
 ];
 
@@ -183,9 +183,10 @@ const INTENTION_NAV_BOOSTS: Partial<Record<IntentionKey, string[]>> = {
   private_notes: ["/journal"],
 };
 
-function buildNavPrefs(persona: PersonaKey, intentions: IntentionKey[]) {
+function buildNavPrefs(persona: PersonaKey, intentions: IntentionKey[], pinnedExtras: string[] = []) {
   const visible = new Set<string>(["/dashboard", ...(PERSONA_NAV_VISIBLE[persona] ?? [])]);
   intentions.forEach(intent => INTENTION_NAV_BOOSTS[intent]?.forEach(path => visible.add(path)));
+  pinnedExtras.forEach(p => visible.add(p));
   const ordered = [
     "/dashboard",
     ...intentions.flatMap(intent => INTENTION_NAV_BOOSTS[intent] ?? []),
@@ -218,13 +219,13 @@ function saveFirstRunDashboardDefaults(persona: PersonaKey, intentions: Intentio
   } catch {}
 }
 
-function persistOnboardingSetup(persona: PersonaKey | null, intentions: IntentionKey[]) {
+function persistOnboardingSetup(persona: PersonaKey | null, intentions: IntentionKey[], pinnedExtras: string[] = []) {
   const key = persona ?? "momentum";
   saveOnboardingData(key);
   saveIntentions(intentions);
   saveFirstRunDashboardDefaults(key, intentions);
   try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
-  apiRequest("POST", "/api/nav-prefs", buildNavPrefs(key, intentions)).catch(() => {});
+  apiRequest("POST", "/api/nav-prefs", buildNavPrefs(key, intentions, pinnedExtras)).catch(() => {});
 }
 
 // ── Minimal inline forms ──────────────────────────────────────────────────────
@@ -740,6 +741,9 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const [createdHref, setCreatedHref] = useState<string | null>(null);
   const [mealWizardOpen, setMealWizardOpen] = useState(false);
 
+  // Screen 4 feature opt-ins
+  const [browseRecipes, setBrowseRecipes] = useState(false);
+
   const completeMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/me/complete-onboarding"),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/me"] }); },
@@ -782,10 +786,10 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   function finish() {
-    persistOnboardingSetup(persona, intentions);
+    persistOnboardingSetup(persona, intentions, browseRecipes ? ["/recipes"] : []);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
     completeMut.mutate();
-    navigate("/dashboard");
+    navigate(browseRecipes ? "/recipes" : "/dashboard");
   }
 
   /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
@@ -1042,6 +1046,30 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   ))}
                 </div>
               </div>
+
+              {/* Recipe browser opt-in */}
+              <button
+                type="button"
+                onClick={() => setBrowseRecipes(v => !v)}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
+                  browseRecipes
+                    ? "border-primary bg-primary/8"
+                    : "border-border hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                <span className="text-3xl shrink-0">🍽️</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">Browse 1,600+ recipes</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Pin the Recipes page to your sidebar for easy access
+                  </p>
+                </div>
+                <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
+                  browseRecipes ? "border-primary bg-primary" : "border-border"
+                }`}>
+                  {browseRecipes && <Check size={10} className="text-primary-foreground" />}
+                </div>
+              </button>
 
               {intentions.length > 0 && (
                 <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center gap-2.5">
