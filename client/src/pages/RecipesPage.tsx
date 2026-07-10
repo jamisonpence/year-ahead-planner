@@ -29,11 +29,13 @@ const SHORT_DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const COMPONENT_TYPES: { value: ComponentType; label: string; icon: React.ReactNode; color: string; bg: string }[] = [
   { value: "main",      label: "Main",       icon: <UtensilsCrossed size={14} />, color: "text-rose-600 dark:text-rose-400",   bg: "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800"   },
   { value: "vegetable", label: "Vegetable",  icon: <Leaf size={14} />,            color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800" },
-  { value: "side",      label: "Side",       icon: <Wheat size={14} />,           color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"   },
+  { value: "side",      label: "Starch / Side", icon: <Wheat size={14} />,        color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"   },
   { value: "sauce",     label: "Sauce",      icon: <Droplets size={14} />,        color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800" },
   { value: "dessert",   label: "Dessert",    icon: <CakeSlice size={14} />,       color: "text-pink-600 dark:text-pink-400",    bg: "bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800"    },
   { value: "baking",    label: "Baking",     icon: <Cookie size={14} />,          color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800" },
 ];
+
+const MEAL_BUILDER_TYPES: ComponentType[] = ["main", "vegetable", "side", "sauce", "dessert", "baking"];
 
 function getWeekStart(): string {
   const sun = startOfWeek(new Date(), { weekStartsOn: 0 });
@@ -429,7 +431,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
   const [emoji, setEmoji] = useState("🍽️");
   const [description, setDescription] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [filter, setFilter] = useState<ComponentType | "all">("all");
+  const [builderSearch, setBuilderSearch] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -437,7 +439,7 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
       setEmoji(editBundle?.emoji ?? "🍽️");
       setDescription(editBundle?.description ?? "");
       setSelectedIds(editBundle ? JSON.parse(editBundle.recipeIdsJson) : []);
-      setFilter("all");
+      setBuilderSearch("");
     }
   }, [open, editBundle]);
 
@@ -454,7 +456,17 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
   const toggleRecipe = (id: number) =>
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  const filtered = filter === "all" ? recipes : recipes.filter(r => r.componentType === filter);
+  const selectedRecipes = selectedIds.map(id => recipes.find(r => r.id === id)).filter(Boolean) as Recipe[];
+  const unclassifiedRecipes = recipes.filter(r => !r.componentType);
+  const builderQuery = builderSearch.trim().toLowerCase();
+  const recipeMatchesBuilderSearch = (recipe: Recipe) =>
+    !builderQuery ||
+    recipe.name.toLowerCase().includes(builderQuery) ||
+    (recipe.category ?? "").toLowerCase().includes(builderQuery) ||
+    parseIngredients(recipe.ingredientsJson).some(ing => ing.name.toLowerCase().includes(builderQuery));
+  const recommendedMealName = selectedRecipes.length > 0
+    ? selectedRecipes.slice(0, 3).map(r => r.name).join(" + ")
+    : "";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -490,54 +502,120 @@ function BundleFormModal({ open, onClose, editBundle, recipes }: {
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Our classic Saturday dinner" />
           </div>
 
-          {/* Recipe picker */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Pick Components</Label>
-              <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+          <div className="rounded-xl border bg-secondary/20 p-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Build the plate</p>
+                <p className="text-xs text-muted-foreground">Choose a main, vegetable, starch/side, sauce, and any extras to save as one reusable meal.</p>
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0">{selectedIds.length} selected</span>
             </div>
-            {/* Type filter pills */}
-            <div className="flex gap-1.5 flex-wrap">
-              {([{ value: "all", label: "All" }, ...COMPONENT_TYPES.map(c => ({ value: c.value, label: c.label }))] as { value: string; label: string }[]).map(f => (
-                <button key={f.value} type="button" onClick={() => setFilter(f.value as any)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${filter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary hover:text-foreground"}`}>
-                  {f.label}
-                </button>
-              ))}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={builderSearch} onChange={e => setBuilderSearch(e.target.value)} placeholder="Search recipes or ingredients..." className="pl-9 h-9" />
             </div>
-            <div className="border rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-              {filtered.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-6">No recipes in this category yet</p>
-              ) : filtered.map(r => {
-                const checked = selectedIds.includes(r.id);
-                const info = getComponentInfo(r.componentType);
-                return (
-                  <label key={r.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b last:border-b-0 ${checked ? "bg-primary/5" : "hover:bg-secondary/40"}`}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleRecipe(r.id)} className="accent-primary shrink-0" />
-                    <span className="text-lg shrink-0">{r.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{r.name}</p>
-                      {info && <p className={`text-xs ${info.color}`}>{info.label}</p>}
+            {!name.trim() && recommendedMealName && (
+              <button
+                type="button"
+                onClick={() => setName(recommendedMealName)}
+                className="text-xs text-primary hover:underline"
+              >
+                Use “{recommendedMealName}” as the meal name
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {MEAL_BUILDER_TYPES.map(type => {
+              const info = getComponentInfo(type);
+              const matching = recipes.filter(r => r.componentType === type && recipeMatchesBuilderSearch(r));
+              const selectedForType = selectedRecipes.filter(r => r.componentType === type);
+              return (
+                <div key={type} className="rounded-xl border overflow-hidden">
+                  <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${info?.bg ?? "bg-secondary/30"}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={info?.color}>{info?.icon}</span>
+                      <div>
+                        <p className={`text-sm font-semibold ${info?.color ?? ""}`}>{info?.label}</p>
+                        <p className="text-xs text-muted-foreground">{selectedForType.length ? selectedForType.map(r => r.name).join(", ") : "Choose one or more"}</p>
+                      </div>
                     </div>
-                  </label>
-                );
-              })}
-            </div>
+                    {selectedForType.length > 0 && (
+                      <span className="text-xs font-medium bg-background/80 border rounded-full px-2 py-0.5">{selectedForType.length}</span>
+                    )}
+                  </div>
+                  <div className="max-h-44 overflow-y-auto divide-y">
+                    {matching.length === 0 ? (
+                      <div className="px-3 py-4 text-xs text-muted-foreground">
+                        No {info?.label.toLowerCase()} recipes yet. Add a recipe and set its Component Type to {info?.label}.
+                      </div>
+                    ) : matching.map(r => {
+                      const checked = selectedIds.includes(r.id);
+                      return (
+                        <label key={r.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-primary/5" : "hover:bg-secondary/40"}`}>
+                          <input type="checkbox" checked={checked} onChange={() => toggleRecipe(r.id)} className="accent-primary shrink-0" />
+                          <span className="text-lg shrink-0">{r.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{r.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {[r.category, r.prepTime != null ? `${r.prepTime}m prep` : null, r.cookTime != null ? `${r.cookTime}m cook` : null].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                          {checked && <Check size={14} className="text-primary shrink-0" />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {(unclassifiedRecipes.length > 0 || builderSearch.trim()) && (() => {
+              const matching = unclassifiedRecipes.filter(recipeMatchesBuilderSearch);
+              if (matching.length === 0) return null;
+              return (
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="px-3 py-2.5 border-b bg-secondary/30">
+                    <p className="text-sm font-semibold">Other Saved Recipes</p>
+                    <p className="text-xs text-muted-foreground">Recipes without a component type can still be added to a meal.</p>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto divide-y">
+                    {matching.map(r => {
+                      const checked = selectedIds.includes(r.id);
+                      return (
+                        <label key={r.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-primary/5" : "hover:bg-secondary/40"}`}>
+                          <input type="checkbox" checked={checked} onChange={() => toggleRecipe(r.id)} className="accent-primary shrink-0" />
+                          <span className="text-lg shrink-0">{r.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{r.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{r.category || "Unclassified"}</p>
+                          </div>
+                          {checked && <Check size={14} className="text-primary shrink-0" />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Selected preview */}
           {selectedIds.length > 0 && (
             <div className="p-3 rounded-xl bg-secondary/30 border">
               <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Meal Preview</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedIds.map(id => {
-                  const r = recipes.find(x => x.id === id);
-                  if (!r) return null;
+              <div className="grid sm:grid-cols-2 gap-2">
+                {selectedRecipes.map(r => {
+                  const info = getComponentInfo(r.componentType);
                   return (
-                    <span key={id} className="flex items-center gap-1 text-xs bg-background border rounded-full px-2 py-1">
-                      {r.emoji} {r.name}
-                      <button type="button" onClick={() => toggleRecipe(id)} className="text-muted-foreground hover:text-destructive ml-0.5"><X size={10} /></button>
-                    </span>
+                    <div key={r.id} className="flex items-center gap-2 text-xs bg-background border rounded-xl px-2.5 py-2">
+                      <span className="text-base shrink-0">{r.emoji}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{r.name}</p>
+                        <p className={`text-xs ${info?.color ?? "text-muted-foreground"}`}>{info?.label ?? "Other"}</p>
+                      </div>
+                      <button type="button" onClick={() => toggleRecipe(r.id)} className="text-muted-foreground hover:text-destructive shrink-0"><X size={12} /></button>
+                    </div>
                   );
                 })}
               </div>
@@ -2782,11 +2860,29 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
       {/* ── MEALS ── */}
       {subView === "bundles" && (
         <div className="space-y-4">
+          <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Curated Meals</h3>
+              <p className="text-sm text-muted-foreground">Build reusable meals from your saved mains, vegetables, starches, sauces, and extras.</p>
+            </div>
+            <Button size="sm" onClick={() => { setEditBundle(null); setBundleModal(true); }} className="gap-1.5 shrink-0">
+              <Plus size={13} /><Package size={13} /> Create Meal
+            </Button>
+          </div>
+
           {bundles.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Package size={40} className="mx-auto mb-4 opacity-20" />
               <p className="font-medium">No reusable meals yet</p>
               <p className="text-sm mt-1">Create meals to save combinations like Steak Night, Taco Tuesday, or meal prep lunches.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <Button size="sm" onClick={() => { setEditBundle(null); setBundleModal(true); }} className="gap-1.5">
+                  <Plus size={13} /> Build a Meal
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setSubView("library")} className="gap-1.5">
+                  <BookOpen size={13} /> Organize Recipes
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
