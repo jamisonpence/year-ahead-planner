@@ -2610,6 +2610,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                           src={recipe.imageUrl}
                           alt={recipe.name}
                           className="w-full h-full object-cover"
+                          style={{ filter: "brightness(1.05) saturate(1.15) contrast(1.03)" }}
                           loading="lazy"
                         />
                       </div>
