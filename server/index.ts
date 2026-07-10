@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
-import { initializeStorage, seedSystemRecipes, seedMealDBRecipes, runMigrations } from "./storage";
+import { initializeStorage, seedSystemRecipes, seedMealDBRecipes, seedRecipeImages, runMigrations } from "./storage";
 import { createMcpRouter, createOAuthRouter, createOAuthEndpoints } from "./mylifos-mcp-server";
 
 const app = express();
@@ -87,6 +87,8 @@ app.use((req, res, next) => {
     await seedMealDBRecipes();
     log("MealDB recipes seeded — registering routes…");
     await registerRoutes(httpServer, app);
+    // Enrich system recipe images in the background (non-blocking)
+    seedRecipeImages().catch(e => console.error("[recipe-images] error:", e));
     log("Routes registered.");
 
     // OAuth endpoints (required by MCP spec for Cowork/Claude connectors)

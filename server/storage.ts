@@ -6741,6 +6741,70 @@ export async function seedMealDBRecipes() {
   console.log(`Seeded ${data.length} MealDB recipes`);
 }
 
+// ── Recipe Image Enrichment ────────────────────────────────────────────────────
+// Fetches og:image from each system recipe's source URL and stores it in the DB.
+// Runs once at startup; idempotent (skips recipes that already have image_url).
+// Failures are silently swallowed so startup is never blocked.
+export async function seedRecipeImages() {
+  const { rows } = await pool.query<{ id: number; source: string }>(
+    `SELECT id, source FROM recipes
+     WHERE user_id IS NULL
+       AND image_url IS NULL
+       AND source IS NOT NULL
+       AND source LIKE 'http%'
+     ORDER BY id`
+  );
+
+  if (rows.length === 0) {
+    console.log("[recipe-images] All system recipes already have images.");
+    return;
+  }
+
+  console.log(`[recipe-images] Enriching ${rows.length} recipes with og:image…`);
+
+  let updated = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(row.source, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; recipe-enricher/1.0)",
+          "Accept": "text/html",
+        },
+        redirect: "follow",
+      }).finally(() => clearTimeout(timeout));
+
+      if (!res.ok) { failed++; continue; }
+
+      const html = await res.text();
+
+      // Try og:image first, then twitter:image
+      const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+        ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+        ?? html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+        ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+
+      const imageUrl = ogMatch?.[1]?.trim();
+      if (!imageUrl || !imageUrl.startsWith("http")) { failed++; continue; }
+
+      await pool.query(`UPDATE recipes SET image_url = $1 WHERE id = $2`, [imageUrl, row.id]);
+      updated++;
+
+      // Be polite — 150ms between requests
+      await new Promise(r => setTimeout(r, 150));
+    } catch {
+      failed++;
+    }
+  }
+
+  console.log(`[recipe-images] Done. Updated: ${updated}, Failed/skipped: ${failed}`);
+}
+
 export { pool };
 
 // ═══════════════════════════════════════════════════════════════════════════
