@@ -1582,7 +1582,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
   const isPending = createMut.isPending || updateMut.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }} modal={false}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
