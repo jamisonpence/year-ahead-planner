@@ -21,12 +21,12 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CHORE_CATEGORIES = [
-  { value: "cleaning",    label: "Cleaning"    },
-  { value: "yard",        label: "Yard"        },
-  { value: "maintenance", label: "Maintenance" },
-  { value: "laundry",     label: "Laundry"     },
-  { value: "cooking",     label: "Cooking"     },
-  { value: "other",       label: "Other"       },
+  { value: "cleaning",    label: "Cleaning",    emoji: "🧹" },
+  { value: "yard",        label: "Yard",        emoji: "🌿" },
+  { value: "maintenance", label: "Maintenance", emoji: "🔧" },
+  { value: "laundry",     label: "Laundry",     emoji: "👕" },
+  { value: "cooking",     label: "Cooking",     emoji: "🍳" },
+  { value: "other",       label: "Other",       emoji: "📋" },
 ];
 
 const FREQUENCIES = [
@@ -1086,20 +1086,23 @@ function ChoresTab() {
       ) : (
         <div className="space-y-3">
           {grouped.map(([cat, catChores]) => {
-            const catLabel = CHORE_CATEGORIES.find((c) => c.value === cat)?.label ?? cat;
+            const catInfo = CHORE_CATEGORIES.find((c) => c.value === cat);
+            const catLabel = catInfo?.label ?? cat;
+            const catEmoji = catInfo?.emoji ?? "📋";
             const isCollapsed = collapsedCats.has(cat);
             return (
               <div key={cat}>
                 <button
                   onClick={() => toggleCat(cat)}
-                  className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary/60 transition-colors mb-1.5"
+                  className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-xl bg-secondary/40 hover:bg-secondary/70 transition-colors mb-2"
                 >
-                  {isCollapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                  <span className="text-base leading-none">{catEmoji}</span>
                   <span className="text-sm font-semibold">{catLabel}</span>
                   <Badge variant="secondary" className="text-xs ml-auto">{catChores.length}</Badge>
+                  {isCollapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                 </button>
                 {!isCollapsed && (
-                  <div className="space-y-2 pl-2">
+                  <div className="space-y-2 pl-1 mb-1">
                     {catChores.map((chore) => {
                       const status = choreStatus(chore);
                       const StatusIcon = status.icon;
