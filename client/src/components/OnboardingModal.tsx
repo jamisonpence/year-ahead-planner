@@ -497,6 +497,48 @@ function buildHobbyPlan(tpl: OnboardingPlanTpl) {
   };
 }
 
+const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string }[]> = {
+  momentum: [
+    { emoji: "🎯", text: "Add your first goal" },
+    { emoji: "✅", text: "Create a task for this week" },
+    { emoji: "🔥", text: "Set up a daily habit" },
+    { emoji: "📅", text: "Block time for a weekly review" },
+  ],
+  health: [
+    { emoji: "🏋️", text: "Log your first workout" },
+    { emoji: "🎯", text: "Set a fitness or wellness goal" },
+    { emoji: "🔥", text: "Create a daily movement habit" },
+    { emoji: "🍽️", text: "Set up a meal plan" },
+  ],
+  explore_life: [
+    { emoji: "📚", text: "Save a book you're reading" },
+    { emoji: "📍", text: "Add a place you want to visit" },
+    { emoji: "✨", text: "Start a hobby or interest" },
+    { emoji: "🎬", text: "Add something to your watchlist" },
+  ],
+  connect: [
+    { emoji: "👤", text: "Add someone important to you" },
+    { emoji: "📚", text: "Share a book recommendation" },
+    { emoji: "✨", text: "Save an interest to bond over" },
+    { emoji: "💬", text: "Start a conversation" },
+  ],
+};
+
+const PATH_LABELS: Record<string, string> = {
+  "/dashboard": "Today", "/goals": "Goals", "/tasks": "Tasks",
+  "/habits": "Habits", "/review": "Weekly Review", "/health": "Health",
+  "/library": "Library", "/hobbies": "Hobbies", "/places": "Places",
+  "/recipes": "Recipes", "/people": "People", "/journal": "Journal",
+  "/mylifos": "MyLifos", "/calendar": "Calendar", "/messenger": "Messenger",
+};
+
+const INTENTION_EXTRA_OPTIONS: Partial<Record<IntentionKey, CreateOption>> = {
+  track_workouts: { key: "workout_log", emoji: "🏋️", label: "Log a workout", sub: "Track your first session", href: "/health" },
+  organize_places: { key: "place", emoji: "📍", label: "Save a place", sub: "A restaurant, venue, or city", href: "/places" },
+  save_recs: { key: "book", emoji: "📚", label: "Save a book", sub: "Search by title or author", href: "/library" },
+  connect_friends: { key: "person", emoji: "👤", label: "Add a person", sub: "Someone important to you", href: "/people" },
+};
+
 const ONBOARDING_PLAN_TEMPLATES: Record<string, OnboardingPlanTpl[]> = {
   creative: [
     { id: "cp1", emoji: "🖼️", label: "Complete a project",  description: "Step through a specific creative work to completion",  durationWeeks: 4,  defaultSteps: ["Gather materials & references","Sketch / plan the composition","Begin main work","Refine and add detail","Finishing touches","Photograph & archive"] },
@@ -1245,28 +1287,19 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string, met
     } catch { /* ignore */ } finally { setCustomSaving(false); }
   }
 
-  // Create hobby + attach plan, then call onDone → navigate to /hobbies
+  // For momentum persona: create a goal (not a hobby) from the selected plan template
   async function saveHobbyPlan(tpl: OnboardingPlanTpl) {
     if (!selectedHobby) return;
     setSaving(tpl.id);
     try {
-      const hobbyRes = await apiRequest("POST", "/api/hobbies", {
-        name: selectedHobby.name,
-        hobbyType: selectedHobby.type,
-        skillLevel: "beginner",
-        status: "active",
-      }).then(r => r.json());
-      const hobbyId = hobbyRes?.id as number | undefined;
-      if (hobbyId) {
-        await apiRequest("PATCH", `/api/hobbies/${hobbyId}`, {
-          extraJson: JSON.stringify({ plans: [buildHobbyPlan(tpl)] }),
-        });
-      }
-      onDone(
-        `${selectedHobby.name} — ${tpl.label}`,
-        "/hobbies",
-        hobbyId ? { hobbyId, hobbyType: selectedHobby.type, planAlreadyCreated: true } : undefined,
-      );
+      const title = `${selectedHobby.name} — ${tpl.label}`;
+      await apiRequest("POST", "/api/goals", {
+        title,
+        horizon: "this_year",
+        progressType: "boolean",
+        description: tpl.description,
+      });
+      onDone(title, "/goals");
     } catch { /* ignore */ } finally { setSaving(null); }
   }
 
@@ -1292,7 +1325,7 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string, met
           <span className="text-xl">{selectedHobby.emoji}</span>
           <div>
             <p className="text-sm font-semibold">{selectedHobby.name}</p>
-            <p className="text-xs text-muted-foreground">Choose a plan — it'll be added to your Hobbies page</p>
+            <p className="text-xs text-muted-foreground">Choose a plan — it'll be saved as a goal</p>
           </div>
         </div>
         <div className="space-y-1.5">
@@ -1465,7 +1498,16 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     screen === 3 ? (createdLabel ? 90 : 60) :
     100;
 
-  const options = persona ? CREATE_OPTIONS[persona] : [];
+  const options = (() => {
+    if (!persona) return [];
+    const base = CREATE_OPTIONS[persona];
+    if (persona !== "momentum") return base;
+    const baseKeys = new Set(base.map(o => o.key));
+    const extras = intentions
+      .map(k => INTENTION_EXTRA_OPTIONS[k])
+      .filter((o): o is CreateOption => !!o && !baseKeys.has(o.key));
+    return [...base, ...extras];
+  })();
   const primaryIntention = intentions[0] ? INTENTIONS.find(i => i.key === intentions[0]) : null;
   const secondaryIntention = intentions[1] ? INTENTIONS.find(i => i.key === intentions[1]) : null;
 
@@ -1508,9 +1550,25 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     completeMut.mutate();
     const dest = createdHobbyMeta?.hobbyId ? "/hobbies"
                : browseRecipes ? "/recipes"
-               : "/dashboard";
+               : createdHref ?? "/dashboard";
     navigate(dest);
   }
+
+  // Computed destination and CTA label for Screen 4
+  const finishDest = createdHobbyMeta?.hobbyId ? "/hobbies"
+                   : browseRecipes ? "/recipes"
+                   : createdHref ?? "/dashboard";
+  const finishLabel = (() => {
+    if (finishDest === "/hobbies")  return "See your Hobbies";
+    if (finishDest === "/recipes")  return "Explore Recipes";
+    if (finishDest === "/goals")    return "See your Goals";
+    if (finishDest === "/tasks")    return "See your Tasks";
+    if (finishDest === "/habits")   return "See your Habits";
+    if (finishDest === "/health")   return "Go to Health";
+    if (finishDest === "/library")  return "See your Library";
+    if (finishDest === "/people")   return "See your People";
+    return "Go to Today";
+  })();
 
   /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
   function finishImmediate(href: string) {
@@ -1559,7 +1617,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           {screen === 1 && (
             <div className="p-6 sm:p-8 space-y-6">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Welcome, {firstName} 👋</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 1 of 3 · Welcome, {firstName} 👋</p>
                 <h1 className="text-2xl font-bold leading-tight">What should MyLifos help with first?</h1>
                 <p className="text-sm text-muted-foreground mt-1">Pick the outcome that fits best. MyLifos will shape Today and your sidebar around it.</p>
               </div>
@@ -1717,7 +1775,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                           if (opt.key === "training_plan") {
                             // Set flag so WorkoutsPage opens the plan builder after navigation
                             sessionStorage.setItem("openPlanBuilder", "1");
-                            finishImmediate("/health");
+                            handleCreated("Training Plan", "/health");
                           } else if (opt.key === "meal_plan") {
                             setMealWizardOpen(true);
                           } else {
@@ -1765,19 +1823,49 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 </p>
               </div>
 
-              <div className="rounded-xl border bg-card px-4 py-3 space-y-2">
-                <p className="text-xs font-semibold">What MyLifos set up</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    "Today",
-                    primaryIntention?.label ?? "First focus",
-                    secondaryIntention?.label ?? "Sidebar tuned",
-                    createdLabel ? "First item saved" : "Setup later",
-                  ].map(item => (
-                    <div key={item} className="rounded-lg bg-secondary/40 px-2 py-1.5 text-[11px] font-medium">{item}</div>
-                  ))}
-                </div>
-              </div>
+              {/* Sidebar tabs that were pinned */}
+              {(() => {
+                const extras = [
+                  ...(browseRecipes ? ["/recipes"] : []),
+                  ...(createdHobbyMeta?.hobbyId ? ["/hobbies"] : []),
+                ];
+                const prefs = buildNavPrefs(persona!, intentions, extras);
+                const visiblePaths = prefs.filter((p: any) => !p.hidden).slice(0, 8).map((p: any) => p.path as string);
+                return (
+                  <div className="rounded-xl border bg-card px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold">Your sidebar now shows</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {visiblePaths.map(path => (
+                        <span key={path} className="rounded-lg bg-secondary/40 px-2 py-1.5 text-[11px] font-medium">
+                          {PATH_LABELS[path] ?? path}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* First-week steps */}
+              {(() => {
+                const steps = PERSONA_FIRST_STEPS[persona!] ?? [];
+                return (
+                  <div className="rounded-xl border px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold">Suggested first steps</p>
+                    <div className="space-y-2">
+                      {steps.map((step, i) => (
+                        <div key={i} className="flex items-center gap-2.5">
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            i === 0 && createdLabel ? "border-primary bg-primary" : "border-border"
+                          }`}>
+                            {i === 0 && createdLabel && <Check size={9} className="text-primary-foreground" />}
+                          </div>
+                          <span className="text-xs text-muted-foreground">{step.emoji} {step.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Hobby plan opt-in — shown only when user created a hobby in Step 3 without a plan already attached */}
               {createdHobbyMeta?.hobbyType && !createdHobbyMeta?.planAlreadyCreated && (() => {
@@ -1828,12 +1916,6 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 </div>
               )}
 
-              <div className="bg-secondary/40 rounded-xl px-4 py-3">
-                <p className="text-xs text-muted-foreground">
-                  A guided <strong>first week</strong> checklist will appear on Today. You can dismiss it anytime.
-                </p>
-              </div>
-
               <button
                 onClick={finish}
                 disabled={completeMut.isPending}
@@ -1841,7 +1923,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               >
                 {completeMut.isPending
                   ? "Saving…"
-                  : <>Go to Today <ArrowRight size={15} /></>
+                  : <>{finishLabel} <ArrowRight size={15} /></>
                 }
               </button>
             </div>
