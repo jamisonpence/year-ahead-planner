@@ -63,7 +63,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
   { key: "track_workouts",  emoji: "💪", label: "Track workouts"        },
   { key: "organize_places", emoji: "📍", label: "Organize places/trips" },
   { key: "connect_friends", emoji: "👥", label: "Connect with friends"  },
-  { key: "private_notes",   emoji: "📝", label: "Keep private notes"    },
+  { key: "private_notes",   emoji: "📝", label: "Keep a journal"        },
 ];
 
 // ── First-item creation config ────────────────────────────────────────────────
@@ -513,10 +513,10 @@ const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string; hre
     { emoji: "🍽️", text: "Set up a meal plan",              href: "/health"   },
   ],
   explore_life: [
-    { emoji: "📚", text: "Save a book you're reading",     href: "/library"  },
-    { emoji: "📍", text: "Add a place you want to visit",  href: "/places"   },
-    { emoji: "✨", text: "Start a hobby or interest",       href: "/hobbies"  },
-    { emoji: "🎬", text: "Add something to your watchlist", href: "/library" },
+    { emoji: "📚", text: "Save a book you're reading",      href: "/library"  },
+    { emoji: "🍽️", text: "Browse and save a recipe",        href: "/recipes"  },
+    { emoji: "📍", text: "Add a place you want to visit",   href: "/places"   },
+    { emoji: "🎬", text: "Save a movie, show, or playlist", href: "/library"  },
   ],
   connect: [
     { emoji: "👤", text: "Add someone important to you",   href: "/people"   },
@@ -535,19 +535,20 @@ const PATH_LABELS: Record<string, string> = {
 };
 
 const INTENTION_EXTRA_OPTIONS: Partial<Record<IntentionKey, CreateOption>> = {
-  plan_week:       { key: "review_task", emoji: "📅", label: "Block review time", sub: "Add a task to schedule your first weekly review", href: "/review" },
-  track_workouts:  { key: "workout_log", emoji: "🏋️", label: "Log a workout",    sub: "Track your first session",                         href: "/health" },
-  organize_places: { key: "place",       emoji: "📍", label: "Save a place",      sub: "A restaurant, venue, or city",                     href: "/places" },
-  save_recs:       { key: "book",        emoji: "📚", label: "Save a book",       sub: "Search by title or author",                        href: "/library" },
-  connect_friends: { key: "person",      emoji: "👤", label: "Add a person",      sub: "Someone important to you",                         href: "/people" },
+  goal:            { key: "goal",        emoji: "🎯", label: "Set a goal",        sub: "Something you want to achieve this year",           href: "/goals"  },
+  plan_week:       { key: "review_task", emoji: "📅", label: "Block review time", sub: "Add a task to schedule your first weekly review",   href: "/review" },
+  track_workouts:  { key: "workout_log", emoji: "🏋️", label: "Log a workout",    sub: "Track your first session",                          href: "/health" },
+  organize_places: { key: "place",       emoji: "📍", label: "Save a place",      sub: "A restaurant, venue, or city",                      href: "/places" },
+  save_recs:       { key: "book",        emoji: "📚", label: "Save a book",       sub: "Search by title or author",                         href: "/library" },
+  connect_friends: { key: "person",      emoji: "👤", label: "Add a person",      sub: "Someone important to you",                          href: "/people" },
 };
 
 // Persona-specific order for the Step 2 intention grid (private_notes always excluded)
 const PERSONA_INTENTION_ORDER: Record<PersonaKey, IntentionKey[]> = {
   momentum:     ["goal", "habit", "plan_week", "track_workouts", "connect_friends", "save_recs", "organize_places"],
   health:       ["track_workouts", "goal", "habit", "plan_week", "connect_friends", "save_recs", "organize_places"],
-  explore_life: ["save_recs", "organize_places", "connect_friends", "goal", "habit", "plan_week"],
-  connect:      ["connect_friends", "save_recs", "organize_places", "goal", "habit", "plan_week"],
+  explore_life: ["save_recs", "organize_places", "connect_friends", "goal", "habit", "plan_week", "private_notes"],
+  connect:      ["connect_friends", "save_recs", "organize_places", "goal", "habit", "plan_week", "private_notes"],
 };
 
 const ONBOARDING_PLAN_TEMPLATES: Record<string, OnboardingPlanTpl[]> = {
@@ -736,7 +737,8 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
         }
         onDone(effectiveTitle, "/health");
       } else {
-        onDone(effectiveTitle, "/goals");
+        // Navigate to /health so health persona users stay in their home base
+        onDone(effectiveTitle, "/health");
       }
     },
   });
@@ -1513,9 +1515,14 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const options = (() => {
     if (!persona) return [];
     const base = CREATE_OPTIONS[persona];
-    if (persona !== "momentum") return base;
+    // explore_life already has 5 options — don't add more
+    if (persona === "explore_life") return base;
     const baseKeys = new Set(base.map(o => o.key));
-    const extras = intentions
+    // For connect, skip save_recs extra — book_share already covers saving a book
+    const relevantIntentions = persona === "connect"
+      ? intentions.filter(k => k !== "save_recs")
+      : intentions;
+    const extras = relevantIntentions
       .map(k => INTENTION_EXTRA_OPTIONS[k])
       .filter((o): o is CreateOption => !!o && !baseKeys.has(o.key));
     return [...base, ...extras];
@@ -1769,32 +1776,49 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     <p className="text-sm text-muted-foreground mt-1">This makes Today useful immediately. You can skip and set it up later.</p>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {options.map(opt => (
-                      <button
-                        key={opt.key}
-                        onClick={() => {
-                          if (opt.key === "training_plan") {
-                            // Set flag so WorkoutsPage opens the plan builder after navigation
-                            sessionStorage.setItem("openPlanBuilder", "1");
-                            handleCreated("Training Plan", "/health");
-                          } else if (opt.key === "meal_plan") {
-                            setMealWizardOpen(true);
-                          } else {
-                            setSelectedOption(opt);
-                          }
-                        }}
-                        className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
-                      >
-                        <span className="text-2xl shrink-0">{opt.emoji}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground">{opt.label}</p>
-                          <p className="text-sm text-muted-foreground mt-0.5">{opt.sub}</p>
-                        </div>
-                        <ArrowRight size={16} className="text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-                      </button>
-                    ))}
-                  </div>
+                  {persona === "explore_life" ? (
+                    /* 2-column grid for explore_life (5 options) to prevent overflow */
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {options.map(opt => (
+                        <button
+                          key={opt.key}
+                          onClick={() => setSelectedOption(opt)}
+                          className="flex flex-col items-start gap-1.5 p-3.5 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
+                        >
+                          <span className="text-2xl">{opt.emoji}</span>
+                          <p className="font-semibold text-sm text-foreground leading-snug">{opt.label}</p>
+                          <p className="text-xs text-muted-foreground leading-snug">{opt.sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Stacked list for all other personas */
+                    <div className="space-y-2.5">
+                      {options.map(opt => (
+                        <button
+                          key={opt.key}
+                          onClick={() => {
+                            if (opt.key === "training_plan") {
+                              sessionStorage.setItem("openPlanBuilder", "1");
+                              handleCreated("Training Plan", "/health");
+                            } else if (opt.key === "meal_plan") {
+                              setMealWizardOpen(true);
+                            } else {
+                              setSelectedOption(opt);
+                            }
+                          }}
+                          className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
+                        >
+                          <span className="text-2xl shrink-0">{opt.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-foreground">{opt.label}</p>
+                            <p className="text-sm text-muted-foreground mt-0.5">{opt.sub}</p>
+                          </div>
+                          <ArrowRight size={16} className="text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between gap-3 pt-1">
                     <button onClick={() => setScreen(2)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -1851,21 +1875,25 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 );
               })()}
 
-              {/* First-week steps */}
+              {/* First-week steps — completed step always floats to top */}
               {(() => {
-                const steps = PERSONA_FIRST_STEPS[persona!] ?? [];
+                const rawSteps = PERSONA_FIRST_STEPS[persona!] ?? [];
+                const isDone = (s: typeof rawSteps[0]) => !!createdLabel && (
+                  finishDest === s.href ||
+                  finishDest.startsWith(s.href + "?") ||
+                  finishDest.startsWith(s.href + "/")
+                );
+                const steps = createdLabel
+                  ? [...rawSteps].sort((a, b) => (isDone(b) ? 1 : 0) - (isDone(a) ? 1 : 0))
+                  : rawSteps;
                 return (
                   <div className="rounded-xl border px-4 py-3 space-y-2">
                     <p className="text-xs font-semibold">Suggested first steps</p>
                     <div className="space-y-2">
                       {steps.map((step, i) => {
-                        const done = !!createdLabel && (
-                          finishDest === step.href ||
-                          finishDest.startsWith(step.href + "?") ||
-                          finishDest.startsWith(step.href + "/")
-                        );
+                        const done = isDone(step);
                         return (
-                          <div key={i} className="flex items-center gap-2.5">
+                          <div key={step.href + step.text} className="flex items-center gap-2.5">
                             <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
                               done ? "border-primary bg-primary" : "border-border"
                             }`}>
