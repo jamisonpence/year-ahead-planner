@@ -1642,6 +1642,30 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     : "You've picked a main and secondary focus — deselect one to change it."}
               </p>
 
+              {/* Recipe sidebar opt-in */}
+              <button
+                type="button"
+                onClick={() => setBrowseRecipes(v => !v)}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
+                  browseRecipes
+                    ? "border-primary bg-primary/8"
+                    : "border-border hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                <span className="text-3xl shrink-0">🍽️</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">Browse 1,600+ recipes</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Pin the Recipes page to your sidebar for easy access
+                  </p>
+                </div>
+                <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
+                  browseRecipes ? "border-primary bg-primary" : "border-border"
+                }`}>
+                  {browseRecipes && <Check size={10} className="text-primary-foreground" />}
+                </div>
+              </button>
+
               <div className="flex items-center justify-between gap-3">
                 <button onClick={() => setScreen(1)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   ← Back
@@ -1805,30 +1829,6 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   </div>
                 );
               })()}
-
-              {/* Recipe browser opt-in */}
-              <button
-                type="button"
-                onClick={() => setBrowseRecipes(v => !v)}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
-                  browseRecipes
-                    ? "border-primary bg-primary/8"
-                    : "border-border hover:border-primary/50 hover:bg-primary/5"
-                }`}
-              >
-                <span className="text-3xl shrink-0">🍽️</span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">Browse 1,600+ recipes</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Pin the Recipes page to your sidebar for easy access
-                  </p>
-                </div>
-                <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
-                  browseRecipes ? "border-primary bg-primary" : "border-border"
-                }`}>
-                  {browseRecipes && <Check size={10} className="text-primary-foreground" />}
-                </div>
-              </button>
 
               {intentions.length > 0 && (
                 <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center gap-2.5">
