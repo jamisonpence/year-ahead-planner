@@ -476,7 +476,49 @@ const INTEREST_PRESETS: { cat: string; emoji: string; type: string; hobbies: str
   { cat: "Collection",  emoji: "🪙", type: "collection",  hobbies: ["Coins", "Stamps", "Vinyl Records", "Trading Cards", "Sneakers", "Watches", "Comic Books", "Antiques"] },
 ];
 
-function InterestForm({ onDone }: { onDone: (label: string) => void }) {
+interface OnboardingPlanTpl { id: string; emoji: string; label: string; description: string; defaultSteps: string[]; durationWeeks?: number; }
+type CreateMeta = { hobbyId?: number; hobbyType?: string };
+
+const ONBOARDING_PLAN_TEMPLATES: Record<string, OnboardingPlanTpl[]> = {
+  creative: [
+    { id: "cp1", emoji: "🖼️", label: "Complete a project",  description: "Step through a specific creative work to completion",  durationWeeks: 4,  defaultSteps: ["Gather materials & references","Sketch / plan the composition","Begin main work","Refine and add detail","Finishing touches","Photograph & archive"] },
+    { id: "cp2", emoji: "🎓", label: "Learn a technique",   description: "Break down mastering a new skill into sessions",        durationWeeks: 8,  defaultSteps: ["Research the technique","Watch / read tutorials","Practice basics","Apply to a small project","Seek feedback","Create a showcase piece"] },
+    { id: "cp3", emoji: "📚", label: "Build a portfolio",   description: "Create a body of work to share or exhibit",             durationWeeks: 12, defaultSteps: ["Define theme and style","Create first 3 pieces","Create 3 more pieces","Edit and curate","Build online presence","Share or exhibit"] },
+    { id: "cp4", emoji: "🏫", label: "Take a class",        description: "Work through a structured class or workshop",           durationWeeks: 6,  defaultSteps: ["Enroll and get materials","Complete weeks 1–2","Complete weeks 3–4","Midpoint review","Complete final lessons","Final project"] },
+  ],
+  collection: [
+    { id: "colp1", emoji: "🗂️", label: "Catalog & organize",  description: "Document and sort your entire collection",                durationWeeks: 4,  defaultSteps: ["Gather everything in one place","Research and identify pieces","Photograph each item","Enter into a spreadsheet or app","Add valuations","Organize storage"] },
+    { id: "colp2", emoji: "🔍", label: "Complete a set",       description: "Track down the missing pieces in a defined set",          durationWeeks: 12, defaultSteps: ["List all missing pieces","Research sources and prices","Set a budget","Acquire top 3 most wanted","Continue filling gaps","Celebrate completion"] },
+    { id: "colp3", emoji: "🛒", label: "Sourcing expedition",  description: "Plan and execute a major sourcing trip or haul",           defaultSteps: ["Research locations and events","Set a budget and want list","Plan logistics","Execute the trip","Process and clean your haul","Update collection records"] },
+    { id: "colp4", emoji: "📖", label: "Become an expert",     description: "Deep dive into the history and value of your collection",  durationWeeks: 8,  defaultSteps: ["Get reference books or guides","Join collector communities","Research your top 10 pieces","Learn grading standards","Attend a show or event","Write about your collection"] },
+  ],
+  outdoor: [
+    { id: "op1", emoji: "🏃", label: "Train for an event",   description: "Progressive plan to prepare for a race, hike, or challenge", durationWeeks: 12, defaultSteps: ["Set baseline fitness","Build base fitness (weeks 1–4)","Increase intensity (weeks 5–8)","Peak week","Taper","Race / event day"] },
+    { id: "op2", emoji: "⛰️", label: "Plan an expedition",   description: "Prepare for a multi-day adventure in depth",                 durationWeeks: 8,  defaultSteps: ["Choose destination and dates","Research route and conditions","Gear check and acquisition","Training hikes","Logistics — permits, transport","Execute the trip"] },
+    { id: "op3", emoji: "🎯", label: "Skill progression",    description: "Systematically improve a specific outdoor skill",            durationWeeks: 10, defaultSteps: ["Assess current level","Find instruction — course, guide, videos","Practice fundamentals","Apply in the field","Advanced practice","Lead or teach others"] },
+    { id: "op4", emoji: "🗺️", label: "Explore a region",    description: "Systematically discover and document a new area",            durationWeeks: 8,  defaultSteps: ["Research the region","Map key locations","First visit — scout","Return for top spots","Off-the-beaten-path trip","Document favorites"] },
+  ],
+  games: [
+    { id: "gp1", emoji: "🎮", label: "Complete a game",      description: "Play through a game from start to finish",                    durationWeeks: 4,  defaultSteps: ["Start / set up","Complete act 1","Complete act 2","Complete main story","Optional content","100% / achievement run"] },
+    { id: "gp2", emoji: "📚", label: "Learn a new game",     description: "Go from beginner to competent in a game you've never played", durationWeeks: 6,  defaultSteps: ["Read rules or watch intro","Play first session","Identify weak spots","Study strategy","Practice regularly","Play a competitive session"] },
+    { id: "gp3", emoji: "⚡", label: "Improve your rating",  description: "Structured path to reach a new skill level",                  durationWeeks: 12, defaultSteps: ["Establish baseline rating","Identify key weaknesses","Study and practice","Play rated games","Analyze losses","Hit target rating"] },
+    { id: "gp4", emoji: "🎲", label: "Run a campaign",       description: "Plan and run a full tabletop or story campaign",              durationWeeks: 16, defaultSteps: ["Plan setting and story arc","Build characters with players","Session 1 — intro arc","Mid-campaign arc","Final arc","Epilogue session"] },
+  ],
+  learning: [
+    { id: "lp1", emoji: "🎓", label: "Complete a course",    description: "Work through a structured course from start to finish",           durationWeeks: 8,  defaultSteps: ["Enroll and set up environment","Complete module 1","Complete modules 2–3","Midpoint project","Complete final modules","Final exam or capstone"] },
+    { id: "lp2", emoji: "🔨", label: "Build a project",      description: "Plan and ship a complete project from scratch",                    durationWeeks: 6,  defaultSteps: ["Define scope and requirements","Design / architecture","Build core features","Add secondary features","Test and fix bugs","Deploy or share"] },
+    { id: "lp3", emoji: "🌍", label: "Reach a skill level",  description: "Systematic path to a specific proficiency or certification",      durationWeeks: 16, defaultSteps: ["Assess current level","Study fundamentals","Practice daily","Reach intermediate milestone","Advanced study","Test or certify"] },
+    { id: "lp4", emoji: "📖", label: "Read & implement",     description: "Work through a technical book with hands-on practice",            durationWeeks: 6,  defaultSteps: ["Acquire the book or resource","Read and do chapters 1–3","Implement exercises 1–3","Read chapters 4–6","Implement exercises 4–6","Final implementation project"] },
+  ],
+  performance: [
+    { id: "pp1", emoji: "🎵", label: "Learn a piece",              description: "Work through a specific song, piece, or routine start to finish", durationWeeks: 4,  defaultSteps: ["Listen and analyze","Break into sections","Learn section A","Learn section B","Combine all sections","Performance-ready run-through"] },
+    { id: "pp2", emoji: "🎤", label: "Prepare for a performance",  description: "Ready yourself for a recital, show, gig, or audition",           durationWeeks: 8,  defaultSteps: ["Set performance date","Finalize setlist or material","Polish each piece","Full run-throughs","Final dress rehearsal","Perform"] },
+    { id: "pp3", emoji: "🎬", label: "Record / create",            description: "Plan and complete a recording or creative project",               durationWeeks: 6,  defaultSteps: ["Finalize the material","Pre-production setup","Record rough takes","Select and polish best takes","Mix and master","Release or share"] },
+    { id: "pp4", emoji: "📋", label: "Practice curriculum",        description: "Build a structured practice routine to improve fundamentals",     durationWeeks: 12, defaultSteps: ["Assess current skills","Design practice schedule","Weeks 1–4: fundamentals","Weeks 5–8: intermediate exercises","Weeks 9–12: advanced exercises","Evaluate and adjust"] },
+  ],
+};
+
+function InterestForm({ onDone }: { onDone: (label: string, href?: string, meta?: CreateMeta) => void }) {
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [name, setName] = useState("");
   const preset = INTEREST_PRESETS.find(p => p.cat === selectedCat);
@@ -486,8 +528,8 @@ function InterestForm({ onDone }: { onDone: (label: string) => void }) {
       hobbyType: preset?.type ?? "creative",
       skillLevel: "beginner",
       status: "active",
-    }),
-    onSuccess: () => onDone(name),
+    }).then(r => r.json()),
+    onSuccess: (data: any) => onDone(name, "/hobbies", { hobbyId: data?.id, hobbyType: preset?.type ?? "creative" }),
   });
   return (
     <div className="space-y-4">
@@ -1160,7 +1202,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
 
 // ── Form router ───────────────────────────────────────────────────────────────
 
-function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string, href?: string) => void }) {
+function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string, href?: string, meta?: CreateMeta) => void }) {
   switch (optionKey) {
     case "goal":          return <GoalForm onDone={onDone} />;
     case "task":          return <TaskForm onDone={onDone} />;
@@ -1198,6 +1240,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
   // Screen 4 feature opt-ins
   const [browseRecipes, setBrowseRecipes] = useState(false);
+  const [createdHobbyMeta, setCreatedHobbyMeta] = useState<CreateMeta | null>(null);
+  const [selectedPlanTpl, setSelectedPlanTpl] = useState<OnboardingPlanTpl | null>(null);
 
   const completeMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/me/complete-onboarding"),
@@ -1233,9 +1277,10 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     });
   }
 
-  function handleCreated(label: string, href?: string) {
+  function handleCreated(label: string, href?: string, meta?: CreateMeta) {
     setCreatedLabel(label);
     setCreatedHref(href ?? selectedOption?.href ?? null);
+    if (meta) setCreatedHobbyMeta(meta);
     // Brief pause to show success, then advance
     setTimeout(() => setScreen(4), 900);
   }
@@ -1243,12 +1288,34 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   function finish() {
     const extras = browseRecipes ? ["/recipes"] : [];
     const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, extras);
-    // Optimistically update the cache so AppShell sees correct sidebar state immediately
     qc.setQueryData(["/api/nav-prefs"], navPrefs);
     persistOnboardingSetup(persona, intentions, extras);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
+    // Create the hobby plan if one was selected
+    if (selectedPlanTpl && createdHobbyMeta?.hobbyId) {
+      const mkId = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+      const plan = {
+        id: mkId(),
+        title: selectedPlanTpl.label,
+        description: selectedPlanTpl.description,
+        durationWeeks: selectedPlanTpl.durationWeeks,
+        isActive: true,
+        startDate: new Date().toISOString().slice(0, 10),
+        steps: selectedPlanTpl.defaultSteps.map(text => ({ id: mkId(), text, done: false })),
+        sessions: [],
+        createdAt: new Date().toISOString(),
+        scheduleDays: ["Mon", "Wed", "Fri"],
+        commitmentDaysPerWeek: 3,
+      };
+      apiRequest("PATCH", `/api/hobbies/${createdHobbyMeta.hobbyId}`, {
+        extraJson: JSON.stringify({ plans: [plan] }),
+      }).catch(() => {});
+    }
     completeMut.mutate();
-    navigate(browseRecipes ? "/recipes" : "/dashboard");
+    const dest = selectedPlanTpl && createdHobbyMeta?.hobbyId ? "/hobbies"
+               : browseRecipes ? "/recipes"
+               : "/dashboard";
+    navigate(dest);
   }
 
   /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
@@ -1507,6 +1574,43 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   ))}
                 </div>
               </div>
+
+              {/* Hobby plan opt-in — shown only when user created a hobby in Step 3 */}
+              {createdHobbyMeta?.hobbyType && (() => {
+                const templates = ONBOARDING_PLAN_TEMPLATES[createdHobbyMeta.hobbyType!] ?? [];
+                if (!templates.length) return null;
+                return (
+                  <div className="rounded-xl border p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📋</span>
+                      <p className="text-xs font-semibold">Start a plan for {createdLabel}</p>
+                    </div>
+                    <div className="space-y-2">
+                      {templates.map(tpl => (
+                        <button key={tpl.id} type="button"
+                          onClick={() => setSelectedPlanTpl(selectedPlanTpl?.id === tpl.id ? null : tpl)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                            selectedPlanTpl?.id === tpl.id
+                              ? "border-primary bg-primary/8"
+                              : "border-border hover:border-primary/50 hover:bg-primary/5"
+                          }`}>
+                          <span className="text-xl shrink-0">{tpl.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold">{tpl.label}</p>
+                            <p className="text-xs text-muted-foreground leading-snug">{tpl.description}</p>
+                            {tpl.durationWeeks && <p className="text-[11px] text-muted-foreground mt-0.5">{tpl.durationWeeks} weeks</p>}
+                          </div>
+                          <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
+                            selectedPlanTpl?.id === tpl.id ? "border-primary bg-primary" : "border-border"
+                          }`}>
+                            {selectedPlanTpl?.id === tpl.id && <Check size={10} className="text-primary-foreground" />}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Recipe browser opt-in */}
               <button
