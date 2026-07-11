@@ -477,7 +477,25 @@ const INTEREST_PRESETS: { cat: string; emoji: string; type: string; hobbies: str
 ];
 
 interface OnboardingPlanTpl { id: string; emoji: string; label: string; description: string; defaultSteps: string[]; durationWeeks?: number; }
-type CreateMeta = { hobbyId?: number; hobbyType?: string };
+type CreateMeta = { hobbyId?: number; hobbyType?: string; planAlreadyCreated?: boolean };
+
+function mkPlanId() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
+
+function buildHobbyPlan(tpl: OnboardingPlanTpl) {
+  return {
+    id: mkPlanId(),
+    title: tpl.label,
+    description: tpl.description,
+    durationWeeks: tpl.durationWeeks,
+    isActive: true,
+    startDate: new Date().toISOString().slice(0, 10),
+    steps: tpl.defaultSteps.map(text => ({ id: mkPlanId(), text, done: false })),
+    sessions: [],
+    createdAt: new Date().toISOString(),
+    scheduleDays: ["Mon", "Wed", "Fri"],
+    commitmentDaysPerWeek: 3,
+  };
+}
 
 const ONBOARDING_PLAN_TEMPLATES: Record<string, OnboardingPlanTpl[]> = {
   creative: [
@@ -1202,7 +1220,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
 
 // ── Goal picker form (momentum persona) ──────────────────────────────────────
 
-function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string, meta?: CreateMeta) => void }) {
   const [customTitle, setCustomTitle] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [customSaving, setCustomSaving] = useState(false);
@@ -1227,6 +1245,31 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
     } catch { /* ignore */ } finally { setCustomSaving(false); }
   }
 
+  // Create hobby + attach plan, then call onDone → navigate to /hobbies
+  async function saveHobbyPlan(tpl: OnboardingPlanTpl) {
+    if (!selectedHobby) return;
+    setSaving(tpl.id);
+    try {
+      const hobbyRes = await apiRequest("POST", "/api/hobbies", {
+        name: selectedHobby.name,
+        hobbyType: selectedHobby.type,
+        skillLevel: "beginner",
+        status: "active",
+      }).then(r => r.json());
+      const hobbyId = hobbyRes?.id as number | undefined;
+      if (hobbyId) {
+        await apiRequest("PATCH", `/api/hobbies/${hobbyId}`, {
+          extraJson: JSON.stringify({ plans: [buildHobbyPlan(tpl)] }),
+        });
+      }
+      onDone(
+        `${selectedHobby.name} — ${tpl.label}`,
+        "/hobbies",
+        hobbyId ? { hobbyId, hobbyType: selectedHobby.type, planAlreadyCreated: true } : undefined,
+      );
+    } catch { /* ignore */ } finally { setSaving(null); }
+  }
+
   const healthGroups = [
     { label: "Endurance", goals: QUICK_START_GOALS.filter(g => g.planType === "endurance") },
     { label: "Strength PR", goals: QUICK_START_GOALS.filter(g => g.planType === "strength_pr") },
@@ -1249,17 +1292,13 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
           <span className="text-xl">{selectedHobby.emoji}</span>
           <div>
             <p className="text-sm font-semibold">{selectedHobby.name}</p>
-            <p className="text-xs text-muted-foreground">Choose a plan to set as your goal</p>
+            <p className="text-xs text-muted-foreground">Choose a plan — it'll be added to your Hobbies page</p>
           </div>
         </div>
         <div className="space-y-1.5">
           {plans.map(tpl => (
             <button key={tpl.id}
-              onClick={() => saveGoal(tpl.id, `${selectedHobby.name} — ${tpl.label}`, {
-                title: `${selectedHobby.name} — ${tpl.label}`,
-                progressType: "boolean",
-                description: tpl.description,
-              })}
+              onClick={() => saveHobbyPlan(tpl)}
               disabled={!!saving}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
               <span className="text-xl shrink-0">{tpl.emoji}</span>
@@ -1452,33 +1491,22 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   function finish() {
-    const extras = browseRecipes ? ["/recipes"] : [];
+    const extras = [
+      ...(browseRecipes ? ["/recipes"] : []),
+      ...(createdHobbyMeta?.hobbyId ? ["/hobbies"] : []),
+    ];
     const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, extras);
     qc.setQueryData(["/api/nav-prefs"], navPrefs);
     persistOnboardingSetup(persona, intentions, extras);
     prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
-    // Create the hobby plan if one was selected
-    if (selectedPlanTpl && createdHobbyMeta?.hobbyId) {
-      const mkId = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
-      const plan = {
-        id: mkId(),
-        title: selectedPlanTpl.label,
-        description: selectedPlanTpl.description,
-        durationWeeks: selectedPlanTpl.durationWeeks,
-        isActive: true,
-        startDate: new Date().toISOString().slice(0, 10),
-        steps: selectedPlanTpl.defaultSteps.map(text => ({ id: mkId(), text, done: false })),
-        sessions: [],
-        createdAt: new Date().toISOString(),
-        scheduleDays: ["Mon", "Wed", "Fri"],
-        commitmentDaysPerWeek: 3,
-      };
+    // Attach the plan selected on Screen 4 (only when not already created in Step 3)
+    if (selectedPlanTpl && createdHobbyMeta?.hobbyId && !createdHobbyMeta?.planAlreadyCreated) {
       apiRequest("PATCH", `/api/hobbies/${createdHobbyMeta.hobbyId}`, {
-        extraJson: JSON.stringify({ plans: [plan] }),
+        extraJson: JSON.stringify({ plans: [buildHobbyPlan(selectedPlanTpl)] }),
       }).catch(() => {});
     }
     completeMut.mutate();
-    const dest = selectedPlanTpl && createdHobbyMeta?.hobbyId ? "/hobbies"
+    const dest = createdHobbyMeta?.hobbyId ? "/hobbies"
                : browseRecipes ? "/recipes"
                : "/dashboard";
     navigate(dest);
@@ -1741,8 +1769,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 </div>
               </div>
 
-              {/* Hobby plan opt-in — shown only when user created a hobby in Step 3 */}
-              {createdHobbyMeta?.hobbyType && (() => {
+              {/* Hobby plan opt-in — shown only when user created a hobby in Step 3 without a plan already attached */}
+              {createdHobbyMeta?.hobbyType && !createdHobbyMeta?.planAlreadyCreated && (() => {
                 const templates = ONBOARDING_PLAN_TEMPLATES[createdHobbyMeta.hobbyType!] ?? [];
                 if (!templates.length) return null;
                 return (
