@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MealDB → CSV Exporter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a; color: #e2e8f0;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .card {
+      background: #1e293b; border: 1px solid #334155;
+      border-radius: 16px; padding: 36px; width: 100%; max-width: 520px;
+      text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,.4);
+    }
+    h1 { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+    .sub { color: #94a3b8; font-size: .875rem; margin-bottom: 28px; }
+    .progress-wrap {
+      background: #0f172a; border-radius: 999px; height: 8px;
+      overflow: hidden; margin-bottom: 12px;
+    }
+    .progress-bar {
+      height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      border-radius: 999px; transition: width .3s ease; width: 0%;
+    }
+    .status { font-size: .8rem; color: #64748b; min-height: 1.2em; margin-bottom: 24px; }
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px; margin-bottom: 28px;
+    }
+    .stat { background: #0f172a; border-radius: 10px; padding: 12px; }
+    .stat-val { font-size: 1.4rem; font-weight: 700; color: #a78bfa; }
+    .stat-lbl { font-size: .7rem; color: #64748b; margin-top: 2px; }
+    button {
+      padding: 12px 28px; border-radius: 10px; border: none;
+      font-size: .95rem; font-weight: 600; cursor: pointer; transition: all .2s;
+    }
+    #startBtn {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; width: 100%;
+    }
+    #startBtn:hover { opacity: .9; transform: translateY(-1px); }
+    #startBtn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    #dlBtn {
+      background: #22c55e; color: #fff; width: 100%;
+      display: none; margin-top: 12px;
+    }
+    #dlBtn:hover { background: #16a34a; }
+    .error { color: #f87171; font-size: .8rem; margin-top: 8px; }
+    .tag {
+      display: inline-block; background: #1e3a5f; color: #60a5fa;
+      border-radius: 6px; padding: 2px 8px; font-size: .7rem; margin: 2px;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🍽️ MealDB → CSV Exporter</h1>
+  <p class="sub">Fetches every recipe from TheMealDB with full details,<br>ingredients, and instructions.</p>
+
+  <div class="progress-wrap"><div class="progress-bar" id="bar"></div></div>
+  <div class="status" id="status">Ready — click Export to begin</div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="nLetters">0</div><div class="stat-lbl">Letters done</div></div>
+    <div class="stat"><div class="stat-val" id="nMeals">0</div><div class="stat-lbl">Meals found</div></div>
+    <div class="stat"><div class="stat-val" id="nCats">0</div><div class="stat-lbl">Categories</div></div>
+  </div>
+
+  <button id="startBtn" onclick="run()">Export All Recipes</button>
+  <button id="dlBtn" onclick="download()">⬇ Download CSV</button>
+  <div class="error" id="errMsg"></div>
+</div>
+
+<script>
+const BASE = "https://www.themealdb.com/api/json/v1/1";
+const LETTERS = "abcdefghijklmnopqrstuvwxyz".split("");
+
+let allMeals = [];
+let csvData = "";
+
+function setStatus(msg) { document.getElementById("status").textContent = msg; }
+function setBar(pct) { document.getElementById("bar").style.width = pct + "%"; }
+function setN(id, val) { document.getElementById(id).textContent = val; }
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function extractIngredients(m) {
+  const parts = [];
+  for (let i = 1; i <= 20; i++) {
+    const ing = (m[`strIngredient${i}`] || "").trim();
+    const meas = (m[`strMeasure${i}`] || "").trim();
+    if (ing) parts.push(meas ? `${meas} ${ing}` : ing);
+  }
+  return parts.join(" | ");
+}
+
+function mealToRow(m) {
+  return {
+    id: m.idMeal || "",
+    name: m.strMeal || "",
+    category: m.strCategory || "",
+    area: m.strArea || "",
+    tags: m.strTags || "",
+    ingredients: extractIngredients(m),
+    instructions: (m.strInstructions || "").replace(/\r?\n/g, " ").trim(),
+    image_url: m.strMealThumb || "",
+    youtube_url: m.strYoutube || "",
+    source_url: m.strSource || "",
+  };
+}
+
+function toCSV(rows) {
+  const fields = ["id","name","category","area","tags","ingredients","instructions","image_url","youtube_url","source_url"];
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  return [fields.join(","), ...rows.map(r => fields.map(f => esc(r[f])).join(","))].join("\r\n");
+}
+
+async function run() {
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true;
+  document.getElementById("errMsg").textContent = "";
+  allMeals = [];
+
+  try {
+    for (let i = 0; i < LETTERS.length; i++) {
+      const letter = LETTERS[i];
+      setStatus(`Fetching meals starting with "${letter.toUpperCase()}"…`);
+      setBar(Math.round((i / LETTERS.length) * 90));
+
+      let data;
+      try {
+        data = await fetchJSON(`${BASE}/search.php?f=${letter}`);
+      } catch (e) {
+        setStatus(`Skipping "${letter}" (error: ${e.message})`);
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+
+      const meals = (data && Array.isArray(data.meals)) ? data.meals : [];
+      allMeals.push(...meals.map(mealToRow));
+
+      const cats = new Set(allMeals.map(m => m.category).filter(Boolean));
+      setN("nLetters", i + 1);
+      setN("nMeals", allMeals.length);
+      setN("nCats", cats.size);
+
+      await new Promise(r => setTimeout(r, 150)); // be polite to API
+    }
+
+    setBar(100);
+    setStatus(`Done! ${allMeals.length} recipes exported across ${new Set(allMeals.map(m=>m.category)).size} categories.`);
+
+    csvData = toCSV(allMeals);
+    document.getElementById("dlBtn").style.display = "block";
+  } catch (e) {
+    document.getElementById("errMsg").textContent = "Error: " + e.message;
+    btn.disabled = false;
+  }
+}
+
+function download() {
+  const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "mealdb_recipes.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

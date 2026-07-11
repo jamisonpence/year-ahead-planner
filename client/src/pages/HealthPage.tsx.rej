@@ -1,0 +1,153 @@
+@@ -2713,35 +2713,133 @@
+   );
+ }
+ 
+-function NutritionConnectionsCard() {
+-  const connections = [
+-    { label: "Health goal", href: "#/goals", icon: Target },
+-    { label: "Workout", href: "#/workouts", icon: Dumbbell },
+-    { label: "Place", href: "#/places", icon: MapPin },
+-    { label: "Person", href: "#/people", icon: Users },
+-    { label: "Private note", href: "#/journal", icon: NotebookPen },
+-  ];
++function NutritionConnectionsCard({
++  activePlan,
++  metric,
++  recipes,
++  friendsCount,
++  proteinLeft,
++  caloriesLeft,
++  goalsMatchPlan,
++  onSyncTargets,
++  onChooseMeal,
++  onAddRecoveryMeal,
++  onAskFriend,
++  onSaveNote,
++  syncingTargets,
++}: {
++  activePlan: WorkoutPlan | null;
++  metric: Record<string, any> | null;
++  recipes: Recipe[];
++  friendsCount: number;
++  proteinLeft: number;
++  caloriesLeft: number;
++  goalsMatchPlan: boolean;
++  onSyncTargets: () => void;
++  onChooseMeal: () => void;
++  onAddRecoveryMeal: () => void;
++  onAskFriend: (item: NutritionMealActionItem) => void;
++  onSaveNote: (item: NutritionMealActionItem) => void;
++  syncingTargets: boolean;
++}) {
++  const highProteinRecipe = recipes.find(recipe => (parseRecipeNutrition(recipe)?.protein ?? 0) >= 25) ?? recipes[0] ?? null;
++  const targetProtein = metric?.proteinGrams ? Math.round(metric.proteinGrams as number) : null;
++  const goalLabel = activePlan
++    ? `${activePlan.name}${targetProtein ? ` · ${targetProtein}g protein target` : ""}`
++    : "No active nutrition-linked goal yet";
++  const workoutDay = !!activePlan;
++  const contextNote: NutritionMealActionItem = {
++    id: "nutrition-context-note",
++    title: "Nutrition context",
++    subtitle: `${proteinLeft}g protein left · ${caloriesLeft} kcal left today`,
++    source: "recipe",
++  };
+ 
+   return (
+     <div className="rounded-2xl border bg-card p-4 space-y-3">
+       <div className="flex items-start justify-between gap-3">
+         <div>
+-          <p className="text-sm font-semibold">Saved in MyLifos</p>
+-          <p className="text-xs text-muted-foreground">Recipes and saved meals can connect to your goals, workouts, places, people, and notes.</p>
++          <p className="text-sm font-semibold">Connected to Today</p>
++          <p className="text-xs text-muted-foreground">Use goals, workouts, saved meals, and recommendations to decide what to eat next.</p>
+         </div>
+         <a href="#/mylifos" className="text-xs text-primary hover:underline shrink-0">Open MyLifos</a>
+       </div>
+-      <div className="flex gap-2 overflow-x-auto pb-0.5">
+-        {connections.map(item => {
+-          const Icon = item.icon;
+-          return (
+-            <a key={item.label} href={item.href} className="shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs hover:bg-secondary transition-colors">
+-              <Icon size={12} /> {item.label}
+-            </a>
+-          );
+-        })}
++
++      <div className="grid md:grid-cols-2 gap-2">
++        <div className="rounded-xl border bg-background p-3 space-y-2">
++          <div className="flex items-start gap-2">
++            <Target size={14} className="mt-0.5 text-primary shrink-0" />
++            <div className="min-w-0">
++              <p className="text-xs font-semibold">Goal context</p>
++              <p className="text-[11px] text-muted-foreground truncate">{goalLabel}</p>
++            </div>
++          </div>
++          <button
++            type="button"
++            onClick={onSyncTargets}
++            disabled={!activePlan || goalsMatchPlan || syncingTargets}
++            className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary disabled:opacity-50"
++          >
++            {goalsMatchPlan ? "Targets synced" : syncingTargets ? "Syncing..." : "Use goal targets"}
++          </button>
++        </div>
++
++        <div className="rounded-xl border bg-background p-3 space-y-2">
++          <div className="flex items-start gap-2">
++            <Dumbbell size={14} className="mt-0.5 text-primary shrink-0" />
++            <div>
++              <p className="text-xs font-semibold">Workout context</p>
++              <p className="text-[11px] text-muted-foreground">{workoutDay ? "Plan a recovery meal around your active training goal." : "Connect a workout goal to get recovery meal prompts."}</p>
++            </div>
++          </div>
++          <button type="button" onClick={onAddRecoveryMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Add recovery meal</button>
++        </div>
++
++        <div className="rounded-xl border bg-background p-3 space-y-2">
++          <div className="flex items-start gap-2">
++            <BookMarked size={14} className="mt-0.5 text-primary shrink-0" />
++            <div>
++              <p className="text-xs font-semibold">Saved ideas</p>
++              <p className="text-[11px] text-muted-foreground">{recipes.length ? `${recipes.length} saved meal${recipes.length === 1 ? "" : "s"} available` : "Save meals to reuse them here."}</p>
++            </div>
++          </div>
++          <button type="button" onClick={onChooseMeal} className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Choose meal</button>
++        </div>
++
++        <div className="rounded-xl border bg-background p-3 space-y-2">
++          <div className="flex items-start gap-2">
++            <MessageCircle size={14} className="mt-0.5 text-primary shrink-0" />
++            <div>
++              <p className="text-xs font-semibold">Social ideas</p>
++              <p className="text-[11px] text-muted-foreground">{friendsCount ? `Ask a friend about ${highProteinRecipe?.name ?? "a meal idea"}.` : "Add friends to exchange recipe ideas."}</p>
++            </div>
++          </div>
++          <button
++            type="button"
++            onClick={() => highProteinRecipe ? onAskFriend(mealActionFromRecipe(highProteinRecipe)) : onChooseMeal()}
++            className="w-full rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary"
++          >
++            {friendsCount ? "Ask friend" : "Find meal idea"}
++          </button>
++        </div>
+       </div>
+ 
++      <div className="rounded-xl border bg-primary/5 border-primary/20 px-3 py-2">
++        <p className="text-xs font-semibold text-primary">Next useful action</p>
++        <p className="text-[11px] text-muted-foreground mt-0.5">
++          {proteinLeft > 25
++            ? `You're ${proteinLeft}g protein short. Choose a saved high-protein meal or add a recovery meal.`
++            : caloriesLeft > 400
++              ? `${caloriesLeft} kcal left today. Pick a planned or saved meal before the day gets away from you.`
++              : "Today is nearly covered. Save a note about what worked so you can repeat it."}
++        </p>
++        <div className="grid grid-cols-3 gap-1.5 mt-2">
++          <button type="button" onClick={onChooseMeal} className="rounded-lg bg-primary text-primary-foreground px-2 py-1.5 text-[11px] font-medium">Use meal</button>
++          <button type="button" onClick={onAddRecoveryMeal} className="rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Log food</button>
++          <button type="button" onClick={() => onSaveNote(contextNote)} className="rounded-lg border px-2 py-1.5 text-[11px] hover:bg-secondary">Save note</button>
++        </div>
++      </div>
++
+       <div className="rounded-xl bg-secondary/20 px-3 py-2 flex items-start gap-2">
+         <Lock size={13} className="mt-0.5 text-muted-foreground shrink-0" />
+         <p className="text-[11px] text-muted-foreground">Private by default: logged foods are for you. Shareable moments focus on recipes, meal ideas, encouragement, and recommendations.</p>

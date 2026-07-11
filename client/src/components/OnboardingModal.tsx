@@ -1200,11 +1200,145 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
   );
 }
 
+// ── Goal picker form (momentum persona) ──────────────────────────────────────
+
+function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
+  const [customTitle, setCustomTitle] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
+  const [customSaving, setCustomSaving] = useState(false);
+
+  async function saveGoal(id: string, title: string, payload: object) {
+    setSaving(id);
+    try {
+      await apiRequest("POST", "/api/goals", { horizon: "this_year", ...payload });
+      onDone(title, "/goals");
+    } catch { /* ignore */ } finally { setSaving(null); }
+  }
+
+  async function saveCustomGoal() {
+    const t = customTitle.trim();
+    if (!t) return;
+    setCustomSaving(true);
+    try {
+      await apiRequest("POST", "/api/goals", { title: t, horizon: "this_year", progressType: "boolean" });
+      onDone(t, "/goals");
+    } catch { /* ignore */ } finally { setCustomSaving(false); }
+  }
+
+  const healthGroups = [
+    { label: "Endurance", goals: QUICK_START_GOALS.filter(g => g.planType === "endurance") },
+    { label: "Strength PR", goals: QUICK_START_GOALS.filter(g => g.planType === "strength_pr") },
+    { label: "Body Composition", goals: QUICK_START_GOALS.filter(g => g.planType === "body_composition") },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Custom goal */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">🎯 Custom Goal</p>
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            className="flex-1 px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+            placeholder="e.g. Write a book, Launch a project…"
+            value={customTitle}
+            onChange={e => setCustomTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") saveCustomGoal(); }}
+          />
+          <button
+            type="button"
+            disabled={!customTitle.trim() || customSaving}
+            onClick={saveCustomGoal}
+            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5 shrink-0"
+          >
+            {customSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            Save
+          </button>
+        </div>
+      </div>
+
+      {/* Template list */}
+      <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+        {/* Health & Fitness */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">💪 Health &amp; Fitness</p>
+          <div className="space-y-3">
+            {healthGroups.map(group => (
+              <div key={group.label}>
+                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5 px-1">{group.label}</p>
+                <div className="space-y-1">
+                  {group.goals.map(g => (
+                    <button key={g.value}
+                      onClick={() => saveGoal(g.value, g.title, {
+                        title: g.title,
+                        progressType: g.planType === "endurance" ? "boolean" : "numeric",
+                        goalMetricJson: JSON.stringify(
+                          g.planType === "endurance"      ? { raceDistance: (g as any).raceDistance }
+                          : g.planType === "strength_pr"  ? { exercise: (g as any).exercise }
+                          : { metric: (g as any).metric }
+                        ),
+                      })}
+                      disabled={!!saving || customSaving}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                      <p className="flex-1 text-sm">{g.label}</p>
+                      {saving === g.value
+                        ? <Loader2 size={13} className="animate-spin shrink-0 text-muted-foreground" />
+                        : <Plus size={13} className="text-muted-foreground shrink-0" />
+                      }
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Hobby / Interest plans */}
+        {INTEREST_PRESETS.map(preset => {
+          const templates = ONBOARDING_PLAN_TEMPLATES[preset.type] ?? [];
+          if (!templates.length) return null;
+          return (
+            <div key={preset.type}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                {preset.emoji} {preset.cat}
+              </p>
+              <div className="space-y-1">
+                {templates.map(tpl => (
+                  <button key={tpl.id}
+                    onClick={() => saveGoal(tpl.id, tpl.label, {
+                      title: tpl.label,
+                      progressType: "boolean",
+                      description: tpl.description,
+                    })}
+                    disabled={!!saving || customSaving}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                    <span className="text-base shrink-0">{tpl.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{tpl.label}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {tpl.description}{tpl.durationWeeks ? ` · ${tpl.durationWeeks}w` : ""}
+                      </p>
+                    </div>
+                    {saving === tpl.id
+                      ? <Loader2 size={13} className="animate-spin shrink-0 text-muted-foreground" />
+                      : <Plus size={13} className="text-muted-foreground shrink-0" />
+                    }
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Form router ───────────────────────────────────────────────────────────────
 
 function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone: (label: string, href?: string, meta?: CreateMeta) => void }) {
   switch (optionKey) {
-    case "goal":          return <GoalForm onDone={onDone} />;
+    case "goal":          return <GoalPickerForm onDone={onDone} />;
     case "task":          return <TaskForm onDone={onDone} />;
     case "habit":         return <HabitForm onDone={onDone} />;
     case "workout_log":   return <WorkoutLogForm onDone={onDone} />;
