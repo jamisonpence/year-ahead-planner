@@ -1656,7 +1656,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Unit</label>
-                    <Select value={weightUnit} onValueChange={setWeightUnit}>
+                    <Select value={weightUnit} onValueChange={setWeightUnit} modal={false}>
                       <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent><SelectItem value="lbs">lbs</SelectItem><SelectItem value="kg">kg</SelectItem></SelectContent>
                     </Select>
@@ -1724,7 +1724,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                 <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5"><TrendingUp size={13} /> Race Goal</p>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Race Distance</label>
-                  <Select value={raceDistance} onValueChange={setRaceDistance}>
+                  <Select value={raceDistance} onValueChange={setRaceDistance} modal={false}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>{RACE_DISTANCES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                   </Select>
@@ -1738,7 +1738,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                     <label className="text-xs font-medium text-muted-foreground">Current longest run</label>
                     <div className="flex gap-1">
                       <Input type="number" value={currentDistance} onChange={e => setCurrentDistance(e.target.value)} placeholder="6" className="flex-1" />
-                      <Select value={distanceUnit} onValueChange={setDistanceUnit}>
+                      <Select value={distanceUnit} onValueChange={setDistanceUnit} modal={false}>
                         <SelectTrigger className="h-9 w-20"><SelectValue /></SelectTrigger>
                         <SelectContent><SelectItem value="miles">mi</SelectItem><SelectItem value="km">km</SelectItem></SelectContent>
                       </Select>
@@ -1791,7 +1791,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                 <p className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5"><Heart size={13} /> Body Goal</p>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Metric</label>
-                  <Select value={bodyMetric} onValueChange={v => {
+                  <Select modal={false} value={bodyMetric} onValueChange={v => {
                     setBodyMetric(v);
                     setBodyCurrentValue(""); setBodyTargetValue("");
                     if (v === "body_fat") setBodyUnit("%");
@@ -1820,7 +1820,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-muted-foreground">Unit</label>
-                      <Select value={bodyUnit} onValueChange={setBodyUnit}>
+                      <Select modal={false} value={bodyUnit} onValueChange={setBodyUnit}>
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="lbs">lbs</SelectItem>
@@ -1922,7 +1922,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium text-muted-foreground">Unit</label>
-                        <Select value={bodyUnit} onValueChange={setBodyUnit}>
+                        <Select modal={false} value={bodyUnit} onValueChange={setBodyUnit}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="lbs">lbs</SelectItem>
@@ -1998,7 +1998,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Duration</label>
-                <Select value={durationWeeks} onValueChange={v => { setDurationWeeks(v); setMilestones(generateMilestones(goalType, parseInt(v))); }}>
+                <Select modal={false} value={durationWeeks} onValueChange={v => { setDurationWeeks(v); setMilestones(generateMilestones(goalType, parseInt(v))); }}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {["4","6","8","10","12","16","20","24"].map(w => <SelectItem key={w} value={w}>{w} weeks</SelectItem>)}
@@ -2150,7 +2150,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
                       <p className="text-xs text-muted-foreground">No workout templates yet. Create some in "My Workouts" first.</p>
                     ) : (
                       <>
-                        <Select value={dayTemplateId ? String(dayTemplateId) : ""} onValueChange={v => setDayTemplateId(parseInt(v))}>
+                        <Select modal={false} value={dayTemplateId ? String(dayTemplateId) : ""} onValueChange={v => setDayTemplateId(parseInt(v))}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Pick a workout…" /></SelectTrigger>
                           <SelectContent>
                             {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
