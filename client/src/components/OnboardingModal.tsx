@@ -50,17 +50,11 @@ const HUBS: {
   },
 ];
 
-// ── Intention definitions ─────────────────────────────────────────────────────
+// ── Intention definitions (kept for export compat) ───────────────────────────
 
 export type IntentionKey =
-  | "goal"
-  | "habit"
-  | "plan_week"
-  | "save_recs"
-  | "track_workouts"
-  | "organize_places"
-  | "connect_friends"
-  | "private_notes";
+  | "goal" | "habit" | "plan_week" | "save_recs"
+  | "track_workouts" | "organize_places" | "connect_friends" | "private_notes";
 
 export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] = [
   { key: "goal",            emoji: "🎯", label: "Hit a goal"            },
@@ -72,6 +66,32 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
   { key: "connect_friends", emoji: "👥", label: "Connect with friends"  },
   { key: "private_notes",   emoji: "📝", label: "Keep a journal"        },
 ];
+
+// ── Page catalog for sidebar builder (Step 2) ────────────────────────────────
+
+const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[] = [
+  { path: "/goals",    emoji: "🎯", name: "Goals",         desc: "Track what you want to achieve this year" },
+  { path: "/tasks",    emoji: "✅", name: "Tasks",         desc: "Daily to-dos and one-off action items" },
+  { path: "/habits",   emoji: "🔥", name: "Habits",        desc: "Build daily routines that stick" },
+  { path: "/review",   emoji: "📅", name: "Weekly Review", desc: "Reflect on your week and plan ahead" },
+  { path: "/calendar", emoji: "🗓️", name: "Calendar",      desc: "Events and schedule at a glance" },
+  { path: "/journal",  emoji: "📝", name: "Journal",       desc: "Private notes and daily reflections" },
+  { path: "/health",   emoji: "💪", name: "Health",        desc: "Workouts, training plans, and body metrics" },
+  { path: "/recipes",  emoji: "🍽️", name: "Recipes",       desc: "Browse 1,600+ recipes or save your own" },
+  { path: "/library",  emoji: "📚", name: "Library",       desc: "Books, movies, shows, and music to track" },
+  { path: "/places",   emoji: "📍", name: "Places",        desc: "Restaurants, destinations, and trips" },
+  { path: "/hobbies",  emoji: "✨", name: "Hobbies",       desc: "Interests and passions worth exploring" },
+  { path: "/people",   emoji: "👤", name: "People",        desc: "Track friends, family, and important contacts" },
+  { path: "/messenger",emoji: "💬", name: "Messenger",     desc: "Chat and share with your connections" },
+  { path: "/mylifos",  emoji: "🌐", name: "MyLifos Feed",  desc: "See what the people you follow are saving" },
+];
+
+const HUB_DEFAULT_PATHS: Record<PersonaKey, string[]> = {
+  momentum:     ["/goals", "/tasks", "/habits", "/review"],
+  health:       ["/health", "/habits", "/recipes", "/goals"],
+  explore_life: ["/library", "/places", "/recipes", "/hobbies"],
+  connect:      ["/people", "/messenger", "/library", "/hobbies"],
+};
 
 // ── First-item creation config ────────────────────────────────────────────────
 
@@ -192,49 +212,37 @@ const INTENTION_NAV_BOOSTS: Partial<Record<IntentionKey, string[]>> = {
   private_notes: ["/journal"],
 };
 
-function buildNavPrefs(persona: PersonaKey, intentions: IntentionKey[], pinnedExtras: string[] = []) {
-  const visible = new Set<string>(["/dashboard", ...(PERSONA_NAV_VISIBLE[persona] ?? [])]);
-  intentions.forEach(intent => INTENTION_NAV_BOOSTS[intent]?.forEach(path => visible.add(path)));
-  pinnedExtras.forEach(p => visible.add(p));
-  const ordered = [
-    "/dashboard",
-    ...intentions.flatMap(intent => INTENTION_NAV_BOOSTS[intent] ?? []),
-    ...(PERSONA_NAV_VISIBLE[persona] ?? []),
-    ...NAV_PATHS,
-  ].filter((path, idx, arr) => NAV_PATHS.includes(path) && arr.indexOf(path) === idx);
+function buildNavPrefs(persona: PersonaKey, selectedPaths: string[]) {
+  const visible = new Set<string>(["/dashboard", ...selectedPaths]);
+  const ordered = ["/dashboard", ...selectedPaths, ...NAV_PATHS]
+    .filter((path, idx, arr) => NAV_PATHS.includes(path) && arr.indexOf(path) === idx);
   return ordered.map(path => ({ path, hidden: !visible.has(path) }));
 }
 
-function saveFirstRunDashboardDefaults(persona: PersonaKey, intentions: IntentionKey[]) {
+function saveFirstRunDashboardDefaults(persona: PersonaKey, selectedPaths: string[]) {
   try {
     if (localStorage.getItem(DASHBOARD_SECTIONS_KEY)) return;
-    const social = persona === "connect" || intentions.includes("connect_friends") || intentions.includes("save_recs");
-    const progress = persona === "momentum" || persona === "health" || intentions.includes("goal") || intentions.includes("track_workouts");
-    const recent = persona === "explore_life" || intentions.includes("save_recs") || intentions.includes("private_notes");
+    const social = selectedPaths.some(p => ["/people", "/messenger", "/mylifos"].includes(p));
+    const progress = selectedPaths.some(p => ["/goals", "/health"].includes(p));
+    const recent = selectedPaths.some(p => ["/library", "/journal", "/recipes"].includes(p));
     localStorage.setItem(DASHBOARD_SECTIONS_KEY, JSON.stringify({
-      today: true,
-      focus: true,
-      up_next: true,
-      progress,
-      social_feed: social,
-      needs_attention: false,
-      events: false,
-      recent_activity: recent,
-      quick_jump: false,
-      day_planner: false,
+      today: true, focus: true, up_next: true, progress,
+      social_feed: social, needs_attention: false,
+      events: selectedPaths.includes("/calendar"),
+      recent_activity: recent, quick_jump: false, day_planner: false,
       memories: persona === "explore_life",
       quote: persona === "explore_life",
     }));
   } catch {}
 }
 
-function persistOnboardingSetup(persona: PersonaKey | null, intentions: IntentionKey[], pinnedExtras: string[] = []) {
+function persistOnboardingSetup(persona: PersonaKey | null, selectedPaths: string[]) {
   const key = persona ?? "momentum";
   saveOnboardingData(key);
-  saveIntentions(intentions);
-  saveFirstRunDashboardDefaults(key, intentions);
+  saveIntentions([]); // kept for compat — intentions replaced by selectedPaths
+  saveFirstRunDashboardDefaults(key, selectedPaths);
   try { localStorage.setItem("mylifos_onboarding_completed_at", Date.now().toString()); } catch {}
-  apiRequest("POST", "/api/nav-prefs", buildNavPrefs(key, intentions, pinnedExtras)).catch(() => {});
+  apiRequest("POST", "/api/nav-prefs", buildNavPrefs(key, selectedPaths)).catch(() => {});
 }
 
 // ── Minimal inline forms ──────────────────────────────────────────────────────
@@ -1486,10 +1494,10 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const qc = useQueryClient();
   const [, navigate] = useLocation();
 
-  // Screens: 1=persona, 2=intentions, 3=create-first-item, 4=done
+  // Screens: 1=hub, 2=sidebar-builder, 3=create-first-item, 4=done
   const [screen, setScreen] = useState<1 | 2 | 3 | 4>(1);
   const [persona, setPersona] = useState<PersonaKey | null>(null);
-  const [intentions, setIntentions] = useState<IntentionKey[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 
   // Screen 3 state
   const [selectedOption, setSelectedOption] = useState<CreateOption | null>(null);
@@ -1498,7 +1506,6 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   const [mealWizardOpen, setMealWizardOpen] = useState(false);
 
   // Screen 4 feature opt-ins
-  const [browseRecipes, setBrowseRecipes] = useState(false);
   const [createdHobbyMeta, setCreatedHobbyMeta] = useState<CreateMeta | null>(null);
   const [selectedPlanTpl, setSelectedPlanTpl] = useState<OnboardingPlanTpl | null>(null);
 
@@ -1519,35 +1526,18 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     screen === 3 ? (createdLabel ? 90 : 60) :
     100;
 
-  const options = (() => {
-    if (!persona) return [];
-    const base = CREATE_OPTIONS[persona];
-    // explore_life already has 5 options — don't add more
-    if (persona === "explore_life") return base;
-    const baseKeys = new Set(base.map(o => o.key));
-    // For connect, skip save_recs extra — book_share already covers saving a book
-    const relevantIntentions = persona === "connect"
-      ? intentions.filter(k => k !== "save_recs")
-      : intentions;
-    const extras = relevantIntentions
-      .map(k => INTENTION_EXTRA_OPTIONS[k])
-      .filter((o): o is CreateOption => !!o && !baseKeys.has(o.key));
-    return [...base, ...extras];
-  })();
-  const primaryIntention = intentions[0] ? INTENTIONS.find(i => i.key === intentions[0]) : null;
-  const secondaryIntention = intentions[1] ? INTENTIONS.find(i => i.key === intentions[1]) : null;
+  const options = persona ? CREATE_OPTIONS[persona] : [];
 
   function pickPersona(p: PersonaKey) {
     setPersona(p);
+    setSelectedPaths(HUB_DEFAULT_PATHS[p] ?? []);
     setScreen(2);
   }
 
-  function toggleIntention(k: IntentionKey) {
-    setIntentions(prev => {
-      if (prev.includes(k)) return prev.filter(x => x !== k);
-      if (prev.length >= 2) return prev;
-      return [...prev, k];
-    });
+  function togglePath(path: string) {
+    setSelectedPaths(prev =>
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    );
   }
 
   function handleCreated(label: string, href?: string, meta?: CreateMeta) {
@@ -1559,14 +1549,14 @@ export default function OnboardingModal({ userName }: { userName: string }) {
   }
 
   function finish() {
-    const extras = [
-      ...(browseRecipes ? ["/recipes"] : []),
+    const allPaths = [...new Set([
+      ...selectedPaths,
       ...(createdHobbyMeta?.hobbyId ? ["/hobbies"] : []),
-    ];
-    const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, extras);
+    ])];
+    const navPrefs = buildNavPrefs(persona ?? "momentum", allPaths);
     qc.setQueryData(["/api/nav-prefs"], navPrefs);
-    persistOnboardingSetup(persona, intentions, extras);
-    prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
+    persistOnboardingSetup(persona, allPaths);
+    prefsMut.mutate({ persona: persona ?? "momentum" });
     // Attach the plan selected on Screen 4 (only when not already created in Step 3)
     if (selectedPlanTpl && createdHobbyMeta?.hobbyId && !createdHobbyMeta?.planAlreadyCreated) {
       apiRequest("PATCH", `/api/hobbies/${createdHobbyMeta.hobbyId}`, {
@@ -1574,16 +1564,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
       }).catch(() => {});
     }
     completeMut.mutate();
-    const dest = createdHobbyMeta?.hobbyId ? "/hobbies"
-               : browseRecipes ? "/recipes"
-               : createdHref ?? "/dashboard";
+    const dest = createdHobbyMeta?.hobbyId ? "/hobbies" : createdHref ?? "/dashboard";
     navigate(dest);
   }
 
   // Computed destination and CTA label for Screen 4
-  const finishDest = createdHobbyMeta?.hobbyId ? "/hobbies"
-                   : browseRecipes ? "/recipes"
-                   : createdHref ?? "/dashboard";
+  const finishDest = createdHobbyMeta?.hobbyId ? "/hobbies" : createdHref ?? "/dashboard";
   const finishLabel = (() => {
     if (finishDest === "/hobbies")  return "See your Hobbies";
     if (finishDest === "/recipes")  return "Explore Recipes";
@@ -1591,7 +1577,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     if (finishDest === "/tasks")    return "See your Tasks";
     if (finishDest === "/habits")   return "See your Habits";
     if (finishDest === "/health")   return "Go to Health";
-    if (finishDest === "/library" || finishDest.startsWith("/library?"))  return "See your Library";
+    if (finishDest === "/library" || finishDest.startsWith("/library?")) return "See your Library";
     if (finishDest === "/people")   return "See your People";
     return "Go to Today";
   })();
@@ -1666,76 +1652,51 @@ export default function OnboardingModal({ userName }: { userName: string }) {
             </div>
           )}
 
-          {/* ── Screen 2: Intentions picker ──────────────────────────────── */}
+          {/* ── Screen 2: Sidebar builder ────────────────────────────────── */}
           {screen === 2 && (
-            <div className="p-6 sm:p-8 space-y-6">
+            <div className="p-6 sm:p-8 space-y-5">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 2 of 3</p>
-                <h1 className="text-2xl font-bold leading-tight">Pick your main focus</h1>
-                <p className="text-sm text-muted-foreground mt-1">Choose one primary focus and, optionally, one secondary focus.</p>
+                <h1 className="text-2xl font-bold leading-tight">Build your sidebar</h1>
+                <p className="text-sm text-muted-foreground mt-1">Your Hub's core pages are already selected. Add or remove anything you like.</p>
               </div>
 
-              {intentions.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl bg-primary/10 border border-primary/20 px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-primary font-semibold">Main</p>
-                    <p className="text-xs font-medium mt-0.5">{primaryIntention?.label}</p>
-                  </div>
-                  <div className="rounded-xl bg-secondary/40 border px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Also</p>
-                    <p className="text-xs font-medium mt-0.5">{secondaryIntention?.label ?? "Optional"}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2.5">
-                {(persona ? PERSONA_INTENTION_ORDER[persona].map(k => INTENTIONS.find(i => i.key === k)!).filter(Boolean) : INTENTIONS.filter(i => i.key !== "private_notes")).map(item => {
-                  const selected = intentions.includes(item.key);
-                  const disabled = !selected && intentions.length >= 2;
+              <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
+                {PAGE_CATALOG.map(page => {
+                  const isSelected = selectedPaths.includes(page.path);
+                  const isDefault = (HUB_DEFAULT_PATHS[persona!] ?? []).includes(page.path);
                   return (
                     <button
-                      key={item.key}
-                      onClick={() => toggleIntention(item.key)}
-                      disabled={disabled}
-                      className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all
-                        ${selected
-                          ? "border-primary bg-primary/8 text-foreground"
-                          : disabled
-                          ? "border-border/40 text-muted-foreground/40 cursor-not-allowed"
-                          : "border-border hover:border-primary/50 hover:bg-primary/5"
+                      key={page.path}
+                      onClick={() => togglePath(page.path)}
+                      className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl border-2 text-left transition-all
+                        ${isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/40 hover:bg-primary/3"
                         }`}
                     >
-                      <span className="text-xl leading-none shrink-0">{item.emoji}</span>
-                      <span className="text-sm font-medium leading-snug">{item.label}</span>
-                      {selected && (
-                        <div className="ml-auto shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                          <Check size={11} className="text-primary-foreground" />
+                      <span className="text-xl shrink-0 leading-none w-6 text-center">{page.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-foreground">{page.name}</p>
+                          {isDefault && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold leading-tight">
+                              Hub default
+                            </span>
+                          )}
                         </div>
-                      )}
+                        <p className="text-xs text-muted-foreground mt-0.5">{page.desc}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all
+                        ${isSelected ? "bg-primary border-primary" : "border-border"}`}>
+                        {isSelected && <Check size={11} className="text-primary-foreground" />}
+                      </div>
                     </button>
                   );
                 })}
-                {/* Recipe tile — only for content/social personas */}
-                {(persona === "explore_life" || persona === "connect") && <button
-                  type="button"
-                  onClick={() => setBrowseRecipes(v => !v)}
-                  className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all
-                    ${browseRecipes
-                      ? "border-primary bg-primary/8 text-foreground"
-                      : "border-border hover:border-primary/50 hover:bg-primary/5"
-                    }`}
-                >
-                  <span className="text-xl leading-none shrink-0">🍽️</span>
-                  <span className="text-sm font-medium leading-snug">Browse recipes</span>
-                  {browseRecipes && (
-                    <div className="ml-auto shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                      <Check size={11} className="text-primary-foreground" />
-                    </div>
-                  )}
-                </button>}
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 pt-1">
                 <button onClick={() => setScreen(1)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   ← Back
                 </button>
@@ -1743,7 +1704,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   onClick={() => setScreen(3)}
                   className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors"
                 >
-                  {intentions.length === 0 ? "Skip" : "Next"} <ArrowRight size={15} />
+                  Next <ArrowRight size={15} />
                 </button>
               </div>
             </div>
