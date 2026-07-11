@@ -16,30 +16,37 @@ const LEGACY_PERSONA_MAP: Record<string, PersonaKey> = {
   organized:  "momentum",
 };
 
-const PERSONAS: { key: PersonaKey; emoji: string; title: string; sub: string }[] = [
+const HUBS: {
+  key: PersonaKey;
+  emoji: string;
+  bgClass: string;
+  title: string;
+  tagline: string;
+  features: string[];
+}[] = [
   {
     key: "momentum",
-    emoji: "🎯",
-    title: "Get things done",
-    sub:   "Goals, tasks, habits, and weekly reviews that keep you moving forward",
+    emoji: "⚡",
+    bgClass: "bg-blue-100 dark:bg-blue-950/50",
+    title: "Momentum",
+    tagline: "Turn goals into action and build the habits that stick",
+    features: ["Goals", "Tasks", "Habits", "Weekly Review"],
   },
   {
     key: "health",
-    emoji: "💪",
-    title: "Health & Energy",
-    sub:   "Workouts, nutrition, habits, and body metrics — all in one place",
+    emoji: "🌿",
+    bgClass: "bg-green-100 dark:bg-green-950/50",
+    title: "Wellbeing",
+    tagline: "Train, eat well, and track what matters for your body",
+    features: ["Workouts", "Training Plans", "Nutrition", "Health Goals"],
   },
   {
     key: "explore_life",
-    emoji: "⭐",
-    title: "Save my life library",
-    sub:   "Books, music, recipes, places, trips, and interests worth remembering",
-  },
-  {
-    key: "connect",
-    emoji: "👥",
-    title: "Share with people",
-    sub:   "Friends, family, shared interests, and recommendations that matter",
+    emoji: "✨",
+    bgClass: "bg-amber-100 dark:bg-amber-950/50",
+    title: "Life",
+    tagline: "Collect books, places, recipes, and everything worth remembering",
+    features: ["Library", "Places", "Recipes", "Hobbies & Interests"],
   },
 ];
 
@@ -1622,28 +1629,37 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
         <div className="overflow-y-auto flex-1">
 
-          {/* ── Screen 1: Persona picker ─────────────────────────────────── */}
+          {/* ── Screen 1: Hub picker ─────────────────────────────────────── */}
           {screen === 1 && (
             <div className="p-6 sm:p-8 space-y-6">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 1 of 3 · Welcome, {firstName} 👋</p>
-                <h1 className="text-2xl font-bold leading-tight">What should MyLifos help with first?</h1>
-                <p className="text-sm text-muted-foreground mt-1">Pick the outcome that fits best. MyLifos will shape Today and your sidebar around it.</p>
+                <h1 className="text-2xl font-bold leading-tight">Which Hub would you like to start with?</h1>
+                <p className="text-sm text-muted-foreground mt-1">Your Hub shapes how MyLifos is organized. You can explore everything else later.</p>
               </div>
 
               <div className="space-y-3">
-                {PERSONAS.map(p => (
+                {HUBS.map(hub => (
                   <button
-                    key={p.key}
-                    onClick={() => pickPersona(p.key)}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
+                    key={hub.key}
+                    onClick={() => pickPersona(hub.key)}
+                    className="w-full flex items-start gap-4 p-5 rounded-2xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group"
                   >
-                    <span className="text-3xl shrink-0">{p.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground">{p.title}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">{p.sub}</p>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${hub.bgClass}`}>
+                      {hub.emoji}
                     </div>
-                    <ArrowRight size={18} className="text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-lg text-foreground leading-tight">{hub.title}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5 mb-2.5 leading-snug">{hub.tagline}</p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {hub.features.map(f => (
+                          <span key={f} className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground font-medium">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <ArrowRight size={18} className="text-muted-foreground group-hover:text-primary shrink-0 transition-colors mt-1" />
                   </button>
                 ))}
               </div>
