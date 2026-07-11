@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -69,7 +69,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 // ── First-item creation config ────────────────────────────────────────────────
 
 type CreateOptionKey =
-  | "goal" | "task" | "habit"
+  | "goal" | "task" | "habit" | "review_task"
   | "workout_log" | "health_goal" | "fitness_habit" | "training_plan" | "meal_plan"
   | "book" | "place" | "recipe" | "movie_show"
   | "person" | "interest" | "book_share";
@@ -96,9 +96,11 @@ const CREATE_OPTIONS: Record<PersonaKey, CreateOption[]> = {
     { key: "fitness_habit", emoji: "🔥", label: "Create a fitness habit", sub: "A daily movement or wellness habit",   href: "/habits"               },
   ],
   explore_life: [
-    { key: "book",       emoji: "📚", label: "Save a book",         sub: "Search by title or author",                        href: "/library"          },
-    { key: "movie_show", emoji: "🎬", label: "Add a Movie/Show",    sub: "Search 1M+ titles and save to your watchlist",     href: "/library?tab=watching" },
-    { key: "recipe",     emoji: "🍽️", label: "Save a recipe",       sub: "Browse 1,600+ recipes or import from a link",      href: "/recipes"          },
+    { key: "book",       emoji: "📚", label: "Save a book",         sub: "Search by title or author",                          href: "/library"              },
+    { key: "movie_show", emoji: "🎬", label: "Add a Movie/Show",    sub: "Search 1M+ titles and save to your watchlist",       href: "/library?tab=watching" },
+    { key: "recipe",     emoji: "🍽️", label: "Save a recipe",       sub: "Browse 1,600+ recipes or import from a link",        href: "/recipes"              },
+    { key: "place",      emoji: "📍", label: "Save a place",         sub: "A restaurant, venue, or city worth remembering",     href: "/places"               },
+    { key: "interest",   emoji: "✨", label: "Start a hobby",        sub: "An interest or passion worth exploring",             href: "/hobbies"              },
   ],
   connect: [
     { key: "person",     emoji: "👤", label: "Add a person",   sub: "Someone important to you",           href: "/people"  },
@@ -497,30 +499,30 @@ function buildHobbyPlan(tpl: OnboardingPlanTpl) {
   };
 }
 
-const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string }[]> = {
+const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string; href: string }[]> = {
   momentum: [
-    { emoji: "🎯", text: "Add your first goal" },
-    { emoji: "✅", text: "Create a task for this week" },
-    { emoji: "🔥", text: "Set up a daily habit" },
-    { emoji: "📅", text: "Block time for a weekly review" },
+    { emoji: "🎯", text: "Add your first goal",           href: "/goals"   },
+    { emoji: "✅", text: "Create a task for this week",   href: "/tasks"   },
+    { emoji: "🔥", text: "Set up a daily habit",          href: "/habits"  },
+    { emoji: "📅", text: "Block time for a weekly review", href: "/review" },
   ],
   health: [
-    { emoji: "🏋️", text: "Log your first workout" },
-    { emoji: "🎯", text: "Set a fitness or wellness goal" },
-    { emoji: "🔥", text: "Create a daily movement habit" },
-    { emoji: "🍽️", text: "Set up a meal plan" },
+    { emoji: "🏋️", text: "Log your first workout",          href: "/health"   },
+    { emoji: "🎯", text: "Set a fitness or wellness goal",  href: "/goals"    },
+    { emoji: "🔥", text: "Create a daily movement habit",   href: "/habits"   },
+    { emoji: "🍽️", text: "Set up a meal plan",              href: "/health"   },
   ],
   explore_life: [
-    { emoji: "📚", text: "Save a book you're reading" },
-    { emoji: "📍", text: "Add a place you want to visit" },
-    { emoji: "✨", text: "Start a hobby or interest" },
-    { emoji: "🎬", text: "Add something to your watchlist" },
+    { emoji: "📚", text: "Save a book you're reading",     href: "/library"  },
+    { emoji: "📍", text: "Add a place you want to visit",  href: "/places"   },
+    { emoji: "✨", text: "Start a hobby or interest",       href: "/hobbies"  },
+    { emoji: "🎬", text: "Add something to your watchlist", href: "/library" },
   ],
   connect: [
-    { emoji: "👤", text: "Add someone important to you" },
-    { emoji: "📚", text: "Share a book recommendation" },
-    { emoji: "✨", text: "Save an interest to bond over" },
-    { emoji: "💬", text: "Start a conversation" },
+    { emoji: "👤", text: "Add someone important to you",   href: "/people"   },
+    { emoji: "📚", text: "Share a book recommendation",    href: "/library"  },
+    { emoji: "✨", text: "Save an interest to bond over",  href: "/hobbies"  },
+    { emoji: "💬", text: "Start a conversation",           href: "/messenger" },
   ],
 };
 
@@ -533,10 +535,19 @@ const PATH_LABELS: Record<string, string> = {
 };
 
 const INTENTION_EXTRA_OPTIONS: Partial<Record<IntentionKey, CreateOption>> = {
-  track_workouts: { key: "workout_log", emoji: "🏋️", label: "Log a workout", sub: "Track your first session", href: "/health" },
-  organize_places: { key: "place", emoji: "📍", label: "Save a place", sub: "A restaurant, venue, or city", href: "/places" },
-  save_recs: { key: "book", emoji: "📚", label: "Save a book", sub: "Search by title or author", href: "/library" },
-  connect_friends: { key: "person", emoji: "👤", label: "Add a person", sub: "Someone important to you", href: "/people" },
+  plan_week:       { key: "review_task", emoji: "📅", label: "Block review time", sub: "Add a task to schedule your first weekly review", href: "/review" },
+  track_workouts:  { key: "workout_log", emoji: "🏋️", label: "Log a workout",    sub: "Track your first session",                         href: "/health" },
+  organize_places: { key: "place",       emoji: "📍", label: "Save a place",      sub: "A restaurant, venue, or city",                     href: "/places" },
+  save_recs:       { key: "book",        emoji: "📚", label: "Save a book",       sub: "Search by title or author",                        href: "/library" },
+  connect_friends: { key: "person",      emoji: "👤", label: "Add a person",      sub: "Someone important to you",                         href: "/people" },
+};
+
+// Persona-specific order for the Step 2 intention grid (private_notes always excluded)
+const PERSONA_INTENTION_ORDER: Record<PersonaKey, IntentionKey[]> = {
+  momentum:     ["goal", "habit", "plan_week", "track_workouts", "connect_friends", "save_recs", "organize_places"],
+  health:       ["track_workouts", "goal", "habit", "plan_week", "connect_friends", "save_recs", "organize_places"],
+  explore_life: ["save_recs", "organize_places", "connect_friends", "goal", "habit", "plan_week"],
+  connect:      ["connect_friends", "save_recs", "organize_places", "goal", "habit", "plan_week"],
 };
 
 const ONBOARDING_PLAN_TEMPLATES: Record<string, OnboardingPlanTpl[]> = {
@@ -1444,6 +1455,7 @@ function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone:
   switch (optionKey) {
     case "goal":          return <GoalPickerForm onDone={onDone} />;
     case "task":          return <TaskForm onDone={onDone} />;
+    case "review_task":   return <TaskForm onDone={onDone} />;
     case "habit":         return <HabitForm onDone={onDone} />;
     case "workout_log":   return <WorkoutLogForm onDone={onDone} />;
     case "health_goal":   return <HealthGoalForm onDone={onDone} />;
@@ -1565,20 +1577,10 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     if (finishDest === "/tasks")    return "See your Tasks";
     if (finishDest === "/habits")   return "See your Habits";
     if (finishDest === "/health")   return "Go to Health";
-    if (finishDest === "/library")  return "See your Library";
+    if (finishDest === "/library" || finishDest.startsWith("/library?"))  return "See your Library";
     if (finishDest === "/people")   return "See your People";
     return "Go to Today";
   })();
-
-  /** Complete onboarding and navigate immediately — used when an action opens its own UI (e.g. plan builder). */
-  function finishImmediate(href: string) {
-    const navPrefs = buildNavPrefs(persona ?? "momentum", intentions, []);
-    qc.setQueryData(["/api/nav-prefs"], navPrefs);
-    persistOnboardingSetup(persona, intentions);
-    prefsMut.mutate({ intentions, persona: persona ?? "momentum" });
-    completeMut.mutate();
-    navigate(href);
-  }
 
   return (
     <>
@@ -1664,7 +1666,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               )}
 
               <div className="grid grid-cols-2 gap-2.5">
-                {INTENTIONS.filter(i => i.key !== "private_notes").map(item => {
+                {(persona ? PERSONA_INTENTION_ORDER[persona].map(k => INTENTIONS.find(i => i.key === k)!).filter(Boolean) : INTENTIONS.filter(i => i.key !== "private_notes")).map(item => {
                   const selected = intentions.includes(item.key);
                   const disabled = !selected && intentions.length >= 2;
                   return (
@@ -1690,8 +1692,8 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     </button>
                   );
                 })}
-                {/* Recipe tile — independent of the 2-intention cap */}
-                <button
+                {/* Recipe tile — only for content/social personas */}
+                {(persona === "explore_life" || persona === "connect") && <button
                   type="button"
                   onClick={() => setBrowseRecipes(v => !v)}
                   className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all
@@ -1707,7 +1709,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                       <Check size={11} className="text-primary-foreground" />
                     </div>
                   )}
-                </button>
+                </button>}
               </div>
 
               <div className="flex items-center justify-between gap-3">
@@ -1818,8 +1820,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <h1 className="text-2xl font-bold">You're all set, {firstName}!</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   {createdLabel
-                    ? `"${createdLabel}" is saved. Today is ready to turn it into action.`
-                    : "Today is ready. You can personalize more anytime."}
+                    ? persona === "explore_life"
+                      ? `"${createdLabel}" is saved. Your library is ready to grow.`
+                      : persona === "connect"
+                      ? `"${createdLabel}" is saved. Your people feed is ready.`
+                      : `"${createdLabel}" is saved. Today is ready to turn it into action.`
+                    : "You're all set. You can personalize more anytime."}
                 </p>
               </div>
 
@@ -1852,16 +1858,23 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   <div className="rounded-xl border px-4 py-3 space-y-2">
                     <p className="text-xs font-semibold">Suggested first steps</p>
                     <div className="space-y-2">
-                      {steps.map((step, i) => (
-                        <div key={i} className="flex items-center gap-2.5">
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                            i === 0 && createdLabel ? "border-primary bg-primary" : "border-border"
-                          }`}>
-                            {i === 0 && createdLabel && <Check size={9} className="text-primary-foreground" />}
+                      {steps.map((step, i) => {
+                        const done = !!createdLabel && (
+                          finishDest === step.href ||
+                          finishDest.startsWith(step.href + "?") ||
+                          finishDest.startsWith(step.href + "/")
+                        );
+                        return (
+                          <div key={i} className="flex items-center gap-2.5">
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                              done ? "border-primary bg-primary" : "border-border"
+                            }`}>
+                              {done && <Check size={9} className="text-primary-foreground" />}
+                            </div>
+                            <span className={`text-xs ${done ? "text-foreground font-medium" : "text-muted-foreground"}`}>{step.emoji} {step.text}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground">{step.emoji} {step.text}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1916,16 +1929,31 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 </div>
               )}
 
-              <button
-                onClick={finish}
-                disabled={completeMut.isPending}
-                className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-              >
-                {completeMut.isPending
-                  ? "Saving…"
-                  : <>{finishLabel} <ArrowRight size={15} /></>
-                }
-              </button>
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => {
+                    setCreatedLabel(null);
+                    setCreatedHref(null);
+                    setCreatedHobbyMeta(null);
+                    setSelectedPlanTpl(null);
+                    setSelectedOption(null);
+                    setScreen(3);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ← Change my setup
+                </button>
+                <button
+                  onClick={finish}
+                  disabled={completeMut.isPending}
+                  className="flex-1 bg-primary text-primary-foreground py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                >
+                  {completeMut.isPending
+                    ? "Saving…"
+                    : <>{finishLabel} <ArrowRight size={15} /></>
+                  }
+                </button>
+              </div>
             </div>
           )}
 
