@@ -1206,6 +1206,8 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
   const [customTitle, setCustomTitle] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [customSaving, setCustomSaving] = useState(false);
+  // Two-step: null = top-level list, otherwise show plans for that hobby
+  const [selectedHobby, setSelectedHobby] = useState<{ name: string; type: string; emoji: string } | null>(null);
 
   async function saveGoal(id: string, title: string, payload: object) {
     setSaving(id);
@@ -1231,6 +1233,52 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
     { label: "Body Composition", goals: QUICK_START_GOALS.filter(g => g.planType === "body_composition") },
   ];
 
+  // Sub-view: plans for a selected hobby
+  if (selectedHobby) {
+    const plans = ONBOARDING_PLAN_TEMPLATES[selectedHobby.type] ?? [];
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setSelectedHobby(null)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowRight size={12} className="rotate-180" /> Back to all goals
+        </button>
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xl">{selectedHobby.emoji}</span>
+          <div>
+            <p className="text-sm font-semibold">{selectedHobby.name}</p>
+            <p className="text-xs text-muted-foreground">Choose a plan to set as your goal</p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          {plans.map(tpl => (
+            <button key={tpl.id}
+              onClick={() => saveGoal(tpl.id, `${selectedHobby.name} — ${tpl.label}`, {
+                title: `${selectedHobby.name} — ${tpl.label}`,
+                progressType: "boolean",
+                description: tpl.description,
+              })}
+              disabled={!!saving}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+              <span className="text-xl shrink-0">{tpl.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">{tpl.label}</p>
+                <p className="text-xs text-muted-foreground">{tpl.description}{tpl.durationWeeks ? ` · ${tpl.durationWeeks}w` : ""}</p>
+              </div>
+              {saving === tpl.id
+                ? <Loader2 size={13} className="animate-spin shrink-0 text-muted-foreground" />
+                : <Plus size={13} className="text-muted-foreground shrink-0" />
+              }
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Main view: custom + health + all hobbies
   return (
     <div className="space-y-4">
       {/* Custom goal */}
@@ -1257,7 +1305,7 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
         </div>
       </div>
 
-      {/* Template list */}
+      {/* Scrollable template list */}
       <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
         {/* Health & Fitness */}
         <div>
@@ -1293,42 +1341,26 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string) => 
           </div>
         </div>
 
-        {/* Hobby / Interest plans */}
-        {INTEREST_PRESETS.map(preset => {
-          const templates = ONBOARDING_PLAN_TEMPLATES[preset.type] ?? [];
-          if (!templates.length) return null;
-          return (
-            <div key={preset.type}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                {preset.emoji} {preset.cat}
-              </p>
-              <div className="space-y-1">
-                {templates.map(tpl => (
-                  <button key={tpl.id}
-                    onClick={() => saveGoal(tpl.id, tpl.label, {
-                      title: tpl.label,
-                      progressType: "boolean",
-                      description: tpl.description,
-                    })}
-                    disabled={!!saving || customSaving}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
-                    <span className="text-base shrink-0">{tpl.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{tpl.label}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {tpl.description}{tpl.durationWeeks ? ` · ${tpl.durationWeeks}w` : ""}
-                      </p>
-                    </div>
-                    {saving === tpl.id
-                      ? <Loader2 size={13} className="animate-spin shrink-0 text-muted-foreground" />
-                      : <Plus size={13} className="text-muted-foreground shrink-0" />
-                    }
-                  </button>
-                ))}
-              </div>
+        {/* All hobbies — each is a drill-down to pick a plan */}
+        {INTEREST_PRESETS.map(preset => (
+          <div key={preset.type}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              {preset.emoji} {preset.cat}
+            </p>
+            <div className="space-y-1">
+              {preset.hobbies.map(hobby => (
+                <button key={hobby}
+                  type="button"
+                  onClick={() => setSelectedHobby({ name: hobby, type: preset.type, emoji: preset.emoji })}
+                  disabled={!!saving || customSaving}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl border hover:border-primary hover:bg-primary/5 text-left transition-all">
+                  <p className="flex-1 text-sm">{hobby}</p>
+                  <ArrowRight size={13} className="text-muted-foreground shrink-0" />
+                </button>
+              ))}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );
