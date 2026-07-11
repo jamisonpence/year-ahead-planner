@@ -1606,7 +1606,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
               )}
 
               <div className="grid grid-cols-2 gap-2.5">
-                {INTENTIONS.map(item => {
+                {INTENTIONS.filter(i => i.key !== "private_notes").map(item => {
                   const selected = intentions.includes(item.key);
                   const disabled = !selected && intentions.length >= 2;
                   return (
@@ -1632,39 +1632,25 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     </button>
                   );
                 })}
+                {/* Recipe tile — independent of the 2-intention cap */}
+                <button
+                  type="button"
+                  onClick={() => setBrowseRecipes(v => !v)}
+                  className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all
+                    ${browseRecipes
+                      ? "border-primary bg-primary/8 text-foreground"
+                      : "border-border hover:border-primary/50 hover:bg-primary/5"
+                    }`}
+                >
+                  <span className="text-xl leading-none shrink-0">🍽️</span>
+                  <span className="text-sm font-medium leading-snug">Browse recipes</span>
+                  {browseRecipes && (
+                    <div className="ml-auto shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                      <Check size={11} className="text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
               </div>
-
-              <p className="text-xs text-center text-muted-foreground">
-                {intentions.length === 0
-                  ? "You can skip this and personalize later."
-                  : intentions.length === 1
-                    ? "Pick one more if there is a secondary focus."
-                    : "You've picked a main and secondary focus — deselect one to change it."}
-              </p>
-
-              {/* Recipe sidebar opt-in */}
-              <button
-                type="button"
-                onClick={() => setBrowseRecipes(v => !v)}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
-                  browseRecipes
-                    ? "border-primary bg-primary/8"
-                    : "border-border hover:border-primary/50 hover:bg-primary/5"
-                }`}
-              >
-                <span className="text-3xl shrink-0">🍽️</span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">Browse 1,600+ recipes</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Pin the Recipes page to your sidebar for easy access
-                  </p>
-                </div>
-                <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
-                  browseRecipes ? "border-primary bg-primary" : "border-border"
-                }`}>
-                  {browseRecipes && <Check size={10} className="text-primary-foreground" />}
-                </div>
-              </button>
 
               <div className="flex items-center justify-between gap-3">
                 <button onClick={() => setScreen(1)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
