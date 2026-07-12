@@ -1832,11 +1832,11 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
               {/* Sidebar tabs that were pinned */}
               {(() => {
-                const extras = [
-                  ...(browseRecipes ? ["/recipes"] : []),
+                const allPaths = [...new Set([
+                  ...selectedPaths,
                   ...(createdHobbyMeta?.hobbyId ? ["/hobbies"] : []),
-                ];
-                const prefs = buildNavPrefs(persona!, intentions, extras);
+                ])];
+                const prefs = buildNavPrefs(persona!, allPaths);
                 const visiblePaths = prefs.filter((p: any) => !p.hidden).slice(0, 8).map((p: any) => p.path as string);
                 return (
                   <div className="rounded-xl border bg-card px-4 py-3 space-y-2">
@@ -1921,18 +1921,6 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                   </div>
                 );
               })()}
-
-              {intentions.length > 0 && (
-                <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center gap-2.5">
-                  <span className="text-base shrink-0">✨</span>
-                  <p className="text-xs text-muted-foreground">
-                    Your Today page will highlight:{" "}
-                    <strong className="text-foreground">
-                      {intentions.map(k => INTENTIONS.find(i => i.key === k)?.label).filter(Boolean).join(" & ")}
-                    </strong>
-                  </p>
-                </div>
-              )}
 
               <div className="flex items-center justify-between gap-3">
                 <button
