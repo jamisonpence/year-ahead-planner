@@ -1581,14 +1581,19 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
   const currentWeekDays = getWeekDays(viewWeek).length;
   const isPending = createMut.isPending || updateMut.isPending;
 
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }} modal={false}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+          <h2 className="font-semibold flex items-center gap-2 text-base">
             <CalendarDays size={16} /> {editing ? "Edit Plan" : "New Training Plan"}
-          </DialogTitle>
-        </DialogHeader>
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-5">
 
         {/* Step: Goal Type */}
         {step === "goal" && (
@@ -2195,8 +2200,9 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }
 
