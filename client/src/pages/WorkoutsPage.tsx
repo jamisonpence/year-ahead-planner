@@ -1423,6 +1423,7 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
     setDurationWeeks(String(dur));
+    let starterPlanId: string | null = null;
     const preselected = !editing && sessionStorage.getItem("newPlanGoalType");
     if (preselected) {
       sessionStorage.removeItem("newPlanGoalType");
@@ -1449,6 +1450,8 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
       if (btPre) { sessionStorage.removeItem("newPlanBodyTargetValue"); setBodyTargetValue(btPre); }
       const buPre = sessionStorage.getItem("newPlanBodyUnit");
       if (buPre) { sessionStorage.removeItem("newPlanBodyUnit"); setBodyUnit(buPre); }
+      const spPre = sessionStorage.getItem("newPlanStarterPlanId");
+      if (spPre) { sessionStorage.removeItem("newPlanStarterPlanId"); starterPlanId = spPre; }
     } else {
       setGoalType((editing?.goalType as GoalType) ?? "general");
       setStep(editing ? "details" : "goal");
@@ -1473,6 +1476,19 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
     } catch { setScheduleByWeek([]); }
 
     try { setMilestones(editing?.milestonesJson ? JSON.parse(editing.milestonesJson) : []); } catch { setMilestones([]); }
+
+    // Apply starter plan if selected from onboarding (overrides the empty defaults above)
+    if (starterPlanId) {
+      for (const plans of Object.values(ENDURANCE_STARTER_PLANS)) {
+        const sp = (plans as StarterPlan[]).find(p => p.id === starterPlanId);
+        if (sp) {
+          setScheduleByWeek(sp.schedule);
+          setDurationWeeks(String(sp.weeks));
+          setMilestones(generateMilestones("endurance", sp.weeks));
+          break;
+        }
+      }
+    }
 
     // Parse existing goal metric
     try {

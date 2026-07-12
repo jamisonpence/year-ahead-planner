@@ -681,6 +681,17 @@ const QUICK_START_GOALS = [
   { value: "body_comp",    label: "Body composition",               planType: "body_composition" as const, metric: "weight",              title: "Improve Body Composition" },
 ];
 
+const STARTER_PLAN_CATALOG: Record<string, { id: string; name: string; description: string }[]> = {
+  "5K":                  [{ id: "5k_couch_8wk",            name: "Couch to 5K",                description: "8-week beginner plan · 3 days/week · starts with run/walk intervals · race sim in Week 8" }],
+  "10K":                 [{ id: "10k_couch_10wk",           name: "Couch to 10K",               description: "10-week beginner plan · 3 days/week · builds from 2 → 6.2 miles · race sim in Week 10" }],
+  "Half Marathon":       [{ id: "half_marathon_couch_16wk", name: "Couch to Half Marathon",     description: "16-week beginner plan · 4 days/week · builds from 1 → 10 miles · race sim in Week 16" }],
+  "Marathon":            [{ id: "marathon_couch_24wk",      name: "Couch to Marathon",          description: "24-week beginner plan · 4 days/week · builds from 1 → 18 miles · includes taper" }],
+  "50K Ultra":           [{ id: "50k_couch_24wk",           name: "Couch to 50K Ultra",         description: "24-week plan · 4 days/week · back-to-back weekends peak at 10+22 miles · taper Weeks 20–24" }],
+  "50 Mile Ultra":       [{ id: "50mile_couch_28wk",        name: "Couch to 50 Mile Ultra",     description: "28-week plan · 4 days/week · back-to-back weekends peak at 12+24 miles · taper Weeks 25–28" }],
+  "Triathlon (Sprint)":  [{ id: "sprint_tri_couch_12wk",    name: "Couch to Sprint Triathlon",  description: "12-week beginner plan · 5–6 days/week · swim/bike/run + weekly brick · taper Week 11 · race Week 12" }],
+  "Triathlon (Olympic)": [{ id: "olympic_tri_couch_16wk",   name: "Couch to Olympic Triathlon", description: "16-week plan · 5–6 days/week · swim/bike/run + weekly brick · taper Weeks 13–15 · race Week 16" }],
+};
+
 function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => void }) {
   const [quickStart, setQuickStart] = useState("");
   const [title, setTitle] = useState("");
@@ -688,14 +699,14 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
   const [currentVal, setCurrentVal] = useState("");
   const [targetVal, setTargetVal] = useState("");
   const [unit, setUnit] = useState("lbs");
-  const [withPlan, setWithPlan] = useState(false);
+  const [selectedStarterPlanId, setSelectedStarterPlanId] = useState<string | null>(null);
 
   const selected = QUICK_START_GOALS.find(g => g.value === quickStart);
 
   useEffect(() => {
     if (selected) {
       setTitle(selected.title);
-      setCurrentVal(""); setTargetVal(""); setRaceDate(""); setWithPlan(false);
+      setCurrentVal(""); setTargetVal(""); setRaceDate(""); setSelectedStarterPlanId(null);
       setUnit("metric" in selected && selected.metric === "body_fat" ? "%" : "lbs");
     }
   }, [quickStart]);
@@ -733,28 +744,15 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
       });
     },
     onSuccess: () => {
-      if (withPlan && selected) {
+      if (selectedStarterPlanId && selected && isEndurance) {
         sessionStorage.setItem("openPlanBuilder", "1");
         sessionStorage.setItem("newPlanGoalType", selected.planType);
-        if (isEndurance && "raceDistance" in selected) {
-          sessionStorage.setItem("newPlanRaceDistance", (selected as any).raceDistance);
-          if (raceDate) sessionStorage.setItem("newPlanRaceDate", raceDate);
-        } else if (isStrength && "exercise" in selected) {
-          sessionStorage.setItem("newPlanExercise", (selected as any).exercise);
-          if (currentVal) sessionStorage.setItem("newPlanCurrentWeight", currentVal);
-          if (targetVal)  sessionStorage.setItem("newPlanTargetWeight",  targetVal);
-          sessionStorage.setItem("newPlanWeightUnit", unit);
-        } else if (isBodyComp && "metric" in selected) {
-          sessionStorage.setItem("newPlanBodyMetric", (selected as any).metric);
-          if (currentVal) sessionStorage.setItem("newPlanBodyCurrentValue", currentVal);
-          if (targetVal)  sessionStorage.setItem("newPlanBodyTargetValue",  targetVal);
-          sessionStorage.setItem("newPlanBodyUnit", unit);
-        }
-        onDone(effectiveTitle, "/health");
-      } else {
-        // Navigate to /health so health persona users stay in their home base
-        onDone(effectiveTitle, "/health");
+        sessionStorage.setItem("newPlanRaceDistance", (selected as any).raceDistance);
+        sessionStorage.setItem("newPlanStarterPlanId", selectedStarterPlanId);
+        if (raceDate) sessionStorage.setItem("newPlanRaceDate", raceDate);
       }
+      // Navigate to /health so health persona users stay in their home base
+      onDone(effectiveTitle, "/health");
     },
   });
 
@@ -837,26 +835,34 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
         </div>
       )}
 
-      {/* Starter training plan toggle */}
-      {selected && (
-        <button
-          type="button"
-          onClick={() => setWithPlan(p => !p)}
-          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
-            withPlan ? "border-primary bg-primary/8 text-foreground" : "border-border hover:border-primary/50 hover:bg-primary/5"
-          }`}
-        >
-          <span className="text-xl shrink-0">📋</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">Also create a Starter Training Plan</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Open the {isEndurance ? "Endurance" : isStrength ? "Strength PR" : "Body Composition"} plan builder pre-configured for this goal
-            </p>
-          </div>
-          <div className={`w-5 h-5 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${withPlan ? "border-primary bg-primary" : "border-border"}`}>
-            {withPlan && <Check size={10} className="text-primary-foreground" />}
-          </div>
-        </button>
+      {/* Starter training plan cards — endurance goals only */}
+      {isEndurance && selected && "raceDistance" in selected && (STARTER_PLAN_CATALOG[(selected as any).raceDistance] ?? []).length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            <span>📋</span> Starter Training Plans
+          </p>
+          {(STARTER_PLAN_CATALOG[(selected as any).raceDistance]).map(plan => (
+            <div key={plan.id} className={`flex items-start gap-3 rounded-xl border-2 p-3 transition-all ${
+              selectedStarterPlanId === plan.id ? "border-primary bg-primary/5" : "border-border bg-card"
+            }`}>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">{plan.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{plan.description}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStarterPlanId(prev => prev === plan.id ? null : plan.id)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  selectedStarterPlanId === plan.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary/50 text-foreground border-border hover:border-primary/50"
+                }`}
+              >
+                <Plus size={11} /> {selectedStarterPlanId === plan.id ? "Selected" : "Use Plan"}
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       <CreateButton loading={mut.isPending} disabled={!effectiveTitle} />
