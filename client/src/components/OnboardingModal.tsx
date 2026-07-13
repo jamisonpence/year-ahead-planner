@@ -70,7 +70,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 // ── Page catalog for sidebar builder (Step 2) ────────────────────────────────
 
 const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[] = [
-  { path: "/dashboard",emoji: "🏠", name: "Home",          desc: "Your daily summary — focus, tasks, and quick stats" },
+  { path: "/dashboard",emoji: "🏠", name: "Home",          desc: "Manage household chores, appliance maintenance, and home projects" },
   { path: "/goals",    emoji: "🎯", name: "Goals",         desc: "Track what you want to achieve this year" },
   { path: "/tasks",    emoji: "✅", name: "Tasks",         desc: "Daily to-dos and one-off action items" },
   { path: "/habits",   emoji: "🔥", name: "Habits",        desc: "Build daily routines that stick" },
