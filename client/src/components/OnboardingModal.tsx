@@ -88,9 +88,9 @@ const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[
 ];
 
 const HUB_DEFAULT_PATHS: Record<PersonaKey, string[]> = {
-  momentum:     ["/dashboard", "/goals", "/tasks", "/habits", "/review"],
-  health:       ["/health", "/habits", "/recipes", "/goals"],
-  explore_life: ["/library", "/places", "/recipes", "/hobbies"],
+  momentum:     ["/dashboard", "/goals", "/tasks", "/habits", "/review", "/people", "/messenger"],
+  health:       ["/health", "/habits", "/recipes", "/goals", "/people", "/messenger"],
+  explore_life: ["/library", "/places", "/recipes", "/hobbies", "/people", "/messenger"],
   connect:      ["/people", "/messenger", "/library", "/hobbies"],
 };
 
