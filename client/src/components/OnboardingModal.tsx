@@ -1541,10 +1541,13 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     setScreen(2);
   }
 
-  function jumpStart(paths: string[], p: PersonaKey) {
-    setPersona(p);
-    setSelectedPaths(paths);
-    setScreen(3);
+  function finishQuickStart(paths: string[], p: PersonaKey, dest: string) {
+    const navPrefs = buildNavPrefs(p, paths);
+    qc.setQueryData(["/api/nav-prefs"], navPrefs);
+    persistOnboardingSetup(p, paths);
+    prefsMut.mutate({ persona: p });
+    completeMut.mutate();
+    navigate(dest);
   }
 
   function togglePath(path: string) {
@@ -1668,12 +1671,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</p>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { emoji: "🍽️", label: "Recipes",  sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],          persona: "explore_life" as PersonaKey },
-                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/dashboard", "/people", "/messenger"],         persona: "momentum"     as PersonaKey },
+                    { emoji: "🍽️", label: "Recipes",  sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],  persona: "explore_life" as PersonaKey, dest: "/recipes"   },
+                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/dashboard", "/people", "/messenger"], persona: "momentum"     as PersonaKey, dest: "/dashboard" },
                   ]).map(qs => (
                     <button
                       key={qs.label}
-                      onClick={() => jumpStart(qs.paths, qs.persona)}
+                      onClick={() => finishQuickStart(qs.paths, qs.persona, qs.dest)}
                       className="flex items-center gap-2.5 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
                     >
                       <span className="text-lg shrink-0">{qs.emoji}</span>
