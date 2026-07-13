@@ -543,7 +543,7 @@ const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string; hre
 };
 
 const PATH_LABELS: Record<string, string> = {
-  "/dashboard": "Today", "/goals": "Goals", "/tasks": "Tasks",
+  "/dashboard": "Home", "/goals": "Goals", "/tasks": "Tasks",
   "/habits": "Habits", "/review": "Weekly Review", "/health": "Health",
   "/library": "Library", "/hobbies": "Hobbies", "/places": "Places",
   "/recipes": "Recipes", "/people": "People", "/journal": "Journal",
