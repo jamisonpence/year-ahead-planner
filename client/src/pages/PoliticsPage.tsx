@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useAuth as useAuthSelf } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isBefore, isAfter, startOfDay, addDays } from "date-fns";
 import {
@@ -4710,7 +4711,8 @@ export default function PoliticsPage() {
     queryKey: ["/api/tab-collaborations"],
     queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
   });
-  const politicsCollab = collabs.find(c => c.tabName === "politics" && c.status === "accepted");
+  const { user: authSelf } = useAuthSelf();
+  const politicsCollab = collabs.find(c => c.tabName === "politics" && c.status === "accepted" && c.otherUser?.id !== authSelf?.id);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -4720,7 +4722,7 @@ export default function PoliticsPage() {
           <Landmark size={20} className="text-blue-600 dark:text-blue-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold">Politics & Civic Life</h1>
+          <h1 className="text-xl font-bold">Civic Life</h1>
           <p className="text-sm text-muted-foreground">Track your representatives, issues, elections, and civic engagement</p>
         </div>
       </div>

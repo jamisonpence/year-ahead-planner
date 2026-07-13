@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { cleanFeedTitle } from "@/lib/feedTitle";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
@@ -894,12 +895,17 @@ export default function DashboardPage() {
     label: c.title, sub: "Chore due today", href: "/housekeeping",
     action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Home moved forward" },
   }));
-  // Overdue chores surface here so they're visible even when Needs Attention is off
-  choresOverdue.slice(0, 3).forEach((c) => todayItems.push({
-    key: `overdue-chore-${c.id}`, icon: <RefreshCw size={13} className="text-red-500" />,
-    label: c.title, sub: `Recurring · ${Math.abs(c.daysLeft!)}d overdue`, href: "/housekeeping", urgent: true,
+  // Overdue chores surface here so they're visible even when Needs Attention is off.
+  // Capped at 2 with a quiet rollup — a wall of alarm-red kills the dashboard.
+  choresOverdue.slice(0, 2).forEach((c) => todayItems.push({
+    key: `overdue-chore-${c.id}`, icon: <RefreshCw size={13} className="text-amber-500" />,
+    label: c.title, sub: `Recurring · from ${Math.abs(c.daysLeft!)}d ago`, href: "/housekeeping", urgent: true,
     action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Overdue chore cleared" },
   }));
+  if (choresOverdue.length > 2) todayItems.push({
+    key: "overdue-chore-rollup", icon: <Home size={13} className="text-amber-500" />,
+    label: `${choresOverdue.length - 2} more overdue chores`, sub: "Review them in Home", href: "/housekeeping",
+  });
   if (!todayWorkoutDone && wPlanned > 0) todayItems.push({
     key: "workout", icon: <Dumbbell size={13} className="text-blue-400" />,
     label: "Log today's workout", sub: `${wCompleted}/${wPlanned} this week`, href: "/workouts",
@@ -921,12 +927,12 @@ export default function DashboardPage() {
   // ── NEEDS ATTENTION ────────────────────────────────────────────────────────
   const attentionItems: TodayItem[] = [];
   allTasksOverdue.slice(0, 4).forEach((t) => attentionItems.push({
-    key: `ov-task-${t.id}`, icon: <AlertTriangle size={13} className="text-red-500" />,
+    key: `ov-task-${t.id}`, icon: <AlertTriangle size={13} className="text-amber-500" />,
     label: t.title, sub: t.source ? `from ${t.source} · overdue` : "Task overdue", href: "/tasks", urgent: true,
     action: t.source ? undefined : { type: "general", id: t.id, title: t.title, context: "Overdue task cleared" },
   }));
   choresOverdue.slice(0, 3).forEach((c) => attentionItems.push({
-    key: `ov-chore-${c.id}`, icon: <RefreshCw size={13} className="text-red-500" />,
+    key: `ov-chore-${c.id}`, icon: <RefreshCw size={13} className="text-amber-500" />,
     label: c.title, sub: `${Math.abs(c.daysLeft!)}d overdue`, href: "/housekeeping", urgent: true,
     action: { type: "chore", id: c.id, frequency: c.frequency, customFrequencyDays: c.customFrequencyDays, title: c.title, context: "Overdue chore cleared" },
   }));
@@ -1126,7 +1132,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                   {todayItems.map((item) => (
-                    <div key={item.key} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors hover:bg-secondary/60 ${item.urgent ? "bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/50" : "bg-secondary/30"}`}>
+                    <div key={item.key} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors hover:bg-secondary/60 ${item.urgent ? "bg-amber-50/50 dark:bg-amber-950/15 border border-amber-200/50 dark:border-amber-800/40" : "bg-secondary/30"}`}>
                       {item.action ? (
                         <button
                           aria-label={`Mark "${item.label}" done`}
@@ -1678,7 +1684,7 @@ function friendFirstName(name: string) {
 
 function highlightContext(item: FeedItem): { badge: string; headline: string; prompt: string } {
   const friend = friendFirstName(item.user.name);
-  const title = item.itemTitle ?? "something new";
+  const title = cleanFeedTitle(item.itemTitle) || "something new";
   const type = item.itemType ?? "";
 
   if (item.activityType === "book_finished") {
@@ -2115,7 +2121,7 @@ function MyRecentActivity() {
                   {item.itemType ? ITEM_TYPE_ICONS[item.itemType] : <Clock size={14} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{item.itemTitle ?? item.activityType}</p>
+                  <p className="text-xs font-medium truncate">{cleanFeedTitle(item.itemTitle) || item.activityType}</p>
                   <p className="text-[10px] text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType} · {timeAgo(item.createdAt)}</p>
                 </div>
               </div>

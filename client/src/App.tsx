@@ -129,6 +129,15 @@ function PageLoading() {
 function AuthenticatedApp() {
   const { user } = useAuth();
 
+  // After signing in, the browser can be left on the /login pathname while the
+  // hash router takes over (e.g. mylifos.com/login#/dashboard). Normalize it so
+  // URLs are clean and shareable.
+  useEffect(() => {
+    if (window.location.pathname === "/login") {
+      window.history.replaceState(null, "", "/" + (window.location.hash || "#/"));
+    }
+  }, []);
+
   // Prefetch page chunks in the background so tab switches are instant.
   // Waits for the window load event (so it never delays initial page load),
   // then trickles the imports in small batches.
@@ -206,6 +215,16 @@ function AuthenticatedApp() {
         <Route path="/meal-planner/recipe/:id" component={PlannerRecipeDetail} />
         <Route path="/meal-planner/shopping" component={PlannerShopping} />
         <Route path="/meal-planner" component={PlannerHome} />
+        {/* Aliases — every sidebar/nav name deep-links to its page */}
+        <Route path="/today" component={DashboardPage} />
+        <Route path="/plan" component={GoalsPage} />
+        <Route path="/schedule" component={CalendarPage} />
+        <Route path="/finance" component={BudgetPage} />
+        <Route path="/home" component={HousekeepingPage} />
+        <Route path="/media" component={LibraryPage} />
+        <Route path="/interests" component={HobbiesPage} />
+        <Route path="/messages" component={MessengerPage} />
+        <Route path="/weekly-review" component={ReviewPage} />
         <Route component={NotFound} />
       </Switch>
       {user && !user.onboarded && <OnboardingModal userName={user.name} />}

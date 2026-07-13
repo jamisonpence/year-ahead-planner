@@ -149,12 +149,12 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   // ── Top-level ──
   { path: "/dashboard",     label: "Today",                   icon: LayoutDashboard },
   // ── Plan ──
-  { path: "/goals",         label: "Plan",                    icon: Target,         matchPaths: ["/calendar", "/tasks", "/habits", "/journal", "/review"] },
-  { path: "/calendar",      label: "Schedule",                icon: Calendar,       defaultHidden: true },
-  { path: "/tasks",         label: "Projects & Tasks",        icon: ClipboardList,  defaultHidden: true },
+  { path: "/goals",         label: "Goals",                   icon: Target,         matchPaths: ["/calendar", "/tasks", "/habits", "/journal", "/review"] },
+  { path: "/calendar",      label: "Calendar",                icon: Calendar,       defaultHidden: true },
+  { path: "/tasks",         label: "Tasks",                   icon: ClipboardList,  defaultHidden: true },
   { path: "/habits",        label: "Habits",                  icon: CalendarCheck,  defaultHidden: true },
   { path: "/journal",       label: "Journal",                 icon: PenLine,        defaultHidden: true },
-  { path: "/review",        label: "Review",                  icon: History,        defaultHidden: true },
+  { path: "/review",        label: "Weekly Review",           icon: History,        defaultHidden: true },
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },
@@ -164,10 +164,10 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/health",        label: "Health",                  icon: Activity,       defaultHidden: true, matchPaths: ["/workouts", "/nutrition"] },
   { path: "/recipes",       label: "Recipes",                 icon: UtensilsCrossed, defaultHidden: true },
   // ── Culture ──
-  { path: "/library",       label: "Media",                   icon: Library,        defaultHidden: true, matchPaths: ["/reading", "/movies", "/music", "/art"] },
-  { path: "/hobbies",       label: "Interests",               icon: Sparkles,       defaultHidden: true },
+  { path: "/library",       label: "Library",                 icon: Library,        defaultHidden: true, matchPaths: ["/reading", "/movies", "/music", "/art"] },
+  { path: "/hobbies",       label: "Hobbies",                 icon: Sparkles,       defaultHidden: true },
   // ── Places ──
-  { path: "/places",        label: "Places & Trips",          icon: MapPin,         defaultHidden: true, matchPaths: ["/spots", "/travel"] },
+  { path: "/places",        label: "Places",                  icon: MapPin,         defaultHidden: true, matchPaths: ["/spots", "/travel"] },
   // ── Home ──
   { path: "/budget",        label: "Finance",                 icon: Wallet,         defaultHidden: true },
   { path: "/housekeeping",  label: "Home",                    icon: Home,           defaultHidden: true },
@@ -362,6 +362,19 @@ const SECTION_KEY: Record<string, string> = {
 
 const COLLECTION_GROUPS = [
   {
+    key: "plan",
+    label: "Plan",
+    subtitle: "Goals, tasks, habits, and schedule",
+    tiles: [
+      { path: "/goals",    emoji: "🎯", label: "Goals"    },
+      { path: "/tasks",    emoji: "✅", label: "Tasks"    },
+      { path: "/habits",   emoji: "🔥", label: "Habits"   },
+      { path: "/calendar", emoji: "🗓️", label: "Calendar" },
+      { path: "/journal",  emoji: "📝", label: "Journal"  },
+      { path: "/review",   emoji: "🪞", label: "Review"   },
+    ],
+  },
+  {
     key: "library",
     label: "Media",
     subtitle: "Books, watching, music, and art",
@@ -497,6 +510,17 @@ function MyLifosSheet({
                 </div>
               ))}
             </div>
+
+            {/* Direct link to the MyLifos library page */}
+            <Link href="/mylifos">
+              <button
+                onClick={onClose}
+                className="mt-3 w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-violet-500/10 border border-violet-400/30 text-sm font-semibold hover:bg-violet-500/15 transition-colors"
+              >
+                <span className="flex items-center gap-2"><Archive size={15} className="text-violet-500" /> Open MyLifos library</span>
+                <ChevronRight size={15} className="text-muted-foreground" />
+              </button>
+            </Link>
           </div>
 
           {/* ── Privacy legend ───────────────────────────────────────────── */}
@@ -696,6 +720,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [notifOpen]);
 
   async function handleLogout() {
+    if (!window.confirm("Sign out of MyLifos?")) return;
     await fetch("/api/logout", { method: "POST" });
     qc.clear();
     window.location.href = "/";
@@ -824,6 +849,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 );
               })}
+              {/* Discovery: surface hidden catalog pages without hunting for Customize Sidebar */}
+              <button
+                onClick={() => setManageMode(true)}
+                className="sidebar-item w-full mt-3 border border-dashed border-border/80 text-muted-foreground/80 hover:text-foreground"
+              >
+                <Plus size={15} />
+                <span>Add pages</span>
+              </button>
             </div>
           )}
         </nav>
@@ -1036,24 +1069,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </Link>
 
-          {/* Plan */}
+          {/* Goals (planning hub) */}
           <Link href="/goals">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
               <Target size={22} className={PLAN_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${PLAN_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Plan</span>
+              <span className={`text-[10px] font-medium ${PLAN_PATHS.includes(location) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>Goals</span>
             </button>
           </Link>
 
-          {/* MyLifos */}
-          <Link href="/mylifos">
-            <button
-              onClick={() => setMyLifosOpen(false)}
-              className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
-            >
-              <Archive size={22} className={(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"} />
-              <span className={`text-[10px] font-medium ${(MYLIFOS_PATHS.includes(location)) && !myLifosOpen ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
-            </button>
-          </Link>
+          {/* MyLifos — opens the all-sections menu so every page is reachable on mobile */}
+          <button
+            onClick={() => setMyLifosOpen(v => !v)}
+            className="flex flex-col items-center gap-0.5 min-w-[56px] py-1"
+          >
+            <Archive size={22} className={myLifosOpen || MYLIFOS_PATHS.includes(location) ? "text-violet-500" : "text-muted-foreground"} />
+            <span className={`text-[10px] font-medium ${myLifosOpen || MYLIFOS_PATHS.includes(location) ? "text-violet-500" : "text-muted-foreground"}`}>MyLifos</span>
+          </button>
 
           {/* People */}
           <Link href="/people">
@@ -1187,7 +1218,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Page content */}
-      <main className="flex-1 min-w-0 lg:pt-0 pt-14 lg:pb-0 pb-24">
+      <main className="flex-1 min-w-0 lg:pt-0 pt-14 lg:pb-0 pb-36">
         <PrivacyBanner path={location} />
         {children}
       </main>

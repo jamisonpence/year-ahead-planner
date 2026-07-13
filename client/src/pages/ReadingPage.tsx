@@ -462,7 +462,7 @@ export default function ReadingPage() {
     <PageShell
       title={
         <div className="flex items-center gap-2.5">
-          <h1 className="text-xl font-semibold tracking-tight">Reading</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Books</h1>
           {streak > 0 && (
             <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800 shrink-0">
               <Flame size={13} />{streak}d streak

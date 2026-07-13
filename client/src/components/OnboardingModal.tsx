@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -70,7 +70,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 // ── Page catalog for sidebar builder (Step 2) ────────────────────────────────
 
 const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[] = [
-  { path: "/dashboard",emoji: "🏠", name: "Home",          desc: "Manage household chores, appliance maintenance, and home projects" },
+  { path: "/housekeeping", emoji: "🏠", name: "Home",      desc: "Manage household chores, appliance maintenance, and home projects" },
   { path: "/goals",    emoji: "🎯", name: "Goals",         desc: "Track what you want to achieve this year" },
   { path: "/tasks",    emoji: "✅", name: "Tasks",         desc: "Daily to-dos and one-off action items" },
   { path: "/habits",   emoji: "🔥", name: "Habits",        desc: "Build daily routines that stick" },
@@ -83,8 +83,8 @@ const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[
   { path: "/places",   emoji: "📍", name: "Places",        desc: "Restaurants, destinations, and trips" },
   { path: "/hobbies",  emoji: "✨", name: "Hobbies",       desc: "Interests and passions worth exploring" },
   { path: "/people",   emoji: "👤", name: "People",        desc: "Track friends, family, and important contacts" },
-  { path: "/messenger",emoji: "💬", name: "Messenger",     desc: "Chat and share with your connections" },
-  { path: "/mylifos",  emoji: "🌐", name: "MyLifos Feed",  desc: "See what the people you follow are saving" },
+  { path: "/messenger",emoji: "💬", name: "Messages",      desc: "Chat and share with your connections" },
+  { path: "/mylifos",  emoji: "🌐", name: "MyLifos",       desc: "Your library — everything you save, love, and receive" },
 ];
 
 const HUB_DEFAULT_PATHS: Record<PersonaKey, string[]> = {
@@ -305,7 +305,7 @@ function GoalForm({ onDone }: { onDone: (label: string) => void }) {
       <FieldInput label="Goal" value={title} onChange={setTitle} placeholder="e.g. Run a 5K" required />
       <FieldTextarea label="Why it matters (optional)" value={why} onChange={setWhy} placeholder="What makes this meaningful?" />
       <FieldInput label="Next action (optional)" value={nextAction} onChange={setNextAction} placeholder="e.g. Pick a 5K race date" />
-      <CreateButton loading={mut.isPending} disabled={!title.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!title.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -319,7 +319,7 @@ function TaskForm({ onDone }: { onDone: (label: string) => void }) {
   return (
     <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
       <FieldInput label="Task" value={title} onChange={setTitle} placeholder="e.g. Schedule a check-in" required />
-      <CreateButton loading={mut.isPending} disabled={!title.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!title.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -350,7 +350,7 @@ function HabitForm({ onDone, defaultCategory }: { onDone: (label: string) => voi
           ))}
         </div>
       </div>
-      <CreateButton loading={mut.isPending} disabled={!title.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!title.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -378,7 +378,7 @@ function WorkoutLogForm({ onDone }: { onDone: (label: string) => void }) {
           ))}
         </div>
       </div>
-      <CreateButton loading={mut.isPending} onClick={() => mut.mutate()} />
+      <CreateButton loading={mut.isPending} onClick={() => mut.mutate()} error={mut.isError} />
     </div>
   );
 }
@@ -394,7 +394,7 @@ function BookForm({ onDone }: { onDone: (label: string) => void }) {
     <form onSubmit={e => { e.preventDefault(); if (title.trim()) mut.mutate(); }} className="space-y-4">
       <FieldInput label="Book title" value={title} onChange={setTitle} placeholder="e.g. Atomic Habits" required />
       <FieldInput label="Author (optional)" value={author} onChange={setAuthor} placeholder="e.g. James Clear" />
-      <CreateButton loading={mut.isPending} disabled={!title.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!title.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -423,7 +423,7 @@ function PlaceForm({ onDone }: { onDone: (label: string) => void }) {
         </div>
       </div>
       <FieldInput label="Name" value={name} onChange={setName} placeholder="e.g. Blue Bottle Coffee" required />
-      <CreateButton loading={mut.isPending} disabled={!name.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!name.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -464,7 +464,7 @@ function RecipeForm({ onDone }: { onDone: (label: string) => void }) {
       </div>
       <FieldTextarea label="Ingredients (optional)" value={ingredients} onChange={setIngredients} placeholder="Paste a few ingredients, one per line" />
       <FieldTextarea label="Instructions or source (optional)" value={instructions} onChange={setInstructions} placeholder="Add quick steps or where you found it" />
-      <CreateButton loading={mut.isPending} disabled={!name.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!name.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -480,7 +480,7 @@ function PersonForm({ onDone }: { onDone: (label: string) => void }) {
     <form onSubmit={e => { e.preventDefault(); if (firstName.trim()) mut.mutate(); }} className="space-y-4">
       <FieldInput label="First name" value={firstName} onChange={setFirstName} placeholder="e.g. Alex" required />
       <FieldInput label="Last name (optional)" value={lastName} onChange={setLastName} placeholder="e.g. Johnson" />
-      <CreateButton loading={mut.isPending} disabled={!firstName.trim()} />
+      <CreateButton loading={mut.isPending} disabled={!firstName.trim()} error={mut.isError} />
     </form>
   );
 }
@@ -543,11 +543,12 @@ const PERSONA_FIRST_STEPS: Record<PersonaKey, { emoji: string; text: string; hre
 };
 
 const PATH_LABELS: Record<string, string> = {
-  "/dashboard": "Home", "/goals": "Goals", "/tasks": "Tasks",
+  "/dashboard": "Today", "/goals": "Goals", "/tasks": "Tasks",
   "/habits": "Habits", "/review": "Weekly Review", "/health": "Health",
   "/library": "Library", "/hobbies": "Hobbies", "/places": "Places",
   "/recipes": "Recipes", "/people": "People", "/journal": "Journal",
-  "/mylifos": "MyLifos", "/calendar": "Calendar", "/messenger": "Messenger",
+  "/mylifos": "MyLifos", "/calendar": "Calendar", "/messenger": "Messages",
+  "/housekeeping": "Home", "/budget": "Finance", "/beliefs": "Beliefs",
 };
 
 const INTENTION_EXTRA_OPTIONS: Partial<Record<IntentionKey, CreateOption>> = {
@@ -652,7 +653,7 @@ function InterestForm({ onDone }: { onDone: (label: string, href?: string, meta?
         placeholder={selectedCat ? "Something else…" : "e.g. Photography, Hiking…"}
         required
       />
-      <CreateButton loading={mut.isPending} disabled={!name.trim()} onClick={() => { if (name.trim()) mut.mutate(); }} />
+      <CreateButton loading={mut.isPending} disabled={!name.trim()} onClick={() => { if (name.trim()) mut.mutate(); }} error={mut.isError} />
     </div>
   );
 }
@@ -866,24 +867,31 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
         </div>
       )}
 
-      <CreateButton loading={mut.isPending} disabled={!effectiveTitle} />
+      <CreateButton loading={mut.isPending} disabled={!effectiveTitle} error={mut.isError} />
     </form>
   );
 }
 
 // Generic create button (works as submit OR with onClick for non-form flows)
-function CreateButton({ loading, disabled, onClick }: { loading: boolean; disabled?: boolean; onClick?: () => void }) {
+function CreateButton({ loading, disabled, onClick, error }: { loading: boolean; disabled?: boolean; onClick?: () => void; error?: boolean }) {
   const props = onClick ? { type: "button" as const, onClick } : { type: "submit" as const };
   return (
-    <button
-      {...props}
-      disabled={loading || disabled}
-      className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm
-        hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
-    >
-      {loading ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-      {loading ? "Creating…" : "Create & Continue"}
-    </button>
+    <div className="space-y-2">
+      {error && (
+        <p className="text-xs text-red-500 dark:text-red-400 text-center">
+          That didn't save — check your connection and try again.
+        </p>
+      )}
+      <button
+        {...props}
+        disabled={loading || disabled}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold text-sm
+          hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-sm"
+      >
+        {loading ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+        {loading ? "Creating…" : error ? "Try Again" : "Create & Continue"}
+      </button>
+    </div>
   );
 }
 
@@ -1560,6 +1568,10 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     setCreatedLabel(label);
     setCreatedHref(href ?? selectedOption?.href ?? null);
     if (meta) setCreatedHobbyMeta(meta);
+    // The app's queries use staleTime: Infinity, so pages fetched before this
+    // creation would otherwise keep showing stale (empty) data. Invalidate
+    // everything so the user's first item is visible the moment they land.
+    qc.invalidateQueries();
     // Brief pause to show success, then advance
     setTimeout(() => setScreen(4), 900);
   }
@@ -1577,7 +1589,9 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     if (selectedPlanTpl && createdHobbyMeta?.hobbyId && !createdHobbyMeta?.planAlreadyCreated) {
       apiRequest("PATCH", `/api/hobbies/${createdHobbyMeta.hobbyId}`, {
         extraJson: JSON.stringify({ plans: [buildHobbyPlan(selectedPlanTpl)] }),
-      }).catch(() => {});
+      })
+        .then(() => qc.invalidateQueries({ queryKey: ["/api/hobbies"] }))
+        .catch(() => {});
     }
     completeMut.mutate();
     const dest = createdHobbyMeta?.hobbyId ? "/hobbies" : createdHref ?? "/dashboard";
@@ -1635,7 +1649,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           {screen === 1 && (
             <div className="p-6 sm:p-8 space-y-6">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 1 of 3 · Welcome, {firstName} 👋</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 1 of 4 · Welcome, {firstName} 👋</p>
                 <h1 className="text-2xl font-bold leading-tight">Which Hub would you like to start with?</h1>
                 <p className="text-sm text-muted-foreground mt-1">Your Hub shapes how MyLifos is organized. You can explore everything else later.</p>
               </div>
@@ -1672,7 +1686,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <div className="grid grid-cols-2 gap-2">
                   {([
                     { emoji: "🍽️", label: "Recipes",  sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],  persona: "explore_life" as PersonaKey, dest: "/recipes"   },
-                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/dashboard", "/people", "/messenger"], persona: "momentum"     as PersonaKey, dest: "/dashboard" },
+                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/housekeeping", "/people", "/messenger"], persona: "momentum"  as PersonaKey, dest: "/housekeeping" },
                   ]).map(qs => (
                     <button
                       key={qs.label}
@@ -1695,7 +1709,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           {screen === 2 && (
             <div className="p-6 sm:p-8 space-y-5">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 2 of 3</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 2 of 4</p>
                 <h1 className="text-2xl font-bold leading-tight">Build your sidebar</h1>
                 <p className="text-sm text-muted-foreground mt-1">Your Hub's core pages are already selected. Add or remove anything you like.</p>
               </div>
@@ -1787,7 +1801,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 /* Option picker */
                 <>
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 3 of 3</p>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 3 of 4</p>
                     <h1 className="text-2xl font-bold leading-tight">Create the first useful thing</h1>
                     <p className="text-sm text-muted-foreground mt-1">This makes Today useful immediately. You can skip and set it up later.</p>
                   </div>
@@ -1856,6 +1870,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           {screen === 4 && persona && (
             <div className="p-6 sm:p-8 space-y-6">
               <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Step 4 of 4 · Done</p>
                 <p className="text-2xl mb-2">🎉</p>
                 <h1 className="text-2xl font-bold">You're all set, {firstName}!</h1>
                 <p className="text-sm text-muted-foreground mt-1">

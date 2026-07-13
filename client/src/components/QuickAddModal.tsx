@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { X, ArrowLeft, Check, Loader2, Search, BookOpen, Film, ExternalLink } from "lucide-react";
+import {
+  X, ArrowLeft, Check, Loader2, Search, BookOpen, Film, ExternalLink,
+  Music2, MapPin, UtensilsCrossed, CheckCircle2, Target, Sprout, PenLine,
+  UserPlus, Flame, CheckSquare, Dumbbell,
+} from "lucide-react";
 import { loadIntentions, type IntentionKey } from "@/components/OnboardingModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -47,6 +51,25 @@ const ALL_SECTIONS: SectionMeta[] = [
 ];
 
 const SECTION_MAP = Object.fromEntries(ALL_SECTIONS.map(s => [s.key, s])) as Record<SectionKey, SectionMeta>;
+
+// One icon system (lucide) for the picker grid — replaces the emoji/clipart mix.
+const SECTION_ICONS: Record<SectionKey, React.ElementType> = {
+  reading: BookOpen, movies: Film, music: Music2, spots: MapPin, recipe: UtensilsCrossed,
+  task: CheckCircle2, goal: Target, habit: Sprout, note: PenLine, person: UserPlus,
+  habit_complete: Flame, task_complete: CheckSquare, workout: Dumbbell,
+};
+
+// Keys that log something that already exists (vs. creating something new)
+const LOG_KEYS = new Set<SectionKey>(["habit_complete", "task_complete", "workout"]);
+
+function SectionTileIcon({ sectionKey }: { sectionKey: SectionKey }) {
+  const Icon = SECTION_ICONS[sectionKey] ?? CheckCircle2;
+  return (
+    <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+      <Icon size={17} />
+    </span>
+  );
+}
 
 const SECTION_EMOJI: Record<string, string> = Object.fromEntries(
   ALL_SECTIONS.map(s => [s.key, s.emoji])
@@ -1239,6 +1262,16 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
     }
   }, [open, initialSection]);
 
+  // Escape closes the modal (keyboard parity with the ✕ button)
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   // Swipe-down to dismiss
   const touchStartY = useRef<number | null>(null);
   function onTouchStart(e: React.TouchEvent) {
@@ -1296,7 +1329,7 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
         /* Section form view */
         <div className="px-5 pt-5 pb-10 space-y-5">
           <div className="flex items-center gap-2.5">
-            <span className="text-3xl leading-none">{activeInfo.emoji}</span>
+            <SectionTileIcon sectionKey={activeSection} />
             <div>
               <p className="font-bold text-base leading-tight">{activeInfo.label}</p>
               <p className="text-xs text-muted-foreground">{activeInfo.sub}</p>
@@ -1320,7 +1353,7 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
                     onClick={() => setActiveSection(sec.key)}
                     className="flex items-center gap-3 px-4 py-4 rounded-2xl bg-secondary/50 hover:bg-secondary border border-border/60 hover:border-primary/30 transition-all active:scale-95 text-left"
                   >
-                    <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                    <SectionTileIcon sectionKey={sec.key} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
                       <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
@@ -1347,7 +1380,7 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
                       onClick={() => setActiveSection(sec.key)}
                       className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-primary/6 hover:bg-primary/12 border border-primary/20 hover:border-primary/40 transition-all active:scale-95 text-left"
                     >
-                      <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
+                      <SectionTileIcon sectionKey={sec.key} />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
                         <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
@@ -1359,29 +1392,33 @@ export default function QuickAddModal({ open, onClose, initialSection }: QuickAd
             </div>
           )}
 
-          {/* All sections, ordered by persona */}
-          <div>
-            {secondarySuggestedSections.length > 0 && (
+          {/* Remaining sections split into "create" vs "log" so the near-duplicate
+              options (Task vs Complete Task, Habit vs Log Habit) read clearly */}
+          {[
+            { label: "Create New", sections: secondaryOrderedSections.filter(sec => !LOG_KEYS.has(sec.key)) },
+            { label: "Log Something", sections: secondaryOrderedSections.filter(sec => LOG_KEYS.has(sec.key)) },
+          ].map(group => group.sections.length === 0 ? null : (
+            <div key={group.label}>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
-                All Options
+                {group.label}
               </p>
-            )}
-            <div className="grid grid-cols-2 gap-2.5">
-              {secondaryOrderedSections.map(sec => (
-                <button
-                  key={sec.key}
-                  onClick={() => setActiveSection(sec.key)}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95 text-left"
-                >
-                  <span className="text-2xl leading-none shrink-0">{sec.emoji}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
-                    <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
-                  </div>
-                </button>
-              ))}
+              <div className="grid grid-cols-2 gap-2.5">
+                {group.sections.map(sec => (
+                  <button
+                    key={sec.key}
+                    onClick={() => setActiveSection(sec.key)}
+                    className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-secondary/50 hover:bg-violet-500/10 border border-transparent hover:border-violet-400/30 transition-all active:scale-95 text-left"
+                  >
+                    <SectionTileIcon sectionKey={sec.key} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-tight truncate">{sec.label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight truncate">{sec.sub}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       )}
     </>

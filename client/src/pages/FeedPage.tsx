@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { cleanFeedTitle } from "@/lib/feedTitle";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
@@ -284,7 +285,7 @@ function FeedCard({ item, currentUserId }: { item: any; currentUserId: number })
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-tight truncate">{item.itemTitle}</p>
+              <p className="text-sm font-semibold leading-tight truncate">{cleanFeedTitle(item.itemTitle)}</p>
               {item.itemSubtitle && (
                 <p className="text-xs text-muted-foreground truncate mt-0.5">{item.itemSubtitle}</p>
               )}
@@ -339,7 +340,7 @@ function MyActivityCard({ item }: { item: any }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">{item.itemTitle ?? "—"}</p>
+        <p className="text-sm font-medium truncate">{cleanFeedTitle(item.itemTitle) || "—"}</p>
         <p className="text-xs text-muted-foreground">{ACTIVITY_LABELS[item.activityType] ?? item.activityType} · {timeAgo(item.createdAt)}</p>
       </div>
     </div>

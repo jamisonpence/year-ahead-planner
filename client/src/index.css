@@ -21,7 +21,7 @@
     --secondary-foreground: 222 30% 20%;
 
     --muted: 220 14% 93%;
-    --muted-foreground: 220 9% 38%; /* darkened for WCAG contrast on light bg */
+    --muted-foreground: 220 10% 34%; /* darkened for WCAG AA contrast on light bg */
 
     --accent: 38 95% 54%;
     --accent-foreground: 222 30% 12%;
@@ -60,7 +60,7 @@
     --secondary-foreground: 210 30% 82%;
 
     --muted: 222 20% 18%;
-    --muted-foreground: 215 14% 64%; /* lightened for WCAG contrast on dark bg */
+    --muted-foreground: 215 16% 70%; /* lightened for WCAG AA contrast on dark bg */
 
     --accent: 38 90% 60%;
     --accent-foreground: 222 30% 10%;

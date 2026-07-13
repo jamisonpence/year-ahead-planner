@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
+import { useAuth as useAuthSelf } from "@/hooks/useAuth";
 import FamilyTreeCanvas from "@/components/FamilyTreeCanvas";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -1640,7 +1641,8 @@ export default function KidsPage() {
     queryKey: ["/api/tab-collaborations"],
     queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
   });
-  const kidsCollab = collabs.find(c => c.tabName === "kids" && c.status === "accepted");
+  const { user: authSelf } = useAuthSelf();
+  const kidsCollab = collabs.find(c => c.tabName === "kids" && c.status === "accepted" && c.otherUser?.id !== authSelf?.id);
 
   const selectedChild = useMemo(
     () => allChildren.find((c) => c.id === selectedChildId) ?? allChildren[0] ?? null,

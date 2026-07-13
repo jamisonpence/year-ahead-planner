@@ -168,7 +168,7 @@ export default function ReviewPage() {
     <div className="p-3 sm:p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Week of {data.weekStart}</p>
-        <h1 className="text-2xl font-bold leading-tight">🪞 Review</h1>
+        <h1 className="text-2xl font-bold leading-tight">🪞 Weekly Review</h1>
         <p className="text-sm text-muted-foreground mt-1">Ten minutes to close out this week and set up the next one.</p>
       </div>
 

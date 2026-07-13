@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, ReactNode } from "react";
+import { useAuth as useAuthSelf } from "@/hooks/useAuth";
 import PlantsPage from "@/pages/PlantsPage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -102,7 +103,7 @@ function choreStatus(chore: Chore): { label: string; color: string; icon: React.
   if (!chore.nextDue) return { label: "No due date", color: "text-muted-foreground", icon: Clock };
   const days = daysUntil(chore.nextDue);
   if (days === null) return { label: "No due date", color: "text-muted-foreground", icon: Clock };
-  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-red-600", icon: AlertTriangle };
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-amber-600 dark:text-amber-400", icon: AlertTriangle };
   if (days === 0) return { label: "Due today", color: "text-orange-600", icon: Clock };
   if (days <= 3) return { label: `Due in ${days}d`, color: "text-yellow-600", icon: Clock };
   return { label: `Due in ${days}d`, color: "text-muted-foreground", icon: Clock };
@@ -597,6 +598,7 @@ function DashboardChoreRow({ chore, onComplete, onDefer }: {
 function DashboardTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [showAllOverdue, setShowAllOverdue] = useState(false);
   const { data: chores = [] } = useQuery<Chore[]>({ queryKey: ["/api/chores"] });
   const { data: projects = [] } = useQuery<HouseProjectWithTasks[]>({ queryKey: ["/api/house-projects"] });
   const { data: appliances = [] } = useQuery<Appliance[]>({ queryKey: ["/api/appliances"] });
@@ -657,13 +659,21 @@ function DashboardTab() {
       )}
 
       {overdueChores.length > 0 && (
-        <DashboardSection title="Needs Attention" count={overdueChores.length} accent="red">
-          {overdueChores.map(c => (
+        <DashboardSection title="Needs Attention" count={overdueChores.length} accent="amber">
+          {(showAllOverdue ? overdueChores : overdueChores.slice(0, 5)).map(c => (
             <DashboardChoreRow key={c.id} chore={c}
               onComplete={() => completeMut.mutate(c)}
               onDefer={() => snoozeMut.mutate({ id: c.id, days: 7 })}
             />
           ))}
+          {overdueChores.length > 5 && (
+            <button
+              onClick={() => setShowAllOverdue(v => !v)}
+              className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showAllOverdue ? "Show fewer" : `Show ${overdueChores.length - 5} more`}
+            </button>
+          )}
         </DashboardSection>
       )}
 
@@ -2227,7 +2237,8 @@ export default function HousekeepingPage() {
     queryKey: ["/api/tab-collaborations"],
     queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
   });
-  const housekeepingCollab = collabs.find(c => c.tabName === "housekeeping" && c.status === "accepted");
+  const { user: authSelf } = useAuthSelf();
+  const housekeepingCollab = collabs.find(c => c.tabName === "housekeeping" && c.status === "accepted" && c.otherUser?.id !== authSelf?.id);
 
   const overdueCount = chores.filter((c) => {
     if (!c.isActive || !c.nextDue) return false;

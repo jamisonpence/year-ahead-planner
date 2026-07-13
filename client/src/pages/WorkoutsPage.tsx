@@ -1323,6 +1323,15 @@ function PlanBuilderModal({ open, onClose, editing, templates, onBodyCompSelecte
 }) {
   const { toast } = useToast();
   const [step, setStep] = useState<"goal" | "details" | "schedule">("goal");
+  // Escape closes the plan builder (plain-div overlay, so no Radix key handling)
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [durationWeeks, setDurationWeeks] = useState("12");

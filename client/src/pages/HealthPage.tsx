@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useContext, createContext, useCallback, useRef } from "react";
+import { useAuth as useAuthSelf } from "@/hooks/useAuth";
 import type { ReactNode } from "react";
 import PageShell from "@/components/PageShell";
 import { useLocation, Router, Switch, Route } from "wouter";
@@ -4739,12 +4740,13 @@ export default function HealthPage() {
     queryKey: ["/api/tab-collaborations"],
     queryFn: () => apiRequest("GET", "/api/tab-collaborations").then(r => r.json()),
   });
-  const healthCollab = collabs.find(c => c.tabName === "health" && c.status === "accepted");
+  const { user: authSelf } = useAuthSelf();
+  const healthCollab = collabs.find(c => c.tabName === "health" && c.status === "accepted" && c.otherUser?.id !== authSelf?.id);
 
   return (
     <PageShell
       size="sm"
-      title="Health"
+      title="Vitals"
       subtitle="Medications, metrics, sleep, and your care team"
       controls={
         <div className="flex gap-1.5 flex-wrap">

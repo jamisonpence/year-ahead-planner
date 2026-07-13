@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { cleanFeedTitle } from "@/lib/feedTitle";
 import { BookOpen, Film, Music, UtensilsCrossed, MapPin, Quote, Users, Sparkles, TrendingUp, Heart } from "lucide-react";
 
 // ── Type definitions ──────────────────────────────────────────────────────────
@@ -221,7 +222,7 @@ function TrendingSection() {
                 {item.friendCount}
               </div>
             </div>
-            <p className="text-xs font-medium leading-tight line-clamp-2">{item.itemTitle}</p>
+            <p className="text-xs font-medium leading-tight line-clamp-2">{cleanFeedTitle(item.itemTitle)}</p>
             {item.itemSubtitle && (
               <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{item.itemSubtitle}</p>
             )}
@@ -288,7 +289,7 @@ function YouMightLikeSection() {
               <ItemArtwork imageUrl={item.itemImageUrl} itemType={item.itemType} title={item.itemTitle} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold line-clamp-2 leading-tight">{item.itemTitle}</p>
+              <p className="text-xs font-semibold line-clamp-2 leading-tight">{cleanFeedTitle(item.itemTitle)}</p>
               {item.itemSubtitle && (
                 <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{item.itemSubtitle}</p>
               )}

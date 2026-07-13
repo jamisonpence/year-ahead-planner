@@ -837,6 +837,18 @@ export default function GoalsPage() {
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
+
+  // Desktop: auto-select the first goal once so the detail pane isn't a blank
+  // two-thirds of the screen. Runs only on first load; never fights the user.
+  const [didAutoSelect, setDidAutoSelect] = useState(false);
+  useEffect(() => {
+    if (didAutoSelect || selectedGoalId !== null || goals.length === 0) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      setSelectedGoalId(goals[0].id);
+    }
+    setDidAutoSelect(true);
+  }, [goals, selectedGoalId, didAutoSelect]);
+
   const filteredGoals = goals.filter(g => {
     const h = (g as any).horizon ?? "this_year";
     if (horizonTab === "this_year") return h === "this_year";
