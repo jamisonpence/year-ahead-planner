@@ -70,6 +70,7 @@ export const INTENTIONS: { key: IntentionKey; emoji: string; label: string }[] =
 // ── Page catalog for sidebar builder (Step 2) ────────────────────────────────
 
 const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[] = [
+  { path: "/dashboard",emoji: "🏠", name: "Home",          desc: "Your daily summary — focus, tasks, and quick stats" },
   { path: "/goals",    emoji: "🎯", name: "Goals",         desc: "Track what you want to achieve this year" },
   { path: "/tasks",    emoji: "✅", name: "Tasks",         desc: "Daily to-dos and one-off action items" },
   { path: "/habits",   emoji: "🔥", name: "Habits",        desc: "Build daily routines that stick" },
@@ -87,7 +88,7 @@ const PAGE_CATALOG: { path: string; emoji: string; name: string; desc: string }[
 ];
 
 const HUB_DEFAULT_PATHS: Record<PersonaKey, string[]> = {
-  momentum:     ["/goals", "/tasks", "/habits", "/review"],
+  momentum:     ["/dashboard", "/goals", "/tasks", "/habits", "/review"],
   health:       ["/health", "/habits", "/recipes", "/goals"],
   explore_life: ["/library", "/places", "/recipes", "/hobbies"],
   connect:      ["/people", "/messenger", "/library", "/hobbies"],
@@ -1669,23 +1670,30 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
               <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
                 {PAGE_CATALOG.map(page => {
-                  const isSelected = selectedPaths.includes(page.path);
+                  const isPinned = page.path === "/dashboard";
+                  const isSelected = isPinned || selectedPaths.includes(page.path);
                   const isDefault = (HUB_DEFAULT_PATHS[persona!] ?? []).includes(page.path);
                   return (
                     <button
                       key={page.path}
-                      onClick={() => togglePath(page.path)}
+                      onClick={() => !isPinned && togglePath(page.path)}
                       className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl border-2 text-left transition-all
-                        ${isSelected
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/40 hover:bg-primary/3"
+                        ${isPinned
+                          ? "border-primary bg-primary/5 cursor-default"
+                          : isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40 hover:bg-primary/3"
                         }`}
                     >
                       <span className="text-xl shrink-0 leading-none w-6 text-center">{page.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-foreground">{page.name}</p>
-                          {isDefault && (
+                          {isPinned ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold leading-tight">
+                              Always shown
+                            </span>
+                          ) : isDefault && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold leading-tight">
                               Hub default
                             </span>
