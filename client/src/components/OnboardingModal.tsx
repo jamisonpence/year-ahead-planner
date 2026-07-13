@@ -1670,30 +1670,23 @@ export default function OnboardingModal({ userName }: { userName: string }) {
 
               <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
                 {PAGE_CATALOG.map(page => {
-                  const isPinned = page.path === "/dashboard";
-                  const isSelected = isPinned || selectedPaths.includes(page.path);
+                  const isSelected = selectedPaths.includes(page.path);
                   const isDefault = (HUB_DEFAULT_PATHS[persona!] ?? []).includes(page.path);
                   return (
                     <button
                       key={page.path}
-                      onClick={() => !isPinned && togglePath(page.path)}
+                      onClick={() => togglePath(page.path)}
                       className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl border-2 text-left transition-all
-                        ${isPinned
-                          ? "border-primary bg-primary/5 cursor-default"
-                          : isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/40 hover:bg-primary/3"
+                        ${isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/40 hover:bg-primary/3"
                         }`}
                     >
                       <span className="text-xl shrink-0 leading-none w-6 text-center">{page.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-foreground">{page.name}</p>
-                          {isPinned ? (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold leading-tight">
-                              Always shown
-                            </span>
-                          ) : isDefault && (
+                          {isDefault && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold leading-tight">
                               Hub default
                             </span>
