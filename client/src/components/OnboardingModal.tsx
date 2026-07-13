@@ -1541,6 +1541,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     setScreen(2);
   }
 
+  function jumpStart(paths: string[], p: PersonaKey) {
+    setPersona(p);
+    setSelectedPaths(paths);
+    setScreen(3);
+  }
+
   function togglePath(path: string) {
     setSelectedPaths(prev =>
       prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
@@ -1655,6 +1661,29 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     <ArrowRight size={18} className="text-muted-foreground group-hover:text-primary shrink-0 transition-colors mt-1" />
                   </button>
                 ))}
+              </div>
+
+              {/* Quick Start */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { emoji: "🍽️", label: "Recipes",  sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],          persona: "explore_life" as PersonaKey },
+                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/dashboard", "/people", "/messenger"],         persona: "momentum"     as PersonaKey },
+                  ]).map(qs => (
+                    <button
+                      key={qs.label}
+                      onClick={() => jumpStart(qs.paths, qs.persona)}
+                      className="flex items-center gap-2.5 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+                    >
+                      <span className="text-lg shrink-0">{qs.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground leading-tight">{qs.label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{qs.sub}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
