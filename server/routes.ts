@@ -9328,6 +9328,7 @@ Rules:
       JOIN users uo ON uo.id = tc.owner_user_id
       JOIN users uc ON uc.id = tc.collaborator_user_id
       WHERE tc.tab_name = 'housekeeping' AND tc.status = 'accepted'
+        AND tc.owner_user_id != tc.collaborator_user_id
         AND (tc.owner_user_id = $1 OR tc.collaborator_user_id = $1)
       LIMIT 1
     `, [userId]);
