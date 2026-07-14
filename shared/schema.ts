@@ -2090,6 +2090,8 @@ export const budBets = pgTable("bud_bets", {
   // optional impartial arbitrator
   arbitratorId:     integer("arbitrator_id"),
   arbitratorName:   text("arbitrator_name"),
+  // optional link to a goal — "stakes" created from the Goals page
+  goalId:           integer("goal_id"),
   // bet details
   title:            text("title").notNull(),           // "Who wins the Super Bowl"
   wager:            text("wager").notNull(),            // "Loser buys dinner and drinks"

@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { cleanFeedTitle } from "@/lib/feedTitle";
-import { BookOpen, Film, Music, UtensilsCrossed, MapPin, Quote, Users, Sparkles, TrendingUp, Heart } from "lucide-react";
+import { BookOpen, Film, Music, UtensilsCrossed, MapPin, Quote, Users, Sparkles, TrendingUp, Heart, Plus, Check, Loader2 } from "lucide-react";
 
 // ── Type definitions ──────────────────────────────────────────────────────────
 
@@ -25,6 +28,8 @@ interface RecommendedItem {
   itemSubtitle?: string;
   friendName: string;
   friendId: number;
+  sharedCount?: number;
+  sharedExample?: string | null;
 }
 
 interface SharedTasteFriend {
@@ -234,6 +239,45 @@ function TrendingSection() {
   );
 }
 
+// ── One-tap add ────────────────────────────────────────────────────────────────
+
+function AddToListButton({ item }: { item: RecommendedItem }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [added, setAdded] = useState(false);
+  const add = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/discover/add", {
+      itemType: item.itemType,
+      itemTitle: item.itemTitle,
+      itemSubtitle: item.itemSubtitle ?? null,
+      itemImageUrl: item.itemImageUrl ?? null,
+    }).then(r => r.json()),
+    onSuccess: () => {
+      setAdded(true);
+      qc.invalidateQueries();
+      toast({ title: "Added to your list ✓", description: `“${cleanFeedTitle(item.itemTitle)}” is saved.` });
+    },
+    onError: () => toast({ title: "Couldn't add that", variant: "destructive" }),
+  });
+  if (added) {
+    return (
+      <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500">
+        <Check className="w-3 h-3" /> Added
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={() => add.mutate()}
+      disabled={add.isPending}
+      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-primary border border-primary/30 rounded-full px-2 py-0.5 hover:bg-primary/10 transition-colors disabled:opacity-50"
+    >
+      {add.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+      Add to my list
+    </button>
+  );
+}
+
 // ── Section: You Might Like ────────────────────────────────────────────────────
 
 function YouMightLikeSection() {
@@ -297,7 +341,14 @@ function YouMightLikeSection() {
                 <CatIcon type={item.itemType} className="w-3 h-3" />
                 <span>{catLabel(item.itemType)}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">via {item.friendName}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                {item.sharedExample
+                  ? <>From {item.friendName} — you both saved <span className="font-medium">“{cleanFeedTitle(item.sharedExample)}”</span></>
+                  : (item.sharedCount ?? 0) > 0
+                  ? <>From {item.friendName} — you share {item.sharedCount} saved item{item.sharedCount === 1 ? "" : "s"}</>
+                  : <>via {item.friendName}</>}
+              </p>
+              <AddToListButton item={item} />
             </div>
           </div>
         ))}

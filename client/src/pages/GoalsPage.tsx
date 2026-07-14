@@ -8,7 +8,7 @@ import {
   Circle, CheckCircle2, ChevronRight, RefreshCw, Folder,
   ClipboardList, Flag, X, CalendarCheck, Trophy,
   Leaf, Droplets, Heart, Dumbbell, Apple, BookOpen, Calendar,
-  Users, Search, Sparkles, ArrowRight,
+  Users, Search, Sparkles, ArrowRight, Handshake, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageShell";
@@ -801,6 +801,112 @@ function WorkoutMilestonesEditor({ plan, currentWeek, metric, onSave }: {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+
+// ── Goal stakes (Bud Bets on goals) ──────────────────────────────────────────
+// Accountability wager: invite a friend to hold you to a goal. Creates a Bud
+// Bet linked to this goal; the friend gets a DM challenge automatically.
+function GoalStakesCard({ goal, friends }: { goal: { id: number; title: string }; friends: { id: number; name: string }[] }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [wager, setWager] = useState("");
+  const [opponentId, setOpponentId] = useState<string>("");
+  const [dueDate, setDueDate] = useState("");
+
+  const { data: bets = [] } = useQuery<any[]>({
+    queryKey: ["/api/bud-bets"],
+    queryFn: () => apiRequest("GET", "/api/bud-bets").then(r => r.json()),
+  });
+  const stake = bets.find(b => b.goalId === goal.id && b.status !== "cancelled");
+
+  const createBet = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/bud-bets", {
+      title: `Complete "${goal.title}"`,
+      wager: wager.trim(),
+      opponentId: Number(opponentId),
+      dueDate: dueDate || null,
+      status: "active",
+      goalId: goal.id,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bud-bets"] });
+      setOpen(false); setWager(""); setOpponentId(""); setDueDate("");
+      toast({ title: "Stakes set! 🤝", description: "Your friend just got the challenge in Messages." });
+    },
+    onError: () => toast({ title: "Couldn't create the bet", variant: "destructive" }),
+  });
+
+  const opponentName = (id: number | null, fallback: string | null) =>
+    friends.find(f => f.id === id)?.name ?? fallback ?? "a friend";
+
+  if (stake) {
+    return (
+      <div className="rounded-xl border border-emerald-200/70 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/20 p-4">
+        <div className="flex items-start gap-2.5">
+          <Handshake size={16} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Stakes on this goal</p>
+            <p className="text-sm font-medium mt-1">
+              {stake.wager} — with {opponentName(stake.opponentId, stake.opponentName)}
+              {stake.dueDate ? ` · by ${stake.dueDate}` : ""}
+            </p>
+            <Link href="/messenger">
+              <a className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline mt-1 inline-block">View in Bud Bets →</a>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="rounded-xl border border-dashed p-4 flex items-center justify-between gap-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <Handshake size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Add a friendly wager</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Invite a friend to hold you to this — goals with stakes get finished.</p>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" className="shrink-0" onClick={() => setOpen(true)}>Add stakes</Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Handshake size={16} /> Stakes: {goal.title}</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label>Friend to hold you to it</Label>
+              <Select value={opponentId} onValueChange={setOpponentId}>
+                <SelectTrigger><SelectValue placeholder={friends.length ? "Choose a friend" : "Add friends in People first"} /></SelectTrigger>
+                <SelectContent>
+                  {friends.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>The wager</Label>
+              <Input value={wager} onChange={e => setWager(e.target.value)} placeholder="e.g. Loser buys dinner" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Deadline (optional)</Label>
+              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!wager.trim() || !opponentId || createBet.isPending}
+              onClick={() => createBet.mutate()}
+            >
+              {createBet.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Handshake size={14} className="mr-1.5" />}
+              Send the challenge
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function GoalsPage() {
   const { toast } = useToast();
   const [goalModal, setGoalModal] = useState(false);
@@ -1529,6 +1635,8 @@ export default function GoalsPage() {
                           )}
                         </div>
                       </div>
+
+                      <GoalStakesCard goal={selectedGoal} friends={friends} />
 
                       <div className="rounded-xl border bg-card p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">

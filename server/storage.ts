@@ -5806,14 +5806,44 @@ export const storage: IStorage = {
       ORDER BY af.item_type, af.item_title, af.created_at DESC
       LIMIT 10
     `, [userId, ...friendIds, ...topCats]);
-    return result.rows.map((r: any) => ({
-      itemType: r.item_type,
-      itemTitle: r.item_title,
-      itemImageUrl: r.item_image_url,
-      itemSubtitle: r.item_subtitle,
-      friendName: r.friend_name,
-      friendId: r.friend_id,
-    }));
+    // Taste context: for each recommending friend, find what you already share
+    // — "because you both saved X" beats "via Mike" every time.
+    const recFriendIds = [...new Set(result.rows.map((r: any) => r.friend_id))] as number[];
+    const sharedByFriend = new Map<number, { count: number; examples: { type: string; title: string }[] }>();
+    if (recFriendIds.length > 0) {
+      const ph = recFriendIds.map((_, i) => `$${i + 2}`).join(",");
+      const sharedRes = await pool.query(`
+        SELECT DISTINCT af.user_id AS fid, af.item_type, af.item_title
+        FROM activity_feed af
+        WHERE af.user_id IN (${ph}) AND af.item_title IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM activity_feed uf
+            WHERE uf.user_id = $1 AND uf.item_type = af.item_type AND uf.item_title = af.item_title
+          )
+      `, [userId, ...recFriendIds]);
+      for (const row of sharedRes.rows) {
+        const entry = sharedByFriend.get(row.fid) ?? { count: 0, examples: [] };
+        entry.count++;
+        if (entry.examples.length < 5) entry.examples.push({ type: row.item_type, title: row.item_title });
+        sharedByFriend.set(row.fid, entry);
+      }
+    }
+
+    return result.rows.map((r: any) => {
+      const shared = sharedByFriend.get(r.friend_id);
+      // Prefer a shared example of the same type as the recommendation
+      const example = shared?.examples.find(e => e.type === r.item_type) ?? shared?.examples[0] ?? null;
+      return {
+        itemType: r.item_type,
+        itemTitle: r.item_title,
+        itemImageUrl: r.item_image_url,
+        itemSubtitle: r.item_subtitle,
+        friendName: r.friend_name,
+        friendId: r.friend_id,
+        sharedCount: shared?.count ?? 0,
+        sharedExample: example?.title ?? null,
+      };
+    });
   },
 
   async getDiscoverSharedTaste(userId: number) {

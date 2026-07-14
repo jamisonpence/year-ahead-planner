@@ -123,6 +123,7 @@ export default function PlanPage() {
 }
 
 function PlanHeader({ plan, onRegenAll, onExportCSV }: { plan: Plan; onRegenAll: () => void; onExportCSV: () => void; }) {
+  const { sharedWith } = usePlanner();
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -132,6 +133,7 @@ function PlanHeader({ plan, onRegenAll, onExportCSV }: { plan: Plan; onRegenAll:
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Daily target · <span className="font-medium text-foreground tabular-nums">{plan.target.cal} cal</span> · {plan.target.p}P · {plan.target.c}C · {plan.target.f}F
+          {sharedWith && <> · shared with <span className="font-medium text-foreground">{sharedWith}</span></>}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">

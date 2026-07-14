@@ -8,7 +8,7 @@ import { buildShoppingList, shoppingToCSV, downloadFile } from "@/lib/planner/sh
 import { useToast } from "@/hooks/use-toast";
 
 export default function Shopping() {
-  const { plan } = usePlanner();
+  const { plan, sharedWith } = usePlanner();
   const { toast } = useToast();
   const [selected, setSelected] = useState<number[]>(() => plan ? plan.days.map((d) => d.day) : []);
 
@@ -45,8 +45,12 @@ export default function Shopping() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Shopping</div>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight">Your list</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Aggregated from your plan and grouped by aisle.</p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">{sharedWith ? "Household list" : "Your list"}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {sharedWith
+              ? <>Shared with <span className="font-medium text-foreground">{sharedWith}</span> — you both see and edit the same list.</>
+              : "Aggregated from your plan and grouped by aisle."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={copyText} data-testid="button-copy">

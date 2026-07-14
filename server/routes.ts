@@ -1363,6 +1363,18 @@ Rules:
   try {
     await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text');
   } catch (_) {}
+  // Goal stakes: bets can be linked to a goal (safe to run on every boot)
+  try {
+    await pool.query('ALTER TABLE bud_bets ADD COLUMN IF NOT EXISTS goal_id integer');
+  } catch (_) {}
+  // Shared household planner state (meal plan + shopping list)
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS planner_state (
+      user_id INTEGER PRIMARY KEY,
+      data_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
+  } catch (_) {}
 
   // ── Local auth helpers ──────────────────────────────────────────────────────
   function hashPassword(password: string): string {
@@ -9258,6 +9270,98 @@ Rules:
       const user = req.user as User;
       const data = await storage.getDiscoverYouMightLike(user.id);
       res.json(data);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // One-tap add from Discover: save a friend-recommended item straight into
+  // the matching collection. Minimal records — users can enrich later.
+  app.post("/api/discover/add", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { itemType, itemTitle, itemSubtitle, itemImageUrl } = req.body ?? {};
+      if (!itemType || !itemTitle) return res.status(400).json({ error: "itemType and itemTitle required" });
+      const t = String(itemType).toLowerCase();
+      let href = "/mylifos";
+      if (t === "book") {
+        const book = await storage.createBook({ title: itemTitle, author: itemSubtitle || undefined, status: "backlog", coverUrl: itemImageUrl || undefined } as any, uid);
+        logActivity(uid, "book_added", book.id, "book", book.title, book.coverUrl ?? null, book.author ?? null);
+        href = "/reading";
+      } else if (t === "movie" || t === "show") {
+        const movie = await storage.createMovie({ mediaType: t, title: itemTitle, status: "backlog", posterUrl: itemImageUrl || undefined } as any, uid);
+        logActivity(uid, "movie_added", movie.id, t, movie.title, itemImageUrl ?? null, itemSubtitle ?? null);
+        href = "/movies";
+      } else if (t === "artist") {
+        const artist = await storage.createMusicArtist({ name: itemTitle } as any, uid);
+        logActivity(uid, "artist_added", artist.id, "artist", artist.name, itemImageUrl ?? null, null);
+        href = "/music";
+      } else if (t === "song") {
+        // Songs need an artist row — find or create by the subtitle (artist name)
+        const artistName = itemSubtitle || "Unknown Artist";
+        const existing = await pool.query(`SELECT id FROM music_artists WHERE user_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`, [uid, artistName]);
+        const artistId = existing.rows[0]?.id ?? (await storage.createMusicArtist({ name: artistName } as any, uid)).id;
+        const song = await storage.createMusicSong({ artistId, title: itemTitle, status: "want_to_listen" } as any, uid);
+        logActivity(uid, "song_added", song.id, "song", song.title, itemImageUrl ?? null, artistName);
+        href = "/music";
+      } else if (t === "spot") {
+        const spot = await storage.createSpot({ name: itemTitle, type: "other", status: "want_to_visit" } as any, uid);
+        logActivity(uid, "spot_added", spot.id, "spot", spot.name, itemImageUrl ?? null, itemSubtitle ?? null);
+        href = "/places";
+      } else if (t === "recipe") {
+        const recipe = await storage.createRecipe({ name: itemTitle, imageUrl: itemImageUrl || undefined } as any, uid);
+        logActivity(uid, "recipe_added", recipe.id, "recipe", recipe.name, itemImageUrl ?? null, null);
+        href = "/recipes";
+      } else {
+        return res.status(400).json({ error: `Unsupported item type: ${t}` });
+      }
+      res.json({ ok: true, href });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Shared household planner state (meal plan + shopping list) ────────────
+  // If the user has an accepted Home collaboration, both people read and write
+  // the OWNER's planner state — one meal plan, one grocery list per household.
+  async function plannerOwnerFor(userId: number): Promise<{ ownerId: number; sharedWith: string | null }> {
+    const r = await pool.query(`
+      SELECT tc.owner_user_id, tc.collaborator_user_id,
+             uo.name AS owner_name, uc.name AS collab_name
+      FROM tab_collaborations tc
+      JOIN users uo ON uo.id = tc.owner_user_id
+      JOIN users uc ON uc.id = tc.collaborator_user_id
+      WHERE tc.tab_name = 'housekeeping' AND tc.status = 'accepted'
+        AND (tc.owner_user_id = $1 OR tc.collaborator_user_id = $1)
+      LIMIT 1
+    `, [userId]);
+    const row = r.rows[0];
+    if (!row) return { ownerId: userId, sharedWith: null };
+    return row.owner_user_id === userId
+      ? { ownerId: userId, sharedWith: row.collab_name }
+      : { ownerId: row.owner_user_id, sharedWith: row.owner_name };
+  }
+
+  app.get("/api/planner-state", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { ownerId, sharedWith } = await plannerOwnerFor(uid);
+      const r = await pool.query(`SELECT data_json, updated_at FROM planner_state WHERE user_id = $1`, [ownerId]);
+      res.json({
+        data: r.rows[0] ? JSON.parse(r.rows[0].data_json) : null,
+        updatedAt: r.rows[0]?.updated_at ?? null,
+        sharedWith,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/planner-state", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { ownerId, sharedWith } = await plannerOwnerFor(uid);
+      const now = new Date().toISOString();
+      await pool.query(
+        `INSERT INTO planner_state (user_id, data_json, updated_at) VALUES ($1,$2,$3)
+         ON CONFLICT (user_id) DO UPDATE SET data_json=$2, updated_at=$3`,
+        [ownerId, JSON.stringify(req.body ?? {}), now]
+      );
+      res.json({ ok: true, updatedAt: now, sharedWith });
     } catch (e) { handleError(res, e); }
   });
 

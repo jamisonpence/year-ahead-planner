@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   Adult,
@@ -90,6 +90,9 @@ type Ctx = {
   plan: Plan | null;
   setPlan: (p: Plan | null) => void;
 
+  /** Name of the household member this plan is shared with (Home collaboration), or null. */
+  sharedWith: string | null;
+
   effectiveTarget: () => Macros;
   generate: () => void;
   regenerateDay: (dayIndex: number) => void;
@@ -128,15 +131,94 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefsState] = useState<Preferences>(() => lsGet("mp.prefs", DEFAULT_PREFS));
   const [plan, setPlanState] = useState<Plan | null>(() => lsGet("mp.plan", null));
 
-  // PERSIST: write to localStorage on change
-  const setMode = (v: Mode) => { setModeState(v); lsSet("mp.mode", v); };
-  const setStats = (v: Stats) => { setStatsState(v); lsSet("mp.stats", v); };
-  const setMacros = (v: Macros) => { setMacrosState(v); lsSet("mp.macros", v); };
-  const setAdults = (v: Adult[]) => { setAdultsState(v); lsSet("mp.adults", v); };
-  const setKids = (v: number) => { setKidsState(v); lsSet("mp.kids", v); };
-  const setKidCalsEach = (v: number) => { setKidCalsEachState(v); lsSet("mp.kidCalsEach", v); };
-  const setPrefs = (v: Preferences) => { setPrefsState(v); lsSet("mp.prefs", v); };
-  const setPlan = (v: Plan | null) => { setPlanState(v); lsSet("mp.plan", v); };
+  // ── Server sync (shared household planner state) ───────────────────────────
+  // localStorage stays as the fast local cache; the server row (resolved to the
+  // household owner when a Home collaboration exists) is the source of truth,
+  // so two people maintain ONE meal plan and ONE grocery list.
+  const [sharedWith, setSharedWith] = useState<string | null>(null);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLocalWrite = useRef(0);
+  const lastServerApplied = useRef<string | null>(null);
+  const hydrated = useRef(false);
+  const snapshotRef = useRef<Record<string, unknown>>({});
+
+  type Snapshot = { mode: Mode; stats: Stats; macros: Macros; adults: Adult[]; kids: number; kidCalsEach: number; prefs: Preferences; plan: Plan | null };
+
+  function applySnapshot(d: Partial<Snapshot>) {
+    if (d.mode !== undefined) { setModeState(d.mode); lsSet("mp.mode", d.mode); }
+    if (d.stats !== undefined) { setStatsState(d.stats); lsSet("mp.stats", d.stats); }
+    if (d.macros !== undefined) { setMacrosState(d.macros); lsSet("mp.macros", d.macros); }
+    if (d.adults !== undefined) { setAdultsState(d.adults); lsSet("mp.adults", d.adults); }
+    if (d.kids !== undefined) { setKidsState(d.kids); lsSet("mp.kids", d.kids); }
+    if (d.kidCalsEach !== undefined) { setKidCalsEachState(d.kidCalsEach); lsSet("mp.kidCalsEach", d.kidCalsEach); }
+    if (d.prefs !== undefined) { setPrefsState(d.prefs); lsSet("mp.prefs", d.prefs); }
+    if (d.plan !== undefined) { setPlanState(d.plan); lsSet("mp.plan", d.plan); }
+  }
+
+  function pushToServer(snapshot: Record<string, unknown>) {
+    snapshotRef.current = { ...snapshotRef.current, ...snapshot };
+    lastLocalWrite.current = Date.now();
+    if (!hydrated.current) return; // don't clobber the server before first read
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      fetch("/api/planner-state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshotRef.current),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => { if (j?.updatedAt) lastServerApplied.current = j.updatedAt; if (j) setSharedWith(j.sharedWith ?? null); })
+        .catch(() => {});
+    }, 1200);
+  }
+
+  async function hydrateFromServer(initial: boolean) {
+    try {
+      const r = await fetch("/api/planner-state");
+      if (!r.ok) return;
+      const j = await r.json();
+      setSharedWith(j.sharedWith ?? null);
+      if (j.data && typeof j.data === "object") {
+        // Skip if we've applied this version, or the user is mid-edit
+        if (j.updatedAt && j.updatedAt === lastServerApplied.current) return;
+        if (!initial && Date.now() - lastLocalWrite.current < 5000) return;
+        applySnapshot(j.data as Partial<Snapshot>);
+        snapshotRef.current = j.data;
+        lastServerApplied.current = j.updatedAt ?? null;
+      } else if (initial) {
+        // First run: migrate whatever this device has up to the server
+        snapshotRef.current = {
+          mode, stats, macros, adults, kids, kidCalsEach, prefs, plan,
+        };
+        fetch("/api/planner-state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshotRef.current),
+        }).then(r => r.ok ? r.json() : null)
+          .then(res => { if (res?.updatedAt) lastServerApplied.current = res.updatedAt; })
+          .catch(() => {});
+      }
+    } catch { /* offline — localStorage still works */ }
+    finally { hydrated.current = true; }
+  }
+
+  useEffect(() => {
+    hydrateFromServer(true);
+    const onFocus = () => hydrateFromServer(false);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PERSIST: write to localStorage + debounced server sync on change
+  const setMode = (v: Mode) => { setModeState(v); lsSet("mp.mode", v); pushToServer({ mode: v }); };
+  const setStats = (v: Stats) => { setStatsState(v); lsSet("mp.stats", v); pushToServer({ stats: v }); };
+  const setMacros = (v: Macros) => { setMacrosState(v); lsSet("mp.macros", v); pushToServer({ macros: v }); };
+  const setAdults = (v: Adult[]) => { setAdultsState(v); lsSet("mp.adults", v); pushToServer({ adults: v }); };
+  const setKids = (v: number) => { setKidsState(v); lsSet("mp.kids", v); pushToServer({ kids: v }); };
+  const setKidCalsEach = (v: number) => { setKidCalsEachState(v); lsSet("mp.kidCalsEach", v); pushToServer({ kidCalsEach: v }); };
+  const setPrefs = (v: Preferences) => { setPrefsState(v); lsSet("mp.prefs", v); pushToServer({ prefs: v }); };
+  const setPlan = (v: Plan | null) => { setPlanState(v); lsSet("mp.plan", v); pushToServer({ plan: v }); };
 
   const recipes = recipesQ.data ?? [];
 
@@ -267,6 +349,7 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
       familyDailyTarget,
       prefs, setPrefs,
       plan, setPlan,
+      sharedWith,
       effectiveTarget,
       generate,
       regenerateDay,
@@ -276,7 +359,7 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
       markLeftover,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [recipes, recipesQ.isLoading, recipesQ.error, mode, stats, macros, adults, kids, kidCalsEach, prefs, plan],
+    [recipes, recipesQ.isLoading, recipesQ.error, mode, stats, macros, adults, kids, kidCalsEach, prefs, plan, sharedWith],
   );
 
   return <PlannerCtx.Provider value={value}>{children}</PlannerCtx.Provider>;
