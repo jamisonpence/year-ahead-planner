@@ -1,6 +1,15 @@
 import { useEffect, useReducer, useState, type ComponentType } from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
+
+// Hash-router location hook that ignores query strings when matching routes.
+// Without this, links like "/people?tab=discover" 404 — the raw hash location
+// includes "?tab=..." and never matches Route path="/people". Pages that need
+// the query read window.location.hash directly, so stripping is safe here.
+const useHashPathOnly: typeof useHashLocation = ((opts?: unknown) => {
+  const [location, navigate] = (useHashLocation as any)(opts);
+  return [String(location).split("?")[0], navigate];
+}) as typeof useHashLocation;
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -273,7 +282,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <Router hook={useHashLocation}>
+        <Router hook={useHashPathOnly}>
           <AppContent />
         </Router>
         <Toaster />

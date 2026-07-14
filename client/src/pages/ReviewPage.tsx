@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   Sparkles, Dumbbell, BookOpen, Zap, Home, PenLine, AlertTriangle,
-  Target, Calendar, RefreshCw, Check, Loader2, ArrowRight, CheckCircle2,
+  Target, Calendar, RefreshCw, Check, Loader2, ArrowRight, CheckCircle2, Share2,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -37,9 +37,83 @@ type ReviewData = {
   }>;
   suggestedFocus: string;
   review: { wins: string | null; challenges: string | null; focus: string | null } | null;
+  aiPlan: { summary: string; suggestions: Suggestion[] } | null;
 };
 
 type Suggestion = { title: string; date: string; time: string | null; reason: string; source: string };
+
+// ── Shareable week recap ──────────────────────────────────────────────────────
+// Renders the week's numbers onto a canvas and shares (or downloads) it as an
+// image — a ritual artifact worth posting, not a screenshot of a dashboard.
+async function shareWeekRecap(weekStart: string, s: ReviewData["stats"]) {
+  const W = 720, H = 900;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#17171f");
+  bg.addColorStop(1, "#0f0f15");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  ctx.fillStyle = "#a78bfa";
+  ctx.font = "600 22px -apple-system, system-ui, sans-serif";
+  ctx.fillText("MY WEEK · MYLIFOS", 56, 84);
+  ctx.fillStyle = "#f4f4f5";
+  ctx.font = "700 44px -apple-system, system-ui, sans-serif";
+  ctx.fillText(`Week of ${weekStart}`, 56, 140);
+
+  const rows: Array<{ emoji: string; label: string; value: string }> = [
+    { emoji: "💪", label: "Workouts", value: String(s.workouts) },
+    { emoji: "⚡", label: "Habit rate", value: s.habitRate !== null ? `${s.habitRate}%` : "—" },
+    { emoji: "📖", label: "Pages read", value: String(s.pagesRead) + (s.booksFinished ? `  ·  ${s.booksFinished} book${s.booksFinished === 1 ? "" : "s"} finished` : "") },
+    { emoji: "🏠", label: "Chores done", value: String(s.choresDone) },
+    { emoji: "✍️", label: "Journal entries", value: String(s.journalEntries) },
+  ];
+  let y = 220;
+  for (const r of rows) {
+    ctx.fillStyle = "#1f1f2a";
+    roundRect(ctx, 56, y, W - 112, 100, 20);
+    ctx.fill();
+    ctx.font = "400 40px -apple-system, system-ui, sans-serif";
+    ctx.fillText(r.emoji, 84, y + 62);
+    ctx.fillStyle = "#a1a1aa";
+    ctx.font = "600 20px -apple-system, system-ui, sans-serif";
+    ctx.fillText(r.label.toUpperCase(), 152, y + 42);
+    ctx.fillStyle = "#f4f4f5";
+    ctx.font = "700 34px -apple-system, system-ui, sans-serif";
+    ctx.fillText(r.value, 152, y + 80);
+    y += 120;
+  }
+
+  ctx.fillStyle = "#71717a";
+  ctx.font = "500 20px -apple-system, system-ui, sans-serif";
+  ctx.fillText("mylifos.com — your personal life OS", 56, H - 48);
+
+  const blob: Blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+  const file = new File([blob], `mylifos-week-${weekStart}.png`, { type: "image/png" });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "My week in MyLifos" }); return; } catch { /* fall through to download */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `mylifos-week-${weekStart}.png`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
 
 function nextSevenDays(): Array<{ iso: string; label: string }> {
   const out = [];
@@ -116,6 +190,15 @@ export default function ReviewPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
+  // Hydrate the week's saved plan so Review opens pre-planned
+  useEffect(() => {
+    if (data?.aiPlan && !aiPlan && !aiLoading) {
+      setAiPlan(data.aiPlan);
+      setSelected(new Set(data.aiPlan.suggestions.map((_, i) => i)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.aiPlan]);
+
   async function generatePlan() {
     setAiLoading(true); setAiError(null);
     try {
@@ -174,7 +257,12 @@ export default function ReviewPage() {
 
       {/* 1 ── The week in numbers */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">1 · Your week in numbers</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">1 · Your week in numbers</h2>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => shareWeekRecap(data.weekStart, s)}>
+            <Share2 size={11} /> Share recap
+          </Button>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {statCards.map((c) => (
             <div key={c.label} className="rounded-xl border bg-card p-3">

@@ -840,19 +840,17 @@ function GoalStakesCard({ goal, friends }: { goal: { id: number; title: string }
 
   if (stake) {
     return (
-      <div className="rounded-xl border border-emerald-200/70 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/20 p-4">
-        <div className="flex items-start gap-2.5">
-          <Handshake size={16} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Stakes on this goal</p>
-            <p className="text-sm font-medium mt-1">
-              {stake.wager} — with {opponentName(stake.opponentId, stake.opponentName)}
-              {stake.dueDate ? ` · by ${stake.dueDate}` : ""}
-            </p>
-            <Link href="/messenger">
-              <a className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline mt-1 inline-block">View in Bud Bets →</a>
-            </Link>
-          </div>
+      <div className="flex items-start gap-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/60 p-3">
+        <Handshake size={15} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Stakes</p>
+          <p className="text-sm font-medium mt-0.5">
+            {stake.wager} — with {opponentName(stake.opponentId, stake.opponentName)}
+            {stake.dueDate ? ` · by ${stake.dueDate}` : ""}
+          </p>
+          <Link href="/messenger">
+            <a className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline mt-0.5 inline-block">View in Bud Bets →</a>
+          </Link>
         </div>
       </div>
     );
@@ -860,12 +858,12 @@ function GoalStakesCard({ goal, friends }: { goal: { id: number; title: string }
 
   return (
     <>
-      <div className="rounded-xl border border-dashed p-4 flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0">
-          <Handshake size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+          <Handshake size={15} className="text-muted-foreground mt-0.5 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium">Add a friendly wager</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Invite a friend to hold you to this — goals with stakes get finished.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Goals with stakes get finished.</p>
           </div>
         </div>
         <Button size="sm" variant="outline" className="shrink-0" onClick={() => setOpen(true)}>Add stakes</Button>
@@ -877,12 +875,14 @@ function GoalStakesCard({ goal, friends }: { goal: { id: number; title: string }
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
               <Label>Friend to hold you to it</Label>
-              <Select value={opponentId} onValueChange={setOpponentId}>
-                <SelectTrigger><SelectValue placeholder={friends.length ? "Choose a friend" : "Add friends in People first"} /></SelectTrigger>
-                <SelectContent>
-                  {friends.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <select
+                value={opponentId}
+                onChange={e => setOpponentId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+              >
+                <option value="">{friends.length ? "Choose a friend" : "Add friends in People first"}</option>
+                {friends.map(f => <option key={f.id} value={String(f.id)}>{f.name}</option>)}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label>The wager</Label>
@@ -1636,8 +1636,6 @@ export default function GoalsPage() {
                         </div>
                       </div>
 
-                      <GoalStakesCard goal={selectedGoal} friends={friends} />
-
                       <div className="rounded-xl border bg-card p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-sm font-semibold text-foreground">Execution</p>
@@ -1763,6 +1761,9 @@ export default function GoalsPage() {
                             />
                           </div>
                         )}
+                        <div className="mt-3 border-t pt-3">
+                          <GoalStakesCard goal={selectedGoal} friends={friends} />
+                        </div>
                       </div>
                     </div>
                   );

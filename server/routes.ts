@@ -675,6 +675,7 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
         nextActions,
         suggestedFocus,
         review: saved ? { wins: saved.wins, challenges: saved.challenges, focus: saved.focus } : null,
+        aiPlan: saved?.ai_plan_json ? (() => { try { return JSON.parse(saved.ai_plan_json); } catch { return null; } })() : null,
       });
     } catch (e) { handleError(res, e); }
   });
@@ -851,7 +852,18 @@ Rules:
       if (!parsed || !Array.isArray(parsed.suggestions)) {
         return res.status(502).json({ error: "AI returned an unexpected format. Try again." });
       }
-      res.json({ summary: parsed.summary ?? "", suggestions: parsed.suggestions });
+      const planPayload = { summary: parsed.summary ?? "", suggestions: parsed.suggestions };
+      // Persist for the week so Review opens pre-planned (survives navigation/devices)
+      try {
+        const wkToday = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+        await pool.query(
+          `INSERT INTO weekly_reviews (user_id, week_start, stats_json, ai_plan_json, created_at)
+           VALUES ($1,$2,'{}',$3,$4)
+           ON CONFLICT (user_id, week_start) DO UPDATE SET ai_plan_json=$3`,
+          [uid, mondayOf(wkToday), JSON.stringify(planPayload), new Date().toISOString()]
+        );
+      } catch {}
+      res.json(planPayload);
     } catch (e) { handleError(res, e); }
   });
 
@@ -877,6 +889,14 @@ Rules:
         }
         created.push(task);
       }
+      // Suggestions are now real tasks — clear the cached plan for the week
+      try {
+        const wkToday = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+        await pool.query(
+          `UPDATE weekly_reviews SET ai_plan_json = NULL WHERE user_id = $1 AND week_start = $2`,
+          [uid, mondayOf(wkToday)]
+        );
+      } catch {}
       res.status(201).json({ created: created.length, tasks: created });
     } catch (e) { handleError(res, e); }
   });
@@ -1366,6 +1386,10 @@ Rules:
   // Goal stakes: bets can be linked to a goal (safe to run on every boot)
   try {
     await pool.query('ALTER TABLE bud_bets ADD COLUMN IF NOT EXISTS goal_id integer');
+  } catch (_) {}
+  // Weekly review: persist the AI-generated plan for the week
+  try {
+    await pool.query('ALTER TABLE weekly_reviews ADD COLUMN IF NOT EXISTS ai_plan_json text');
   } catch (_) {}
   // Shared household planner state (meal plan + shopping list)
   try {
