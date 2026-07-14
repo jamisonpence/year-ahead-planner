@@ -2376,17 +2376,34 @@ export interface IStorage {
 }
 
 // ── Habit streak helpers ─────────────────────────────────────────────────────
-function computeHabitStreak(completions: { date: string }[], _targetDays: number, _frequency: string): number {
-  if (!completions.length) return 0;
+// Streak insurance: every 7 completions in the last 60 days banks a "freeze"
+// (max 2). A freeze automatically covers a single missed day so one off-day
+// doesn't zero out weeks of consistency. Two consecutive missed days (or more
+// gaps than banked freezes) still break the streak.
+function computeHabitStreakInfo(completions: { date: string }[]): { streak: number; freezesAvailable: number; freezesUsed: number } {
+  if (!completions.length) return { streak: 0, freezesAvailable: 0, freezesUsed: 0 };
   const dates = new Set(completions.map(c => c.date));
-  let streak = 0;
   const today = new Date();
+  const dayStr = (offset: number) => {
+    const d = new Date(today); d.setDate(d.getDate() - offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const cutoff = dayStr(60);
+  const recentCount = completions.filter(c => c.date >= cutoff).length;
+  const bank = Math.min(2, Math.floor(recentCount / 7));
+  let streak = 0, used = 0;
   for (let i = 0; i <= 365; i++) {
-    const d = new Date(today); d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    if (dates.has(ds)) { streak++; } else if (i > 0) { break; }
+    const ds = dayStr(i);
+    if (dates.has(ds)) { streak++; continue; }
+    if (i === 0) continue; // today not logged yet — no penalty
+    // Missed day: a freeze can bridge it, but only a single-day gap
+    if (bank - used > 0 && dates.has(dayStr(i + 1))) { used++; continue; }
+    break;
   }
-  return streak;
+  return { streak, freezesAvailable: Math.max(0, bank - used), freezesUsed: used };
+}
+function computeHabitStreak(completions: { date: string }[], _targetDays: number, _frequency: string): number {
+  return computeHabitStreakInfo(completions).streak;
 }
 function computeHabitBestStreak(completions: { date: string }[]): number {
   if (!completions.length) return 0;
@@ -6439,7 +6456,10 @@ export const storage: IStorage = {
       let completions: HabitCompletion[] = [];
       try { completions = JSON.parse(h.completionsJson); } catch {}
       const today = new Date();
-      const streakCurrent = computeHabitStreak(completions, h.targetDaysPerWeek, h.frequency);
+      const streakInfo = computeHabitStreakInfo(completions);
+      const streakCurrent = streakInfo.streak;
+      const streakFreezes = streakInfo.freezesAvailable;
+      const streakFreezesUsed = streakInfo.freezesUsed;
       const streakBest = computeHabitBestStreak(completions);
       const last7 = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(today); d.setDate(d.getDate() - i);
@@ -6447,7 +6467,7 @@ export const storage: IStorage = {
       });
       const completionRate7d = last7.filter(dt => completions.some(c => c.date === dt)).length / 7;
       const { completionsJson: _cj, ...rest } = h;
-      return { ...rest, completions, streakCurrent, streakBest, completionRate7d };
+      return { ...rest, completions, streakCurrent, streakBest, streakFreezes, streakFreezesUsed, completionRate7d };
     });
   },
 

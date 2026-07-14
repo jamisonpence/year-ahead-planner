@@ -450,9 +450,19 @@ function TodayHabitRow({ habit, onToggle }: { habit: HabitWithStats; onToggle: (
 
       <div className="text-right shrink-0">
         {habit.streakCurrent > 0 && (
-          <div className="flex items-center gap-0.5 text-amber-500 text-xs font-semibold">
-            <Flame size={11} />
-            {habit.streakCurrent}
+          <div className="flex items-center justify-end gap-1 text-xs font-semibold">
+            {(habit.streakFreezes ?? 0) > 0 && (
+              <span
+                title={`${habit.streakFreezes} streak freeze${habit.streakFreezes === 1 ? "" : "s"} banked — a freeze auto-covers one missed day`}
+                className="text-sky-500 dark:text-sky-400"
+              >
+                🧊{habit.streakFreezes > 1 ? habit.streakFreezes : ""}
+              </span>
+            )}
+            <span className="flex items-center gap-0.5 text-amber-500">
+              <Flame size={11} />
+              {habit.streakCurrent}
+            </span>
           </div>
         )}
         <div className="text-[10px] text-muted-foreground mt-0.5">{habit.targetDaysPerWeek}x/wk</div>
@@ -500,6 +510,14 @@ function HabitManageCard({ habit, onEdit, onDelete }: {
           <div className="flex items-center justify-center gap-0.5 text-amber-500">
             <Flame size={12} />
             <span className="font-bold text-sm">{habit.streakCurrent}</span>
+            {(habit.streakFreezes ?? 0) > 0 && (
+              <span
+                title={`${habit.streakFreezes} streak freeze${habit.streakFreezes === 1 ? "" : "s"} banked — earned every 7 days of consistency, auto-covers one missed day`}
+                className="text-[10px] ml-0.5"
+              >
+                🧊{habit.streakFreezes > 1 ? habit.streakFreezes : ""}
+              </span>
+            )}
           </div>
           <div className="text-[10px] text-muted-foreground">Current</div>
         </div>

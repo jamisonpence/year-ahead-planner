@@ -76,9 +76,9 @@ import { initWebPush, getVapidPublicKey, saveSubscription, removeSubscription, s
 
 /** Fire-and-forget notification creator — never throws or blocks the main request.
  *  Persists an in-app notification AND pushes it to the user's devices. */
-function notify(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null }) {
+function notify(n: { userId: number; type: string; title: string; body?: string | null; href?: string | null; actorId?: number | null; pushActions?: { action: string; title: string }[]; pushTag?: string }) {
   storage.createNotification(n).catch(() => {});
-  sendPushToUser(n.userId, { title: n.title, body: n.body, href: n.href }).catch(() => {});
+  sendPushToUser(n.userId, { title: n.title, body: n.body, href: n.href, actions: n.pushActions, tag: n.pushTag }).catch(() => {});
 }
 
 /** Fire-and-forget activity logger — never throws or blocks the main request. */
@@ -1260,6 +1260,8 @@ Rules:
   // Every 30 min, after 7am (America/Chicago) create one "Your day ahead"
   // notification per user summarizing today's agenda. Guarded to once per day.
   const DIGEST_HOUR = 7;
+  const CLOSEOUT_HOUR = 21;
+  let lastChoreSweepDate = "";
   setInterval(async () => {
     try {
       const now = new Date();
@@ -1268,6 +1270,43 @@ Rules:
       const today = now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
       const isSunday = new Date(today + "T00:00:00Z").getUTCDay() === 0;
       const usersRes = await pool.query(`SELECT id FROM users`);
+
+      // ── Streak insurance for chores: auto-reschedule anything overdue by more
+      // than one full frequency cycle. A "49d overdue" wall of guilt keeps
+      // people out of the app; a chore that's due today invites them back in.
+      if (lastChoreSweepDate !== today) {
+        lastChoreSweepDate = today;
+        await pool.query(
+          `UPDATE chores SET next_due = $1
+           WHERE is_active = true AND next_due IS NOT NULL AND frequency != 'as_needed'
+             AND next_due::date < ($1::date - (CASE frequency
+               WHEN 'daily' THEN 1 WHEN 'weekly' THEN 7 WHEN 'biweekly' THEN 14
+               WHEN 'monthly' THEN 30 WHEN 'quarterly' THEN 91 WHEN 'yearly' THEN 365
+               ELSE GREATEST(COALESCE(custom_frequency_days, 30), 1) END) * INTERVAL '1 day')`,
+          [today]
+        ).catch((e) => console.error("chore auto-reschedule error:", e));
+      }
+
+      // ── Evening close-out: after 9pm, one nudge to check habits, jot a line,
+      // and set tomorrow's focus. Only for users who track habits.
+      if (hour >= CLOSEOUT_HOUR) {
+        for (const u of usersRes.rows) {
+          if (await storage.hasNotificationToday(u.id, "evening_closeout", today)) continue;
+          const agenda = await storage.getTodayItems(u.id, today);
+          const habitItems = agenda.items.filter(i => i.type === "habit");
+          if (habitItems.length === 0) continue;
+          const left = habitItems.filter(i => !i.done).length;
+          notify({
+            userId: u.id, type: "evening_closeout",
+            title: "Close out your day",
+            body: left > 0
+              ? `${left} habit${left === 1 ? "" : "s"} to check off · one line about today`
+              : "All habits done 🎉 Add one line about today and set tomorrow's focus.",
+            href: "/close-day",
+            pushTag: "evening-closeout",
+          });
+        }
+      }
 
       // Sunday afternoon: weekly review reminder (once per Sunday)
       if (isSunday && hour >= 16) {
@@ -1295,11 +1334,18 @@ Rules:
         const habits = by("habit"); if (habits) parts.push(`${habits} habit${habits === 1 ? "" : "s"}`);
         const events = by("event"); if (events) parts.push(`${events} event${events === 1 ? "" : "s"}`);
         const plants = by("plant"); if (plants) parts.push(`${plants} plant${plants === 1 ? "" : "s"} to water`);
+        // One-tap logging: surface up to two due habits as notification action buttons
+        const dueHabits = agenda.items.filter(i => i.type === "habit" && !i.done).slice(0, 2);
         notify({
           userId: u.id, type: "daily_digest",
           title: "Your day ahead",
           body: parts.join(" · ") + (agenda.counts.overdue ? ` · ${agenda.counts.overdue} overdue` : ""),
           href: "/dashboard",
+          pushTag: "daily-digest",
+          pushActions: dueHabits.map(h => ({
+            action: `habit:${h.id}`,
+            title: `✓ ${h.title.length > 18 ? h.title.slice(0, 17) + "…" : h.title}`,
+          })),
         });
       }
     } catch (e) { console.error("daily digest error:", e); }

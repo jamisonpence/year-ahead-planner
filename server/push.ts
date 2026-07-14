@@ -76,7 +76,12 @@ export async function removeSubscription(userId: number, endpoint: string) {
 /** Fire-and-forget push to all of a user's devices. Prunes dead subscriptions. */
 export async function sendPushToUser(
   userId: number,
-  payload: { title: string; body?: string | null; href?: string | null }
+  payload: {
+    title: string; body?: string | null; href?: string | null;
+    /** Notification action buttons (e.g. one-tap habit logging). Handled in the service worker. */
+    actions?: { action: string; title: string }[];
+    tag?: string;
+  }
 ) {
   if (!configured) return;
   try {
@@ -85,7 +90,11 @@ export async function sendPushToUser(
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: JSON.parse(s.keys_json) },
-          JSON.stringify({ title: payload.title, body: payload.body ?? "", href: payload.href ?? "/" })
+          JSON.stringify({
+            title: payload.title, body: payload.body ?? "", href: payload.href ?? "/",
+            ...(payload.actions?.length ? { actions: payload.actions.slice(0, 2) } : {}),
+            ...(payload.tag ? { tag: payload.tag } : {}),
+          })
         );
       } catch (e: any) {
         // 404/410 = subscription expired or revoked

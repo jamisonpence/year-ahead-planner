@@ -1948,6 +1948,8 @@ export type HabitWithStats = Omit<Habit, "completionsJson"> & {
   completions: HabitCompletion[];
   streakCurrent: number;
   streakBest: number;
+  streakFreezes: number;     // banked streak freezes (earned via consistency, max 2)
+  streakFreezesUsed: number; // freezes currently bridging missed days in the streak
   completionRate7d: number; // 0..100
 };
 
