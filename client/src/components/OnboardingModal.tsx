@@ -500,7 +500,7 @@ const INTEREST_PRESETS: { cat: string; emoji: string; type: string; hobbies: str
 ];
 
 interface OnboardingPlanTpl { id: string; emoji: string; label: string; description: string; defaultSteps: string[]; durationWeeks?: number; }
-type CreateMeta = { hobbyId?: number; hobbyType?: string; planAlreadyCreated?: boolean };
+type CreateMeta = { hobbyId?: number; hobbyType?: string; planAlreadyCreated?: boolean; pendingBuilder?: boolean };
 
 function mkPlanId() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
 
@@ -758,8 +758,13 @@ function HealthGoalForm({ onDone }: { onDone: (label: string, href?: string) => 
         sessionStorage.setItem("newPlanStarterPlanId", selectedStarterPlanId);
         if (raceDate) sessionStorage.setItem("newPlanRaceDate", raceDate);
       }
-      // Navigate to /health so health persona users stay in their home base
-      onDone(effectiveTitle, "/health");
+      if (selectedStarterPlanId && isEndurance) {
+        // Builder will auto-open in Health, pre-loaded with the starter plan
+        onDone(effectiveTitle, "/health");
+      } else {
+        // No plan attached — land where the goal actually lives
+        onDone(effectiveTitle, "/goals");
+      }
     },
   });
 
@@ -1510,7 +1515,7 @@ function CreateForm({ optionKey, onDone }: { optionKey: CreateOptionKey; onDone:
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
 
-export default function OnboardingModal({ userName }: { userName: string }) {
+export default function OnboardingModal({ userName, onComplete }: { userName: string; onComplete?: () => void }) {
   const qc = useQueryClient();
   const [, navigate] = useLocation();
 
@@ -1561,6 +1566,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     prefsMut.mutate({ persona: p });
     completeMut.mutate();
     navigate(dest);
+    onComplete?.();
   }
 
   function togglePath(path: string) {
@@ -1575,8 +1581,14 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     if (meta) setCreatedHobbyMeta(meta);
     // The app's queries use staleTime: Infinity, so pages fetched before this
     // creation would otherwise keep showing stale (empty) data. Invalidate
-    // everything so the user's first item is visible the moment they land.
-    qc.invalidateQueries();
+    // everything EXCEPT /api/me (a refetch reporting onboarded=true would
+    // unmount this modal mid-flow) and /api/nav-prefs (written at finish).
+    qc.invalidateQueries({
+      predicate: (q) => {
+        const key = String(q.queryKey[0] ?? "");
+        return key !== "/api/me" && key !== "/api/nav-prefs";
+      },
+    });
     // Brief pause to show success, then advance
     setTimeout(() => setScreen(4), 900);
   }
@@ -1601,6 +1613,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
     completeMut.mutate();
     const dest = createdHobbyMeta?.hobbyId ? "/hobbies" : createdHref ?? "/dashboard";
     navigate(dest);
+    onComplete?.();
   }
 
   // Computed destination and CTA label for Screen 4
@@ -1634,7 +1647,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
           <div className="flex-1 overflow-y-auto p-5">
             <PlannerSetup
               onClose={() => setMealWizardOpen(false)}
-              onSaved={() => { setMealWizardOpen(false); handleCreated("Meal Plan", "/health"); }}
+              onSaved={() => { setMealWizardOpen(false); try { localStorage.setItem("mylifos_health_tab_intent", "nutrition"); } catch {} handleCreated("Meal Plan", "/health"); }}
             />
           </div>
         </div>
@@ -1778,8 +1791,12 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                     <Check size={28} className="text-primary-foreground" strokeWidth={2.5} />
                   </div>
                   <div className="text-center">
-                    <p className="text-base font-bold">Created! 🎉</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">"{createdLabel}" has been saved.</p>
+                    <p className="text-base font-bold">{createdHobbyMeta?.pendingBuilder ? "Almost there!" : "Created! 🎉"}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {createdHobbyMeta?.pendingBuilder
+                        ? "We'll open the plan builder in Health next."
+                        : `"${createdLabel}" has been saved.`}
+                    </p>
                   </div>
                 </div>
               ) : selectedOption ? (
@@ -1835,7 +1852,7 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                           onClick={() => {
                             if (opt.key === "training_plan") {
                               sessionStorage.setItem("openPlanBuilder", "1");
-                              handleCreated("Training Plan", "/health");
+                              handleCreated("Training Plan", "/health", { pendingBuilder: true });
                             } else if (opt.key === "meal_plan") {
                               setMealWizardOpen(true);
                             } else {
@@ -1879,7 +1896,9 @@ export default function OnboardingModal({ userName }: { userName: string }) {
                 <p className="text-2xl mb-2">🎉</p>
                 <h1 className="text-2xl font-bold">You're all set, {firstName}!</h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {createdLabel
+                  {createdHobbyMeta?.pendingBuilder
+                    ? "Your training plan is ready to build — the builder will open in Health."
+                    : createdLabel
                     ? persona === "explore_life"
                       ? `"${createdLabel}" is saved. Your library is ready to grow.`
                       : persona === "connect"

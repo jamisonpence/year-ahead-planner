@@ -1,4 +1,4 @@
-import { useEffect, useReducer, type ComponentType } from "react";
+import { useEffect, useReducer, useState, type ComponentType } from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -129,6 +129,16 @@ function PageLoading() {
 function AuthenticatedApp() {
   const { user } = useAuth();
 
+  // Latch the onboarding modal: once shown, it stays until ITS OWN finish flow
+  // completes. Without this, any mid-flow /api/me refetch that reports
+  // onboarded=true (e.g. the QA account's first-call-only override, another
+  // tab, a cache invalidation) unmounts the modal mid-setup — discarding the
+  // user's selections before nav prefs are saved or navigation happens.
+  const [onboardingActive, setOnboardingActive] = useState(false);
+  useEffect(() => {
+    if (user && !user.onboarded) setOnboardingActive(true);
+  }, [user]);
+
   // After signing in, the browser can be left on the /login pathname while the
   // hash router takes over (e.g. mylifos.com/login#/dashboard). Normalize it so
   // URLs are clean and shareable.
@@ -227,7 +237,9 @@ function AuthenticatedApp() {
         <Route path="/weekly-review" component={ReviewPage} />
         <Route component={NotFound} />
       </Switch>
-      {user && !user.onboarded && <OnboardingModal userName={user.name} />}
+      {user && onboardingActive && (
+        <OnboardingModal userName={user.name} onComplete={() => setOnboardingActive(false)} />
+      )}
       <InstallPrompt />
     </AppShell>
     </PlannerProvider>
