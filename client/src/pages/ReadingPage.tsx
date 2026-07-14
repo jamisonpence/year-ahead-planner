@@ -560,8 +560,8 @@ export default function ReadingPage() {
         </div>
       )}
 
-      {/* Genre filter — hidden on Recommendations tab */}
-      {!isRecsTab && (
+      {/* Genre filter — hidden on Recommendations tab and while the shelf is empty */}
+      {!isRecsTab && (filtered.length > 0 || genreFilter !== "all") && (
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setGenreFilter("all")} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${genreFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"}`}>All</button>
           {GENRE_TAGS.map((g) => (

@@ -696,6 +696,13 @@ export default function CalendarPage() {
             </div>
           </div>
 
+          {/* Empty-month hint */}
+          {days.every((d: Date) => !(dayMap[format(d, "yyyy-MM-dd")]?.length)) && (
+            <p className="text-center text-sm text-muted-foreground py-2">
+              Nothing scheduled this month — add an event or connect Google Calendar above.
+            </p>
+          )}
+
           {/* Selected day detail panel */}
           {selectedDay && (
             <div className="bg-card rounded-xl border p-4">

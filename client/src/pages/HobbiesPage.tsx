@@ -6724,9 +6724,11 @@ function HobbyCard({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-sm leading-snug truncate">{hobby.name}</h3>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {hobby.category || typeInfo.label}
-            </p>
+            {(hobby.category || typeInfo.label)?.trim().toLowerCase() !== hobby.name.trim().toLowerCase() && (
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                {hobby.category || typeInfo.label}
+              </p>
+            )}
           </div>
           {/* Overflow menu — always visible, no hover gymnastics */}
           <DropdownMenu>

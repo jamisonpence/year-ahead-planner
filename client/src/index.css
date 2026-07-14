@@ -144,6 +144,15 @@
 ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 
+/* Horizontal scroll affordance: fades the right edge of overflowing tab strips */
+.scroll-fade-r {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+}
+@media (min-width: 640px) {
+  .scroll-fade-r { -webkit-mask-image: none; mask-image: none; }
+}
+
 /* Module colors */
 .cat-reading   { background-color: hsl(25 85% 52% / 0.12); color: hsl(25 85% 52%); border-color: hsl(25 85% 52% / 0.3); }
 .cat-workout   { background-color: hsl(210 80% 48% / 0.12); color: hsl(210 80% 48%); border-color: hsl(210 80% 48% / 0.3); }

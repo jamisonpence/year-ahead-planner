@@ -1884,7 +1884,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
         </div>
       }
       controls={
-        <div className="overflow-x-auto -mx-1 px-1">
+        <div className="overflow-x-auto -mx-1 px-1 scroll-fade-r">
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-max sm:w-fit">
             {subNavItems.map(item => (
               <button key={item.id} onClick={() => setSubView(item.id)}
@@ -2006,7 +2006,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
                     >
                       <ChevronDown size={14} className={`transition-transform duration-200 text-muted-foreground shrink-0 ${isSectionCollapsed ? "-rotate-90" : ""}`} />
                       <span className={ct.color}>{ct.icon}</span>
-                      <span className={`text-sm font-bold uppercase tracking-widest ${ct.color}`}>{ct.label}s</span>
+                      <span className="text-sm font-semibold uppercase tracking-wider text-foreground/80">{ct.label}s</span>
                       <span className="text-xs text-muted-foreground ml-1">{group.length}</span>
                     </button>
                     {!isSectionCollapsed && (

@@ -357,7 +357,7 @@ export default function ReviewPage() {
           {aiError && <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{aiError}</p>}
           {!aiPlan && !aiLoading && !aiError && (
             <p className="text-xs text-muted-foreground">
-              Claude turns your goals, open tasks, and calendar into a concrete week of scheduled tasks.
+              AI turns your goals, open tasks, and calendar into a concrete week of scheduled tasks.
               Uses your focus above as the guiding priority.
             </p>
           )}

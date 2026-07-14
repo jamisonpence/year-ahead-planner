@@ -567,8 +567,7 @@ export default function MyLifosPage() {
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <header className="space-y-3">
           <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-wider">MyLifos</p>
-            <h1 className="text-2xl font-bold tracking-tight">Saved Life</h1>
+            <h1 className="text-2xl font-bold tracking-tight">MyLifos</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {isCaptureMode || !data
                 ? "Save the things that matter — build your personal library."

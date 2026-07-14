@@ -2786,12 +2786,12 @@ function SacredTextsSection() {
   return (
     <div className="space-y-4">
       {/* Inner sub-navigation */}
-      <div className="flex gap-1 flex-wrap bg-stone-100 dark:bg-stone-800/60 rounded-xl p-1">
+      <div className="flex gap-1 flex-wrap bg-secondary/60 rounded-xl p-1">
         {SUB_TABS.map(t => (
           <button key={t.id} onClick={() => setSub(t.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-1 justify-center
               ${sub === t.id
-                ? "bg-white dark:bg-stone-900 shadow-sm text-foreground"
+                ? "bg-card shadow-sm text-foreground"
                 : "text-muted-foreground hover:text-foreground"
               }`}>
             {t.icon} {t.label}
@@ -2833,8 +2833,8 @@ export default function FaithPage() {
             <button key={tab.id} onClick={() => setSubView(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
                 ${subView === tab.id
-                  ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-                  : "text-muted-foreground hover:text-foreground hover:bg-stone-100 dark:hover:bg-stone-800"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}>
               {tab.icon} {tab.label}
             </button>

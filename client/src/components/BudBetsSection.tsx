@@ -161,7 +161,7 @@ export function BudBetsSection({ friends = [] }: { friends: PublicUser[] }) {
       {/* ── Integrity explainer */}
       <div className="rounded-lg border bg-secondary/20 px-3 py-2 text-xs text-muted-foreground flex gap-2 items-start">
         <ShieldCheck size={14} className="shrink-0 mt-0.5 text-green-500" />
-        <span>Pay up → <strong>+10 integrity points</strong>. Get stiffed on payment → <strong>−15 points</strong> for the loser. Your reputation among friends depends on it.</span>
+        <span>Settling up earns <strong>+10 integrity points</strong>; an unpaid bet costs <strong>−15</strong>. Integrity is visible to your friends.</span>
       </div>
 
       {/* ── Filter tabs */}

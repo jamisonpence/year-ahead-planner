@@ -65,7 +65,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-function NotificationFeed({ onNavigate }: { onNavigate: () => void }) {
+function NotificationFeed({ onNavigate, showEmpty }: { onNavigate: () => void; showEmpty?: boolean }) {
   const qc = useQueryClient();
   const { data: notifs = [] } = useQuery<NotificationItem[]>({
     queryKey: ["/api/notifications"],
@@ -79,7 +79,14 @@ function NotificationFeed({ onNavigate }: { onNavigate: () => void }) {
       .catch(() => {});
   }, [qc]);
 
-  if (notifs.length === 0) return null;
+  if (notifs.length === 0) {
+    if (!showEmpty) return null;
+    return (
+      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        You're all caught up
+      </div>
+    );
+  }
   return (
     <>
       <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-4 pt-3 pb-1">Recent</p>
@@ -177,8 +184,11 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
 
 // ── Desktop sidebar groupings ─────────────────────────────────────────────────
 const SIDEBAR_GROUPS: { key: string; label: string | null; paths: string[] }[] = [
-  { key: "main",      label: null,                paths: ["/dashboard", "/goals", "/people", "/messenger", "/mylifos"] },
-  { key: "pinned",    label: "Pinned",            paths: ["/calendar", "/tasks", "/habits", "/journal", "/review", "/health", "/recipes", "/library", "/hobbies", "/places", "/budget", "/housekeeping", "/beliefs"] },
+  { key: "main",   label: null,           paths: ["/dashboard", "/goals", "/people", "/messenger", "/mylifos"] },
+  { key: "plan",   label: "Plan",         paths: ["/calendar", "/tasks", "/habits", "/journal", "/review"] },
+  { key: "life",   label: "Life",         paths: ["/health", "/recipes", "/library", "/hobbies", "/places"] },
+  { key: "home",   label: "Home & Money", paths: ["/budget", "/housekeeping"] },
+  { key: "values", label: "Values",       paths: ["/beliefs"] },
 ];
 
 const PLAN_PATHS = ["/calendar", "/goals", "/tasks", "/habits", "/journal", "/review"];
@@ -883,9 +893,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <div className="absolute bottom-full left-0 mb-2 w-72 bg-card border rounded-xl shadow-xl z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b">
                   <h3 className="font-semibold text-sm">Notifications</h3>
-                  {totalNotifCount === 0 && (
-                    <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
-                  )}
                 </div>
                 <div className="divide-y max-h-80 overflow-y-auto">
                   {/* Friend requests */}
@@ -953,12 +960,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         </div>
                       </Link>
                     ))}
-                  <NotificationFeed onNavigate={() => setNotifOpen(false)} />
-                  {totalNotifCount === 0 && (
-                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      Nothing new to see here
-                    </div>
-                  )}
+                  <NotificationFeed onNavigate={() => setNotifOpen(false)} showEmpty={totalNotifCount === 0} />
                 </div>
               </div>
             )}
@@ -1206,12 +1208,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </Link>
                 ))}
-              <NotificationFeed onNavigate={() => setNotifOpen(false)} />
-              {totalNotifCount === 0 && (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  Nothing new to see here
-                </div>
-              )}
+              <NotificationFeed onNavigate={() => setNotifOpen(false)} showEmpty={totalNotifCount === 0} />
             </div>
           </div>
         </div>

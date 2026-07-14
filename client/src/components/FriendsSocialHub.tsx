@@ -607,7 +607,8 @@ function InboxSection() {
 
       {expanded && (
         <>
-          {/* Filter tabs */}
+          {/* Filter tabs — hidden while the inbox is empty (nothing to filter) */}
+          {(items.length > 0 || filter !== "all") && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {REC_TYPES.map(t => (
               <button
@@ -619,6 +620,7 @@ function InboxSection() {
               </button>
             ))}
           </div>
+          )}
 
           {isLoading && (
             <div className="py-6 flex items-center justify-center">

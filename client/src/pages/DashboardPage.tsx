@@ -1410,8 +1410,8 @@ export default function DashboardPage() {
 
           {/* ── MANTRA ─────────────────────────────────────────────────────── */}
           {dailyMantra && (
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🔥 Today's Mantra</p>
+            <div className="bg-card border rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Today's Mantra</p>
               <p className="text-sm font-medium leading-relaxed text-foreground italic">"{dailyMantra.text}"</p>
               {dailyMantra.intention && (
                 <p className="text-xs text-muted-foreground mt-1.5">{dailyMantra.intention}</p>
@@ -1462,7 +1462,8 @@ export default function DashboardPage() {
                     </Link>
                   );
                 })()}
-                {/* Workout streak */}
+                {/* Workout streak — only once there's a streak to celebrate */}
+                {wStreak > 0 && (
                 <Link href="/workouts">
                   <a className="flex items-center justify-between py-1 hover:opacity-80 transition-opacity">
                     <div className="flex items-center gap-2">
@@ -1472,6 +1473,7 @@ export default function DashboardPage() {
                     <span className="text-xs text-muted-foreground">{wCompleted}/{wPlanned} wk</span>
                   </a>
                 </Link>
+                )}
                 {/* Active workout plan */}
                 {(() => {
                   const activePlan = workoutPlans.find(p => p.isActive);
@@ -1484,7 +1486,7 @@ export default function DashboardPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 min-w-0">
                             <Dumbbell size={13} className="text-blue-500 shrink-0" />
-                            <span className="text-xs font-medium truncate">{activePlan.name}</span>
+                            <span className="text-xs font-medium truncate">Plan: {activePlan.name}</span>
                           </div>
                           <span className="text-xs text-muted-foreground shrink-0">{pct}%</span>
                         </div>
@@ -1544,7 +1546,7 @@ export default function DashboardPage() {
                         <BookOpen size={13} className="text-orange-500 shrink-0" />
                         <span className="text-xs font-medium truncate">{currentBooks[0].title}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{rStreak}d streak</span>
+                      {rStreak > 0 && <span className="text-xs text-muted-foreground">{rStreak}d streak</span>}
                     </a>
                   </Link>
                 )}

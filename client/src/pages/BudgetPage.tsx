@@ -390,7 +390,18 @@ export default function BudgetPage() {
         </div>
       )}
 
-      {/* Summary cards */}
+      {/* First-run welcome — four $0 stat cards greet nobody well */}
+      {transactions.length === 0 && subscriptions.length === 0 && categories.length === 0 && (
+        <div className="rounded-xl border bg-card p-5 mb-6">
+          <p className="text-sm font-semibold">Welcome to Finance</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Track spending, subscriptions, and receipts in one place. Start by adding a budget category or your first transaction.
+          </p>
+        </div>
+      )}
+
+      {/* Summary cards — shown once there's any data to summarize */}
+      {(transactions.length > 0 || subscriptions.length > 0 || categories.length > 0) && (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-2 text-emerald-500 mb-1"><TrendingUp size={15} /><span className="text-xs font-medium">Income</span></div>
@@ -415,6 +426,7 @@ export default function BudgetPage() {
           <p className="text-xs text-muted-foreground mt-0.5">/mo ({activeSubs.length} active)</p>
         </div>
       </div>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-4 flex-wrap h-auto gap-y-1">

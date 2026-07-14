@@ -54,11 +54,19 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm flex flex-col gap-6">
-        {/* Logo */}
+        {/* Logo — same mark as the app shell and landing page */}
         <div className="text-center space-y-1">
-          <div className="text-5xl mb-2">📅</div>
+          <svg aria-label="MyLifos" viewBox="0 0 32 32" width="44" height="44" fill="none" className="mx-auto mb-2">
+            <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
+            <path d="M2 12h28" stroke="currentColor" strokeWidth="2" />
+            <rect x="8" y="2" width="2" height="6" rx="1" fill="currentColor" />
+            <rect x="22" y="2" width="2" height="6" rx="1" fill="currentColor" />
+            <circle cx="10" cy="21" r="2" fill="hsl(var(--cat-goal))" />
+            <circle cx="16" cy="21" r="2" fill="hsl(25 85% 52%)" />
+            <circle cx="22" cy="21" r="2" fill="hsl(210 80% 48%)" />
+          </svg>
           <h1 className="text-3xl font-bold tracking-tight">MyLifos</h1>
-          <p className="text-muted-foreground text-sm">Your personal planning space</p>
+          <p className="text-muted-foreground text-sm">Your personal life OS</p>
         </div>
 
         {/* Error banner */}

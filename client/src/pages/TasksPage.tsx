@@ -1308,7 +1308,7 @@ export default function TasksPage() {
           <Button size="sm" variant="outline" onClick={() => setNewProjectModal(true)} className="gap-1.5">
             <Plus size={13} /><Folder size={13} /><span className="hidden sm:inline">Project</span>
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setNewTaskModal(true)} className="gap-1.5">
+          <Button size="sm" onClick={() => setNewTaskModal(true)} className="gap-1.5">
             <Plus size={13} /><ClipboardList size={13} /><span className="hidden sm:inline">Task</span>
           </Button>
           <Button size="sm" variant="outline" onClick={() => setNewChoreModal(true)} className="gap-1.5">

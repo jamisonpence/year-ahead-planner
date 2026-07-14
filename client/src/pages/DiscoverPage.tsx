@@ -346,13 +346,30 @@ function SharedTasteSection() {
     );
   }
 
+  // A wall of "0% match" rows reads as a dead feature — show real overlaps only
+  const withOverlap = data.filter(f => f.overlapPct > 0 || f.overlapCount > 0);
+  const zeroCount = data.length - withOverlap.length;
+
+  if (withOverlap.length === 0) {
+    return (
+      <div className="px-4 mb-8">
+        <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+          <Users className="w-4 h-4 text-violet-500" /> Shared Taste
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          No taste overlaps yet — save more books, movies, and recipes and this fills in as your friends do the same.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 mb-8">
       <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
         <Users className="w-4 h-4 text-violet-500" /> Shared Taste
       </h2>
       <div className="space-y-3">
-        {data.map(friend => {
+        {withOverlap.map(friend => {
           const { books, movies, songs, recipes } = friend.breakdown;
           const cats = [
             { type: "book", count: books },
@@ -397,6 +414,11 @@ function SharedTasteSection() {
             </div>
           );
         })}
+        {zeroCount > 0 && (
+          <p className="text-xs text-muted-foreground px-1">
+            {zeroCount} more {zeroCount === 1 ? "friend hasn't" : "friends haven't"} overlapped with your taste yet.
+          </p>
+        )}
       </div>
     </div>
   );

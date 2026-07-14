@@ -326,7 +326,11 @@ function TaskForm({ onDone }: { onDone: (label: string) => void }) {
 
 function HabitForm({ onDone, defaultCategory }: { onDone: (label: string) => void; defaultCategory?: string }) {
   const [title, setTitle] = useState("");
-  const EMOJIS = ["🔥","💪","🧘","📚","💧","🏃","🥗","😴","🎯","✅"];
+  const EMOJIS: { char: string; name: string }[] = [
+    { char: "🔥", name: "Streak" }, { char: "💪", name: "Strength" }, { char: "🧘", name: "Mindfulness" },
+    { char: "📚", name: "Reading" }, { char: "💧", name: "Hydration" }, { char: "🏃", name: "Running" },
+    { char: "🥗", name: "Nutrition" }, { char: "😴", name: "Sleep" }, { char: "🎯", name: "Focus" }, { char: "✅", name: "Done" },
+  ];
   const [emoji, setEmoji] = useState("🔥");
   const mut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/habits", {
@@ -342,10 +346,11 @@ function HabitForm({ onDone, defaultCategory }: { onDone: (label: string) => voi
         <label className="text-xs font-medium text-muted-foreground">Pick an emoji</label>
         <div className="flex gap-1.5 flex-wrap">
           {EMOJIS.map(e => (
-            <button key={e} type="button" onClick={() => setEmoji(e)}
+            <button key={e.char} type="button" onClick={() => setEmoji(e.char)}
+              title={e.name} aria-label={e.name}
               className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-colors
-                ${emoji === e ? "bg-primary/20 ring-2 ring-primary/50" : "bg-secondary/50 hover:bg-secondary"}`}>
-              {e}
+                ${emoji === e.char ? "bg-primary/20 ring-2 ring-primary/50" : "bg-secondary/50 hover:bg-secondary"}`}>
+              {e.char}
             </button>
           ))}
         </div>
