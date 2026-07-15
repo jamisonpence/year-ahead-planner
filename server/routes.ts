@@ -5249,6 +5249,10 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
         body: title,
         href: "/discover",
       });
+      // Recommendations land in Messages too — that's where the conversation happens
+      storage.createDMShareMessage(fromUserId, toUserId, type, JSON.stringify({
+        shareType: type, name: title, subtitle: subtitle ?? null, note: note ?? null,
+      }), `Recommended "${title}"${note ? ` — "${note}"` : ""}`).catch(() => {});
       res.status(201).json(result);
     } catch (e) { handleError(res, e); }
   });
@@ -9229,11 +9233,18 @@ Rules:
          FROM activity_feed af WHERE af.id=$1`, [feedItemId, user.id]
       ).then(r => {
         const row = r.rows[0];
-        if (row && row.user_id !== user.id && +row.mine > 0) notify({
-          userId: row.user_id, type: "reaction", actorId: user.id,
-          title: `${user.name} reacted ${emoji} to ${row.item_title ?? "your activity"}`,
-          href: "/discover",
-        });
+        if (row && row.user_id !== user.id && +row.mine > 0) {
+          notify({
+            userId: row.user_id, type: "reaction", actorId: user.id,
+            title: `${user.name} reacted ${emoji} to ${row.item_title ?? "your activity"}`,
+            href: "/discover",
+          });
+          // Land it in Messages too, so the moment can turn into a conversation
+          storage.createDMTextMessage(
+            user.id, row.user_id,
+            `${emoji} Cheered your save — "${row.item_title ?? "your activity"}"`
+          ).catch(() => {});
+        }
       }).catch(() => {});
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
@@ -9250,12 +9261,18 @@ Rules:
       pool.query(`SELECT user_id, item_title FROM activity_feed WHERE id=$1`, [feedItemId])
         .then(r => {
           const owner = r.rows[0];
-          if (owner && owner.user_id !== user.id) notify({
-            userId: owner.user_id, type: "comment", actorId: user.id,
-            title: `${user.name} commented on ${owner.item_title ?? "your activity"}`,
-            body: content.trim().slice(0, 120),
-            href: "/discover",
-          });
+          if (owner && owner.user_id !== user.id) {
+            notify({
+              userId: owner.user_id, type: "comment", actorId: user.id,
+              title: `${user.name} commented on ${owner.item_title ?? "your activity"}`,
+              body: content.trim().slice(0, 120),
+              href: "/discover",
+            });
+            storage.createDMTextMessage(
+              user.id, owner.user_id,
+              `About "${owner.item_title ?? "your activity"}" — ${content.trim()}`
+            ).catch(() => {});
+          }
         }).catch(() => {});
       res.status(201).json(comment);
     } catch (e) { handleError(res, e); }
@@ -9302,7 +9319,7 @@ Rules:
   app.post("/api/discover/add", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      const { itemType, itemTitle, itemSubtitle, itemImageUrl } = req.body ?? {};
+      const { itemType, itemTitle, itemSubtitle, itemImageUrl, friendId } = req.body ?? {};
       if (!itemType || !itemTitle) return res.status(400).json({ error: "itemType and itemTitle required" });
       const t = String(itemType).toLowerCase();
       let href = "/mylifos";
@@ -9336,6 +9353,13 @@ Rules:
         href = "/recipes";
       } else {
         return res.status(400).json({ error: `Unsupported item type: ${t}` });
+      }
+      // If this save came from a friend's highlight/recommendation, tell them in Messages
+      if (friendId && Number(friendId) !== uid) {
+        storage.createDMShareMessage(uid, Number(friendId), t, JSON.stringify({
+          shareType: t, name: itemTitle, subtitle: itemSubtitle ?? null, emoji: "📌",
+          note: "Saved this from your highlights",
+        }), `Saved "${itemTitle}" from your highlights 📌`).catch(() => {});
       }
       res.json({ ok: true, href });
     } catch (e) { handleError(res, e); }

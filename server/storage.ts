@@ -1951,6 +1951,8 @@ export async function initializeStorage() {
 
 // ── STORAGE INTERFACE ──────────────────────────────────────────────────────────
 export interface IStorage {
+  createDMShareMessage(fromUserId: number, toUserId: number, shareType: string, shareData: string, displayText: string): Promise<void>;
+  createDMTextMessage(fromUserId: number, toUserId: number, text: string): Promise<void>;
   // Events
   getAllEventsWithTasks(userId: number): Promise<EventWithTasks[]>;
   createEvent(data: InsertEvent, userId: number): Promise<Event>;
@@ -6422,6 +6424,29 @@ export const storage: IStorage = {
     } catch (e) {
       // Non-fatal: share itself already created, messenger message is a bonus
       console.error('[createDMShareMessage] error:', e);
+    }
+  },
+
+  async createDMTextMessage(fromUserId: number, toUserId: number, text: string): Promise<void> {
+    try {
+      const conv = await this.getOrCreateDM(fromUserId, toUserId);
+      for (const uid of [fromUserId, toUserId]) {
+        const p = await pool.query(
+          `SELECT 1 FROM conversation_participants WHERE conversation_id=$1 AND user_id=$2`,
+          [conv.id, uid]
+        );
+        if (!p.rows[0]) {
+          await pool.query(
+            `INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
+             VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+            [conv.id, uid, new Date().toISOString()]
+          );
+        }
+      }
+      await this.createMessage(conv.id, fromUserId, text);
+    } catch (e) {
+      // Non-fatal: the primary action already succeeded; the DM is a bonus
+      console.error('[createDMTextMessage] error:', e);
     }
   },
 

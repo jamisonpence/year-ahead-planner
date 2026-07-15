@@ -1872,6 +1872,7 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
       itemTitle: item.itemTitle,
       itemSubtitle: item.itemSubtitle,
       itemImageUrl: item.itemImageUrl,
+      friendId: item.user.id, // lets the server drop a "saved this" note in Messages
     }).then(r => r.json()),
     onSuccess: () => {
       setSavedIt(true);

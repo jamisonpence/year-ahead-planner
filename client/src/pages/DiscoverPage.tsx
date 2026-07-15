@@ -251,6 +251,7 @@ function AddToListButton({ item }: { item: RecommendedItem }) {
       itemTitle: item.itemTitle,
       itemSubtitle: item.itemSubtitle ?? null,
       itemImageUrl: item.itemImageUrl ?? null,
+      friendId: item.friendId, // lets the server drop a "saved this" note in Messages
     }).then(r => r.json()),
     onSuccess: () => {
       setAdded(true);
