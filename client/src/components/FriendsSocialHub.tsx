@@ -94,7 +94,7 @@ function Avatar({ user, size = 36 }: { user: { name: string; avatarUrl?: string 
 
 // ── Rec Modal ─────────────────────────────────────────────────────────────────
 
-function RecModal({ friend, onClose }: { friend: EnrichedFriend; onClose: () => void }) {
+export function RecModal({ friend, onClose }: { friend: { id: number; name: string }; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [type, setType] = useState("book");

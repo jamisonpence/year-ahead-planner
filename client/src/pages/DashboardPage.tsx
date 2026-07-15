@@ -12,6 +12,7 @@ import {
   Film, Music, ChefHat, MessageCircle, Send, Users, Apple,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RecModal } from "@/components/FriendsSocialHub";
 import { Progress } from "@/components/ui/progress";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -1822,7 +1823,6 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
   const [showAllComments, setShowAllComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const context = highlightContext(item);
-  const saveHref = ITEM_TYPE_HREFS[item.itemType ?? ""] ?? "/discover";
 
   const reactionCounts = REACTION_EMOJIS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = item.reactions.filter((r) => r.emoji === e).length;
@@ -1835,7 +1835,11 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
     mutationFn: async (emoji: string) => {
       await apiRequest("POST", `/api/feed/${item.id}/react`, { emoji });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/feed"] }); },
+    onSuccess: (_d, emoji) => {
+      qc.invalidateQueries({ queryKey: ["/api/feed"] });
+      if (!myReactions.has(emoji)) toast({ title: `Cheered ${emoji}`, description: `${item.user.name} will get a notification.` });
+    },
+    onError: () => toast({ title: "Couldn't react", variant: "destructive" }),
   });
 
   const commentMutation = useMutation({
@@ -1846,14 +1850,38 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
       setCommentText("");
       setShowCommentBox(false);
       qc.invalidateQueries({ queryKey: ["/api/feed"] });
+      toast({ title: "Comment sent 💬", description: `${item.user.name} will get a notification.` });
     },
+    onError: () => toast({ title: "Couldn't send that", variant: "destructive" }),
   });
 
+  // "Ask about it" opens the comment box pre-filled with a suggested question —
+  // the user sees and can edit what they're sending (no silent auto-posts).
   const handleAsk = () => {
-    const prompt = askPromptFor(item);
-    commentMutation.mutate(prompt);
-    toast({ title: "Asked about it" });
+    setCommentText(askPromptFor(item));
+    setShowCommentBox(true);
   };
+
+  // "Save this" actually saves the item into the matching collection
+  const SAVEABLE_TYPES = new Set(["book", "movie", "show", "artist", "song", "recipe", "spot"]);
+  const canSave = !!item.itemTitle && SAVEABLE_TYPES.has(item.itemType ?? "");
+  const [savedIt, setSavedIt] = useState(false);
+  const saveMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/discover/add", {
+      itemType: item.itemType,
+      itemTitle: item.itemTitle,
+      itemSubtitle: item.itemSubtitle,
+      itemImageUrl: item.itemImageUrl,
+    }).then(r => r.json()),
+    onSuccess: () => {
+      setSavedIt(true);
+      toast({ title: "Saved to your collection ✓", description: `“${cleanFeedTitle(item.itemTitle)}” is in your library.` });
+    },
+    onError: () => toast({ title: "Couldn't save that", variant: "destructive" }),
+  });
+
+  // "Recommend back" opens the real recommendation composer for this friend
+  const [recOpen, setRecOpen] = useState(false);
 
   const visibleComments = showAllComments ? item.comments : item.comments.slice(-2);
 
@@ -1905,18 +1933,28 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
             <MessageCircle size={11} />
             Ask about it
           </button>
-          <Link href={saveHref}>
-            <a className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary transition-colors">
+          {canSave && (savedIt ? (
+            <span className="flex items-center gap-1 text-xs text-emerald-500 px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/5">
+              <Check size={11} />
+              Saved
+            </span>
+          ) : (
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary disabled:opacity-50 transition-colors"
+            >
               <BookMarked size={11} />
-              Save this
-            </a>
-          </Link>
-          <Link href={`/profile/${item.user.id}`}>
-            <a className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary transition-colors">
-              <Send size={11} />
-              Recommend back
-            </a>
-          </Link>
+              {saveMutation.isPending ? "Saving…" : "Save this"}
+            </button>
+          ))}
+          <button
+            onClick={() => setRecOpen(true)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full border border-border hover:bg-secondary transition-colors"
+          >
+            <Send size={11} />
+            Recommend back
+          </button>
         </div>
       </div>
 
@@ -1941,6 +1979,7 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
       {showCommentBox && (
         <div className="flex items-center gap-1 pl-10">
           <input
+            autoFocus
             className="flex-1 text-xs border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="Add a comment..."
             value={commentText}
@@ -1958,6 +1997,9 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
           </button>
         </div>
       )}
+
+      {/* Recommend-back composer (same flow as People → Rec) */}
+      {recOpen && <RecModal friend={{ id: item.user.id, name: item.user.name }} onClose={() => setRecOpen(false)} />}
     </div>
   );
 }
