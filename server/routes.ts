@@ -3352,16 +3352,38 @@ Return exactly this structure:
         return fallback;
       };
 
+      // Pick the most sensible match from the top hits — the raw #1 result is
+      // often a processed variant ("Lunchmeat, chicken breast, sliced") with no
+      // usable nutrient payload. Prefer simple raw/cooked entries with data.
+      const pickFood = (foods: any[], query: string) => {
+        const qTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+        let best: any = null; let bestScore = -Infinity;
+        for (const f of foods ?? []) {
+          const desc = String(f.description ?? "").toLowerCase();
+          const hasData = (f.foodNutrients ?? []).some((n: any) =>
+            n.nutrientId === 1008 || n.nutrientId === 1003 || /^energy$/i.test(String(n.nutrientName ?? "")));
+          if (!hasData) continue;
+          let score = 0;
+          for (const t of qTokens) if (desc.includes(t)) score += 10;
+          score -= desc.split(",").length * 2;
+          if (/lunchmeat|breaded|roll|canned|soup|baby|snack|fried|sauce|gravy|fast food|restaurant|frozen/.test(desc)) score -= 25;
+          if (/\braw\b/.test(desc)) score += 6;
+          if (f.dataType === "SR Legacy") score += 3;
+          if (score > bestScore) { bestScore = score; best = f; }
+        }
+        return best;
+      };
+
       let totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 };
       const unmatched: string[] = [];
       for (const ing of (ingredients || [])) {
         try {
           const cleanName = String(ing.name ?? "").replace(/\(.*?\)/g, "").trim();
           if (!cleanName) continue;
-          const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(cleanName)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${apiKey}`;
+          const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(cleanName)}&dataType=Foundation,SR%20Legacy&pageSize=6&api_key=${apiKey}`;
           const r = await fetch(url);
           const data = await r.json() as any;
-          const food = data.foods?.[0];
+          const food = pickFood(data.foods, cleanName);
           if (!food) { unmatched.push(ing.name); continue; }
           const factor = qtyToGrams(ing.qty) / 100; // per-100g → actual amount
           totals.calories += nutrientValue(food, [1008, 2047, 2048], /^energy$/i, "KCAL") * factor;
