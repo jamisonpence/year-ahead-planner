@@ -1282,7 +1282,7 @@ Rules:
   const DIGEST_HOUR = 7;
   const CLOSEOUT_HOUR = 21;
   let lastChoreSweepDate = "";
-  setInterval(async () => {
+  const dailyTick = async () => {
     try {
       const now = new Date();
       const hour = +now.toLocaleString("en-US", { timeZone: "America/Chicago", hour: "2-digit", hour12: false });
@@ -1369,7 +1369,11 @@ Rules:
         });
       }
     } catch (e) { console.error("daily digest error:", e); }
-  }, 30 * 60 * 1000);
+  };
+  setInterval(dailyTick, 30 * 60 * 1000);
+  // Run once shortly after boot — frequent deploys restart the server before
+  // the 30-minute interval ever fires, which starved the chore sweep entirely.
+  setTimeout(dailyTick, 15 * 1000);
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));

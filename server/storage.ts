@@ -5065,7 +5065,8 @@ export const storage: IStorage = {
          WHEN tc.owner_user_id = $1 THEN tc.collaborator_user_id
          ELSE tc.owner_user_id
        END
-       WHERE tc.owner_user_id = $1 OR tc.collaborator_user_id = $1
+       WHERE (tc.owner_user_id = $1 OR tc.collaborator_user_id = $1)
+         AND tc.owner_user_id != tc.collaborator_user_id
        ORDER BY tc.created_at DESC`,
       [userId]
     );
