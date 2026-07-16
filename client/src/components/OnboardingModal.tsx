@@ -230,6 +230,9 @@ function saveFirstRunDashboardDefaults(persona: PersonaKey, selectedPaths: strin
       today: true, focus: true, up_next: true, progress,
       social_feed: social, needs_attention: false,
       events: selectedPaths.includes("/calendar"),
+      // Anyone who pinned Recipes (incl. the Recipes Quick Start) gets the
+      // rotating Recipe Ideas panel on Today by default
+      recipes: selectedPaths.includes("/recipes"),
       recent_activity: recent, quick_jump: false, day_planner: false,
       memories: persona === "explore_life",
       quote: persona === "explore_life",
