@@ -3295,23 +3295,82 @@ Return exactly this structure:
       if (!apiKey) return res.status(400).json({ nutrition: null, error: "USDA_API_KEY not configured" });
       const { ingredients, servings } = req.body as { ingredients: { name: string; qty: string }[]; servings: number };
       const srv = Math.max(1, servings || 4);
+
+      // Parse an ingredient quantity ("1 lb", "2 tbsp", "1/2 cup", "200g", "3")
+      // into an estimated gram weight. USDA values are per 100g, so without
+      // this every recipe was just a sum of per-100g rows — quantities ignored.
+      const qtyToGrams = (qty: string | null | undefined): number => {
+        if (!qty || !String(qty).trim()) return 100;
+        const q = String(qty).toLowerCase().trim();
+        let n = 1;
+        const m = q.match(/(\d+\s+\d+\/\d+|\d+\/\d+|\d*\.?\d+)/);
+        if (m) {
+          const t = m[1];
+          if (t.includes("/")) {
+            const parts = t.split(/\s+/);
+            const frac = parts[parts.length - 1].split("/");
+            n = (parts.length === 2 ? parseFloat(parts[0]) : 0) + (parseFloat(frac[0]) / (parseFloat(frac[1]) || 1));
+          } else n = parseFloat(t);
+        }
+        if (!isFinite(n) || n <= 0) n = 1;
+        const units: Array<[RegExp, number]> = [
+          [/\bkgs?\b|\bkilo/, 1000],
+          [/\blbs?\b|\bpound/, 454],
+          [/\boz\b|\bounce/, 28],
+          [/\bgrams?\b|\bgr?\b/, 1],
+          [/\bmls?\b|\bmillilit/, 1],
+          [/\blitre|\bliter|\bl\b/, 1000],
+          [/\btbsp|\btablespoon/, 14],
+          [/\btsp|\bteaspoon/, 5],
+          [/\bcups?\b/, 130],
+          [/\bcloves?\b/, 5],
+          [/\bcans?\b/, 400],
+          [/\bsticks?\b/, 113],
+          [/\bslices?\b|\bpieces?\b/, 30],
+          [/\bbunch/, 100],
+          [/\bpinch|\bdash/, 0.5],
+          [/\bhandful/, 40],
+        ];
+        for (const [re, g] of units) if (re.test(q)) return Math.max(0.5, n * g);
+        // Bare count ("2 eggs", "1 onion") — assume a typical item weight
+        return Math.max(20, n * 80);
+      };
+
+      // Robust nutrient lookup: match by id OR name, preferring kcal for energy
+      const nutrientValue = (food: any, ids: number[], nameRe: RegExp, preferUnit?: string): number => {
+        let fallback = 0, hasFallback = false;
+        for (const fn of food.foodNutrients ?? []) {
+          const matches = ids.includes(fn.nutrientId) || nameRe.test(String(fn.nutrientName ?? ""));
+          if (!matches) continue;
+          const unit = String(fn.unitName ?? "").toUpperCase();
+          if (preferUnit && unit !== preferUnit) {
+            if (!hasFallback) { fallback = fn.value || 0; hasFallback = true; }
+            continue;
+          }
+          return fn.value || 0;
+        }
+        return fallback;
+      };
+
       let totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 };
       const unmatched: string[] = [];
       for (const ing of (ingredients || [])) {
         try {
-          const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(ing.name)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${apiKey}`;
+          const cleanName = String(ing.name ?? "").replace(/\(.*?\)/g, "").trim();
+          if (!cleanName) continue;
+          const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(cleanName)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${apiKey}`;
           const r = await fetch(url);
           const data = await r.json() as any;
           const food = data.foods?.[0];
           if (!food) { unmatched.push(ing.name); continue; }
-          const get = (id: number) => (food.foodNutrients?.find((n: any) => n.nutrientId === id)?.value || 0);
-          totals.calories += get(1008);
-          totals.protein  += get(1003);
-          totals.carbs    += get(1005);
-          totals.fat      += get(1004);
-          totals.fiber    += get(1079);
-          totals.sugar    += get(2000);
-          totals.sodium   += get(1093);
+          const factor = qtyToGrams(ing.qty) / 100; // per-100g → actual amount
+          totals.calories += nutrientValue(food, [1008, 2047, 2048], /^energy$/i, "KCAL") * factor;
+          totals.protein  += nutrientValue(food, [1003], /^protein$/i) * factor;
+          totals.carbs    += nutrientValue(food, [1005], /^carbohydrate/i) * factor;
+          totals.fat      += nutrientValue(food, [1004], /^total lipid|^total fat/i) * factor;
+          totals.fiber    += nutrientValue(food, [1079], /^fiber/i) * factor;
+          totals.sugar    += nutrientValue(food, [2000], /^sugars|^total sugars/i) * factor;
+          totals.sodium   += nutrientValue(food, [1093], /^sodium/i) * factor;
         } catch { unmatched.push(ing.name); }
       }
       res.json({

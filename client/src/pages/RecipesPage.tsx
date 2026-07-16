@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageShell from "@/components/PageShell";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -1053,13 +1053,28 @@ function RecipeNutritionCard({ recipe, onRefresh }: { recipe: Recipe; onRefresh:
     setComputing(false);
   }
 
+  // Auto-estimate on first open — macros should just appear, not hide behind a button
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (autoRan.current || nutrition || computing) return;
+    let ingredients: unknown[] = [];
+    try { ingredients = JSON.parse(recipe.ingredientsJson || "[]"); } catch {}
+    if (Array.isArray(ingredients) && ingredients.length > 0) {
+      autoRan.current = true;
+      computeNutrition();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!nutrition) {
     return (
       <div className="mt-3 p-3 rounded-xl border bg-secondary/20 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Nutrition not yet estimated</p>
+        <p className="text-xs text-muted-foreground">
+          {computing ? "Estimating nutrition from ingredients…" : "Nutrition not yet estimated"}
+        </p>
         <Button size="sm" variant="outline" onClick={computeNutrition} disabled={computing} className="h-7 text-xs">
           {computing && <Loader2 size={12} className="animate-spin mr-1" />}
-          Estimate Nutrition
+          {computing ? "Estimating" : "Estimate Nutrition"}
         </Button>
       </div>
     );
