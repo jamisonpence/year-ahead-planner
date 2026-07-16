@@ -51,7 +51,7 @@ const INTENTION_LINKS: Record<IntentionKey, { emoji: string; label: string; href
 
 // ── Section config ─────────────────────────────────────────────────────────────
 
-type SectionId = "today" | "focus" | "up_next" | "needs_attention" | "progress" | "social_feed" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories" | "quote";
+type SectionId = "today" | "focus" | "up_next" | "needs_attention" | "progress" | "social_feed" | "recipes" | "events" | "recent_activity" | "quick_jump" | "day_planner" | "memories" | "quote";
 
 const SECTION_LABELS: Record<SectionId, string> = {
   today:            "Right Now",
@@ -60,6 +60,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   needs_attention:  "Needs Attention",
   progress:         "Progress",
   social_feed:      "Friend Highlights",
+  recipes:          "Recipe Ideas",
   events:           "Later This Month",
   recent_activity:  "Recent Activity",
   quick_jump:       "Quick Jump",
@@ -70,17 +71,17 @@ const SECTION_LABELS: Record<SectionId, string> = {
 // (the "events" section shows only items beyond the Up Next 7-day window,
 // so the two sections never duplicate each other)
 
-const SECTION_ORDER: SectionId[] = ["today", "focus", "up_next", "progress", "social_feed", "needs_attention", "events", "recent_activity", "quick_jump", "day_planner", "memories", "quote"];
+const SECTION_ORDER: SectionId[] = ["today", "focus", "up_next", "progress", "social_feed", "recipes", "needs_attention", "events", "recent_activity", "quick_jump", "day_planner", "memories", "quote"];
 
 const ALL_ON: Record<SectionId, boolean> = {
   today: true, up_next: true, needs_attention: true, progress: true,
-  social_feed: true, events: true, recent_activity: true, quick_jump: true, day_planner: false,
+  social_feed: true, recipes: true, events: true, recent_activity: true, quick_jump: true, day_planner: false,
   memories: true, focus: true, quote: true,
 };
 
 const DEFAULT_VISIBLE: Record<SectionId, boolean> = {
   today: true, focus: true, up_next: true, progress: true, social_feed: true,
-  needs_attention: false, events: false, recent_activity: false, quick_jump: false,
+  recipes: false, needs_attention: false, events: false, recent_activity: false, quick_jump: false,
   day_planner: false, memories: false, quote: false,
 };
 
@@ -91,29 +92,147 @@ const PERSONA_SECTION_DEFAULTS: Record<string, Record<SectionId, boolean>> = {
   // Build Momentum: Today tasks/habits, weekly focus, up next, goal progress
   momentum: {
     today: true, focus: true, up_next: true, progress: true,
-    social_feed: false, needs_attention: false, events: false,
+    social_feed: false, recipes: false, needs_attention: false, events: false,
     recent_activity: false, quick_jump: false, day_planner: false, memories: false, quote: false,
   },
   // Health & Energy: Today (workout items), focus, habits + goal progress, recent activity for logs
   health: {
     today: true, focus: true, up_next: true, progress: true, recent_activity: true,
-    social_feed: false, needs_attention: false, events: false,
+    social_feed: false, recipes: true, needs_attention: false, events: false,
     quick_jump: false, day_planner: false, memories: false, quote: false,
   },
   // Save & Explore Life: recent saves, friend highlights (sharing), up next, memories, a daily quote
   explore_life: {
-    today: false, focus: false, social_feed: true, recent_activity: true,
+    today: false, focus: false, social_feed: true, recipes: true, recent_activity: true,
     up_next: true, memories: true, quote: true,
     needs_attention: false, progress: false, events: false,
     quick_jump: false, day_planner: false,
   },
   // Connect with People: friend highlights, today (shared events), recent activity, quick jump
   connect: {
-    today: true, social_feed: true, recent_activity: true, quick_jump: true,
+    today: true, social_feed: true, recipes: false, recent_activity: true, quick_jump: true,
     up_next: true, focus: false, progress: false,
     needs_attention: false, events: false, memories: false, quote: false, day_planner: false,
   },
 };
+
+// ── Recipe Ideas panel ────────────────────────────────────────────────────────
+// Three recipe picks that rotate daily (seeded by the date, so everyone's picks
+// are stable for the day and fresh tomorrow). Categories are customizable and
+// persist locally; defaults lean mainstream.
+
+const RECIPE_PANEL_CATS_KEY = "mylifos_recipe_panel_cats";
+const RECIPE_PANEL_DEFAULT_CATS = ["Chicken", "Pasta", "Breakfast"];
+const RECIPE_PANEL_ALL_CATS = ["Chicken", "Beef", "Pasta", "Seafood", "Vegetarian", "Breakfast", "Dessert", "Soup", "Salad", "Pork", "Lamb"];
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const a = [...arr];
+  let st = seed;
+  const rnd = () => {
+    st |= 0; st = (st + 0x6D2B79F5) | 0;
+    let t = Math.imul(st ^ (st >>> 15), 1 | st);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function RecipeIdeasPanel() {
+  const { data: allRecipes = [] } = useQuery<any[]>({ queryKey: ["/api/recipes"] });
+  const [cats, setCats] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(RECIPE_PANEL_CATS_KEY) || "null") ?? RECIPE_PANEL_DEFAULT_CATS; }
+    catch { return RECIPE_PANEL_DEFAULT_CATS; }
+  });
+  const [editing, setEditing] = useState(false);
+
+  function toggleCat(c: string) {
+    setCats(prev => {
+      const next = prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c];
+      try { localStorage.setItem(RECIPE_PANEL_CATS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const seed = [...todayStr].reduce((acc, ch) => ((acc * 31 + ch.charCodeAt(0)) | 0), 7);
+
+  const picks = useMemo(() => {
+    const lower = cats.map(c => c.toLowerCase());
+    const inCats = allRecipes.filter((r: any) => {
+      const rc = String(r.category ?? "").toLowerCase();
+      return lower.length === 0 || lower.some(c => rc.includes(c));
+    });
+    const pool = inCats.length >= 3 ? inCats : allRecipes; // graceful fallback for narrow selections
+    return seededShuffle(pool, seed).slice(0, 3);
+  }, [allRecipes, cats, seed]);
+
+  if (allRecipes.length === 0) return null;
+
+  return (
+    <div className="bg-card border rounded-xl p-4">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-start gap-2">
+          <ChefHat size={14} className="text-primary mt-0.5" />
+          <div>
+            <span className="text-sm font-semibold">Recipe Ideas</span>
+            <p className="text-xs text-muted-foreground mt-0.5">Three fresh picks, rotating daily.</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setEditing(e => !e)}
+          title="Choose recipe categories"
+          className={`p-1 rounded-md transition-colors ${editing ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
+        >
+          <Settings2 size={13} />
+        </button>
+      </div>
+
+      {editing && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {RECIPE_PANEL_ALL_CATS.map(c => (
+            <button
+              key={c}
+              onClick={() => toggleCat(c)}
+              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                cats.includes(c) ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {picks.map((r: any) => {
+          const total = (r.prepTime ?? 0) + (r.cookTime ?? 0);
+          return (
+            <Link key={r.id} href="/recipes">
+              <a className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-secondary/50 transition-colors">
+                {r.imageUrl ? (
+                  <img src={r.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
+                ) : (
+                  <span className="w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-lg shrink-0">{r.emoji || "🍽️"}</span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{r.name}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {[r.category, total > 0 ? `${total}m` : null].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+              </a>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ── Start Here card ───────────────────────────────────────────────────────────
 
@@ -1557,6 +1676,9 @@ export default function DashboardPage() {
 
           {/* ── FRIEND HIGHLIGHTS ──────────────────────────────────────────── */}
           {visible.social_feed && <SocialFeed currentUserId={authUser?.id} />}
+
+          {/* ── RECIPE IDEAS (rotates daily) ───────────────────────────────── */}
+          {visible.recipes && <RecipeIdeasPanel />}
 
           {/* ── UPCOMING EVENTS (compact) ──────────────────────────────────── */}
           {visible.events && upcomingEvents.filter((e) => daysUntil(e.displayDate) > 7).length > 0 && (
