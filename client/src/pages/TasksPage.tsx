@@ -608,22 +608,26 @@ function NewTaskModal({
   open,
   onClose,
   onSave,
+  projects = [],
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (title: string, priority: string, dueDate: string | null, notes: string | null) => void;
+  onSave: (title: string, priority: string, dueDate: string | null, notes: string | null, projectKey: string) => void;
+  /** Active projects a task can be filed under ("" = standalone task) */
+  projects?: { key: string; label: string; group: string }[];
 }) {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("medium");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [projectKey, setProjectKey] = useState("");
 
-  const reset = () => { setTitle(""); setPriority("medium"); setDueDate(""); setNotes(""); };
+  const reset = () => { setTitle(""); setPriority("medium"); setDueDate(""); setNotes(""); setProjectKey(""); };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onSave(title.trim(), priority, dueDate || null, notes.trim() || null);
+    onSave(title.trim(), priority, dueDate || null, notes.trim() || null, projectKey);
     reset();
     onClose();
   };
@@ -651,6 +655,29 @@ function NewTaskModal({
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
+          {projects.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Project <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <select
+                value={projectKey}
+                onChange={(e) => setProjectKey(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+              >
+                <option value="">No project — standalone task</option>
+                {Object.entries(
+                  projects.reduce<Record<string, { key: string; label: string; group: string }[]>>((acc, p) => {
+                    (acc[p.group] ||= []).push(p);
+                    return acc;
+                  }, {})
+                ).map(([group, items]) => (
+                  <optgroup key={group} label={group}>
+                    {items.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              {projectKey && <p className="text-[11px] text-muted-foreground">Due date and notes apply to standalone tasks only.</p>}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any context?" />
@@ -1209,6 +1236,15 @@ export default function TasksPage() {
   const openTasks     = generalTasksData.filter(t => !t.completed);
   const completedTasks = generalTasksData.filter(t => t.completed);
 
+  // The Tasks tab lists standalone tasks AND every task inside a project, so
+  // its count must include both — counting only standalone tasks understated
+  // the real workload badly.
+  const openProjectTaskCount = useMemo(
+    () => allDisplayProjects.reduce((sum, p) => sum + p.tasks.filter(t => !t.completed).length, 0),
+    [allDisplayProjects]
+  );
+  const totalOpenTaskCount = openTasks.length + openProjectTaskCount;
+
   // Weekly wins — tasks completed since this Sunday midnight
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0, 0, 0, 0);
   const completedThisWeek = completedTasks.filter(t => (t as any).completedAt && new Date((t as any).completedAt) >= weekStart).length;
@@ -1321,7 +1357,7 @@ export default function TasksPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x border-b shrink-0">
         {[
           { label: "Active Projects", value: activeProjects.length,  icon: <Layers size={14} className="text-primary" />, onClick: () => setActiveView("projects") },
-          { label: "Open Tasks",      value: openTasks.length,       icon: <ClipboardList size={14} className="text-violet-500" />, onClick: () => setActiveView("tasks") },
+          { label: "Open Tasks",      value: totalOpenTaskCount,     icon: <ClipboardList size={14} className="text-violet-500" />, onClick: () => setActiveView("tasks") },
           { label: "Chores Due",      value: choresDueSoon.length,   icon: <AlertTriangle size={14} className="text-amber-500" />, onClick: () => setActiveView("recurring") },
           { label: "Completed",       value: completedTasks.length + completedProjects.length, icon: <CheckSquare size={14} className="text-emerald-500" />, onClick: () => setActiveView("completed") },
         ].map(({ label, value, icon, onClick }) => (
@@ -1337,7 +1373,7 @@ export default function TasksPage() {
         <div className="flex gap-1 w-max">
           {([
             { value: "projects",  label: `Projects (${activeProjects.length})` },
-            { value: "tasks",     label: `Tasks (${openTasks.length})` },
+            { value: "tasks",     label: `Tasks (${totalOpenTaskCount})` },
             { value: "recurring", label: `Recurring (${activeChores.length})` },
             { value: "purchases", label: `Purchases (${purchaseItems.filter((p:any)=>!p.purchased).length})` },
             { value: "completed", label: "Completed" },
@@ -1884,9 +1920,22 @@ export default function TasksPage() {
       <NewTaskModal
         open={newTaskModal}
         onClose={() => setNewTaskModal(false)}
-        onSave={(title, priority, dueDate, notes) =>
-          addGeneralTask.mutate({ title, priority, dueDate, notes } as any)
-        }
+        projects={activeProjects.map(p => ({
+          key: `${p.source}:${p.id}`,
+          label: p.title,
+          group: p.source === "house" ? "Home projects" : p.goalTitle ? `Goal: ${p.goalTitle}` : "Projects",
+        }))}
+        onSave={(title, priority, dueDate, notes, projectKey) => {
+          if (projectKey) {
+            const proj = activeProjects.find(p => `${p.source}:${p.id}` === projectKey);
+            if (proj) {
+              handleAddProjectTask(proj, title);
+              toast({ title: "Task added", description: `Added to “${proj.title}”` });
+              return;
+            }
+          }
+          addGeneralTask.mutate({ title, priority, dueDate, notes } as any);
+        }}
       />
       <NewChoreModal
         open={newChoreModal}
