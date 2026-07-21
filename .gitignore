@@ -15,3 +15,7 @@ vite.config.ts.*
 
 # Source PNGs for recipe images (converted to client/public/recipe-images)
 recipe-images-source/
+
+# Recipe images now live in Cloudflare R2 (see R2-MIGRATION.md).
+# Staged here by script/import-recipe-images.mjs, then uploaded with rclone.
+client/public/recipe-images/
