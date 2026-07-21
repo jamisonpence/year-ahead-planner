@@ -6992,6 +6992,49 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Admin: repoint recipe image URLs (local ⇄ CDN) ─────────────────────────
+  // Used to move the local /recipe-images/ files to Cloudflare R2 and back again.
+  // Prefix-swap only, always previewable, and symmetric — running it with `from`
+  // and `to` reversed is a complete rollback.
+  app.post("/api/admin/rewrite-image-urls", requireAdmin, async (req, res) => {
+    try {
+      const from = String(req.body?.from ?? "").trim();
+      const to = String(req.body?.to ?? "").trim();
+      const dryRun = req.body?.dryRun !== false; // default to preview
+      if (!from || !to) return res.status(400).json({ error: "from and to prefixes are required" });
+      if (from === to) return res.status(400).json({ error: "from and to are identical" });
+
+      // `to` must be an https URL or a site-relative path — never anything else.
+      const validTo = /^https:\/\/[a-z0-9.-]+\//i.test(to) || to.startsWith("/");
+      if (!validTo) return res.status(400).json({ error: "to must start with https://<host>/ or /" });
+
+      const matched = await pool.query(
+        `SELECT COUNT(*)::int AS c FROM recipes WHERE image_url LIKE $1`, [from + "%"]
+      );
+      const sample = await pool.query(
+        `SELECT name, image_url FROM recipes WHERE image_url LIKE $1 ORDER BY name LIMIT 5`, [from + "%"]
+      );
+      const preview = sample.rows.map((r: any) => ({
+        recipe: r.name,
+        before: r.image_url,
+        after: to + String(r.image_url).slice(from.length),
+      }));
+
+      if (dryRun) {
+        return res.json({ dryRun: true, wouldUpdate: matched.rows[0].c, from, to, preview });
+      }
+
+      const upd = await pool.query(
+        `UPDATE recipes
+            SET image_url = $2 || SUBSTRING(image_url FROM ${from.length + 1})
+          WHERE image_url LIKE $1`,
+        [from + "%", to]
+      );
+      console.log(`[admin] ${(req.user as User).email} rewrote ${upd.rowCount} recipe image URLs: "${from}" → "${to}"`);
+      res.json({ dryRun: false, updated: upd.rowCount, from, to, preview });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Admin: delete an account ───────────────────────────────────────────────
   // Every column that points at users.id, discovered from the live schema so new
   // tables are covered automatically. facebook_user_id is an external string ID,
