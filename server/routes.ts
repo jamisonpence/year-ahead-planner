@@ -72,6 +72,25 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Unauthorized" });
 }
 
+// ── Admin access ─────────────────────────────────────────────────────────────
+// Hardcoded owner accounts. Add or remove emails here (lowercase) — a database
+// write can never grant admin, which keeps the blast radius small.
+const ADMIN_EMAILS = new Set<string>([
+  "jamisonpence@gmail.com",
+  "jamison@trysecurelead.com",
+]);
+
+export function isAdminUser(user: unknown): boolean {
+  const email = (user as User | undefined)?.email;
+  return !!email && ADMIN_EMAILS.has(email.toLowerCase().trim());
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: "Forbidden" });
+  next();
+}
+
 import { initWebPush, getVapidPublicKey, saveSubscription, removeSubscription, sendPushToUser } from "./push";
 
 /** Fire-and-forget notification creator — never throws or blocks the main request.
@@ -3039,7 +3058,7 @@ Return exactly this structure:
   // POST /api/recipes/apply-image-csv
   // Accepts a CSV body with columns "Recipe" and "Image Address" (same format as
   // the manual upload sheet) and bulk-updates image_url on system recipes.
-  app.post("/api/recipes/apply-image-csv", async (req, res) => {
+  app.post("/api/recipes/apply-image-csv", requireAdmin, async (req, res) => {
     try {
       const { csvText } = req.body as { csvText: string };
       if (!csvText) return res.status(400).json({ error: "csvText required" });
@@ -3096,7 +3115,7 @@ Return exactly this structure:
   // caller can test with limit=5 first). Also re-applies manual images when
   // ?applyManual=true. Processes up to 15 recipes concurrently per batch to
   // stay under the 60-second proxy timeout.
-  app.post("/api/admin/reseed-images", async (req, res) => {
+  app.post("/api/admin/reseed-images", requireAdmin, async (req, res) => {
     try {
       const offset    = parseInt((req.query.offset  as string) || "0",  10);
       const limit     = parseInt((req.query.limit   as string) || "20", 10);
@@ -6844,6 +6863,115 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const all = await storage.getTabCollaborations(uid);
       const count = all.filter(c => c.collaboratorUserId === uid && c.status === "pending").length;
       res.json({ count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── Admin: users & usage ───────────────────────────────────────────────────
+  // Content tables are discovered from information_schema so this keeps working
+  // as the schema grows — no hardcoded list to fall out of date.
+  let contentTablesCache: string[] | null = null;
+  const SKIP_TABLES = new Set([
+    "users", "session", "push_subscriptions", "nav_prefs", "notifications",
+    "activity_feed", "activity_reactions", "activity_comments", "app_secrets",
+    "tab_privacy", "tab_collaborations", "friend_requests", "conversation_participants",
+    "messages", "conversations", "shares", "planner_state", "invites",
+  ]);
+  async function getContentTables(): Promise<string[]> {
+    if (contentTablesCache) return contentTablesCache;
+    const r = await pool.query(
+      `SELECT table_name FROM information_schema.columns
+       WHERE table_schema='public' AND column_name='user_id'`
+    );
+    contentTablesCache = r.rows
+      .map((x: any) => x.table_name as string)
+      .filter((t) => !SKIP_TABLES.has(t))
+      .sort();
+    return contentTablesCache;
+  }
+
+  app.get("/api/admin/overview", requireAdmin, async (_req, res) => {
+    try {
+      const tables = await getContentTables();
+      const [users, active, feed] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS total,
+                           COUNT(*) FILTER (WHERE onboarded)::int AS onboarded,
+                           COUNT(*) FILTER (WHERE created_at >= (NOW() - INTERVAL '7 days')::text)::int AS new7,
+                           COUNT(*) FILTER (WHERE created_at >= (NOW() - INTERVAL '30 days')::text)::int AS new30
+                    FROM users`),
+        pool.query(`SELECT
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '1 day')::text)::int  AS d1,
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '7 days')::text)::int  AS d7,
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '30 days')::text)::int AS d30
+                    FROM activity_feed`).catch(() => ({ rows: [{ d1: null, d7: null, d30: null }] })),
+        pool.query(`SELECT COUNT(*)::int AS events FROM activity_feed`).catch(() => ({ rows: [{ events: null }] })),
+      ]);
+
+      // Total content rows across every user-owned table
+      let totalItems = 0;
+      const byTable: { table: string; count: number }[] = [];
+      for (const t of tables) {
+        try {
+          const c = await pool.query(`SELECT COUNT(*)::int AS c FROM "${t}" WHERE user_id IS NOT NULL`);
+          const n = c.rows[0]?.c ?? 0;
+          totalItems += n;
+          if (n > 0) byTable.push({ table: t, count: n });
+        } catch { /* table shape differs — skip */ }
+      }
+      byTable.sort((a, b) => b.count - a.count);
+
+      res.json({
+        users: users.rows[0],
+        activeUsers: active.rows[0],
+        totalActivityEvents: feed.rows[0]?.events ?? null,
+        totalItems,
+        topTables: byTable.slice(0, 12),
+        tablesScanned: tables.length,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const tables = await getContentTables();
+      const base = await pool.query(
+        `SELECT u.id, u.email, u.name, u.avatar_url AS "avatarUrl", u.created_at AS "createdAt",
+                u.onboarded,
+                (u.anthropic_api_key_enc IS NOT NULL) AS "hasApiKey",
+                (u.gcal_refresh_token IS NOT NULL)    AS "hasGoogleCal",
+                (SELECT COUNT(*)::int FROM push_subscriptions ps WHERE ps.user_id = u.id) AS "devices",
+                (SELECT MAX(af.created_at) FROM activity_feed af WHERE af.user_id = u.id)  AS "lastActive",
+                (SELECT COUNT(*)::int FROM activity_feed af WHERE af.user_id = u.id)       AS "activityEvents",
+                (SELECT COUNT(*)::int FROM friend_requests fr
+                   WHERE fr.status='accepted' AND (fr.from_user_id = u.id OR fr.to_user_id = u.id)) AS "friends"
+         FROM users u ORDER BY u.created_at DESC NULLS LAST`
+      );
+
+      // One grouped count per table → scales with tables, not users
+      const perUser = new Map<number, Record<string, number>>();
+      for (const t of tables) {
+        try {
+          const r = await pool.query(
+            `SELECT user_id AS uid, COUNT(*)::int AS c FROM "${t}" WHERE user_id IS NOT NULL GROUP BY user_id`
+          );
+          for (const row of r.rows) {
+            const m = perUser.get(row.uid) ?? {};
+            m[t] = row.c;
+            perUser.set(row.uid, m);
+          }
+        } catch { /* skip odd tables */ }
+      }
+
+      const users = base.rows.map((u: any) => {
+        const counts = perUser.get(u.id) ?? {};
+        const totalItems = Object.values(counts).reduce((a: number, b: any) => a + b, 0);
+        const top = Object.entries(counts)
+          .sort((a, b) => (b[1] as number) - (a[1] as number))
+          .slice(0, 5)
+          .map(([table, count]) => ({ table, count }));
+        return { ...u, totalItems, topModules: top, moduleCount: Object.keys(counts).length };
+      });
+
+      res.json({ users, tablesScanned: tables.length });
     } catch (e) { handleError(res, e); }
   });
 

@@ -15,7 +15,7 @@ import {
   Eye, EyeOff, GripVertical, Settings, LogOut, Baby, Palette, KeyRound,
   Bell, ChevronRight, Sparkles, Flame, Activity, Landmark, Lock,
   Search, Plus, MessageSquare, PenLine, CalendarCheck, ClipboardList, Archive,
-  History, BookOpen, Quote,
+  History, BookOpen, Quote, ShieldCheck,
 } from "lucide-react";
 
 // ── Per-tab custom "shared" descriptions ─────────────────────────────────────
@@ -44,6 +44,10 @@ const TAB_SHARED_DESCRIPTIONS: Record<string, string> = {
 };
 
 const PRIVACY_PATHS = new Set(Object.keys(TAB_SHARED_DESCRIPTIONS));
+
+// Owner accounts — mirrors ADMIN_EMAILS on the server. This only controls whether
+// the nav link is rendered; the server independently enforces access.
+const ADMIN_EMAILS = new Set(["jamisonpence@gmail.com", "jamison@trysecurelead.com"]);
 
 // ── Notification feed (persistent, itemized) ─────────────────────────────────
 type NotificationItem = {
@@ -975,6 +979,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>{manageMode ? "Done" : "Customize Sidebar"}</span>
           </button>
           <NavLink path="/settings" label="Settings" icon={KeyRound} active={location === "/settings"} />
+          {ADMIN_EMAILS.has((user?.email ?? "").toLowerCase()) && (
+            <NavLink path="/admin" label="Admin" icon={ShieldCheck} active={location === "/admin"} />
+          )}
           <button onClick={toggle} className="sidebar-item w-full">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>

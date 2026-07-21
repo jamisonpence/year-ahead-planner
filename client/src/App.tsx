@@ -106,6 +106,7 @@ const MessengerPage = lazyPage(() => import("@/pages/MessengerPage"));
 const NotFound = lazyPage(() => import("@/pages/not-found"));
 const ReviewPage = lazyPage(() => import("@/pages/ReviewPage"));
 const CloseDayPage = lazyPage(() => import("@/pages/CloseDayPage"));
+const AdminPage = lazyPage(() => import("@/pages/AdminPage"));
 const PlannerHome = lazyPage(() => import("@/pages/planner/Home"));
 const PlannerSetup = lazyPage(() => import("@/pages/planner/Setup"));
 const PlannerPreferences = lazyPage(() => import("@/pages/planner/Preferences"));
@@ -226,6 +227,7 @@ function AuthenticatedApp() {
         <Route path="/politics" component={PoliticsPage} />
         <Route path="/review" component={ReviewPage} />
         <Route path="/close-day" component={CloseDayPage} />
+        <Route path="/admin" component={AdminPage} />
         <Route path="/messenger" component={MessengerPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/profile/:userId" component={ProfilePage} />
