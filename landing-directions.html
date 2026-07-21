@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyLifos — landing page design directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;background:#0e0e11;color:#fff}
+
+  /* ── Chrome for the comparison tool itself ─────────────────────────── */
+  .tool{position:sticky;top:0;z-index:100;background:#0e0e11;border-bottom:1px solid #26262e;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .tool h1{font-size:13px;margin:0;font-weight:600;letter-spacing:-.01em}
+  .tool p{margin:0;font-size:12px;color:#8b8b9a}
+  .tabs{display:flex;gap:6px;margin-left:auto}
+  .tab{background:#1a1a20;border:1px solid #2e2e38;color:#b6b6c4;padding:7px 14px;border-radius:8px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;transition:.15s}
+  .tab:hover{border-color:#4a4a58;color:#fff}
+  .tab[aria-selected="true"]{background:#fff;color:#0e0e11;border-color:#fff}
+  .frame{display:none}
+  .frame.on{display:block}
+  .note{padding:16px 20px;background:#15151a;border-bottom:1px solid #26262e;font-size:12.5px;line-height:1.6;color:#a5a5b5}
+  .note b{color:#fff;font-weight:600}
+
+  /* ══════════════════════════════════════════════════════════════════════
+     DIRECTION A — EDITORIAL
+     Serif display, warm paper ground, one earthy accent, lots of air.
+     Reads like a considered personal object rather than a SaaS tool.
+     ══════════════════════════════════════════════════════════════════════ */
+  .A{--ink:#241f1a;--ink-soft:#6b6259;--paper:#f7f3ec;--card:#fffdfa;--accent:#b4552d;--line:#e2d9cc;
+     background:var(--paper);color:var(--ink);font-family:Inter,sans-serif}
+  .A .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  .A nav{display:flex;align-items:center;gap:28px;padding:28px 0}
+  .A .logo{font-family:Fraunces,serif;font-size:21px;font-weight:600;letter-spacing:-.02em}
+  .A nav a{color:var(--ink-soft);text-decoration:none;font-size:14px}
+  .A nav a:hover{color:var(--ink)}
+  .A .navr{margin-left:auto;display:flex;align-items:center;gap:20px}
+  .A .btn{background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:100px;font-size:14px;font-weight:500;text-decoration:none;display:inline-block}
+  .A .hero{padding:76px 0 64px;max-width:820px}
+  .A .eyebrow{font-family:Fraunces,serif;font-style:italic;font-size:15px;color:var(--accent);margin-bottom:20px}
+  .A h1{font-family:Fraunces,serif;font-size:clamp(42px,6.2vw,72px);line-height:1.02;letter-spacing:-.025em;font-weight:500;margin:0 0 26px}
+  .A h1 em{font-style:italic;color:var(--accent)}
+  .A .sub{font-size:19px;line-height:1.65;color:var(--ink-soft);max-width:600px;margin:0 0 36px}
+  .A .cta{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .A .cta .btn{padding:15px 28px;font-size:15px}
+  .A .cta small{color:var(--ink-soft);font-size:13.5px}
+  .A .trust{display:flex;gap:32px;margin-top:44px;padding-top:26px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .A .trust span{font-size:13.5px;color:var(--ink-soft)}
+  .A .trust b{font-family:Fraunces,serif;color:var(--ink);font-weight:600;display:block;font-size:16px;margin-bottom:2px}
+  .A .sec{padding:80px 0}
+  .A .seclabel{font-family:Fraunces,serif;font-style:italic;color:var(--accent);font-size:15px;margin-bottom:12px}
+  .A h2{font-family:Fraunces,serif;font-size:38px;font-weight:500;letter-spacing:-.02em;margin:0 0 12px}
+  .A .secsub{color:var(--ink-soft);font-size:16.5px;margin:0 0 40px}
+  .A .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .A .mod{background:var(--card);padding:22px 20px}
+  .A .mod h3{font-family:Fraunces,serif;font-size:17px;font-weight:600;margin:0 0 5px}
+  .A .mod p{margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.55}
+
+  /* ══════════════════════════════════════════════════════════════════════
+     DIRECTION B — QUIET
+     Near-invisible chrome, one deep accent, typographic hierarchy doing
+     all the work. Content-forward; ages well; closest to Notion/Linear.
+     ══════════════════════════════════════════════════════════════════════ */
+  .B{--ink:#16181d;--ink-soft:#61656e;--bg:#fcfcfd;--card:#fff;--accent:#1c6b52;--line:#e8e9ec;
+     background:var(--bg);color:var(--ink);font-family:Inter,sans-serif;letter-spacing:-.011em}
+  .B .wrap{max-width:1000px;margin:0 auto;padding:0 32px}
+  .B nav{display:flex;align-items:center;gap:26px;padding:22px 0}
+  .B .logo{font-size:15.5px;font-weight:650;letter-spacing:-.02em}
+  .B nav a{color:var(--ink-soft);text-decoration:none;font-size:14px;font-weight:450}
+  .B .navr{margin-left:auto;display:flex;align-items:center;gap:18px}
+  .B .btn{background:var(--ink);color:#fff;padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:520;text-decoration:none}
+  .B .hero{padding:92px 0 72px;max-width:720px}
+  .B .eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:520;color:var(--accent);background:#1c6b520f;border:1px solid #1c6b5222;padding:5px 11px;border-radius:100px;margin-bottom:26px}
+  .B h1{font-size:clamp(38px,5.4vw,60px);line-height:1.06;letter-spacing:-.038em;font-weight:640;margin:0 0 22px}
+  .B h1 span{color:var(--ink-soft)}
+  .B .sub{font-size:18px;line-height:1.6;color:var(--ink-soft);max-width:560px;margin:0 0 34px;font-weight:420}
+  .B .cta{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .B .cta .btn{padding:13px 22px;font-size:14.5px}
+  .B .cta small{font-size:13px;color:var(--ink-soft)}
+  .B .trust{display:flex;gap:26px;margin-top:52px;flex-wrap:wrap}
+  .B .trust span{font-size:13px;color:var(--ink-soft);display:flex;align-items:center;gap:7px}
+  .B .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+  .B .sec{padding:72px 0;border-top:1px solid var(--line)}
+  .B .seclabel{font-size:12.5px;font-weight:560;color:var(--accent);text-transform:uppercase;letter-spacing:.07em;margin-bottom:14px}
+  .B h2{font-size:31px;font-weight:640;letter-spacing:-.03em;margin:0 0 10px}
+  .B .secsub{color:var(--ink-soft);font-size:16px;margin:0 0 36px;font-weight:420}
+  .B .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:10px}
+  .B .mod{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .B .mod h3{font-size:14.5px;font-weight:580;margin:0 0 4px}
+  .B .mod p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+
+  /* ══════════════════════════════════════════════════════════════════════
+     DIRECTION C — NIGHT
+     Dark hero, high contrast, geometric display face, electric accent.
+     Most distinctive and most opinionated; also the most polarising.
+     ══════════════════════════════════════════════════════════════════════ */
+  .C{--ink:#0b0c10;--paper:#fff;--soft:#8a8f9c;--accent:#c8f04c;--line:#1e2029;
+     background:var(--paper);color:var(--ink);font-family:'Space Grotesk',Inter,sans-serif}
+  .C .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  .C .dark{background:var(--ink);color:#fff}
+  .C nav{display:flex;align-items:center;gap:26px;padding:24px 0}
+  .C .logo{font-size:17px;font-weight:700;letter-spacing:-.03em}
+  .C nav a{color:#a8adba;text-decoration:none;font-size:14px}
+  .C .navr{margin-left:auto;display:flex;align-items:center;gap:18px}
+  .C .btn{background:var(--accent);color:var(--ink);padding:11px 20px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;display:inline-block}
+  .C .hero{padding:84px 0 92px;max-width:900px}
+  .C .eyebrow{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin-bottom:24px}
+  .C h1{font-size:clamp(42px,6.6vw,78px);line-height:.98;letter-spacing:-.045em;font-weight:700;margin:0 0 24px}
+  .C h1 em{font-style:normal;color:var(--accent)}
+  .C .sub{font-size:18.5px;line-height:1.58;color:#a8adba;max-width:580px;margin:0 0 36px}
+  .C .cta{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .C .cta .btn{padding:15px 26px;font-size:15px}
+  .C .cta small{color:#8a8f9c;font-size:13px}
+  .C .trust{display:flex;gap:0;margin-top:56px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .C .trust span{font-size:13px;color:#a8adba;padding:18px 26px 0 0;margin-right:26px;border-right:1px solid var(--line)}
+  .C .trust span:last-child{border:0}
+  .C .trust b{display:block;color:#fff;font-weight:600;font-size:15px;margin-bottom:3px}
+  .C .sec{padding:76px 0}
+  .C .seclabel{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:#6b7280;margin-bottom:14px}
+  .C h2{font-size:40px;font-weight:700;letter-spacing:-.035em;margin:0 0 10px}
+  .C .secsub{color:#5c626e;font-size:16.5px;margin:0 0 38px}
+  .C .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .C .mod{border:1.5px solid #e6e8ec;border-radius:8px;padding:20px;transition:.15s}
+  .C .mod:hover{border-color:var(--ink);transform:translateY(-2px)}
+  .C .mod h3{font-size:15px;font-weight:600;margin:0 0 5px;letter-spacing:-.01em}
+  .C .mod p{margin:0;font-size:13px;color:#6b7280;line-height:1.5}
+
+  @media(max-width:640px){
+    .A .wrap,.B .wrap,.C .wrap{padding:0 20px}
+    .A nav a,.B nav a,.C nav a{display:none}
+    .tabs{margin-left:0;width:100%}
+    .tab{flex:1}
+  }
+</style>
+</head>
+<body>
+
+<div class="tool">
+  <div>
+    <h1>MyLifos landing — three directions</h1>
+    <p>Same copy, same structure. Only the visual language changes.</p>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  data-t="A">A · Editorial</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="B">B · Quiet</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="C">C · Night</button>
+  </div>
+</div>
+
+<div class="note" id="note"></div>
+
+<!-- ─────────────────────────── A · EDITORIAL ─────────────────────────── -->
+<div class="frame on A" data-f="A">
+  <div class="wrap">
+    <nav>
+      <span class="logo">MyLifos</span>
+      <a href="#">How it works</a><a href="#">Features</a>
+      <span class="navr"><a href="#">Log in</a><a href="#" class="btn">Get started</a></span>
+    </nav>
+    <section class="hero">
+      <div class="eyebrow">Your personal life OS</div>
+      <h1>Stop juggling apps.<br>Start <em>living intentionally.</em></h1>
+      <p class="sub">MyLifos brings your goals, habits, relationships, reading, workouts, and everyday life together in one beautifully connected place.</p>
+      <div class="cta">
+        <a href="#" class="btn">Continue with Google</a>
+        <small>Free — no credit card</small>
+      </div>
+      <div class="trust">
+        <span><b>No credit card</b>Free to start, always</span>
+        <span><b>Every device</b>Phone, tablet, desktop</span>
+        <span><b>Minutes to set up</b>No learning curve</span>
+      </div>
+    </section>
+  </div>
+  <div class="wrap">
+    <section class="sec">
+      <div class="seclabel">Everything in one place</div>
+      <h2>One place for all of it</h2>
+      <p class="secsub">Choose the trackers that match your life. Turn off the ones you don't need.</p>
+      <div class="grid">
+        <div class="mod"><h3>Goals &amp; Projects</h3><p>Milestones, tasks, chores &amp; house projects</p></div>
+        <div class="mod"><h3>Calendar</h3><p>Events, birthdays &amp; recurring reminders</p></div>
+        <div class="mod"><h3>Workouts</h3><p>Strength, cardio, yoga &amp; custom plans</p></div>
+        <div class="mod"><h3>Reading</h3><p>Books, reading progress &amp; notes</p></div>
+        <div class="mod"><h3>Recipes</h3><p>Meals, ingredients &amp; grocery lists</p></div>
+        <div class="mod"><h3>Relationships</h3><p>People, groups, birthdays &amp; connections</p></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ───────────────────────────── B · QUIET ───────────────────────────── -->
+<div class="frame B" data-f="B">
+  <div class="wrap">
+    <nav>
+      <span class="logo">MyLifos</span>
+      <a href="#">How it works</a><a href="#">Features</a>
+      <span class="navr"><a href="#">Log in</a><a href="#" class="btn">Get started</a></span>
+    </nav>
+    <section class="hero">
+      <div class="eyebrow"><span class="dot"></span> Your personal life OS</div>
+      <h1>Stop juggling apps.<br><span>Start living intentionally.</span></h1>
+      <p class="sub">MyLifos brings your goals, habits, relationships, reading, workouts, and everyday life together in one beautifully connected place.</p>
+      <div class="cta">
+        <a href="#" class="btn">Continue with Google</a>
+        <small>Free — no credit card</small>
+      </div>
+      <div class="trust">
+        <span><span class="dot"></span> No credit card</span>
+        <span><span class="dot"></span> Works on all devices</span>
+        <span><span class="dot"></span> Set up in minutes</span>
+      </div>
+    </section>
+  </div>
+  <div class="wrap">
+    <section class="sec">
+      <div class="seclabel">Everything in one place</div>
+      <h2>One place for all of it</h2>
+      <p class="secsub">Choose the trackers that match your life. Turn off the ones you don't need.</p>
+      <div class="grid">
+        <div class="mod"><h3>Goals &amp; Projects</h3><p>Milestones, tasks, chores &amp; house projects</p></div>
+        <div class="mod"><h3>Calendar</h3><p>Events, birthdays &amp; recurring reminders</p></div>
+        <div class="mod"><h3>Workouts</h3><p>Strength, cardio, yoga &amp; custom plans</p></div>
+        <div class="mod"><h3>Reading</h3><p>Books, reading progress &amp; notes</p></div>
+        <div class="mod"><h3>Recipes</h3><p>Meals, ingredients &amp; grocery lists</p></div>
+        <div class="mod"><h3>Relationships</h3><p>People, groups, birthdays &amp; connections</p></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ───────────────────────────── C · NIGHT ───────────────────────────── -->
+<div class="frame C" data-f="C">
+  <div class="dark">
+    <div class="wrap">
+      <nav>
+        <span class="logo">MyLifos</span>
+        <a href="#">How it works</a><a href="#">Features</a>
+        <span class="navr"><a href="#" style="color:#a8adba">Log in</a><a href="#" class="btn">Get started</a></span>
+      </nav>
+      <section class="hero">
+        <div class="eyebrow">Your personal life OS</div>
+        <h1>Stop juggling apps.<br>Start <em>living intentionally.</em></h1>
+        <p class="sub">MyLifos brings your goals, habits, relationships, reading, workouts, and everyday life together in one beautifully connected place.</p>
+        <div class="cta">
+          <a href="#" class="btn">Continue with Google</a>
+          <small>Free — no credit card</small>
+        </div>
+        <div class="trust">
+          <span><b>No credit card</b>Free to start</span>
+          <span><b>Every device</b>Phone to desktop</span>
+          <span><b>Minutes</b>No learning curve</span>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="wrap">
+    <section class="sec">
+      <div class="seclabel">Everything in one place</div>
+      <h2>One place for all of it</h2>
+      <p class="secsub">Choose the trackers that match your life. Turn off the ones you don't need.</p>
+      <div class="grid">
+        <div class="mod"><h3>Goals &amp; Projects</h3><p>Milestones, tasks, chores &amp; house projects</p></div>
+        <div class="mod"><h3>Calendar</h3><p>Events, birthdays &amp; recurring reminders</p></div>
+        <div class="mod"><h3>Workouts</h3><p>Strength, cardio, yoga &amp; custom plans</p></div>
+        <div class="mod"><h3>Reading</h3><p>Books, reading progress &amp; notes</p></div>
+        <div class="mod"><h3>Recipes</h3><p>Meals, ingredients &amp; grocery lists</p></div>
+        <div class="mod"><h3>Relationships</h3><p>People, groups, birthdays &amp; connections</p></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const NOTES = {
+    A: "<b>A · Editorial.</b> Fraunces serif display on warm paper, a single terracotta accent, hairline-divided module grid. Reads personal and considered — closer to a well-made notebook than a productivity tool, which fits a life-management product. Risk: serif display is less conventional for software and needs disciplined spacing to not feel precious.",
+    B: "<b>B · Quiet.</b> Inter with tight negative tracking, near-white ground, deep green accent used sparingly, chrome almost invisible. Hierarchy comes entirely from type weight and size. Safest of the three and ages best. Risk: it's the current default for good software, so it's the least distinctive.",
+    C: "<b>C · Night.</b> Dark hero, Space Grotesk geometric display, electric lime accent, hard-edged 6px radii. Most memorable and most opinionated. Risk: high-contrast dark heroes read as developer-tool, which may undersell a warm, personal product — and lime is polarising."
+  };
+  const tabs = [...document.querySelectorAll('.tab')];
+  const frames = [...document.querySelectorAll('.frame')];
+  const note = document.getElementById('note');
+  function show(t){
+    tabs.forEach(b => b.setAttribute('aria-selected', String(b.dataset.t === t)));
+    frames.forEach(f => f.classList.toggle('on', f.dataset.f === t));
+    note.innerHTML = NOTES[t];
+    window.scrollTo({top:0});
+  }
+  tabs.forEach(b => b.addEventListener('click', () => show(b.dataset.t)));
+  show('A');
+</script>
+</body>
+</html>
