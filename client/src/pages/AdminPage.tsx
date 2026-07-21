@@ -11,7 +11,7 @@ type AdminUser = {
   id: number; email: string; name: string; avatarUrl: string | null;
   createdAt: string | null; onboarded: boolean;
   hasApiKey: boolean; hasGoogleCal: boolean; devices: number;
-  lastActive: string | null; activityEvents: number; friends: number;
+  lastSeen: string | null; lastActive: string | null; activityEvents: number; friends: number;
   totalItems: number; moduleCount: number;
   topModules: { table: string; count: number }[];
 };
@@ -159,7 +159,7 @@ export default function AdminPage() {
 
         <div className="divide-y">
           {filtered.map((u) => {
-            const seen = relativeDays(u.lastActive);
+            const seen = relativeDays(u.lastSeen ?? u.lastActive);
             const open = expanded === u.id;
             return (
               <div key={u.id}>
@@ -197,6 +197,9 @@ export default function AdminPage() {
                     <div className="flex flex-wrap gap-2 text-[11px]">
                       <span className="px-2 py-0.5 rounded-full bg-secondary">{u.moduleCount} modules used</span>
                       <span className="px-2 py-0.5 rounded-full bg-secondary">{u.activityEvents} activity events</span>
+                      <span className="px-2 py-0.5 rounded-full bg-secondary">
+                        last session {u.lastSeen ? relativeDays(u.lastSeen).label : "not yet tracked"}
+                      </span>
                       <span className="px-2 py-0.5 rounded-full bg-secondary">{u.friends} friends</span>
                       {u.devices > 0 && (
                         <span className="px-2 py-0.5 rounded-full bg-secondary flex items-center gap-1">
@@ -238,6 +241,8 @@ export default function AdminPage() {
 
       <p className="text-[11px] text-muted-foreground">
         Aggregate counts only — no one's personal content is shown here.
+        “Active” counts real sessions (tracked from this release onward), falling back to
+        content activity for users not yet seen since.
       </p>
     </div>
   );

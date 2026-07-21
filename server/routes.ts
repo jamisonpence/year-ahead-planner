@@ -1414,6 +1414,11 @@ Rules:
   try {
     await pool.query('ALTER TABLE weekly_reviews ADD COLUMN IF NOT EXISTS ai_plan_json text');
   } catch (_) {}
+  // Engagement: when we last saw each user (real DAU/WAU, not just content writes)
+  try {
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at text');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_users_last_seen_at ON users (last_seen_at)');
+  } catch (_) {}
   // Shared household planner state (meal plan + shopping list)
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS planner_state (
@@ -1648,9 +1653,19 @@ Rules:
     }
   });
 
+  const lastSeenTouch = new Map<number, number>();
+  const LAST_SEEN_THROTTLE_MS = 60 * 60 * 1000; // at most one write per user per hour
+
   app.get("/api/me", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Not authenticated" });
     const user = req.user as User;
+    // Record engagement. Fire-and-forget and throttled — never blocks the response.
+    const now = Date.now();
+    if (now - (lastSeenTouch.get(user.id) ?? 0) > LAST_SEEN_THROTTLE_MS) {
+      lastSeenTouch.set(user.id, now);
+      pool.query(`UPDATE users SET last_seen_at = $1 WHERE id = $2`,
+        [new Date().toISOString(), user.id]).catch(() => {});
+    }
     const enc = await storage.getAnthropicApiKeyEnc(user.id);
     // Never expose secrets (password hash, OAuth tokens, encrypted API key) —
     // only indicate whether an Anthropic key is saved
@@ -2011,41 +2026,41 @@ Return exactly this structure:
   });
 
   // ── Events ──────────────────────────────────────────────────────────────────
-  app.get("/api/events", async (req, res) => {
+  app.get("/api/events", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllEventsWithTasks(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/events", async (req, res) => {
+  app.post("/api/events", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createEvent(insertEventSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/events/:id", async (req, res) => {
+  app.patch("/api/events/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateEvent(+req.params.id, insertEventSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/events/:id", async (req, res) => {
+  app.delete("/api/events/:id", requireAuth, async (req, res) => {
     (await storage.deleteEvent(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Tasks ────────────────────────────────────────────────────────────────────
-  app.post("/api/events/:eventId/tasks", async (req, res) => {
+  app.post("/api/events/:eventId/tasks", requireAuth, async (req, res) => {
     try { res.status(201).json(await storage.createTask(insertTaskSchema.parse({ ...req.body, eventId: +req.params.eventId }))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/tasks/:id", async (req, res) => {
+  app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateTask(+req.params.id, insertTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/tasks/:id", async (req, res) => {
+  app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
     (await storage.deleteTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
@@ -2099,13 +2114,13 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/books", async (req, res) => {
+  app.get("/api/books", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllBooksWithSessions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/books", async (req, res) => {
+  app.post("/api/books", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const book = await storage.createBook(insertBookSchema.parse(req.body), uid);
@@ -2114,7 +2129,7 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/books/:id", async (req, res) => {
+  app.patch("/api/books/:id", requireAuth, async (req, res) => {
     try {
       const body = insertBookSchema.partial().parse(req.body);
       // Check if we're transitioning to 'finished'
@@ -2150,49 +2165,49 @@ Return exactly this structure:
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/books/:id", async (req, res) => {
+  app.delete("/api/books/:id", requireAuth, async (req, res) => {
     (await storage.deleteBook(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Reading Sessions ──────────────────────────────────────────────────────────
-  app.get("/api/reading-sessions", async (_req, res) => {
+  app.get("/api/reading-sessions", requireAuth, async (_req, res) => {
     try { res.json(await storage.getAllReadingSessions()); } catch (e) { handleError(res, e); }
   });
-  app.post("/api/reading-sessions", async (req, res) => {
+  app.post("/api/reading-sessions", requireAuth, async (req, res) => {
     try { res.status(201).json(await storage.createReadingSession(insertReadingSessionSchema.parse(req.body))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/reading-sessions/:id", async (req, res) => {
+  app.patch("/api/reading-sessions/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateReadingSession(+req.params.id, insertReadingSessionSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/reading-sessions/:id", async (req, res) => {
+  app.delete("/api/reading-sessions/:id", requireAuth, async (req, res) => {
     (await storage.deleteReadingSession(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Workout Templates ─────────────────────────────────────────────────────────
-  app.get("/api/workout-templates", async (req, res) => {
+  app.get("/api/workout-templates", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllWorkoutTemplates(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/workout-templates", async (req, res) => {
+  app.post("/api/workout-templates", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createWorkoutTemplate(insertWorkoutTemplateSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/workout-templates/:id", async (req, res) => {
+  app.patch("/api/workout-templates/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateWorkoutTemplate(+req.params.id, insertWorkoutTemplateSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/workout-templates/:id", async (req, res) => {
+  app.delete("/api/workout-templates/:id", requireAuth, async (req, res) => {
     (await storage.deleteWorkoutTemplate(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
@@ -2342,13 +2357,13 @@ Return exactly this structure:
   });
 
   // ── Workout Logs ──────────────────────────────────────────────────────────────
-  app.get("/api/workout-logs", async (req, res) => {
+  app.get("/api/workout-logs", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllWorkoutLogs(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/workout-logs", async (req, res) => {
+  app.post("/api/workout-logs", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const log = await storage.createWorkoutLog(insertWorkoutLogSchema.parse(req.body), uid);
@@ -2385,31 +2400,31 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/workout-logs/:id", async (req, res) => {
+  app.patch("/api/workout-logs/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateWorkoutLog(+req.params.id, insertWorkoutLogSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/workout-logs/:id", async (req, res) => {
+  app.delete("/api/workout-logs/:id", requireAuth, async (req, res) => {
     (await storage.deleteWorkoutLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goals ─────────────────────────────────────────────────────────────────────
-  app.get("/api/goals", async (req, res) => {
+  app.get("/api/goals", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllGoalsWithProjects(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/goals", async (req, res) => {
+  app.post("/api/goals", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createGoal(insertGoalSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/goals/:id", async (req, res) => {
+  app.patch("/api/goals/:id", requireAuth, async (req, res) => {
     try {
       const parsed = insertGoalSchema.partial().parse(req.body);
       // Snapshot the previous state so we can detect crossings (completion,
@@ -2474,40 +2489,40 @@ Return exactly this structure:
       res.json(r);
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/goals/:id", async (req, res) => {
+  app.delete("/api/goals/:id", requireAuth, async (req, res) => {
     (await storage.deleteGoal(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goal Tasks (legacy) ──────────────────────────────────────────────────────
-  app.post("/api/goals/:goalId/tasks", async (req, res) => {
+  app.post("/api/goals/:goalId/tasks", requireAuth, async (req, res) => {
     try { res.status(201).json(await storage.createGoalTask(insertGoalTaskSchema.parse({ ...req.body, goalId: +req.params.goalId }))); }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/goal-tasks/:id", async (req, res) => {
+  app.patch("/api/goal-tasks/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateGoalTask(+req.params.id, insertGoalTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/goal-tasks/:id", async (req, res) => {
+  app.delete("/api/goal-tasks/:id", requireAuth, async (req, res) => {
     (await storage.deleteGoalTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Projects ──────────────────────────────────────────────────────────────────
-  app.post("/api/goals/:goalId/projects", async (req, res) => {
+  app.post("/api/goals/:goalId/projects", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: +req.params.goalId }), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/projects/:id", async (req, res) => {
+  app.patch("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateProject(+req.params.id, insertProjectSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/projects/:id", async (req, res) => {
+  app.delete("/api/projects/:id", requireAuth, async (req, res) => {
     (await storage.deleteProject(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
@@ -2585,7 +2600,7 @@ Return exactly this structure:
     WHERE p.id = sub.project_id AND p.status != 'blocked' AND p.status != sub.derived
   `).then(r => { if (r.rowCount) console.log(`Backfilled status on ${r.rowCount} projects.`); }).catch(() => {});
 
-  app.post("/api/projects/:projectId/tasks", async (req, res) => {
+  app.post("/api/projects/:projectId/tasks", requireAuth, async (req, res) => {
     try {
       const task = await storage.createProjectTask(insertProjectTaskSchema.parse({ ...req.body, projectId: +req.params.projectId }));
       afterProjectTaskChange(+req.params.projectId);
@@ -2593,7 +2608,7 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/project-tasks/:id", async (req, res) => {
+  app.patch("/api/project-tasks/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateProjectTask(+req.params.id, insertProjectTaskSchema.partial().parse(req.body));
       if (!r) return res.status(404).json({ error: "Not found" });
@@ -2601,7 +2616,7 @@ Return exactly this structure:
       res.json(r);
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/project-tasks/:id", async (req, res) => {
+  app.delete("/api/project-tasks/:id", requireAuth, async (req, res) => {
     const pid = await pool.query(`SELECT project_id FROM project_tasks WHERE id=$1`, [+req.params.id]).then(r => r.rows[0]?.project_id).catch(() => null);
     const ok = await storage.deleteProjectTask(+req.params.id);
     if (ok && pid) afterProjectTaskChange(pid);
@@ -2609,13 +2624,13 @@ Return exactly this structure:
   });
 
   // ── Standalone Projects (no goal) ────────────────────────────────────────────
-  app.get("/api/projects/standalone", async (req, res) => {
+  app.get("/api/projects/standalone", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getStandaloneProjects(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/projects/standalone", async (req, res) => {
+  app.post("/api/projects/standalone", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createProject(insertProjectSchema.parse({ ...req.body, goalId: null }), uid));
@@ -2624,61 +2639,61 @@ Return exactly this structure:
   });
 
   // ── General Tasks ─────────────────────────────────────────────────────────────
-  app.get("/api/general-tasks", async (req, res) => {
+  app.get("/api/general-tasks", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllGeneralTasks(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/general-tasks", async (req, res) => {
+  app.post("/api/general-tasks", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createGeneralTask(insertGeneralTaskSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/general-tasks/:id", async (req, res) => {
+  app.patch("/api/general-tasks/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/general-tasks/:id", async (req, res) => {
+  app.delete("/api/general-tasks/:id", requireAuth, async (req, res) => {
     (await storage.deleteGeneralTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Relationship Groups ───────────────────────────────────────────────────────
-  app.get("/api/groups", async (req, res) => {
+  app.get("/api/groups", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllGroups(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/groups", async (req, res) => {
+  app.post("/api/groups", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createGroup(insertRelationshipGroupSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/groups/:id", async (req, res) => {
+  app.patch("/api/groups/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateGroup(+req.params.id, insertRelationshipGroupSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/groups/:id", async (req, res) => {
+  app.delete("/api/groups/:id", requireAuth, async (req, res) => {
     (await storage.deleteGroup(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── People ────────────────────────────────────────────────────────────────────
-  app.get("/api/people", async (req, res) => {
+  app.get("/api/people", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllPeople(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/people", async (req, res) => {
+  app.post("/api/people", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const person = await storage.createPerson(insertPersonSchema.parse(req.body), uid);
@@ -2699,7 +2714,7 @@ Return exactly this structure:
       res.status(201).json(person);
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/people/:id", async (req, res) => {
+  app.patch("/api/people/:id", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const data = insertPersonSchema.partial().parse(req.body);
@@ -2733,18 +2748,18 @@ Return exactly this structure:
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/people/:id", async (req, res) => {
+  app.delete("/api/people/:id", requireAuth, async (req, res) => {
     (await storage.deletePerson(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Timeline Entries ─────────────────────────────────────────────────────────
-  app.get("/api/timeline", async (req, res) => {
+  app.get("/api/timeline", requireAuth, async (req, res) => {
     try {
       const entries = await storage.getTimelineEntries((req.user as User).id);
       res.json(entries);
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/timeline", async (req, res) => {
+  app.post("/api/timeline", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const { personIds, interactionType, customType, note, date } = req.body as {
@@ -2760,7 +2775,7 @@ Return exactly this structure:
       res.json({ id });
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/timeline/:id", async (req, res) => {
+  app.patch("/api/timeline/:id", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const { personIds, interactionType, customType, note, date } = req.body as any;
@@ -2771,14 +2786,14 @@ Return exactly this structure:
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/timeline/:id", async (req, res) => {
+  app.delete("/api/timeline/:id", requireAuth, async (req, res) => {
     try {
       const ok = await storage.deleteTimelineEntry(+req.params.id, (req.user as User).id);
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/people/:id/link-spouse", async (req, res) => {
+  app.post("/api/people/:id/link-spouse", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const id = +req.params.id;
@@ -2809,7 +2824,7 @@ Return exactly this structure:
   // POST /api/people/:id/merge
   // Body: { mergePersonId: number }  — merge mergePersonId INTO :id, delete mergePersonId
   // OR:   { linkUserId: number }     — link :id to a MyLifos user (set linkedUserId)
-  app.post("/api/people/:id/merge", async (req, res) => {
+  app.post("/api/people/:id/merge", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const primaryId = +req.params.id;
@@ -2959,7 +2974,7 @@ Return exactly this structure:
     return cleanRecipeText(value.text || value.name || "");
   }
 
-  app.post("/api/recipes/import-url", async (req, res) => {
+  app.post("/api/recipes/import-url", requireAuth, async (req, res) => {
     try {
       const rawUrl = String(req.body?.url || "").trim();
       if (!rawUrl) return res.status(400).json({ error: "url is required" });
@@ -3030,13 +3045,13 @@ Return exactly this structure:
     }
   });
 
-  app.get("/api/recipes", async (req, res) => {
+  app.get("/api/recipes", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllRecipes(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/recipes", async (req, res) => {
+  app.post("/api/recipes", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const recipe = await storage.createRecipe(insertRecipeSchema.parse(req.body), uid);
@@ -3045,13 +3060,13 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/recipes/:id", async (req, res) => {
+  app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateRecipe(+req.params.id, insertRecipeSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/recipes/:id", async (req, res) => {
+  app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
     (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
@@ -3255,7 +3270,7 @@ Return exactly this structure:
   });
 
   // ── Temporary: report server outbound IP (for FatSecret whitelist setup) ──
-  app.get("/api/server-ip", async (_req, res) => {
+  app.get("/api/server-ip", requireAdmin, async (_req, res) => {
     try {
       const r = await fetch("https://api.ipify.org?format=json");
       const data = await r.json() as { ip: string };
@@ -3521,54 +3536,54 @@ Return exactly this structure:
   });
 
   // ── Meal Bundles ────────────────────────────────────────────────────────────
-  app.get("/api/meal-bundles", async (req, res) => {
+  app.get("/api/meal-bundles", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllBundles(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/meal-bundles", async (req, res) => {
+  app.post("/api/meal-bundles", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createBundle(insertMealBundleSchema.parse(req.body), uid));
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/meal-bundles/:id", async (req, res) => {
+  app.patch("/api/meal-bundles/:id", requireAuth, async (req, res) => {
     try {
       const r = await storage.updateBundle(+req.params.id, insertMealBundleSchema.partial().parse(req.body));
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/meal-bundles/:id", async (req, res) => {
+  app.delete("/api/meal-bundles/:id", requireAuth, async (req, res) => {
     (await storage.deleteBundle(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Week Plan ───────────────────────────────────────────────────────────────
-  app.get("/api/week-plan/:weekStart", async (req, res) => {
+  app.get("/api/week-plan/:weekStart", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getWeekPlan(req.params.weekStart, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/week-plan", async (req, res) => {
+  app.post("/api/week-plan", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.assignToWeek(insertWeekPlanSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.delete("/api/week-plan/:id", async (req, res) => {
+  app.delete("/api/week-plan/:id", requireAuth, async (req, res) => {
     (await storage.removeWeekAssignment(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Grocery Checks ──────────────────────────────────────────────────────────
-  app.get("/api/grocery-checks/:weekStart", async (req, res) => {
+  app.get("/api/grocery-checks/:weekStart", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getGroceryChecks(req.params.weekStart, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/grocery-checks", async (req, res) => {
+  app.patch("/api/grocery-checks", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const { weekStart, itemKey, checked } = req.body;
@@ -3577,26 +3592,26 @@ Return exactly this structure:
   });
 
   // ── Custom Grocery Items ──────────────────────────────────────────────────────
-  app.get("/api/custom-grocery-items/:weekStart", async (req, res) => {
+  app.get("/api/custom-grocery-items/:weekStart", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getCustomGroceryItems(req.params.weekStart, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/custom-grocery-items", async (req, res) => {
+  app.post("/api/custom-grocery-items", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.addCustomGroceryItem(req.body, uid));
     } catch (e) { handleError(res, e); }
   });
-  app.patch("/api/custom-grocery-items/:id", async (req, res) => {
+  app.patch("/api/custom-grocery-items/:id", requireAuth, async (req, res) => {
     try {
       const result = await storage.updateCustomGroceryItem(parseInt(req.params.id), req.body);
       if (!result) return res.status(404).json({ error: "Not found" });
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/custom-grocery-items/:id", async (req, res) => {
+  app.delete("/api/custom-grocery-items/:id", requireAuth, async (req, res) => {
     try {
       const ok = await storage.deleteCustomGroceryItem(parseInt(req.params.id));
       res.json({ success: ok });
@@ -3604,13 +3619,13 @@ Return exactly this structure:
   });
 
   // ── Movies ────────────────────────────────────────────────────────────────────
-  app.get("/api/movies", async (req, res) => {
+  app.get("/api/movies", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllMovies(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/movies", async (req, res) => {
+  app.post("/api/movies", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       const movie = await storage.createMovie(insertMovieSchema.parse(req.body), uid);
@@ -3619,13 +3634,13 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/movies/:id", async (req, res) => {
+  app.patch("/api/movies/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateMovie(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/movies/:id", async (req, res) => {
+  app.delete("/api/movies/:id", requireAuth, async (req, res) => {
     (await storage.deleteMovie(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
@@ -3684,85 +3699,85 @@ Return exactly this structure:
   });
 
   // ── Budget Categories ───────────────────────────────────────────────────────
-  app.get("/api/budget-categories", async (req, res) => {
+  app.get("/api/budget-categories", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllBudgetCategories(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/budget-categories", async (req, res) => {
+  app.post("/api/budget-categories", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createBudgetCategory(insertBudgetCategorySchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/budget-categories/:id", async (req, res) => {
+  app.patch("/api/budget-categories/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateBudgetCategory(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/budget-categories/:id", async (req, res) => {
+  app.delete("/api/budget-categories/:id", requireAuth, async (req, res) => {
     (await storage.deleteBudgetCategory(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Transactions ─────────────────────────────────────────────────────────────────
-  app.get("/api/transactions", async (req, res) => {
+  app.get("/api/transactions", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllTransactions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/transactions", async (req, res) => {
+  app.post("/api/transactions", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createTransaction(insertTransactionSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/transactions/:id", async (req, res) => {
+  app.patch("/api/transactions/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateTransaction(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/transactions/:id", async (req, res) => {
+  app.delete("/api/transactions/:id", requireAuth, async (req, res) => {
     (await storage.deleteTransaction(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Subscriptions ────────────────────────────────────────────────────────────────
-  app.get("/api/subscriptions", async (req, res) => {
+  app.get("/api/subscriptions", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllSubscriptions(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/subscriptions", async (req, res) => {
+  app.post("/api/subscriptions", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.status(201).json(await storage.createSubscription(insertSubscriptionSchema.parse(req.body), uid));
     }
     catch (e) { handleError(res, e); }
   });
-  app.patch("/api/subscriptions/:id", async (req, res) => {
+  app.patch("/api/subscriptions/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateSubscription(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
-  app.delete("/api/subscriptions/:id", async (req, res) => {
+  app.delete("/api/subscriptions/:id", requireAuth, async (req, res) => {
     (await storage.deleteSubscription(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Nav Prefs ────────────────────────────────────────────────────────────────────
-  app.get("/api/nav-prefs", async (req, res) => {
+  app.get("/api/nav-prefs", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getNavPrefs(uid));
     } catch (e) { handleError(res, e); }
   });
-  app.post("/api/nav-prefs", async (req, res) => {
+  app.post("/api/nav-prefs", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       await storage.saveNavPrefs(uid, req.body);
@@ -3824,14 +3839,14 @@ Return exactly this structure:
 
   app.use("/uploads/receipts", express.static(UPLOADS_DIR));
 
-  app.get("/api/receipts", async (req, res) => {
+  app.get("/api/receipts", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
       res.json(await storage.getAllReceipts(uid));
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/receipts", upload.single("file"), async (req: any, res) => {
+  app.post("/api/receipts", requireAuth, upload.single("file"), async (req: any, res) => {
     try {
       const uid = (req.user as User).id;
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -3854,14 +3869,14 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
-  app.patch("/api/receipts/:id", async (req, res) => {
+  app.patch("/api/receipts/:id", requireAuth, async (req, res) => {
     try {
       const updated = await storage.updateReceiptRecord(+req.params.id, req.body);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/receipts/:id", async (req, res) => {
+  app.delete("/api/receipts/:id", requireAuth, async (req, res) => {
     try {
       const all = await storage.getAllReceipts((req.user as User).id);
       const rec = all.find((r) => r.id === +req.params.id);
@@ -6038,7 +6053,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
 
   // ── TMDB Proxy ───────────────────────────────────────────────────────────────
   // Temporary debug endpoint – remove after confirming env vars work
-  app.get("/api/debug/env-check", (req, res) => {
+  app.get("/api/debug/env-check", requireAdmin, (req, res) => {
     const allKeys = Object.keys(process.env).sort();
     res.json({
       TMDB_API_KEY: process.env.TMDB_API_KEY ? `set (${process.env.TMDB_API_KEY.length} chars)` : "NOT SET",
@@ -6899,10 +6914,11 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
                            COUNT(*) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '30 days')::int AS new30
                     FROM users`),
         pool.query(`SELECT
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '1 day')::int   AS d1,
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '7 days')::int  AS d7,
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '30 days')::int AS d30
-                    FROM activity_feed`).catch(() => ({ rows: [{ d1: null, d7: null, d30: null }] })),
+                      COUNT(*) FILTER (WHERE last_seen_at::timestamptz >= NOW() - INTERVAL '1 day')::int   AS d1,
+                      COUNT(*) FILTER (WHERE last_seen_at::timestamptz >= NOW() - INTERVAL '7 days')::int  AS d7,
+                      COUNT(*) FILTER (WHERE last_seen_at::timestamptz >= NOW() - INTERVAL '30 days')::int AS d30,
+                      COUNT(*) FILTER (WHERE last_seen_at IS NOT NULL)::int AS everSeen
+                    FROM users`).catch(() => ({ rows: [{ d1: null, d7: null, d30: null }] })),
         pool.query(`SELECT COUNT(*)::int AS events FROM activity_feed`).catch(() => ({ rows: [{ events: null }] })),
       ]);
 
@@ -6939,6 +6955,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
                 (u.anthropic_api_key_enc IS NOT NULL) AS "hasApiKey",
                 (u.gcal_refresh_token IS NOT NULL)    AS "hasGoogleCal",
                 (SELECT COUNT(*)::int FROM push_subscriptions ps WHERE ps.user_id = u.id) AS "devices",
+                u.last_seen_at AS "lastSeen",
                 (SELECT MAX(af.created_at) FROM activity_feed af WHERE af.user_id = u.id)  AS "lastActive",
                 (SELECT COUNT(*)::int FROM activity_feed af WHERE af.user_id = u.id)       AS "activityEvents",
                 (SELECT COUNT(*)::int FROM friend_requests fr
