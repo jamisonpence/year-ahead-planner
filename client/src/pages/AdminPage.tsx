@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import {
   Users, Activity, Database, ShieldAlert, TrendingUp, Search,
   ChevronRight, Loader2, CheckCircle2, Circle, Smartphone, KeyRound, Calendar,
+  Trash2, AlertTriangle, X,
 } from "lucide-react";
 
 type AdminUser = {
@@ -38,9 +41,155 @@ function relativeDays(iso: string | null): { label: string; tone: string } {
 const prettyTable = (t: string) =>
   t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+/** apiRequest throws `Error("409: {json}")` — pull out the human-readable bit. */
+function errText(e: unknown): string {
+  const raw = (e as Error)?.message ?? "Something went wrong.";
+  const body = raw.replace(/^\d{3}:\s*/, "");
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed?.error) return parsed.error;
+  } catch { /* not JSON */ }
+  return body;
+}
+
+/**
+ * Permanent account deletion. Deliberately high-friction: shows exactly how many
+ * rows will be destroyed and requires the operator to type the user's email.
+ */
+function DeleteUserDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const [typed, setTyped] = useState("");
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const footprint = useQuery<{ totalRows: number; tables: { table: string; count: number }[] }>({
+    queryKey: ["/api/admin/users", user.id, "footprint"],
+    queryFn: () => apiRequest("GET", `/api/admin/users/${user.id}/footprint`).then((r) => r.json()),
+    retry: false,
+  });
+
+  const del = useMutation({
+    mutationFn: () =>
+      apiRequest("DELETE", `/api/admin/users/${user.id}`, { confirmEmail: user.email }).then((r) => r.json()),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Account deleted",
+        description: `${data.deletedUser?.email} and ${data.totalRows?.toLocaleString()} rows of their data were permanently removed.`,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/overview"] });
+      onClose();
+    },
+    onError: (e) =>
+      toast({ title: "Couldn't delete account", description: errText(e), variant: "destructive" }),
+  });
+
+  const confirmed = typed.trim().toLowerCase() === user.email.trim().toLowerCase();
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={() => !del.isPending && onClose()} />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        className="relative w-full max-w-md rounded-2xl border bg-card shadow-xl p-5 space-y-4"
+      >
+        <button
+          onClick={() => !del.isPending && onClose()}
+          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+          aria-label="Close"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="flex gap-3">
+          <div className="w-9 h-9 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+            <AlertTriangle size={17} className="text-destructive" />
+          </div>
+          <div>
+            <h2 className="font-bold leading-tight">Delete this account?</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              <span className="font-medium text-foreground">{user.name}</span> · {user.email}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-secondary/30 p-3">
+          {footprint.isLoading ? (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Counting their data…
+            </p>
+          ) : footprint.data ? (
+            <>
+              <p className="text-sm">
+                <span className="font-bold">{footprint.data.totalRows.toLocaleString()}</span> rows across{" "}
+                <span className="font-bold">{footprint.data.tables.length}</span> tables will be permanently erased.
+              </p>
+              {footprint.data.tables.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2 max-h-24 overflow-y-auto">
+                  {footprint.data.tables.slice(0, 12).map((t) => (
+                    <span key={t.table} className="text-[10px] px-1.5 py-0.5 rounded bg-card border">
+                      {prettyTable(t.table)} <span className="font-semibold">{t.count}</span>
+                    </span>
+                  ))}
+                  {footprint.data.tables.length > 12 && (
+                    <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                      +{footprint.data.tables.length - 12} more
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-destructive">{errText(footprint.error)}</p>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          This cannot be undone. There is no soft-delete and no backup restore from this page.
+          Their goals, recipes, tasks, messages, and friendships all go with them.
+        </p>
+
+        <div>
+          <label className="text-xs font-medium">
+            Type <span className="font-mono text-foreground">{user.email}</span> to confirm
+          </label>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={user.email}
+            className="mt-1 w-full px-3 py-2 rounded-lg border bg-background text-sm outline-none focus:ring-2 focus:ring-destructive/40"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            disabled={del.isPending}
+            className="px-3 py-2 rounded-lg border text-sm hover:bg-secondary disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => del.mutate()}
+            disabled={!confirmed || del.isPending}
+            className="px-3 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {del.isPending ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            {del.isPending ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null);
+  const { user: me } = useAuth();
 
   const overview = useQuery<any>({
     queryKey: ["/api/admin/overview"],
@@ -231,6 +380,21 @@ export default function AdminPage() {
                     ) : (
                       <p className="text-xs text-muted-foreground">No content created yet.</p>
                     )}
+
+                    <div className="pt-2 border-t flex items-center justify-between gap-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        {u.id === me?.id
+                          ? "This is your own account."
+                          : "Deleting removes this person and all of their data permanently."}
+                      </p>
+                      <button
+                        onClick={() => setPendingDelete(u)}
+                        disabled={u.id === me?.id}
+                        className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-destructive/30 text-destructive text-xs font-medium hover:bg-destructive/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        <Trash2 size={12} /> Delete account
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -244,6 +408,10 @@ export default function AdminPage() {
         “Active” counts real sessions (tracked from this release onward), falling back to
         content activity for users not yet seen since.
       </p>
+
+      {pendingDelete && (
+        <DeleteUserDialog user={pendingDelete} onClose={() => setPendingDelete(null)} />
+      )}
     </div>
   );
 }

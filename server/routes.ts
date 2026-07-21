@@ -6992,6 +6992,155 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Admin: delete an account ───────────────────────────────────────────────
+  // Every column that points at users.id, discovered from the live schema so new
+  // tables are covered automatically. facebook_user_id is an external string ID,
+  // not a reference to our users table — the integer-type filter excludes it.
+  let userRefCache: { table: string; column: string }[] | null = null;
+  async function getUserRefColumns() {
+    if (userRefCache) return userRefCache;
+    const r = await pool.query(
+      `SELECT c.table_name AS t, c.column_name AS col
+         FROM information_schema.columns c
+         JOIN information_schema.tables tb
+           ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name
+        WHERE c.table_schema = 'public'
+          AND tb.table_type = 'BASE TABLE'
+          AND c.column_name ~ '(^|_)user_id$'
+          AND c.data_type IN ('integer','bigint','smallint')
+          AND c.table_name <> 'users'`
+    );
+    userRefCache = r.rows.map((x: any) => ({ table: x.t as string, column: x.col as string }));
+    return userRefCache;
+  }
+
+  /** Count every row across the app that belongs to this user. */
+  async function userFootprint(userId: number) {
+    const refs = await getUserRefColumns();
+    const byTable: Record<string, number> = {};
+    let total = 0;
+    for (const { table, column } of refs) {
+      try {
+        const c = await pool.query(
+          `SELECT COUNT(*)::int AS c FROM "${table}" WHERE "${column}" = $1`, [userId]
+        );
+        const n = c.rows[0]?.c ?? 0;
+        if (n > 0) { byTable[table] = (byTable[table] ?? 0) + n; total += n; }
+      } catch { /* skip odd tables */ }
+    }
+    return { total, byTable };
+  }
+
+  // Preview: what exactly would be destroyed. Powers the confirmation dialog.
+  app.get("/api/admin/users/:id/footprint", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad user id" });
+      const u = await pool.query(`SELECT id, email, name FROM users WHERE id = $1`, [id]);
+      if (!u.rows[0]) return res.status(404).json({ error: "User not found" });
+      const fp = await userFootprint(id);
+      const rows = Object.entries(fp.byTable)
+        .sort((a, b) => b[1] - a[1])
+        .map(([table, count]) => ({ table, count }));
+      res.json({ user: u.rows[0], totalRows: fp.total, tables: rows });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const id = Number(req.params.id);
+      const actor = req.user as User;
+      if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad user id" });
+
+      const target = (await client.query(
+        `SELECT id, email, name FROM users WHERE id = $1`, [id]
+      )).rows[0];
+      if (!target) return res.status(404).json({ error: "User not found" });
+
+      // Guards — deliberately strict; this is unrecoverable.
+      if (target.id === actor.id) {
+        return res.status(400).json({ error: "You can't delete your own account from the admin panel." });
+      }
+      if (isAdminUser(target)) {
+        return res.status(403).json({ error: "Admin accounts can't be deleted here. Remove the email from ADMIN_EMAILS first." });
+      }
+      const confirm = String(req.body?.confirmEmail ?? "").trim().toLowerCase();
+      if (confirm !== String(target.email ?? "").trim().toLowerCase()) {
+        return res.status(400).json({ error: "confirmEmail does not match this user's email." });
+      }
+
+      const refs = await getUserRefColumns();
+      const deleted: Record<string, number> = {};
+      let totalRows = 0;
+
+      await client.query("BEGIN");
+
+      // Several passes: a table can be blocked by an FK from another table we
+      // haven't cleared yet. Each pass clears what it can; we stop when a pass
+      // makes no progress. Anything still failing surfaces as a real error.
+      let pending = [...refs];
+      let lastError: any = null;
+      for (let pass = 0; pass < 4 && pending.length; pass++) {
+        const stillPending: typeof pending = [];
+        let progress = false;
+        for (const ref of pending) {
+          try {
+            await client.query("SAVEPOINT del");
+            const r = await client.query(
+              `DELETE FROM "${ref.table}" WHERE "${ref.column}" = $1`, [id]
+            );
+            await client.query("RELEASE SAVEPOINT del");
+            const n = r.rowCount ?? 0;
+            if (n > 0) { deleted[ref.table] = (deleted[ref.table] ?? 0) + n; totalRows += n; }
+            progress = true;
+          } catch (err) {
+            await client.query("ROLLBACK TO SAVEPOINT del");
+            lastError = err;
+            stillPending.push(ref);
+          }
+        }
+        pending = stillPending;
+        if (!progress) break;
+      }
+
+      if (pending.length) {
+        await client.query("ROLLBACK");
+        console.error("[admin] delete blocked on tables:", pending.map((p) => p.table).join(", "), lastError);
+        return res.status(500).json({
+          error: "Could not fully delete this account — nothing was changed.",
+          blockedTables: [...new Set(pending.map((p) => p.table))],
+        });
+      }
+
+      const userRow = await client.query(`DELETE FROM users WHERE id = $1`, [id]);
+      if ((userRow.rowCount ?? 0) === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "User not found" });
+      }
+      await client.query("COMMIT");
+
+      // Audit trail — deletions should always be attributable.
+      console.log(
+        `[admin] ${actor.email} (id ${actor.id}) deleted user ${target.email} (id ${id}) — ` +
+        `${totalRows} rows across ${Object.keys(deleted).length} tables`
+      );
+
+      // Any live session for this user now deserializes to false → logged out.
+      res.json({
+        ok: true,
+        deletedUser: { id: target.id, email: target.email, name: target.name },
+        totalRows,
+        tables: Object.entries(deleted).sort((a, b) => b[1] - a[1]).map(([table, count]) => ({ table, count })),
+      });
+    } catch (e) {
+      try { await client.query("ROLLBACK"); } catch { /* already rolled back */ }
+      handleError(res, e);
+    } finally {
+      client.release();
+    }
+  });
+
   app.get("/api/tab-collaborations", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
