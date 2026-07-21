@@ -277,6 +277,41 @@
     margin-bottom: 6px;
   }
   .step-card p { font-size: 13px; font-weight: 300; color: var(--text-mid); line-height: 1.6; }
+  /* Compact inline steps — combined intro panel */
+  .steps-inline {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    max-width: 720px;
+    margin: 0 auto 34px;
+  }
+  .steps-inline > div {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-mid);
+  }
+  .si-num {
+    width: 22px; height: 22px;
+    background: var(--indigo-light);
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: var(--indigo);
+    flex: none;
+  }
+  .si-sep { color: var(--border); user-select: none; }
+  /* Module grid, folded into the intro panel (no separate section chrome) */
+  .grid-lead {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--text-soft);
+    margin: 40px 0 18px;
+  }
   /* ── DASHBOARD PREVIEW ── */
   .preview-wrap {
     max-width: 700px;
@@ -783,33 +818,22 @@
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="section" id="how" style="padding-top: 0; padding-bottom: 72px;">
-  <div class="section-label">Simple by design</div>
-  <h2>How it works</h2>
-  <p class="section-sub">Up and running in minutes. No learning curve.</p>
-  <div class="steps-row">
-    <div class="step-card">
-      <div class="step-num">1</div>
-      <h3>Pick your modules</h3>
-      <p>Turn on the trackers that fit your life — goals, reading, workouts, budget, plants, and more. Hide everything else.</p>
-    </div>
-    <div class="step-card">
-      <div class="step-num">2</div>
-      <h3>Log as you go</h3>
-      <p>Add entries throughout your day. Everything stays connected — a recipe links to your grocery list, a goal ties to your daily tasks.</p>
-    </div>
-    <div class="step-card">
-      <div class="step-num">3</div>
-      <h3>See your whole life</h3>
-      <p>Your dashboard surfaces what matters: today's tasks, active goals, recent activity, and upcoming events — all at a glance.</p>
-    </div>
+<!-- ── HOW IT WORKS + DASHBOARD + MODULES — one combined intro panel ──────── -->
+<section class="section" id="how" style="padding-top: 8px; padding-bottom: 56px;">
+  <div class="section-label">How it works</div>
+  <h2>Your whole life on one screen</h2>
+  <p class="section-sub" style="margin-bottom:28px;">Turn on the trackers you want, log as you go, and watch everything connect.</p>
+  <div class="steps-inline">
+    <div><span class="si-num">1</span> Pick your modules</div>
+    <span class="si-sep">·</span>
+    <div><span class="si-num">2</span> Log as you go</div>
+    <span class="si-sep">·</span>
+    <div><span class="si-num">3</span> See it all connect</div>
   </div>
-</section>
 
-<!-- DASHBOARD PREVIEW -->
-<div class="preview-wrap">
-  <p class="preview-label">Your personalized dashboard</p>
+  <!-- Dashboard preview -->
+  <div class="preview-wrap" style="padding:0;margin-bottom:0;max-width:700px;">
+    <p class="preview-label">Your personalized dashboard</p>
   <div class="browser-chrome">
     <div class="chrome-dot"></div>
     <div class="chrome-dot"></div>
@@ -858,21 +882,16 @@
       </div>
       <div class="dash-card">
         <div class="dc-label">Upcoming</div>
-        <div class="dc-title">🎂 Sarah's birthday</div>
+        <div class="dc-title">🎂 Maya's birthday</div>
         <div class="dc-sub">In 3 days</div>
         <span class="dc-pill pill-rose">relationships</span>
       </div>
     </div>
   </div>
-</div>
-
-<!-- FEATURES / CATEGORIES -->
-<div class="section-alt" id="features">
-  <div class="section-alt-inner">
-    <div class="section-label">Everything in one place</div>
-    <h2 style="text-align:center;font-family:'Lora',serif;font-size:clamp(24px,3.5vw,36px);font-weight:500;color:var(--text);margin-bottom:10px;letter-spacing:-0.3px;line-height:1.3;">One place for all of it</h2>
-    <p style="text-align:center;font-size:15px;font-weight:300;color:var(--text-mid);margin-bottom:44px;">Choose the trackers that match your life. Turn off the ones you don't need.</p>
-    <div class="cats-grid">
+  </div>
+  <!-- Modules — folded into the same panel so you reach the detail sooner -->
+  <p class="grid-lead" id="features">One place for all of it — choose the trackers that match your life</p>
+  <div class="cats-grid">
 
       <!-- Goals, Projects & Tasks -->
       <div class="cat-card">
@@ -1030,8 +1049,7 @@
       </div>
 
     </div>
-  </div>
-</div>
+</section>
 
 
 <!-- ── WHAT YOU ACTUALLY GET — module deep dives ─────────────────────────── -->
@@ -1156,7 +1174,7 @@
         </div>
         <div class="mini-row"><span class="mini-em">📋</span><div class="mini-grow"><div class="mini-t">Build weekly mileage</div><div class="mini-s">8 of 12 tasks</div></div><span class="mini-tag pill-green">on track</span></div>
         <div class="mini-row"><span class="mini-em">🔥</span><div class="mini-grow"><div class="mini-t">Morning run</div><div class="mini-s">41-day streak · 2 freezes banked</div></div><span class="mini-tag pill-amber">habit</span></div>
-        <div class="mini-row"><span class="mini-em">🤝</span><div class="mini-grow"><div class="mini-t">Mike is holding you to this</div><div class="mini-s">Stakes set 4 weeks ago</div></div><span class="mini-tag pill-rose">stakes</span></div>
+        <div class="mini-row"><span class="mini-em">🤝</span><div class="mini-grow"><div class="mini-t">Devin is holding you to this</div><div class="mini-s">Stakes set 4 weeks ago</div></div><span class="mini-tag pill-rose">stakes</span></div>
       </div>
     </div>
   </div>
@@ -1208,7 +1226,7 @@
       <div class="mini-body">
         <div class="mini-h">Currently <span>Books · Watching · Music · Art</span></div>
         <div class="mini-row"><span class="mini-em">📖</span><div class="mini-grow"><div class="mini-t">Atomic Habits</div><div class="mini-s">page 142 of 320 · 44%</div></div><span class="mini-tag pill-blue">reading</span></div>
-        <div class="mini-row"><span class="mini-em">🎬</span><div class="mini-grow"><div class="mini-t">The Bear · S3 E4</div><div class="mini-s">Recommended by Mike</div></div><span class="mini-tag pill-purple">watching</span></div>
+        <div class="mini-row"><span class="mini-em">🎬</span><div class="mini-grow"><div class="mini-t">The Bear · S3 E4</div><div class="mini-s">Recommended by Devin</div></div><span class="mini-tag pill-purple">watching</span></div>
         <div class="mini-row"><span class="mini-em">🎵</span><div class="mini-grow"><div class="mini-t">Khruangbin</div><div class="mini-s">Added to Late night collection</div></div><span class="mini-tag pill-rose">music</span></div>
       </div>
     </div>
@@ -1233,8 +1251,8 @@
       <div class="mini-bar"><i class="mini-dot"></i><i class="mini-dot"></i><i class="mini-dot"></i><span class="mini-url">mylifos.com/people</span></div>
       <div class="mini-body">
         <div class="mini-h">Birthdays <span>from their profiles</span></div>
-        <div class="mini-row"><span class="mini-em">🎂</span><div class="mini-grow"><div class="mini-t">Sarah Borrmann</div><div class="mini-s">3 May</div></div><span class="mini-tag pill-rose">in 3 days</span></div>
-        <div class="mini-row"><span class="mini-em">🎂</span><div class="mini-grow"><div class="mini-t">Jonathan Gamel</div><div class="mini-s">17 May</div></div><span class="mini-tag pill-indigo">17d</span></div>
+        <div class="mini-row"><span class="mini-em">🎂</span><div class="mini-grow"><div class="mini-t">Maya Ellison</div><div class="mini-s">3 May</div></div><span class="mini-tag pill-rose">in 3 days</span></div>
+        <div class="mini-row"><span class="mini-em">🎂</span><div class="mini-grow"><div class="mini-t">Devin Alvarez</div><div class="mini-s">17 May</div></div><span class="mini-tag pill-indigo">17d</span></div>
         <div class="mini-h" style="margin-top:12px;">Where your friends are <span></span></div>
         <div class="mini-row"><span class="mini-em">📍</span><div class="mini-grow"><div class="mini-t">Chicago, IL</div><div class="mini-s">4 friends</div></div></div>
         <div class="mini-row"><span class="mini-em">📍</span><div class="mini-grow"><div class="mini-t">Austin, TX</div><div class="mini-s">2 friends</div></div></div>
