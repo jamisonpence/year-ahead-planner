@@ -1706,18 +1706,19 @@ export default function OnboardingModal({ userName, onComplete }: { userName: st
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick start</p>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { emoji: "🍽️", label: "Recipes",  sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],  persona: "explore_life" as PersonaKey, dest: "/recipes"   },
-                    { emoji: "🏠", label: "Home",     sub: "Home · People · Messages",    paths: ["/housekeeping", "/people", "/messenger"], persona: "momentum"  as PersonaKey, dest: "/housekeeping" },
+                    { emoji: "🍽️", label: "Recipes",  desc: "Cook from 1,600+ recipes, save your own, and swap ideas with friends.", sub: "Recipes · People · Messages", paths: ["/recipes", "/people", "/messenger"],  persona: "explore_life" as PersonaKey, dest: "/recipes"   },
+                    { emoji: "🏠", label: "Home",     desc: "Track chores, appliance upkeep, and home projects — solo or shared.",   sub: "Home · People · Messages",    paths: ["/housekeeping", "/people", "/messenger"], persona: "momentum"  as PersonaKey, dest: "/housekeeping" },
                   ]).map(qs => (
                     <button
                       key={qs.label}
                       onClick={() => finishQuickStart(qs.paths, qs.persona, qs.dest)}
-                      className="flex items-center gap-2.5 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+                      className="flex items-start gap-2.5 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
                     >
-                      <span className="text-lg shrink-0">{qs.emoji}</span>
+                      <span className="text-lg shrink-0 leading-none mt-0.5">{qs.emoji}</span>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-foreground leading-tight">{qs.label}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{qs.sub}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{qs.desc}</p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 leading-snug">{qs.sub}</p>
                       </div>
                     </button>
                   ))}
