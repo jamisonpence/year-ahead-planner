@@ -44,23 +44,49 @@ One honest limitation: Cache Rules set `max-age`, but they can't add the `immuta
 
 While you're in **Caching → Tiered Cache**, turning on **Smart Tiered Cache** is worth the click. It makes edge locations check a nearby upper-tier data center before going back to R2, which cuts your Class B operation count and therefore your bill.
 
-## Step 4 — Upload the images
+## Step 4 — Upload the images with rclone
 
-In the bucket, click **Upload → Select folder**, and choose:
+**The dashboard can't do this.** It refuses more than 100 files per upload, and we have 916. Wrangler isn't an option either — it uploads one object per invocation. rclone is the supported tool for bulk transfers into R2, and it parallelises and resumes.
 
+### 4a. Create an R2 API token
+
+**R2 → API → Manage API tokens → Create API token**
+
+- **Permissions:** Object Read & Write
+- **Specify bucket:** `mylifos-images` (scope it to just this bucket, not the whole account)
+- **TTL:** short — you only need it for this upload, and you can delete it afterward
+
+Copy the **Access Key ID** and **Secret Access Key**. The secret is shown once. Also note your **Account ID** from the R2 overview page.
+
+### 4b. Install rclone
+
+```sh
+brew install rclone
 ```
-YearAheadPlanner-source (1)/client/public/recipe-images
+
+### 4c. Run the upload
+
+Paste your credentials into your shell and run the script. They're read from the environment, never written to disk or into this repo:
+
+```sh
+export R2_ACCOUNT_ID="your-account-id"
+export R2_ACCESS_KEY_ID="..."
+export R2_SECRET_ACCESS_KEY="..."
+
+cd ~/Downloads/"YearAheadPlanner-source (1)"
+chmod +x script/upload-recipe-images-r2.sh
+./script/upload-recipe-images-r2.sh
 ```
 
-Cloudflare will upload all 916 files and key them as `recipe-images/<filename>.webp`, which gives you final URLs like:
+It uploads with 32 parallel transfers, prints progress, then counts the remote objects and confirms the total matches the 916 local files. If anything fails partway, just run it again — rclone skips what's already there and sends only the remainder.
 
-```
-https://images.mylifos.com/recipe-images/chicken-piccata.webp
-```
+When you're done, delete the API token in the Cloudflare dashboard. Nothing in the running app needs it; the bucket is public-read.
 
-Two things to watch:
+### A bonus: this makes Step 3 optional
 
-The browser may warn about uploading many files — that's expected, accept it. And when it finishes, **check the object count reads 916**. Browser folder uploads occasionally drop files silently, and a partial upload is the one failure mode that would leave broken images in the app. If the count is short, re-run the upload; R2 overwrites by key, so re-uploading everything is safe and idempotent.
+The script passes `--header-upload "Cache-Control: public, max-age=31536000, immutable"`, which writes real Cache-Control metadata onto every object. That's the thing a zone Cache Rule *can't* do, so going the rclone route gets you the genuine `immutable` directive after all.
+
+The Cache Rule from Step 3 is still harmless to keep as a belt-and-braces default, but it's no longer necessary.
 
 ## Step 5 — Verify before cutting over
 
