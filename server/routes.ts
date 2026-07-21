@@ -6895,13 +6895,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       const [users, active, feed] = await Promise.all([
         pool.query(`SELECT COUNT(*)::int AS total,
                            COUNT(*) FILTER (WHERE onboarded)::int AS onboarded,
-                           COUNT(*) FILTER (WHERE created_at >= (NOW() - INTERVAL '7 days')::text)::int AS new7,
-                           COUNT(*) FILTER (WHERE created_at >= (NOW() - INTERVAL '30 days')::text)::int AS new30
+                           COUNT(*) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '7 days')::int  AS new7,
+                           COUNT(*) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '30 days')::int AS new30
                     FROM users`),
         pool.query(`SELECT
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '1 day')::text)::int  AS d1,
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '7 days')::text)::int  AS d7,
-                      COUNT(DISTINCT user_id) FILTER (WHERE created_at >= (NOW() - INTERVAL '30 days')::text)::int AS d30
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '1 day')::int   AS d1,
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '7 days')::int  AS d7,
+                      COUNT(DISTINCT user_id) FILTER (WHERE created_at::timestamptz >= NOW() - INTERVAL '30 days')::int AS d30
                     FROM activity_feed`).catch(() => ({ rows: [{ d1: null, d7: null, d30: null }] })),
         pool.query(`SELECT COUNT(*)::int AS events FROM activity_feed`).catch(() => ({ rows: [{ events: null }] })),
       ]);
