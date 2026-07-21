@@ -519,6 +519,36 @@ function CaptureCollectionEntries({ collections }: { collections: Collection[] }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/**
+ * One-line prompt to fill in the profile, shown only while birthday and city are
+ * both empty. Editing lives in Settings — this is a pointer, not a second form.
+ * Dismissal is remembered for the session so it never nags twice in a sitting.
+ */
+function ProfileNudge() {
+  const [dismissed, setDismissed] = useState(false);
+  const { data } = useQuery<{ birthday: string | null; locationCity: string | null }>({
+    queryKey: ["/api/profile/me"],
+    queryFn: () => apiRequest("GET", "/api/profile/me").then(r => r.json()),
+    retry: false,
+  });
+  if (dismissed || !data || data.birthday || data.locationCity) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5">
+      <Users size={15} className="text-primary shrink-0" />
+      <p className="text-sm flex-1 min-w-0">
+        Add your birthday and city so friends don't have to track them by hand.
+      </p>
+      <Link href="/settings">
+        <a className="text-sm font-medium text-primary hover:underline shrink-0">Add them</a>
+      </Link>
+      <button onClick={() => setDismissed(true)} className="text-muted-foreground hover:text-foreground shrink-0" aria-label="Dismiss">
+        <ChevronRight size={14} className="rotate-90 opacity-0" />
+        <span className="text-xs">Later</span>
+      </button>
+    </div>
+  );
+}
+
 export default function MyLifosPage() {
   const { toast } = useToast();
   const [query, setQuery] = useState("");
@@ -559,6 +589,7 @@ export default function MyLifosPage() {
       (data.lifeStats.counts.journal ?? 0)
     : 0;
   const isCaptureMode = libraryCount < 5;
+  // (ProfileNudge is defined below and self-hides once the profile is filled in.)
 
   return (
     <div className="min-h-screen bg-background">
@@ -574,6 +605,8 @@ export default function MyLifosPage() {
                 : "Your archive — everything you save, love, and receive."}
             </p>
           </div>
+
+          <ProfileNudge />
 
           {/* Search */}
           <div className={cardClass("p-3")}>

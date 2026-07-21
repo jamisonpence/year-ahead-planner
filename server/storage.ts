@@ -701,6 +701,38 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_token_expiry TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
 
+  // Personal profile fields (birthday, location, relationship) + visibility
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_city TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_region TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_country TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS relationship_status TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_visibility_json TEXT NOT NULL DEFAULT '{}'`);
+  // Grouping friends by city is a listing query, so index the lowered value.
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_location_city ON users (LOWER(location_city))`);
+
+  // Family / partner links between accounts
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_relations (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      related_user_id INTEGER,
+      relation TEXT NOT NULL,
+      display_name TEXT,
+      birthday TEXT,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      created_at TEXT NOT NULL
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_relations_user ON user_relations (user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_relations_related ON user_relations (related_user_id)`);
+  // One link per pair per relation type — stops duplicate pending requests.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_relations_pair
+      ON user_relations (user_id, related_user_id, relation)
+      WHERE related_user_id IS NOT NULL
+  `);
+
   // Google Contacts table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS google_contacts (

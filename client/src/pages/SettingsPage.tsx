@@ -20,6 +20,320 @@ import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } fr
 
 type ApiKeyStatus = { hasKey: boolean; encryptionConfigured: boolean };
 
+// ── Personal Profile Section ──────────────────────────────────────────────────
+
+type VisField = "birthday" | "location" | "relationship" | "family";
+type Visibility = "friends" | "private";
+
+type MyProfile = {
+  birthday: string | null;
+  locationCity: string | null;
+  locationRegion: string | null;
+  locationCountry: string | null;
+  relationshipStatus: string | null;
+  visibility: Record<VisField, Visibility>;
+  family: {
+    id: number; relation: string; name: string | null; birthday: string | null;
+    status: string; relatedUserId: number | null; relatedAvatarUrl: string | null;
+  }[];
+  pendingRequests: { id: number; relation: string; fromName: string; fromUserId: number }[];
+};
+
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  single: "Single",
+  in_a_relationship: "In a relationship",
+  engaged: "Engaged",
+  married: "Married",
+  partnered: "Partnered",
+  its_complicated: "It's complicated",
+  prefer_not_to_say: "Prefer not to say",
+};
+
+const RELATION_LABELS: Record<string, string> = {
+  partner: "Partner", child: "Child", parent: "Parent", sibling: "Sibling", other: "Other",
+};
+
+/** Friends / Private toggle for a single profile field. */
+function VisibilityToggle({ value, onChange, disabled }: {
+  value: Visibility; onChange: (v: Visibility) => void; disabled?: boolean;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border overflow-hidden shrink-0" role="group">
+      {(["friends", "private"] as Visibility[]).map(v => (
+        <button
+          key={v}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(v)}
+          className={`px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+            value === v
+              ? v === "friends" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
+              : "bg-background text-muted-foreground hover:bg-secondary/50"
+          }`}
+        >
+          {v === "friends" ? <span className="flex items-center gap-1"><Users size={10} /> Friends</span>
+                           : <span className="flex items-center gap-1"><Lock size={10} /> Private</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ProfileSection() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<Partial<MyProfile>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [newRel, setNewRel] = useState({ relation: "child", displayName: "", birthday: "", relatedUserId: "" });
+
+  const { data, isLoading } = useQuery<MyProfile>({
+    queryKey: ["/api/profile/me"],
+    queryFn: () => apiRequest("GET", "/api/profile/me").then(r => r.json()),
+  });
+  const { data: friends = [] } = useQuery<PublicUser[]>({
+    queryKey: ["/api/friends"],
+    queryFn: () => apiRequest("GET", "/api/friends").then(r => r.json()).catch(() => []),
+  });
+
+  const save = useMutation({
+    mutationFn: (patch: Record<string, any>) => apiRequest("PATCH", "/api/profile/me", patch).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/profile/me"] }); qc.invalidateQueries({ queryKey: ["/api/friends/directory"] }); },
+    onError: (e: any) => toast({ title: "Couldn't save", description: String(e.message ?? e), variant: "destructive" }),
+  });
+
+  const addRel = useMutation({
+    mutationFn: (body: any) => apiRequest("POST", "/api/profile/relations", body).then(r => r.json()),
+    onSuccess: (r: any) => {
+      qc.invalidateQueries({ queryKey: ["/api/profile/me"] });
+      setAddOpen(false);
+      setNewRel({ relation: "child", displayName: "", birthday: "", relatedUserId: "" });
+      toast({
+        title: r.status === "pending" ? "Request sent" : "Added",
+        description: r.status === "pending" ? "They'll appear once they confirm the link." : undefined,
+      });
+    },
+    onError: (e: any) => toast({ title: "Couldn't add", description: String(e.message ?? e).replace(/^\d{3}:\s*/, ""), variant: "destructive" }),
+  });
+
+  const answer = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: string }) =>
+      apiRequest("PATCH", `/api/profile/relations/${id}`, { action }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+  });
+
+  const removeRel = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/profile/relations/${id}`).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+  });
+
+  const v = (f: VisField): Visibility => data?.visibility?.[f] ?? "private";
+  const setVis = (f: VisField, val: Visibility) => save.mutate({ visibility: { [f]: val } });
+  const val = <K extends keyof MyProfile>(k: K) => (draft[k] !== undefined ? draft[k] : data?.[k]) as any;
+  const commit = (k: string, value: any) => { setDraft(d => ({ ...d, [k]: value })); save.mutate({ [k]: value || null }); };
+
+  if (isLoading) {
+    return (
+      <section className="rounded-xl border bg-card p-6">
+        <Loader2 size={16} className="animate-spin text-muted-foreground" />
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-6 space-y-5">
+      <div>
+        <div className="flex items-center gap-2">
+          <UserCheck size={18} className="text-primary" />
+          <h2 className="font-semibold text-base">Profile</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          Fill this in once and your friends stop having to. Each field is separately controlled —
+          nothing marked Private ever leaves your account.
+        </p>
+      </div>
+
+      {/* Pending link requests */}
+      {(data?.pendingRequests?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Waiting on you</p>
+          {data!.pendingRequests.map(p => (
+            <div key={p.id} className="flex items-center justify-between gap-3">
+              <p className="text-sm">
+                <span className="font-medium">{p.fromName}</span> listed you as their{" "}
+                {RELATION_LABELS[p.relation]?.toLowerCase() ?? p.relation}.
+              </p>
+              <div className="flex gap-1.5 shrink-0">
+                <button onClick={() => answer.mutate({ id: p.id, action: "confirm" })}
+                        className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium">
+                  Confirm
+                </button>
+                <button onClick={() => answer.mutate({ id: p.id, action: "decline" })}
+                        className="px-2.5 py-1 rounded-lg border text-xs">
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Birthday */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-[200px] flex-1">
+          <label className="text-sm font-medium">Birthday</label>
+          <p className="text-xs text-muted-foreground mb-1.5">Friends see this on their calendar automatically.</p>
+          <Input type="date" value={val("birthday") ?? ""} max={new Date().toISOString().slice(0, 10)}
+                 onChange={e => setDraft(d => ({ ...d, birthday: e.target.value }))}
+                 onBlur={e => commit("birthday", e.target.value)} className="max-w-[200px]" />
+        </div>
+        <div className="pt-6"><VisibilityToggle value={v("birthday")} onChange={x => setVis("birthday", x)} /></div>
+      </div>
+
+      {/* Location */}
+      <div className="flex items-start justify-between gap-3 flex-wrap border-t pt-5">
+        <div className="min-w-[200px] flex-1">
+          <label className="text-sm font-medium">Location</label>
+          <p className="text-xs text-muted-foreground mb-1.5">City only — this groups friends by area. Never a street address.</p>
+          <div className="flex gap-2 flex-wrap">
+            <Input placeholder="City" value={val("locationCity") ?? ""}
+                   onChange={e => setDraft(d => ({ ...d, locationCity: e.target.value }))}
+                   onBlur={e => commit("locationCity", e.target.value)} className="max-w-[160px]" />
+            <Input placeholder="State / region" value={val("locationRegion") ?? ""}
+                   onChange={e => setDraft(d => ({ ...d, locationRegion: e.target.value }))}
+                   onBlur={e => commit("locationRegion", e.target.value)} className="max-w-[160px]" />
+            <Input placeholder="Country" value={val("locationCountry") ?? ""}
+                   onChange={e => setDraft(d => ({ ...d, locationCountry: e.target.value }))}
+                   onBlur={e => commit("locationCountry", e.target.value)} className="max-w-[140px]" />
+          </div>
+        </div>
+        <div className="pt-6"><VisibilityToggle value={v("location")} onChange={x => setVis("location", x)} /></div>
+      </div>
+
+      {/* Relationship status */}
+      <div className="flex items-start justify-between gap-3 flex-wrap border-t pt-5">
+        <div className="min-w-[200px] flex-1">
+          <label className="text-sm font-medium">Relationship status</label>
+          <p className="text-xs text-muted-foreground mb-1.5">Private by default.</p>
+          <Select value={val("relationshipStatus") ?? ""} onValueChange={x => commit("relationshipStatus", x)}>
+            <SelectTrigger className="max-w-[220px]"><SelectValue placeholder="Not set" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(RELATIONSHIP_LABELS).map(([k, label]) => (
+                <SelectItem key={k} value={k}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="pt-6"><VisibilityToggle value={v("relationship")} onChange={x => setVis("relationship", x)} /></div>
+      </div>
+
+      {/* Family */}
+      <div className="border-t pt-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-sm font-medium">Family</label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Add names, or link to a friend's account. Linked people have to confirm before it shows anywhere.
+            </p>
+          </div>
+          <div className="pt-1"><VisibilityToggle value={v("family")} onChange={x => setVis("family", x)} /></div>
+        </div>
+
+        <div className="space-y-1.5 mt-2">
+          {(data?.family ?? []).map(f => (
+            <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary font-medium shrink-0">
+                {RELATION_LABELS[f.relation] ?? f.relation}
+              </span>
+              <span className="text-sm truncate flex-1">{f.name ?? "—"}</span>
+              {f.status === "pending" && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-500 shrink-0">awaiting confirmation</span>
+              )}
+              {f.status === "declined" && (
+                <span className="text-[10px] text-muted-foreground shrink-0">declined</span>
+              )}
+              {f.birthday && <span className="text-[11px] text-muted-foreground shrink-0">{f.birthday}</span>}
+              <button onClick={() => removeRel.mutate(f.id)} className="text-muted-foreground hover:text-destructive shrink-0" aria-label="Remove">
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+          {(data?.family ?? []).length === 0 && (
+            <p className="text-xs text-muted-foreground py-1">No family members added yet.</p>
+          )}
+        </div>
+
+        <Button variant="outline" size="sm" className="mt-2" onClick={() => setAddOpen(true)}>
+          Add family member
+        </Button>
+      </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Add a family member</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">Relationship</label>
+              <Select value={newRel.relation} onValueChange={x => setNewRel(s => ({ ...s, relation: x }))}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(RELATION_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium">Link to a friend's account</label>
+              <Select value={newRel.relatedUserId || "none"}
+                      onValueChange={x => setNewRel(s => ({ ...s, relatedUserId: x === "none" ? "" : x }))}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Not linked" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked — just a name</SelectItem>
+                  {friends.map((f: any) => (
+                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Linking sends them a request. Nothing shows until they confirm.
+              </p>
+            </div>
+
+            {!newRel.relatedUserId && (
+              <>
+                <div>
+                  <label className="text-xs font-medium">Name</label>
+                  <Input className="mt-1" value={newRel.displayName} placeholder="e.g. Maya"
+                         onChange={e => setNewRel(s => ({ ...s, displayName: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Birthday (optional)</label>
+                  <Input className="mt-1" type="date" value={newRel.birthday}
+                         onChange={e => setNewRel(s => ({ ...s, birthday: e.target.value }))} />
+                </div>
+              </>
+            )}
+
+            <Button
+              className="w-full"
+              disabled={addRel.isPending || (!newRel.relatedUserId && !newRel.displayName.trim())}
+              onClick={() => addRel.mutate({
+                relation: newRel.relation,
+                displayName: newRel.relatedUserId ? undefined : newRel.displayName.trim(),
+                birthday: newRel.relatedUserId ? undefined : (newRel.birthday || undefined),
+                relatedUserId: newRel.relatedUserId ? Number(newRel.relatedUserId) : undefined,
+              })}
+            >
+              {addRel.isPending ? <Loader2 size={14} className="animate-spin" /> : newRel.relatedUserId ? "Send link request" : "Add"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 const PRIVACY_TABS = [
   { path: "/",              label: "Today",                   icon: LayoutDashboard },
   { path: "/calendar",      label: "Schedule",                icon: Calendar        },
@@ -872,6 +1186,9 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your account preferences and integrations.</p>
       </div>
+
+      {/* Personal profile — birthday, location, relationship, family */}
+      <ProfileSection />
 
       {/* Install App */}
       <InstallAppSection />

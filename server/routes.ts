@@ -41,6 +41,10 @@ import {
   insertCareProviderSchema,
   insertFoodLogSchema,
   insertNutritionGoalSchema,
+  RELATIONSHIP_STATUSES,
+  RELATION_TYPES,
+  RELATION_INVERSE,
+  PROFILE_VISIBILITY_DEFAULTS,
 } from "@shared/schema";
 import type { FoodLogEntry, WaterLog, NutritionGoal } from "@shared/schema";
 import { z } from "zod";
@@ -2690,7 +2694,43 @@ Return exactly this structure:
   app.get("/api/people", requireAuth, async (req, res) => {
     try {
       const uid = (req.user as User).id;
-      res.json(await storage.getAllPeople(uid));
+      const list = await storage.getAllPeople(uid);
+
+      // For contacts linked to an app account, borrow the birthday from that
+      // person's own profile when they've chosen to share it. Surfaced as a
+      // separate field rather than written into the row — their profile stays
+      // the source of truth, and the user's own entry is never overwritten.
+      const linkedIds = [...new Set(list.map((p: any) => p.linkedUserId).filter(Boolean))] as number[];
+      if (linkedIds.length) {
+        const r = await pool.query(
+          `SELECT id, birthday, location_city AS "locationCity", location_region AS "locationRegion",
+                  profile_visibility_json AS "visJson"
+             FROM users WHERE id = ANY($1::int[])`, [linkedIds]
+        );
+        const shared = new Map<number, any>();
+        for (const u of r.rows) {
+          const vis = parseVisibility(u.visJson);
+          shared.set(u.id, {
+            birthday: vis.birthday === "friends" ? u.birthday ?? null : null,
+            city: vis.location === "friends" ? u.locationCity ?? null : null,
+            region: vis.location === "friends" ? u.locationRegion ?? null : null,
+          });
+        }
+        return res.json(list.map((p: any) => {
+          const s = p.linkedUserId ? shared.get(p.linkedUserId) : null;
+          if (!s) return p;
+          return {
+            ...p,
+            profileBirthday: s.birthday,          // from their profile
+            profileCity: s.city,
+            profileRegion: s.region,
+            // What the UI should actually show: their entry wins if they typed one.
+            effectiveBirthday: p.birthday || s.birthday || null,
+            birthdayFromProfile: !p.birthday && !!s.birthday,
+          };
+        }));
+      }
+      res.json(list);
     } catch (e) { handleError(res, e); }
   });
   app.post("/api/people", requireAuth, async (req, res) => {
@@ -3797,13 +3837,295 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
 
+  // ── Personal profile: birthday, location, relationship, family ─────────────
+  // Visibility is enforced here, server-side. The client never receives a field
+  // the viewer isn't entitled to see, so a UI bug can't leak one.
+
+  function parseVisibility(json: string | null): Record<string, "friends" | "private"> {
+    let stored: Record<string, any> = {};
+    try { stored = JSON.parse(json || "{}") || {}; } catch { stored = {}; }
+    const out: Record<string, "friends" | "private"> = { ...PROFILE_VISIBILITY_DEFAULTS };
+    for (const k of Object.keys(PROFILE_VISIBILITY_DEFAULTS)) {
+      if (stored[k] === "friends" || stored[k] === "private") out[k] = stored[k];
+    }
+    return out;
+  }
+
+  async function areFriends(a: number, b: number): Promise<boolean> {
+    if (a === b) return true;
+    const r = await pool.query(
+      `SELECT 1 FROM friend_requests WHERE status = 'accepted'
+        AND ((from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1))
+        LIMIT 1`, [a, b]
+    );
+    return !!r.rows[0];
+  }
+
+  /** Confirmed relations for a user, with the linked account's name resolved. */
+  async function getRelations(userId: number, onlyConfirmed = true) {
+    const r = await pool.query(
+      `SELECT ur.id, ur.relation, ur.display_name AS "displayName", ur.birthday,
+              ur.status, ur.related_user_id AS "relatedUserId",
+              u.name AS "relatedName", u.avatar_url AS "relatedAvatarUrl"
+         FROM user_relations ur
+         LEFT JOIN users u ON u.id = ur.related_user_id
+        WHERE ur.user_id = $1 ${onlyConfirmed ? "AND ur.status = 'confirmed'" : ""}
+        ORDER BY ur.created_at`, [userId]
+    );
+    return r.rows.map((x: any) => ({ ...x, name: x.relatedName ?? x.displayName }));
+  }
+
+  /** The profile block a given viewer is allowed to see. */
+  async function visibleProfileFor(viewerId: number, targetId: number) {
+    const q = await pool.query(
+      `SELECT id, birthday, location_city AS "locationCity", location_region AS "locationRegion",
+              location_country AS "locationCountry", relationship_status AS "relationshipStatus",
+              profile_visibility_json AS "visJson"
+         FROM users WHERE id = $1`, [targetId]
+    );
+    const u = q.rows[0];
+    if (!u) return null;
+
+    const vis = parseVisibility(u.visJson);
+    const isSelf = viewerId === targetId;
+    const friend = isSelf || (await areFriends(viewerId, targetId));
+    const can = (f: string) => isSelf || (friend && vis[f] === "friends");
+
+    const out: Record<string, any> = {};
+    if (can("birthday")) out.birthday = u.birthday ?? null;
+    if (can("location")) {
+      out.locationCity = u.locationCity ?? null;
+      out.locationRegion = u.locationRegion ?? null;
+      out.locationCountry = u.locationCountry ?? null;
+    }
+    if (can("relationship")) out.relationshipStatus = u.relationshipStatus ?? null;
+    if (can("family")) out.family = await getRelations(targetId);
+    return out;
+  }
+
+  // Own profile — always complete, plus the visibility settings themselves.
+  app.get("/api/profile/me", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const q = await pool.query(
+        `SELECT birthday, location_city AS "locationCity", location_region AS "locationRegion",
+                location_country AS "locationCountry", relationship_status AS "relationshipStatus",
+                profile_visibility_json AS "visJson"
+           FROM users WHERE id = $1`, [uid]
+      );
+      const u = q.rows[0] ?? {};
+      // Incoming link requests waiting on this user
+      const pending = await pool.query(
+        `SELECT ur.id, ur.relation, u.name AS "fromName", u.avatar_url AS "fromAvatarUrl", ur.user_id AS "fromUserId"
+           FROM user_relations ur JOIN users u ON u.id = ur.user_id
+          WHERE ur.related_user_id = $1 AND ur.status = 'pending'
+          ORDER BY ur.created_at DESC`, [uid]
+      );
+      res.json({
+        birthday: u.birthday ?? null,
+        locationCity: u.locationCity ?? null,
+        locationRegion: u.locationRegion ?? null,
+        locationCountry: u.locationCountry ?? null,
+        relationshipStatus: u.relationshipStatus ?? null,
+        visibility: parseVisibility(u.visJson),
+        family: await getRelations(uid, false),
+        pendingRequests: pending.rows,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/profile/me", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const b = req.body ?? {};
+      const sets: string[] = [];
+      const vals: any[] = [];
+      const push = (col: string, v: any) => { sets.push(`${col} = $${vals.length + 1}`); vals.push(v); };
+
+      if ("birthday" in b) {
+        const v = b.birthday ? String(b.birthday).trim() : null;
+        if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return res.status(400).json({ error: "birthday must be YYYY-MM-DD" });
+        push("birthday", v);
+      }
+      for (const [key, col] of [["locationCity", "location_city"], ["locationRegion", "location_region"], ["locationCountry", "location_country"]] as const) {
+        if (key in b) push(col, b[key] ? String(b[key]).trim().slice(0, 120) : null);
+      }
+      if ("relationshipStatus" in b) {
+        const v = b.relationshipStatus ? String(b.relationshipStatus) : null;
+        if (v && !RELATIONSHIP_STATUSES.includes(v as any)) return res.status(400).json({ error: "Unknown relationshipStatus" });
+        push("relationship_status", v);
+      }
+      if (b.visibility && typeof b.visibility === "object") {
+        const merged = parseVisibility((await pool.query(`SELECT profile_visibility_json AS v FROM users WHERE id=$1`, [uid])).rows[0]?.v);
+        for (const k of Object.keys(PROFILE_VISIBILITY_DEFAULTS)) {
+          const v = b.visibility[k];
+          if (v === "friends" || v === "private") merged[k] = v;
+        }
+        push("profile_visibility_json", JSON.stringify(merged));
+      }
+      if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
+
+      vals.push(uid);
+      await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Add a family member — free text, or a link request to another account.
+  app.post("/api/profile/relations", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const { relation, displayName, relatedUserId, birthday } = req.body ?? {};
+      if (!RELATION_TYPES.includes(relation)) return res.status(400).json({ error: "Unknown relation type" });
+      if (!displayName && !relatedUserId) return res.status(400).json({ error: "displayName or relatedUserId required" });
+      if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(String(birthday))) {
+        return res.status(400).json({ error: "birthday must be YYYY-MM-DD" });
+      }
+
+      let linkedId: number | null = null;
+      let status = "confirmed";
+      if (relatedUserId) {
+        linkedId = Number(relatedUserId);
+        if (!Number.isInteger(linkedId)) return res.status(400).json({ error: "Bad relatedUserId" });
+        if (linkedId === uid) return res.status(400).json({ error: "You can't link your profile to yourself" });
+        const exists = await pool.query(`SELECT 1 FROM users WHERE id = $1`, [linkedId]);
+        if (!exists.rows[0]) return res.status(404).json({ error: "That user doesn't exist" });
+        // You can only propose a link to someone you're already friends with.
+        if (!(await areFriends(uid, linkedId))) {
+          return res.status(403).json({ error: "You can only link family members you're friends with" });
+        }
+        status = "pending"; // waits on their confirmation
+      }
+
+      const dup = linkedId
+        ? await pool.query(`SELECT 1 FROM user_relations WHERE user_id=$1 AND related_user_id=$2 AND relation=$3`, [uid, linkedId, relation])
+        : { rows: [] };
+      if (dup.rows[0]) return res.status(409).json({ error: "That link already exists" });
+
+      const r = await pool.query(
+        `INSERT INTO user_relations (user_id, related_user_id, relation, display_name, birthday, status, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [uid, linkedId, relation, displayName ? String(displayName).trim().slice(0, 120) : null,
+         birthday || null, status, new Date().toISOString()]
+      );
+      if (linkedId) {
+        await storage.createNotification({
+          userId: linkedId,
+          type: "relation_request",
+          title: `${(req.user as User).name} added you as their ${relation}`,
+          body: "Confirm or decline this in Settings → Profile.",
+          href: "/settings",
+          actorId: uid,
+        }).catch(() => { /* notification failure must not fail the request */ });
+      }
+      res.status(201).json({ id: r.rows[0].id, status });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Confirm or decline a link someone proposed. Only the named person may do this.
+  app.patch("/api/profile/relations/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const id = Number(req.params.id);
+      const action = String(req.body?.action ?? "");
+      if (!["confirm", "decline"].includes(action)) return res.status(400).json({ error: "action must be confirm or decline" });
+
+      const row = (await pool.query(`SELECT * FROM user_relations WHERE id = $1`, [id])).rows[0];
+      if (!row) return res.status(404).json({ error: "Not found" });
+      if (row.related_user_id !== uid) return res.status(403).json({ error: "Only the linked person can respond to this" });
+      if (row.status !== "pending") return res.status(409).json({ error: "Already answered" });
+
+      if (action === "decline") {
+        await pool.query(`UPDATE user_relations SET status = 'declined' WHERE id = $1`, [id]);
+        return res.json({ ok: true, status: "declined" });
+      }
+
+      await pool.query(`UPDATE user_relations SET status = 'confirmed' WHERE id = $1`, [id]);
+      // Mirror it so the relationship reads correctly from both sides.
+      const inverse = RELATION_INVERSE[row.relation] ?? "other";
+      await pool.query(
+        `INSERT INTO user_relations (user_id, related_user_id, relation, status, created_at)
+         VALUES ($1,$2,$3,'confirmed',$4)
+         ON CONFLICT (user_id, related_user_id, relation) WHERE related_user_id IS NOT NULL
+         DO UPDATE SET status = 'confirmed'`,
+        [uid, row.user_id, inverse, new Date().toISOString()]
+      );
+      res.json({ ok: true, status: "confirmed" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/profile/relations/:id", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const id = Number(req.params.id);
+      const row = (await pool.query(`SELECT * FROM user_relations WHERE id = $1`, [id])).rows[0];
+      if (!row) return res.status(404).json({ error: "Not found" });
+      // Either side can sever the link.
+      if (row.user_id !== uid && row.related_user_id !== uid) return res.status(403).json({ error: "Forbidden" });
+      await pool.query(`DELETE FROM user_relations WHERE id = $1`, [id]);
+      if (row.related_user_id) {
+        await pool.query(
+          `DELETE FROM user_relations WHERE user_id = $1 AND related_user_id = $2`,
+          [row.related_user_id, row.user_id]
+        );
+      }
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Friend directory — birthdays and cities the viewer is entitled to see.
+  // This is what stops people retyping their friends' birthdays by hand.
+  app.get("/api/friends/directory", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const r = await pool.query(
+        `SELECT u.id, u.name, u.avatar_url AS "avatarUrl", u.birthday,
+                u.location_city AS "locationCity", u.location_region AS "locationRegion",
+                u.location_country AS "locationCountry", u.profile_visibility_json AS "visJson"
+           FROM friend_requests fr
+           JOIN users u ON u.id = CASE WHEN fr.from_user_id = $1 THEN fr.to_user_id ELSE fr.from_user_id END
+          WHERE fr.status = 'accepted' AND (fr.from_user_id = $1 OR fr.to_user_id = $1)`,
+        [uid]
+      );
+      const friends = r.rows.map((u: any) => {
+        const vis = parseVisibility(u.visJson);
+        return {
+          id: u.id, name: u.name, avatarUrl: u.avatarUrl,
+          birthday: vis.birthday === "friends" ? u.birthday ?? null : null,
+          locationCity: vis.location === "friends" ? u.locationCity ?? null : null,
+          locationRegion: vis.location === "friends" ? u.locationRegion ?? null : null,
+          locationCountry: vis.location === "friends" ? u.locationCountry ?? null : null,
+        };
+      });
+      // Group by city for the "friends in different areas" view.
+      const byCity: Record<string, { city: string; region: string | null; friends: any[] }> = {};
+      for (const f of friends) {
+        if (!f.locationCity) continue;
+        const key = f.locationCity.toLowerCase();
+        byCity[key] ??= { city: f.locationCity, region: f.locationRegion, friends: [] };
+        byCity[key].friends.push({ id: f.id, name: f.name, avatarUrl: f.avatarUrl });
+      }
+      res.json({
+        friends,
+        withBirthday: friends.filter(f => f.birthday).length,
+        locations: Object.values(byCity).sort((a, b) => b.friends.length - a.friends.length),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // NOTE: registered after /api/profile/me and /api/profile/relations so those
+  // literal paths win. Express 5 dropped regex path params, so ordering is the
+  // only thing keeping ":userId" from swallowing "me".
   app.get("/api/profile/:userId", requireAuth, async (req, res) => {
     try {
+      const viewerId = (req.user as User).id;
       const targetId = parseInt(req.params.userId);
       if (isNaN(targetId)) return res.status(400).json({ error: "Invalid userId" });
-      const profile = await storage.getFriendProfile((req.user as User).id, targetId);
+      const profile = await storage.getFriendProfile(viewerId, targetId);
       if (!profile) return res.status(404).json({ error: "Profile not found or not a friend" });
-      res.json(profile);
+      // Identity block, already filtered to what this viewer may see.
+      const identity = await visibleProfileFor(viewerId, targetId);
+      res.json({ ...profile, identity });
     } catch (e) { handleError(res, e); }
   });
 

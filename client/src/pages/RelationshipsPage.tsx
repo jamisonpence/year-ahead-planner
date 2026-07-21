@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import FriendsSocialHub from "@/components/FriendsSocialHub";
+import FriendsDirectoryPanel from "@/components/FriendsDirectoryPanel";
 import LifeGraphPanel from "@/components/LifeGraphPanel";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
@@ -3173,6 +3174,7 @@ export default function RelationshipsPage() {
       {/* ── Friends / Social Hub ─────────────────────────────────────────────── */}
       {socialTab === "friends" && (
         <div className="space-y-4">
+          <FriendsDirectoryPanel />
           <FriendsHighlights people={allPeople} />
           <FriendsSocialHub />
         </div>

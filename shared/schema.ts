@@ -45,7 +45,55 @@ export const users = pgTable("users", {
   googleContactsRefreshToken: text("google_contacts_refresh_token"),
   googleContactsTokenExpiry: text("google_contacts_token_expiry"),
   googleContactsLastSync: text("google_contacts_last_sync"),
+  // ── Personal profile (shown to friends, per-field visibility) ──────────────
+  birthday: text("birthday"),                     // ISO "YYYY-MM-DD"
+  locationCity: text("location_city"),
+  locationRegion: text("location_region"),        // state / province
+  locationCountry: text("location_country"),
+  relationshipStatus: text("relationship_status"), // see RELATIONSHIP_STATUSES
+  // JSON: { birthday|location|relationship|family: "friends" | "private" }
+  // Absent keys fall back to PROFILE_VISIBILITY_DEFAULTS.
+  profileVisibilityJson: text("profile_visibility_json").notNull().default("{}"),
 });
+
+// ── PROFILE: family & partner links ───────────────────────────────────────────
+// A relation is either free text (displayName) or a link to another app account
+// (relatedUserId). Account links start life as "pending" and only appear on
+// either profile once the other person confirms — nobody gets to assert a
+// relationship with you unilaterally.
+export const userRelations = pgTable("user_relations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  relatedUserId: integer("related_user_id"),   // null = unlinked, name only
+  relation: text("relation").notNull(),        // see RELATION_TYPES
+  displayName: text("display_name"),           // used when relatedUserId is null
+  birthday: text("birthday"),                  // optional, for unlinked family
+  status: text("status").notNull().default("confirmed"), // pending|confirmed|declined
+  createdAt: text("created_at").notNull(),
+});
+
+export const RELATIONSHIP_STATUSES = [
+  "single", "in_a_relationship", "engaged", "married", "partnered",
+  "its_complicated", "prefer_not_to_say",
+] as const;
+
+export const RELATION_TYPES = ["partner", "child", "parent", "sibling", "other"] as const;
+
+/** Inverse used to create the reciprocal row when a link is accepted. */
+export const RELATION_INVERSE: Record<string, string> = {
+  partner: "partner", sibling: "sibling", other: "other",
+  parent: "child", child: "parent",
+};
+
+export type ProfileVisibilityField = "birthday" | "location" | "relationship" | "family";
+/** Birthday and city are the point of the feature, so they default to visible.
+ *  Relationship and family are more personal, so they start private. */
+export const PROFILE_VISIBILITY_DEFAULTS: Record<ProfileVisibilityField, "friends" | "private"> = {
+  birthday: "friends",
+  location: "friends",
+  relationship: "private",
+  family: "private",
+};
 
 // ── GOOGLE CONTACTS ───────────────────────────────────────────────────────────
 export const googleContacts = pgTable("google_contacts", {

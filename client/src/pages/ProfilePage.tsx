@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BookOpen, Film, Music2, ChefHat, MapPin, Palette,
   Target, Dumbbell, Star, Heart, Lock, Plus, Check, Sparkles, Flame, Send, X,
-  Loader2, GitMerge, UserPlus,
+  Loader2, GitMerge, UserPlus, Cake, Users,
 } from "lucide-react";
 import LifeGraphPanel from "@/components/LifeGraphPanel";
 
@@ -371,6 +371,84 @@ function WorkoutsPanel({ workouts }: { workouts: ProfileData["data"]["workouts"]
 }
 
 
+// ── Identity row ──────────────────────────────────────────────────────────────
+// The server has already stripped anything this viewer isn't allowed to see, so
+// whatever arrives here is safe to render. Absent fields simply don't appear.
+
+type Identity = {
+  birthday?: string | null;
+  locationCity?: string | null;
+  locationRegion?: string | null;
+  locationCountry?: string | null;
+  relationshipStatus?: string | null;
+  family?: { id: number; relation: string; name: string | null; relatedUserId: number | null }[];
+};
+
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  single: "Single", in_a_relationship: "In a relationship", engaged: "Engaged",
+  married: "Married", partnered: "Partnered", its_complicated: "It's complicated",
+  prefer_not_to_say: "Prefer not to say",
+};
+const RELATION_LABELS: Record<string, string> = {
+  partner: "Partner", child: "Child", parent: "Parent", sibling: "Sibling", other: "Family",
+};
+
+/** "March 4" — year deliberately omitted; friends need the day, not the age. */
+function birthdayLabel(iso: string) {
+  const [, m, d] = iso.split("-").map(Number);
+  if (!m || !d) return iso;
+  return new Date(2000, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+}
+
+function daysUntilBirthday(iso: string): number | null {
+  const [, m, d] = iso.split("-").map(Number);
+  if (!m || !d) return null;
+  const now = new Date();
+  let next = new Date(now.getFullYear(), m - 1, d);
+  if (next < new Date(now.getFullYear(), now.getMonth(), now.getDate())) next = new Date(now.getFullYear() + 1, m - 1, d);
+  return Math.round((next.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
+}
+
+function IdentityRow({ identity }: { identity?: Identity | null }) {
+  if (!identity) return null;
+  const place = [identity.locationCity, identity.locationRegion, identity.locationCountry].filter(Boolean).join(", ");
+  const fam = identity.family ?? [];
+  const hasAnything = identity.birthday || place || identity.relationshipStatus || fam.length;
+  if (!hasAnything) return null;
+
+  const days = identity.birthday ? daysUntilBirthday(identity.birthday) : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+      {identity.birthday && (
+        <span className="flex items-center gap-1.5">
+          <Cake size={13} className="text-pink-500" />
+          {birthdayLabel(identity.birthday)}
+          {days !== null && days <= 30 && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium">
+              {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days}d`}
+            </span>
+          )}
+        </span>
+      )}
+      {place && <span className="flex items-center gap-1.5"><MapPin size={13} className="text-sky-500" />{place}</span>}
+      {identity.relationshipStatus && (
+        <span className="flex items-center gap-1.5">
+          <Heart size={13} className="text-rose-500" />
+          {RELATIONSHIP_LABELS[identity.relationshipStatus] ?? identity.relationshipStatus}
+        </span>
+      )}
+      {fam.length > 0 && (
+        <span className="flex items-center gap-1.5">
+          <Users size={13} className="text-violet-500" />
+          {fam.slice(0, 3).map(f => `${RELATION_LABELS[f.relation] ?? f.relation}: ${f.name}`).join(" · ")}
+          {fam.length > 3 && ` +${fam.length - 3}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Empty({ label }: { label: string }) {
   return <p className="text-sm text-muted-foreground py-8 text-center">{label}</p>;
 }
@@ -702,6 +780,9 @@ export default function ProfilePage() {
             <Send size={13} /> Rec
           </button>
         </div>
+
+        {/* Identity — only the fields this person chose to share with friends */}
+        <IdentityRow identity={(profile as any)?.identity} />
 
         {/* Stats row */}
         <div className="flex gap-4">
