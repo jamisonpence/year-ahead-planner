@@ -3073,8 +3073,10 @@ Return exactly this structure:
         const name = cols[nameIdx]?.trim();
         const url  = cols[urlIdx]?.trim();
         if (!name || !url) { skipped++; continue; }
+        // Update the system recipe AND any user-saved copies of the same recipe,
+        // so people who saved a recipe get the new artwork too.
         const result = await pool.query(
-          `UPDATE recipes SET image_url = $1 WHERE name = $2 AND user_id IS NULL`,
+          `UPDATE recipes SET image_url = $1 WHERE name = $2`,
           [url, name]
         );
         if ((result.rowCount ?? 0) > 0) updated++; else skipped++;

@@ -12,3 +12,6 @@ vite.config.ts.*
 # Git backup dirs
 .git_backup/
 .git2/
+
+# Source PNGs for recipe images (converted to client/public/recipe-images)
+recipe-images-source/
