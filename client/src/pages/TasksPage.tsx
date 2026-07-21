@@ -786,7 +786,7 @@ function ProjectEditModal({ open, onClose, project, onSave, goals }: {
   open: boolean;
   onClose: () => void;
   project: DisplayProject | null;
-  onSave: (id: number, data: Partial<InsertProject>) => void;
+  onSave: (id: number, data: Partial<InsertProject>, source: DisplayProject["source"]) => void;
   goals: GoalWithProjects[];
 }) {
   const [title, setTitle] = useState("");
@@ -815,7 +815,7 @@ function ProjectEditModal({ open, onClose, project, onSave, goals }: {
       dueDate: dueDate || null,
       description: description.trim() || null,
       goalId: linkedGoalId,
-    });
+    }, project.source);
     onClose();
   };
 
@@ -1297,10 +1297,20 @@ export default function TasksPage() {
     toast({ title: "Project created!" });
   }
 
-  function handleUpdateProject(id: number, data: Partial<InsertProject>) {
-    const proj = allDisplayProjects.find(p => p.id === id);
-    if (proj?.source === "house") updateHouseProject.mutate({ id, data });
-    else updateProject.mutate({ id, data });
+  // Source must be passed in explicitly: house projects and goal/standalone
+  // projects are separate tables with independent id sequences, so resolving the
+  // source by id alone is ambiguous and could PATCH the wrong project — which
+  // left an edited project sitting in its old status. The editor knows the
+  // source, so it tells us.
+  function handleUpdateProject(id: number, data: Partial<InsertProject>, source: DisplayProject["source"]) {
+    if (source === "house") {
+      // House projects have no goal link — drop it so the update doesn't carry a
+      // column that table doesn't have.
+      const { goalId, ...houseData } = data as any;
+      updateHouseProject.mutate({ id, data: houseData });
+    } else {
+      updateProject.mutate({ id, data });
+    }
   }
 
   function handleDeleteProject(proj: DisplayProject) {
