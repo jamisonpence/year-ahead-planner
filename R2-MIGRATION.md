@@ -24,15 +24,25 @@ Enter `images.mylifos.com` and connect. Cloudflare adds the CNAME automatically 
 
 Do **not** enable the `r2.dev` public URL. It's rate-limited and Cloudflare states it isn't for production traffic. The custom domain has no such limit and gets full CDN caching.
 
-## Step 3 — Set the cache header
+## Step 3 — Set a long cache lifetime with a Cache Rule
 
-In the same bucket, go to **Settings → Object lifecycle / Caching**, or set it at the domain level under **Rules → Cache Rules** for `images.mylifos.com`:
+R2 has no bucket-wide Cache-Control setting. `Cache-Control` lives on each individual object's HTTP metadata, and the dashboard's folder upload doesn't let you set it — so for 916 files, the practical route is a **Cache Rule** on the zone, which overrides TTLs at the edge and in the browser regardless of what the objects say.
 
-```
-Cache-Control: public, max-age=31536000, immutable
-```
+Go to the **mylifos.com** zone (not the R2 section) → **Caching → Cache Rules → Create rule**.
 
-These filenames are content-stable — `chicken-piccata.webp` will always be that image — so a one-year immutable cache is correct and means repeat visitors never re-download them.
+- **Rule name:** `R2 recipe images`
+- **When incoming requests match:** Hostname **equals** `images.mylifos.com`
+- **Cache eligibility:** Eligible for cache
+- **Edge TTL:** *Ignore cache-control header and use this TTL* → **1 year**
+- **Browser TTL:** *Override origin* → **1 year**
+
+Deploy the rule.
+
+These filenames are content-stable — `chicken-piccata.webp` will always be that image — so a one-year lifetime is correct. If you ever do need to replace an image, upload it under a new filename rather than fighting the cache, or purge that single URL from **Caching → Configuration → Purge cache**.
+
+One honest limitation: Cache Rules set `max-age`, but they can't add the `immutable` directive — that only comes from per-object metadata. `immutable` just suppresses revalidation requests on reload, so you're giving up a small optimization, not the caching itself. If it ever matters, it's fixable later by re-uploading with metadata via `rclone` or `wrangler`.
+
+While you're in **Caching → Tiered Cache**, turning on **Smart Tiered Cache** is worth the click. It makes edge locations check a nearby upper-tier data center before going back to R2, which cuts your Class B operation count and therefore your bill.
 
 ## Step 4 — Upload the images
 
