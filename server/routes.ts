@@ -2045,7 +2045,7 @@ Return exactly this structure:
   });
   app.patch("/api/events/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateEvent(+req.params.id, insertEventSchema.partial().parse(req.body));
+      const r = await storage.updateEvent(+req.params.id, insertEventSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2141,7 +2141,7 @@ Return exactly this structure:
         const existing = await storage.getAllBooks((req.user as User).id);
         const book = existing.find((b) => b.id === +req.params.id);
         if (book && book.status !== "finished") {
-          const r = await storage.updateBook(+req.params.id, body);
+          const r = await storage.updateBook(+req.params.id, body, (req.user as User).id);
           if (r) {
             // Buddy visibility: finished book pings the reading-goal buddy
             const uid = (req.user as User).id;
@@ -2165,7 +2165,7 @@ Return exactly this structure:
           return res.status(404).json({ error: "Not found" });
         }
       }
-      const r = await storage.updateBook(+req.params.id, body);
+      const r = await storage.updateBook(+req.params.id, body, uid);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2252,7 +2252,7 @@ Return exactly this structure:
         const uid = (req.user as User).id;
         const allGoals = await storage.getAllGoalsWithProjects(uid);
         const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
-        if (linked) await storage.updateGoal(linked.id, { title: req.body.name });
+        if (linked) await storage.updateGoal(linked.id, { title: req.body.name }, uid);
       }
       res.json(updated);
     } catch (e) { handleError(res, e); }
@@ -2297,7 +2297,7 @@ Return exactly this structure:
   });
   app.patch("/api/body-comp-plans/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateBodyCompPlan(+req.params.id, req.body);
+      const updated = await storage.updateBodyCompPlan(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2437,7 +2437,7 @@ Return exactly this structure:
         ? (await pool.query(`SELECT progress_current, progress_target, milestones_json FROM goals WHERE id=$1`, [+req.params.id])).rows[0]
         : null;
 
-      const r = await storage.updateGoal(+req.params.id, parsed);
+      const r = await storage.updateGoal(+req.params.id, parsed, (req.user as User).id);
       if (!r) return res.status(404).json({ error: "Not found" });
 
       const target = r.progressTarget || 100;
@@ -2522,7 +2522,7 @@ Return exactly this structure:
   });
   app.patch("/api/projects/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateProject(+req.params.id, insertProjectSchema.partial().parse(req.body));
+      const r = await storage.updateProject(+req.params.id, insertProjectSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2658,12 +2658,12 @@ Return exactly this structure:
   });
   app.patch("/api/general-tasks/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body));
+      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/general-tasks/:id", requireAuth, async (req, res) => {
-    (await storage.deleteGeneralTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteGeneralTask(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Relationship Groups ───────────────────────────────────────────────────────
@@ -2682,7 +2682,7 @@ Return exactly this structure:
   });
   app.patch("/api/groups/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateGroup(+req.params.id, insertRelationshipGroupSchema.partial().parse(req.body));
+      const r = await storage.updateGroup(+req.params.id, insertRelationshipGroupSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2769,7 +2769,7 @@ Return exactly this structure:
             title: `${name}'s Birthday`,
             date: data.birthday || existing.birthday || "",
             recurring: "yearly",
-          });
+          }, uid);
         } else if (data.birthday) {
           const event = await storage.createEvent({
             title: `${name}'s Birthday`,
@@ -3103,7 +3103,7 @@ Return exactly this structure:
   });
   app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateRecipe(+req.params.id, insertRecipeSchema.partial().parse(req.body));
+      const r = await storage.updateRecipe(+req.params.id, insertRecipeSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -3591,7 +3591,7 @@ Return exactly this structure:
   });
   app.patch("/api/meal-bundles/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateBundle(+req.params.id, insertMealBundleSchema.partial().parse(req.body));
+      const r = await storage.updateBundle(+req.params.id, insertMealBundleSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -3647,14 +3647,14 @@ Return exactly this structure:
   });
   app.patch("/api/custom-grocery-items/:id", requireAuth, async (req, res) => {
     try {
-      const result = await storage.updateCustomGroceryItem(parseInt(req.params.id), req.body);
+      const result = await storage.updateCustomGroceryItem(parseInt(req.params.id), req.body, (req.user as User).id);
       if (!result) return res.status(404).json({ error: "Not found" });
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/custom-grocery-items/:id", requireAuth, async (req, res) => {
     try {
-      const ok = await storage.deleteCustomGroceryItem(parseInt(req.params.id));
+      const ok = await storage.deleteCustomGroceryItem(parseInt(req.params.id), (req.user as User).id);
       res.json({ success: ok });
     } catch (e) { handleError(res, e); }
   });
@@ -3677,12 +3677,12 @@ Return exactly this structure:
   });
   app.patch("/api/movies/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateMovie(+req.params.id, req.body);
+      const updated = await storage.updateMovie(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/movies/:id", requireAuth, async (req, res) => {
-    (await storage.deleteMovie(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteMovie(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Movie Lists ─────────────────────────────────────────────────────────────
@@ -4278,7 +4278,7 @@ Return exactly this structure:
   });
   app.patch("/api/music/artists/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateMusicArtist(+req.params.id, req.body);
+      const updated = await storage.updateMusicArtist(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -4300,13 +4300,13 @@ Return exactly this structure:
   });
   app.patch("/api/music/songs/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateMusicSong(+req.params.id, req.body);
+      const updated = await storage.updateMusicSong(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/music/songs/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteMusicSong(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteMusicSong(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6152,13 +6152,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/child-prep-items/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateChildPrepItem(+req.params.id, req.body);
+      const updated = await storage.updateChildPrepItem(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/child-prep-items/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteChildPrepItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteChildPrepItem(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6218,13 +6218,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateQuote(+req.params.id, req.body);
+      const updated = await storage.updateQuote(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteQuote(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteQuote(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6241,13 +6241,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/mantras/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateMantra(+req.params.id, req.body);
+      const updated = await storage.updateMantra(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/mantras/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteMantra(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteMantra(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6263,13 +6263,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/art/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateArtPiece(+req.params.id, req.body);
+      const updated = await storage.updateArtPiece(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/art/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteArtPiece(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteArtPiece(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6931,7 +6931,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
 
   app.patch("/api/hobbies/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateHobby(Number(req.params.id), req.body);
+      const updated = await storage.updateHobby(Number(req.params.id), req.body, (req.user as User).id);
       if (!updated) return res.status(404).json({ error: "Not found" });
       res.json(updated);
     } catch (e) { handleError(res, e); }
@@ -6939,7 +6939,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
 
   app.delete("/api/hobbies/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteHobby(Number(req.params.id));
+      await storage.deleteHobby(Number(req.params.id), (req.user as User).id);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
@@ -7166,7 +7166,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
 
   app.patch("/api/music/collections/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateCollection(Number(req.params.id), req.body);
+      const updated = await storage.updateCollection(Number(req.params.id), req.body, (req.user as User).id);
       if (!updated) return res.status(404).json({ error: "Not found" });
       res.json(updated);
     } catch (e) { handleError(res, e); }
@@ -9751,13 +9751,13 @@ Rules:
   });
   app.patch("/api/politics/officials/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePoliticalOfficial(+req.params.id, req.body);
+      const updated = await storage.updatePoliticalOfficial(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/politics/officials/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePoliticalOfficial(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePoliticalOfficial(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9795,13 +9795,13 @@ Rules:
   });
   app.patch("/api/politics/elections/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePoliticalElection(+req.params.id, req.body);
+      const updated = await storage.updatePoliticalElection(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/politics/elections/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePoliticalElection(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePoliticalElection(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9817,13 +9817,13 @@ Rules:
   });
   app.patch("/api/politics/civic-actions/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateCivicAction(+req.params.id, req.body);
+      const updated = await storage.updateCivicAction(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/politics/civic-actions/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteCivicAction(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteCivicAction(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9839,13 +9839,13 @@ Rules:
   });
   app.patch("/api/politics/news-sources/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePoliticalNewsSource(+req.params.id, req.body);
+      const updated = await storage.updatePoliticalNewsSource(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/politics/news-sources/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePoliticalNewsSource(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePoliticalNewsSource(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9877,13 +9877,13 @@ Rules:
   });
   app.patch("/api/trip-items/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateTripItem(+req.params.id, req.body);
+      const updated = await storage.updateTripItem(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/trip-items/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteTripItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteTripItem(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 

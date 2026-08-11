@@ -94,7 +94,7 @@ function buildMcpServer() {
       notes: z.string().nullable().optional().describe("New notes or null to clear"),
     },
     async ({ id, ...updates }) => {
-      const task = await storage.updateGeneralTask(id, updates);
+      const task = await storage.updateGeneralTask(id, updates, uid);
       if (!task) {
         return {
           content: [{ type: "text", text: `Task ${id} not found` }],

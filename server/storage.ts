@@ -1988,7 +1988,7 @@ export interface IStorage {
   // Events
   getAllEventsWithTasks(userId: number): Promise<EventWithTasks[]>;
   createEvent(data: InsertEvent, userId: number): Promise<Event>;
-  updateEvent(id: number, data: Partial<InsertEvent>): Promise<Event | undefined>;
+  updateEvent(id: number, data: Partial<InsertEvent>, userId: number): Promise<Event | undefined>;
   deleteEvent(id: number): Promise<boolean>;
   // Tasks
   createTask(data: InsertTask): Promise<Task>;
@@ -1998,7 +1998,7 @@ export interface IStorage {
   getAllBooks(userId: number): Promise<Book[]>;
   getAllBooksWithSessions(userId: number): Promise<BookWithSessions[]>;
   createBook(data: InsertBook, userId: number): Promise<Book>;
-  updateBook(id: number, data: Partial<InsertBook>): Promise<Book | undefined>;
+  updateBook(id: number, data: Partial<InsertBook>, userId: number): Promise<Book | undefined>;
   deleteBook(id: number): Promise<boolean>;
   // Reading Sessions
   getAllReadingSessions(): Promise<ReadingSession[]>;
@@ -2019,7 +2019,7 @@ export interface IStorage {
   getAllGoalsWithProjects(userId: number): Promise<GoalWithProjects[]>;
   getAllGoalsWithTasks(userId: number): Promise<GoalWithTasks[]>;
   createGoal(data: InsertGoal, userId: number): Promise<Goal>;
-  updateGoal(id: number, data: Partial<InsertGoal>): Promise<Goal | undefined>;
+  updateGoal(id: number, data: Partial<InsertGoal>, userId: number): Promise<Goal | undefined>;
   deleteGoal(id: number): Promise<boolean>;
   // Goal Tasks (legacy)
   createGoalTask(data: InsertGoalTask): Promise<GoalTask>;
@@ -2029,7 +2029,7 @@ export interface IStorage {
   getProjectsForGoal(goalId: number): Promise<ProjectWithTasks[]>;
   getStandaloneProjects(userId: number): Promise<ProjectWithTasks[]>;
   createProject(data: InsertProject, userId: number): Promise<Project>;
-  updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined>;
+  updateProject(id: number, data: Partial<InsertProject>, userId: number): Promise<Project | undefined>;
   deleteProject(id: number): Promise<boolean>;
   // Project Tasks
   createProjectTask(data: InsertProjectTask): Promise<ProjectTask>;
@@ -2038,17 +2038,17 @@ export interface IStorage {
   // General Tasks
   getAllGeneralTasks(userId: number): Promise<GeneralTask[]>;
   createGeneralTask(data: InsertGeneralTask, userId: number): Promise<GeneralTask>;
-  updateGeneralTask(id: number, data: Partial<InsertGeneralTask>): Promise<GeneralTask | undefined>;
-  deleteGeneralTask(id: number): Promise<boolean>;
+  updateGeneralTask(id: number, data: Partial<InsertGeneralTask>, userId: number): Promise<GeneralTask | undefined>;
+  deleteGeneralTask(id: number, userId: number): Promise<boolean>;
   // Recipes
   getAllRecipes(userId: number): Promise<Recipe[]>;
   createRecipe(data: InsertRecipe, userId: number): Promise<Recipe>;
-  updateRecipe(id: number, data: Partial<InsertRecipe>): Promise<Recipe | undefined>;
+  updateRecipe(id: number, data: Partial<InsertRecipe>, userId: number): Promise<Recipe | undefined>;
   deleteRecipe(id: number): Promise<boolean>;
   // Meal Bundles
   getAllBundles(userId: number): Promise<MealBundle[]>;
   createBundle(data: InsertMealBundle, userId: number): Promise<MealBundle>;
-  updateBundle(id: number, data: Partial<InsertMealBundle>): Promise<MealBundle | undefined>;
+  updateBundle(id: number, data: Partial<InsertMealBundle>, userId: number): Promise<MealBundle | undefined>;
   deleteBundle(id: number): Promise<boolean>;
   // Week Plan
   getWeekPlan(weekStart: string, userId: number): Promise<WeekPlan[]>;
@@ -2060,12 +2060,12 @@ export interface IStorage {
   // Custom Grocery Items
   getCustomGroceryItems(weekStart: string, userId: number): Promise<CustomGroceryItem[]>;
   addCustomGroceryItem(data: InsertCustomGroceryItem, userId: number): Promise<CustomGroceryItem>;
-  updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>): Promise<CustomGroceryItem | undefined>;
-  deleteCustomGroceryItem(id: number): Promise<boolean>;
+  updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>, userId: number): Promise<CustomGroceryItem | undefined>;
+  deleteCustomGroceryItem(id: number, userId: number): Promise<boolean>;
   // Relationship Groups
   getAllGroups(userId: number): Promise<RelationshipGroup[]>;
   createGroup(data: InsertRelationshipGroup, userId: number): Promise<RelationshipGroup>;
-  updateGroup(id: number, data: Partial<InsertRelationshipGroup>): Promise<RelationshipGroup | undefined>;
+  updateGroup(id: number, data: Partial<InsertRelationshipGroup>, userId: number): Promise<RelationshipGroup | undefined>;
   deleteGroup(id: number): Promise<boolean>;
   // People
   getAllPeople(userId: number): Promise<PersonWithSpouse[]>;
@@ -2075,8 +2075,8 @@ export interface IStorage {
   // Movies
   getAllMovies(userId: number): Promise<Movie[]>;
   createMovie(data: InsertMovie, userId: number): Promise<Movie>;
-  updateMovie(id: number, data: Partial<InsertMovie>): Promise<Movie | undefined>;
-  deleteMovie(id: number): Promise<boolean>;
+  updateMovie(id: number, data: Partial<InsertMovie>, userId: number): Promise<Movie | undefined>;
+  deleteMovie(id: number, userId: number): Promise<boolean>;
   // Budget Categories
   getAllBudgetCategories(userId: number): Promise<BudgetCategory[]>;
   createBudgetCategory(data: InsertBudgetCategory, userId: number): Promise<BudgetCategory>;
@@ -2155,12 +2155,12 @@ export interface IStorage {
   // Music Artists
   getAllMusicArtistsWithSongs(userId: number): Promise<MusicArtistWithSongs[]>;
   createMusicArtist(data: InsertMusicArtist, userId: number): Promise<MusicArtist>;
-  updateMusicArtist(id: number, data: Partial<InsertMusicArtist>): Promise<MusicArtist | undefined>;
+  updateMusicArtist(id: number, data: Partial<InsertMusicArtist>, userId: number): Promise<MusicArtist | undefined>;
   deleteMusicArtist(id: number): Promise<boolean>;
   // Music Songs
   createMusicSong(data: InsertMusicSong, userId: number): Promise<MusicSong>;
-  updateMusicSong(id: number, data: Partial<InsertMusicSong>): Promise<MusicSong | undefined>;
-  deleteMusicSong(id: number): Promise<boolean>;
+  updateMusicSong(id: number, data: Partial<InsertMusicSong>, userId: number): Promise<MusicSong | undefined>;
+  deleteMusicSong(id: number, userId: number): Promise<boolean>;
   // Chores
   getAllChores(userId: number): Promise<Chore[]>;
   createChore(data: InsertChore, userId: number): Promise<Chore>;
@@ -2192,8 +2192,8 @@ export interface IStorage {
   deleteTrip(id: number): Promise<boolean>;
   getTripItems(tripId: number): Promise<TripItem[]>;
   createTripItem(data: InsertTripItem, userId: number): Promise<TripItem>;
-  updateTripItem(id: number, data: Partial<InsertTripItem>): Promise<TripItem | undefined>;
-  deleteTripItem(id: number): Promise<boolean>;
+  updateTripItem(id: number, data: Partial<InsertTripItem>, userId: number): Promise<TripItem | undefined>;
+  deleteTripItem(id: number, userId: number): Promise<boolean>;
   // Children
   getAllChildrenWithDetails(userId: number): Promise<ChildWithDetails[]>;
   createChild(data: InsertChild, userId: number): Promise<Child>;
@@ -2209,8 +2209,8 @@ export interface IStorage {
   deleteChildMemory(id: number): Promise<boolean>;
   // Child Prep Items
   createChildPrepItem(data: InsertChildPrepItem, userId: number): Promise<ChildPrepItem>;
-  updateChildPrepItem(id: number, data: Partial<InsertChildPrepItem>): Promise<ChildPrepItem | undefined>;
-  deleteChildPrepItem(id: number): Promise<boolean>;
+  updateChildPrepItem(id: number, data: Partial<InsertChildPrepItem>, userId: number): Promise<ChildPrepItem | undefined>;
+  deleteChildPrepItem(id: number, userId: number): Promise<boolean>;
   // Pets
   getAllPetsWithVisits(userId: number): Promise<PetWithVisits[]>;
   createPet(data: InsertPet, userId: number): Promise<Pet>;
@@ -2222,18 +2222,18 @@ export interface IStorage {
   // Quotes
   getAllQuotes(userId: number): Promise<Quote[]>;
   createQuote(data: InsertQuote, userId: number): Promise<Quote>;
-  updateQuote(id: number, data: Partial<InsertQuote>): Promise<Quote | undefined>;
-  deleteQuote(id: number): Promise<boolean>;
+  updateQuote(id: number, data: Partial<InsertQuote>, userId: number): Promise<Quote | undefined>;
+  deleteQuote(id: number, userId: number): Promise<boolean>;
   // Mantras
   getAllMantras(userId: number): Promise<Mantra[]>;
   createMantra(data: InsertMantra, userId: number): Promise<Mantra>;
-  updateMantra(id: number, data: Partial<InsertMantra>): Promise<Mantra | undefined>;
-  deleteMantra(id: number): Promise<boolean>;
+  updateMantra(id: number, data: Partial<InsertMantra>, userId: number): Promise<Mantra | undefined>;
+  deleteMantra(id: number, userId: number): Promise<boolean>;
   // Art Pieces
   getAllArtPieces(userId: number): Promise<ArtPiece[]>;
   createArtPiece(data: InsertArtPiece, userId: number): Promise<ArtPiece>;
-  updateArtPiece(id: number, data: Partial<InsertArtPiece>): Promise<ArtPiece | undefined>;
-  deleteArtPiece(id: number): Promise<boolean>;
+  updateArtPiece(id: number, data: Partial<InsertArtPiece>, userId: number): Promise<ArtPiece | undefined>;
+  deleteArtPiece(id: number, userId: number): Promise<boolean>;
   // Journal
   getJournalEntries(userId: number): Promise<JournalEntry[]>;
   createJournalEntry(data: InsertJournalEntry, userId: number): Promise<JournalEntry>;
@@ -2247,12 +2247,12 @@ export interface IStorage {
   // Hobbies
   getAllHobbies(userId: number): Promise<Hobby[]>;
   createHobby(data: InsertHobby, userId: number): Promise<Hobby>;
-  updateHobby(id: number, data: Partial<InsertHobby>): Promise<Hobby | undefined>;
-  deleteHobby(id: number): Promise<boolean>;
+  updateHobby(id: number, data: Partial<InsertHobby>, userId: number): Promise<Hobby | undefined>;
+  deleteHobby(id: number, userId: number): Promise<boolean>;
   // Music Collections
   getAllCollections(userId: number): Promise<MusicCollectionWithItems[]>;
   createCollection(data: Partial<InsertMusicCollection>, userId: number): Promise<MusicCollection>;
-  updateCollection(id: number, data: Partial<InsertMusicCollection>): Promise<MusicCollection | undefined>;
+  updateCollection(id: number, data: Partial<InsertMusicCollection>, userId: number): Promise<MusicCollection | undefined>;
   deleteCollection(id: number): Promise<boolean>;
   addCollectionItem(collectionId: number, itemType: string, songId?: number | null, artistId?: number | null): Promise<MusicCollectionItem>;
   removeCollectionItem(itemId: number): Promise<boolean>;
@@ -2311,7 +2311,7 @@ export interface IStorage {
   // Body Composition Plans
   getBodyCompPlans(userId: number): Promise<BodyCompPlan[]>;
   createBodyCompPlan(data: InsertBodyCompPlan, userId: number): Promise<BodyCompPlan>;
-  updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>): Promise<BodyCompPlan | null>;
+  updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>, userId: number): Promise<BodyCompPlan | null>;
   deleteBodyCompPlan(id: number, userId: number): Promise<boolean>;
   getBodyCompCheckIns(planId: number, userId: number): Promise<BodyCompCheckIn[]>;
   createBodyCompCheckIn(data: InsertBodyCompCheckIn, userId: number): Promise<BodyCompCheckIn>;
@@ -2365,24 +2365,24 @@ export interface IStorage {
   // Politics
   getPoliticalOfficials(userId: number): Promise<import("@shared/schema").PoliticalOfficial[]>;
   createPoliticalOfficial(data: import("@shared/schema").InsertPoliticalOfficial, userId: number): Promise<import("@shared/schema").PoliticalOfficial>;
-  updatePoliticalOfficial(id: number, data: Partial<import("@shared/schema").InsertPoliticalOfficial>): Promise<import("@shared/schema").PoliticalOfficial | undefined>;
-  deletePoliticalOfficial(id: number): Promise<boolean>;
+  updatePoliticalOfficial(id: number, data: Partial<import("@shared/schema").InsertPoliticalOfficial>, userId: number): Promise<import("@shared/schema").PoliticalOfficial | undefined>;
+  deletePoliticalOfficial(id: number, userId: number): Promise<boolean>;
   getPoliticalIssues(userId: number): Promise<import("@shared/schema").PoliticalIssue[]>;
   createPoliticalIssue(data: import("@shared/schema").InsertPoliticalIssue, userId: number): Promise<import("@shared/schema").PoliticalIssue>;
   updatePoliticalIssue(id: number, data: Partial<import("@shared/schema").InsertPoliticalIssue>): Promise<import("@shared/schema").PoliticalIssue | undefined>;
   deletePoliticalIssue(id: number): Promise<boolean>;
   getPoliticalElections(userId: number): Promise<import("@shared/schema").PoliticalElection[]>;
   createPoliticalElection(data: import("@shared/schema").InsertPoliticalElection, userId: number): Promise<import("@shared/schema").PoliticalElection>;
-  updatePoliticalElection(id: number, data: Partial<import("@shared/schema").InsertPoliticalElection>): Promise<import("@shared/schema").PoliticalElection | undefined>;
-  deletePoliticalElection(id: number): Promise<boolean>;
+  updatePoliticalElection(id: number, data: Partial<import("@shared/schema").InsertPoliticalElection>, userId: number): Promise<import("@shared/schema").PoliticalElection | undefined>;
+  deletePoliticalElection(id: number, userId: number): Promise<boolean>;
   getCivicActions(userId: number): Promise<import("@shared/schema").CivicAction[]>;
   createCivicAction(data: import("@shared/schema").InsertCivicAction, userId: number): Promise<import("@shared/schema").CivicAction>;
-  updateCivicAction(id: number, data: Partial<import("@shared/schema").InsertCivicAction>): Promise<import("@shared/schema").CivicAction | undefined>;
-  deleteCivicAction(id: number): Promise<boolean>;
+  updateCivicAction(id: number, data: Partial<import("@shared/schema").InsertCivicAction>, userId: number): Promise<import("@shared/schema").CivicAction | undefined>;
+  deleteCivicAction(id: number, userId: number): Promise<boolean>;
   getPoliticalNewsSources(userId: number): Promise<import("@shared/schema").PoliticalNewsSource[]>;
   createPoliticalNewsSource(data: import("@shared/schema").InsertPoliticalNewsSource, userId: number): Promise<import("@shared/schema").PoliticalNewsSource>;
-  updatePoliticalNewsSource(id: number, data: Partial<import("@shared/schema").InsertPoliticalNewsSource>): Promise<import("@shared/schema").PoliticalNewsSource | undefined>;
-  deletePoliticalNewsSource(id: number): Promise<boolean>;
+  updatePoliticalNewsSource(id: number, data: Partial<import("@shared/schema").InsertPoliticalNewsSource>, userId: number): Promise<import("@shared/schema").PoliticalNewsSource | undefined>;
+  deletePoliticalNewsSource(id: number, userId: number): Promise<boolean>;
   // Activity Feed
   logActivity(userId: number, type: string, itemId: number | null, itemType: string | null, title: string | null, imageUrl: string | null, subtitle: string | null, extra?: string): Promise<void>;
   getFeedForUser(userId: number, page: number, pageSize: number): Promise<{ items: any[]; total: number }>;
@@ -2461,10 +2461,10 @@ export const storage: IStorage = {
     const result = await db.insert(events).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateEvent(id, data) {
-    const existing = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  async updateEvent(id, data, userId) {
+    const existing = await db.select().from(events).where(and(eq(events.id, id), eq(events.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(events).set(data).where(eq(events.id, id)).returning();
+    const result = await db.update(events).set(data).where(and(eq(events.id, id), eq(events.userId, userId))).returning();
     return result[0];
   },
   async deleteEvent(id) {
@@ -2502,10 +2502,10 @@ export const storage: IStorage = {
     const result = await db.insert(books).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateBook(id, data) {
-    const existing = await db.select().from(books).where(eq(books.id, id)).limit(1);
+  async updateBook(id, data, userId) {
+    const existing = await db.select().from(books).where(and(eq(books.id, id), eq(books.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(books).set(data).where(eq(books.id, id)).returning();
+    const result = await db.update(books).set(data).where(and(eq(books.id, id), eq(books.userId, userId))).returning();
     return result[0];
   },
   async deleteBook(id) {
@@ -2592,10 +2592,10 @@ export const storage: IStorage = {
     const result = await db.insert(goals).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateGoal(id, data) {
-    const existing = await db.select().from(goals).where(eq(goals.id, id)).limit(1);
+  async updateGoal(id, data, userId) {
+    const existing = await db.select().from(goals).where(and(eq(goals.id, id), eq(goals.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(goals).set(data).where(eq(goals.id, id)).returning();
+    const result = await db.update(goals).set(data).where(and(eq(goals.id, id), eq(goals.userId, userId))).returning();
     return result[0];
   },
   async deleteGoal(id) {
@@ -2642,10 +2642,10 @@ export const storage: IStorage = {
     const result = await db.insert(projects).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateProject(id, data) {
-    const existing = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  async updateProject(id, data, userId) {
+    const existing = await db.select().from(projects).where(and(eq(projects.id, id), eq(projects.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    const result = await db.update(projects).set(data).where(and(eq(projects.id, id), eq(projects.userId, userId))).returning();
     return result[0];
   },
   async deleteProject(id) {
@@ -2678,14 +2678,14 @@ export const storage: IStorage = {
     const result = await db.insert(generalTasks).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateGeneralTask(id, data) {
-    const existing = await db.select().from(generalTasks).where(eq(generalTasks.id, id)).limit(1);
+  async updateGeneralTask(id, data, userId) {
+    const existing = await db.select().from(generalTasks).where(and(eq(generalTasks.id, id), eq(generalTasks.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(generalTasks).set(data).where(eq(generalTasks.id, id)).returning();
+    const result = await db.update(generalTasks).set(data).where(and(eq(generalTasks.id, id), eq(generalTasks.userId, userId))).returning();
     return result[0];
   },
-  async deleteGeneralTask(id) {
-    const result = await db.delete(generalTasks).where(eq(generalTasks.id, id));
+  async deleteGeneralTask(id, userId) {
+    const result = await db.delete(generalTasks).where(and(eq(generalTasks.id, id), eq(generalTasks.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2699,10 +2699,10 @@ export const storage: IStorage = {
     const result = await db.insert(recipes).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateRecipe(id: number, data: Partial<InsertRecipe>) {
-    const existing = await db.select().from(recipes).where(eq(recipes.id, id)).limit(1);
+  async updateRecipe(id: number, data: Partial<InsertRecipe>, userId: number) {
+    const existing = await db.select().from(recipes).where(and(eq(recipes.id, id), eq(recipes.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(recipes).set(data).where(eq(recipes.id, id)).returning();
+    const result = await db.update(recipes).set(data).where(and(eq(recipes.id, id), eq(recipes.userId, userId))).returning();
     return result[0];
   },
   async deleteRecipe(id: number) {
@@ -2719,10 +2719,10 @@ export const storage: IStorage = {
     const result = await db.insert(mealBundles).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateBundle(id: number, data: Partial<InsertMealBundle>) {
-    const existing = await db.select().from(mealBundles).where(eq(mealBundles.id, id)).limit(1);
+  async updateBundle(id: number, data: Partial<InsertMealBundle>, userId: number) {
+    const existing = await db.select().from(mealBundles).where(and(eq(mealBundles.id, id), eq(mealBundles.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(mealBundles).set(data).where(eq(mealBundles.id, id)).returning();
+    const result = await db.update(mealBundles).set(data).where(and(eq(mealBundles.id, id), eq(mealBundles.userId, userId))).returning();
     return result[0];
   },
   async deleteBundle(id: number) {
@@ -2772,12 +2772,12 @@ export const storage: IStorage = {
     const result = await db.insert(customGroceryItems).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>) {
-    const result = await db.update(customGroceryItems).set(data).where(eq(customGroceryItems.id, id)).returning();
+  async updateCustomGroceryItem(id: number, data: Partial<InsertCustomGroceryItem>, userId: number) {
+    const result = await db.update(customGroceryItems).set(data).where(and(eq(customGroceryItems.id, id), eq(customGroceryItems.userId, userId))).returning();
     return result[0];
   },
-  async deleteCustomGroceryItem(id: number) {
-    const result = await db.delete(customGroceryItems).where(eq(customGroceryItems.id, id));
+  async deleteCustomGroceryItem(id: number, userId: number) {
+    const result = await db.delete(customGroceryItems).where(and(eq(customGroceryItems.id, id), eq(customGroceryItems.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -2789,10 +2789,10 @@ export const storage: IStorage = {
     const result = await db.insert(relationshipGroups).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateGroup(id, data) {
-    const existing = await db.select().from(relationshipGroups).where(eq(relationshipGroups.id, id)).limit(1);
+  async updateGroup(id, data, userId) {
+    const existing = await db.select().from(relationshipGroups).where(and(eq(relationshipGroups.id, id), eq(relationshipGroups.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(relationshipGroups).set(data).where(eq(relationshipGroups.id, id)).returning();
+    const result = await db.update(relationshipGroups).set(data).where(and(eq(relationshipGroups.id, id), eq(relationshipGroups.userId, userId))).returning();
     return result[0];
   },
   async deleteGroup(id) {
@@ -2890,14 +2890,14 @@ export const storage: IStorage = {
     const result = await db.insert(movies).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateMovie(id, data) {
-    const existing = await db.select().from(movies).where(eq(movies.id, id)).limit(1);
+  async updateMovie(id, data, userId) {
+    const existing = await db.select().from(movies).where(and(eq(movies.id, id), eq(movies.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(movies).set(data).where(eq(movies.id, id)).returning();
+    const result = await db.update(movies).set(data).where(and(eq(movies.id, id), eq(movies.userId, userId))).returning();
     return result[0];
   },
-  async deleteMovie(id) {
-    const result = await db.delete(movies).where(eq(movies.id, id));
+  async deleteMovie(id, userId) {
+    const result = await db.delete(movies).where(and(eq(movies.id, id), eq(movies.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3689,10 +3689,10 @@ export const storage: IStorage = {
     const result = await db.insert(musicArtists).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateMusicArtist(id, data) {
-    const existing = await db.select().from(musicArtists).where(eq(musicArtists.id, id)).limit(1);
+  async updateMusicArtist(id, data, userId) {
+    const existing = await db.select().from(musicArtists).where(and(eq(musicArtists.id, id), eq(musicArtists.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(musicArtists).set(data).where(eq(musicArtists.id, id)).returning();
+    const result = await db.update(musicArtists).set(data).where(and(eq(musicArtists.id, id), eq(musicArtists.userId, userId))).returning();
     return result[0];
   },
   async deleteMusicArtist(id) {
@@ -3704,14 +3704,14 @@ export const storage: IStorage = {
     const result = await db.insert(musicSongs).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateMusicSong(id, data) {
-    const existing = await db.select().from(musicSongs).where(eq(musicSongs.id, id)).limit(1);
+  async updateMusicSong(id, data, userId) {
+    const existing = await db.select().from(musicSongs).where(and(eq(musicSongs.id, id), eq(musicSongs.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(musicSongs).set(data).where(eq(musicSongs.id, id)).returning();
+    const result = await db.update(musicSongs).set(data).where(and(eq(musicSongs.id, id), eq(musicSongs.userId, userId))).returning();
     return result[0];
   },
-  async deleteMusicSong(id) {
-    const result = await db.delete(musicSongs).where(eq(musicSongs.id, id));
+  async deleteMusicSong(id, userId) {
+    const result = await db.delete(musicSongs).where(and(eq(musicSongs.id, id), eq(musicSongs.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3887,14 +3887,14 @@ export const storage: IStorage = {
     const result = await db.insert(childPrepItems).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateChildPrepItem(id, data) {
-    const existing = await db.select().from(childPrepItems).where(eq(childPrepItems.id, id)).limit(1);
+  async updateChildPrepItem(id, data, userId) {
+    const existing = await db.select().from(childPrepItems).where(and(eq(childPrepItems.id, id), eq(childPrepItems.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(childPrepItems).set(data).where(eq(childPrepItems.id, id)).returning();
+    const result = await db.update(childPrepItems).set(data).where(and(eq(childPrepItems.id, id), eq(childPrepItems.userId, userId))).returning();
     return result[0];
   },
-  async deleteChildPrepItem(id) {
-    const result = await db.delete(childPrepItems).where(eq(childPrepItems.id, id));
+  async deleteChildPrepItem(id, userId) {
+    const result = await db.delete(childPrepItems).where(and(eq(childPrepItems.id, id), eq(childPrepItems.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3938,14 +3938,14 @@ export const storage: IStorage = {
     const result = await db.insert(quotes).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateQuote(id, data) {
-    const existing = await db.select().from(quotes).where(eq(quotes.id, id)).limit(1);
+  async updateQuote(id, data, userId) {
+    const existing = await db.select().from(quotes).where(and(eq(quotes.id, id), eq(quotes.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(quotes).set(data).where(eq(quotes.id, id)).returning();
+    const result = await db.update(quotes).set(data).where(and(eq(quotes.id, id), eq(quotes.userId, userId))).returning();
     return result[0];
   },
-  async deleteQuote(id) {
-    const result = await db.delete(quotes).where(eq(quotes.id, id));
+  async deleteQuote(id, userId) {
+    const result = await db.delete(quotes).where(and(eq(quotes.id, id), eq(quotes.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3957,14 +3957,14 @@ export const storage: IStorage = {
     const result = await db.insert(mantras).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateMantra(id, data) {
-    const existing = await db.select().from(mantras).where(eq(mantras.id, id)).limit(1);
+  async updateMantra(id, data, userId) {
+    const existing = await db.select().from(mantras).where(and(eq(mantras.id, id), eq(mantras.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(mantras).set(data).where(eq(mantras.id, id)).returning();
+    const result = await db.update(mantras).set(data).where(and(eq(mantras.id, id), eq(mantras.userId, userId))).returning();
     return result[0];
   },
-  async deleteMantra(id) {
-    const result = await db.delete(mantras).where(eq(mantras.id, id));
+  async deleteMantra(id, userId) {
+    const result = await db.delete(mantras).where(and(eq(mantras.id, id), eq(mantras.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3976,14 +3976,14 @@ export const storage: IStorage = {
     const result = await db.insert(artPieces).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateArtPiece(id, data) {
-    const existing = await db.select().from(artPieces).where(eq(artPieces.id, id)).limit(1);
+  async updateArtPiece(id, data, userId) {
+    const existing = await db.select().from(artPieces).where(and(eq(artPieces.id, id), eq(artPieces.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(artPieces).set(data).where(eq(artPieces.id, id)).returning();
+    const result = await db.update(artPieces).set(data).where(and(eq(artPieces.id, id), eq(artPieces.userId, userId))).returning();
     return result[0];
   },
-  async deleteArtPiece(id) {
-    const result = await db.delete(artPieces).where(eq(artPieces.id, id));
+  async deleteArtPiece(id, userId) {
+    const result = await db.delete(artPieces).where(and(eq(artPieces.id, id), eq(artPieces.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -4905,8 +4905,8 @@ export const storage: IStorage = {
     const result = await db.insert(bodyCompPlans).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>) {
-    const result = await db.update(bodyCompPlans).set(data).where(eq(bodyCompPlans.id, id)).returning();
+  async updateBodyCompPlan(id: number, data: Partial<InsertBodyCompPlan>, userId: number) {
+    const result = await db.update(bodyCompPlans).set(data).where(and(eq(bodyCompPlans.id, id), eq(bodyCompPlans.userId, userId))).returning();
     return result[0] ?? null;
   },
   async deleteBodyCompPlan(id: number, userId: number) {
@@ -4960,14 +4960,14 @@ export const storage: IStorage = {
     const result = await db.insert(hobbies).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateHobby(id, data) {
-    const existing = await db.select().from(hobbies).where(eq(hobbies.id, id)).limit(1);
+  async updateHobby(id, data, userId) {
+    const existing = await db.select().from(hobbies).where(and(eq(hobbies.id, id), eq(hobbies.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(hobbies).set(data).where(eq(hobbies.id, id)).returning();
+    const result = await db.update(hobbies).set(data).where(and(eq(hobbies.id, id), eq(hobbies.userId, userId))).returning();
     return result[0];
   },
-  async deleteHobby(id) {
-    const result = await db.delete(hobbies).where(eq(hobbies.id, id));
+  async deleteHobby(id, userId) {
+    const result = await db.delete(hobbies).where(and(eq(hobbies.id, id), eq(hobbies.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5047,10 +5047,10 @@ export const storage: IStorage = {
     return result[0];
   },
 
-  async updateCollection(id, data) {
-    const existing = await db.select().from(musicCollections).where(eq(musicCollections.id, id)).limit(1);
+  async updateCollection(id, data, userId) {
+    const existing = await db.select().from(musicCollections).where(and(eq(musicCollections.id, id), eq(musicCollections.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(musicCollections).set(data as any).where(eq(musicCollections.id, id)).returning();
+    const result = await db.update(musicCollections).set(data as any).where(and(eq(musicCollections.id, id), eq(musicCollections.userId, userId))).returning();
     return result[0];
   },
 
@@ -5284,12 +5284,12 @@ export const storage: IStorage = {
     const result = await db.insert(politicalOfficials).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePoliticalOfficial(id: number, data: any) {
-    const result = await db.update(politicalOfficials).set(data).where(eq(politicalOfficials.id, id)).returning();
+  async updatePoliticalOfficial(id: number, data: any, userId: number) {
+    const result = await db.update(politicalOfficials).set(data).where(and(eq(politicalOfficials.id, id), eq(politicalOfficials.userId, userId))).returning();
     return result[0];
   },
-  async deletePoliticalOfficial(id: number) {
-    const result = await db.delete(politicalOfficials).where(eq(politicalOfficials.id, id));
+  async deletePoliticalOfficial(id: number, userId: number) {
+    const result = await db.delete(politicalOfficials).where(and(eq(politicalOfficials.id, id), eq(politicalOfficials.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getPoliticalIssues(userId: number) {
@@ -5314,12 +5314,12 @@ export const storage: IStorage = {
     const result = await db.insert(politicalElections).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePoliticalElection(id: number, data: any) {
-    const result = await db.update(politicalElections).set(data).where(eq(politicalElections.id, id)).returning();
+  async updatePoliticalElection(id: number, data: any, userId: number) {
+    const result = await db.update(politicalElections).set(data).where(and(eq(politicalElections.id, id), eq(politicalElections.userId, userId))).returning();
     return result[0];
   },
-  async deletePoliticalElection(id: number) {
-    const result = await db.delete(politicalElections).where(eq(politicalElections.id, id));
+  async deletePoliticalElection(id: number, userId: number) {
+    const result = await db.delete(politicalElections).where(and(eq(politicalElections.id, id), eq(politicalElections.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getCivicActions(userId: number) {
@@ -5329,12 +5329,12 @@ export const storage: IStorage = {
     const result = await db.insert(civicActions).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateCivicAction(id: number, data: any) {
-    const result = await db.update(civicActions).set(data).where(eq(civicActions.id, id)).returning();
+  async updateCivicAction(id: number, data: any, userId: number) {
+    const result = await db.update(civicActions).set(data).where(and(eq(civicActions.id, id), eq(civicActions.userId, userId))).returning();
     return result[0];
   },
-  async deleteCivicAction(id: number) {
-    const result = await db.delete(civicActions).where(eq(civicActions.id, id));
+  async deleteCivicAction(id: number, userId: number) {
+    const result = await db.delete(civicActions).where(and(eq(civicActions.id, id), eq(civicActions.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getPoliticalNewsSources(userId: number) {
@@ -5344,12 +5344,12 @@ export const storage: IStorage = {
     const result = await db.insert(politicalNewsSources).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePoliticalNewsSource(id: number, data: any) {
-    const result = await db.update(politicalNewsSources).set(data).where(eq(politicalNewsSources.id, id)).returning();
+  async updatePoliticalNewsSource(id: number, data: any, userId: number) {
+    const result = await db.update(politicalNewsSources).set(data).where(and(eq(politicalNewsSources.id, id), eq(politicalNewsSources.userId, userId))).returning();
     return result[0];
   },
-  async deletePoliticalNewsSource(id: number) {
-    const result = await db.delete(politicalNewsSources).where(eq(politicalNewsSources.id, id));
+  async deletePoliticalNewsSource(id: number, userId: number) {
+    const result = await db.delete(politicalNewsSources).where(and(eq(politicalNewsSources.id, id), eq(politicalNewsSources.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5413,8 +5413,8 @@ export const storage: IStorage = {
     const result = await db.insert(politicalDebatePosts).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateDebatePost(id: number, data: any) {
-    const result = await db.update(politicalDebatePosts).set(data).where(eq(politicalDebatePosts.id, id)).returning();
+  async updateDebatePost(id: number, data: any, userId: number) {
+    const result = await db.update(politicalDebatePosts).set(data).where(and(eq(politicalDebatePosts.id, id), eq(politicalDebatePosts.userId, userId))).returning();
     return result[0];
   },
   async deleteDebatePost(id: number) {
@@ -5477,14 +5477,14 @@ export const storage: IStorage = {
     const result = await db.insert(tripItems).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateTripItem(id: number, data: Partial<InsertTripItem>) {
-    const existing = await db.select().from(tripItems).where(eq(tripItems.id, id)).limit(1);
+  async updateTripItem(id: number, data: Partial<InsertTripItem>, userId: number) {
+    const existing = await db.select().from(tripItems).where(and(eq(tripItems.id, id), eq(tripItems.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(tripItems).set(data).where(eq(tripItems.id, id)).returning();
+    const result = await db.update(tripItems).set(data).where(and(eq(tripItems.id, id), eq(tripItems.userId, userId))).returning();
     return result[0];
   },
-  async deleteTripItem(id: number) {
-    const result = await db.delete(tripItems).where(eq(tripItems.id, id));
+  async deleteTripItem(id: number, userId: number) {
+    const result = await db.delete(tripItems).where(and(eq(tripItems.id, id), eq(tripItems.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 

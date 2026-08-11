@@ -77,7 +77,8 @@ export function registerExternalApiRoutes(app: Express) {
   /** PATCH /api/v1/tasks/:id — update a general task (any fields, e.g. completed, priority) */
   app.patch("/api/v1/tasks/:id", requireApiKey, async (req, res) => {
     try {
-      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body));
+      const uid = await externalUserId(res); if (!uid) return;
+      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body), uid);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
