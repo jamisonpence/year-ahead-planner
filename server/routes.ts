@@ -2207,12 +2207,12 @@ Return exactly this structure:
   });
   app.patch("/api/workout-templates/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateWorkoutTemplate(+req.params.id, insertWorkoutTemplateSchema.partial().parse(req.body));
+      const r = await storage.updateWorkoutTemplate(+req.params.id, insertWorkoutTemplateSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/workout-templates/:id", requireAuth, async (req, res) => {
-    (await storage.deleteWorkoutTemplate(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteWorkoutTemplate(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Workout Plans ─────────────────────────────────────────────────────────────
@@ -2245,7 +2245,7 @@ Return exactly this structure:
   });
   app.patch("/api/workout-plans/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateWorkoutPlan(+req.params.id, req.body);
+      const updated = await storage.updateWorkoutPlan(+req.params.id, req.body, (req.user as User).id);
       if (!updated) return res.status(404).json({ error: "Not found" });
       // Keep linked goal title in sync when plan is renamed
       if (req.body.name) {
@@ -2264,7 +2264,7 @@ Return exactly this structure:
       const allGoals = await storage.getAllGoalsWithProjects(uid);
       const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
       if (linked) await storage.deleteGoal(linked.id);
-      const ok = await storage.deleteWorkoutPlan(+req.params.id);
+      const ok = await storage.deleteWorkoutPlan(+req.params.id, uid);
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -2406,12 +2406,12 @@ Return exactly this structure:
   });
   app.patch("/api/workout-logs/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateWorkoutLog(+req.params.id, insertWorkoutLogSchema.partial().parse(req.body));
+      const r = await storage.updateWorkoutLog(+req.params.id, insertWorkoutLogSchema.partial().parse(req.body), (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/workout-logs/:id", requireAuth, async (req, res) => {
-    (await storage.deleteWorkoutLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteWorkoutLog(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goals ─────────────────────────────────────────────────────────────────────
@@ -3755,12 +3755,12 @@ Return exactly this structure:
   });
   app.patch("/api/budget-categories/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateBudgetCategory(+req.params.id, req.body);
+      const updated = await storage.updateBudgetCategory(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/budget-categories/:id", requireAuth, async (req, res) => {
-    (await storage.deleteBudgetCategory(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteBudgetCategory(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Transactions ─────────────────────────────────────────────────────────────────
@@ -3804,12 +3804,12 @@ Return exactly this structure:
   });
   app.patch("/api/subscriptions/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateSubscription(+req.params.id, req.body);
+      const updated = await storage.updateSubscription(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/subscriptions/:id", requireAuth, async (req, res) => {
-    (await storage.deleteSubscription(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteSubscription(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Nav Prefs ────────────────────────────────────────────────────────────────────
@@ -4204,7 +4204,7 @@ Return exactly this structure:
 
   app.patch("/api/receipts/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateReceiptRecord(+req.params.id, req.body);
+      const updated = await storage.updateReceiptRecord(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -4217,7 +4217,7 @@ Return exactly this structure:
         const filePath = path.join(UPLOADS_DIR, rec.filename);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
-      (await storage.deleteReceiptRecord(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteReceiptRecord(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4862,13 +4862,13 @@ Return exactly this structure:
   });
   app.patch("/api/equipment/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateEquipment(+req.params.id, req.body);
+      const updated = await storage.updateEquipment(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/equipment/:id", requireAuth, async (req, res) => {
     try {
-      const ok = await storage.deleteEquipment(+req.params.id);
+      const ok = await storage.deleteEquipment(+req.params.id, (req.user as User).id);
       ok ? res.status(204).end() : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
@@ -5046,7 +5046,7 @@ Return exactly this structure:
       if (!template) return res.status(404).json({ error: "Template not found" });
       const exercises = JSON.parse(template.exercisesJson ?? "[]");
       exercises.push(req.body);
-      const updated = await storage.updateWorkoutTemplate(+req.params.id, { exercisesJson: JSON.stringify(exercises) });
+      const updated = await storage.updateWorkoutTemplate(+req.params.id, { exercisesJson: JSON.stringify(exercises) }, (req.user as User).id);
       res.json(updated);
     } catch (e) { handleError(res, e); }
   });
@@ -7591,13 +7591,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/sacred-texts/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateSacredText(+req.params.id, req.body);
+      const updated = await storage.updateSacredText(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/sacred-texts/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteSacredText(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteSacredText(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7615,13 +7615,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/faith-practices/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateFaithPractice(+req.params.id, req.body);
+      const updated = await storage.updateFaithPractice(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/faith-practices/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteFaithPractice(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteFaithPractice(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7639,13 +7639,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/sermons/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateSermon(+req.params.id, req.body);
+      const updated = await storage.updateSermon(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/sermons/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteSermon(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteSermon(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7663,13 +7663,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/prayer-items/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePrayerItem(+req.params.id, req.body);
+      const updated = await storage.updatePrayerItem(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/prayer-items/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePrayerItem(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePrayerItem(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7711,7 +7711,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.delete("/api/health/metrics/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteHealthMetric(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteHealthMetric(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7728,13 +7728,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/health/sleep/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateSleepLog(+req.params.id, req.body);
+      const updated = await storage.updateSleepLog(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/health/sleep/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteSleepLog(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteSleepLog(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7751,13 +7751,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/health/care-providers/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateCareProvider(+req.params.id, req.body);
+      const updated = await storage.updateCareProvider(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/health/care-providers/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteCareProvider(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteCareProvider(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 

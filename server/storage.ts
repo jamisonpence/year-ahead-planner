@@ -2008,13 +2008,13 @@ export interface IStorage {
   // Workout Templates
   getAllWorkoutTemplates(userId: number): Promise<WorkoutTemplate[]>;
   createWorkoutTemplate(data: InsertWorkoutTemplate, userId: number): Promise<WorkoutTemplate>;
-  updateWorkoutTemplate(id: number, data: Partial<InsertWorkoutTemplate>): Promise<WorkoutTemplate | undefined>;
-  deleteWorkoutTemplate(id: number): Promise<boolean>;
+  updateWorkoutTemplate(id: number, data: Partial<InsertWorkoutTemplate>, userId: number): Promise<WorkoutTemplate | undefined>;
+  deleteWorkoutTemplate(id: number, userId: number): Promise<boolean>;
   // Workout Logs
   getAllWorkoutLogs(userId: number): Promise<WorkoutLog[]>;
   createWorkoutLog(data: InsertWorkoutLog, userId: number): Promise<WorkoutLog>;
-  updateWorkoutLog(id: number, data: Partial<InsertWorkoutLog>): Promise<WorkoutLog | undefined>;
-  deleteWorkoutLog(id: number): Promise<boolean>;
+  updateWorkoutLog(id: number, data: Partial<InsertWorkoutLog>, userId: number): Promise<WorkoutLog | undefined>;
+  deleteWorkoutLog(id: number, userId: number): Promise<boolean>;
   // Goals
   getAllGoalsWithProjects(userId: number): Promise<GoalWithProjects[]>;
   getAllGoalsWithTasks(userId: number): Promise<GoalWithTasks[]>;
@@ -2080,8 +2080,8 @@ export interface IStorage {
   // Budget Categories
   getAllBudgetCategories(userId: number): Promise<BudgetCategory[]>;
   createBudgetCategory(data: InsertBudgetCategory, userId: number): Promise<BudgetCategory>;
-  updateBudgetCategory(id: number, data: Partial<InsertBudgetCategory>): Promise<BudgetCategory | undefined>;
-  deleteBudgetCategory(id: number): Promise<boolean>;
+  updateBudgetCategory(id: number, data: Partial<InsertBudgetCategory>, userId: number): Promise<BudgetCategory | undefined>;
+  deleteBudgetCategory(id: number, userId: number): Promise<boolean>;
   // Transactions
   getAllTransactions(userId: number): Promise<Transaction[]>;
   createTransaction(data: InsertTransaction, userId: number): Promise<Transaction>;
@@ -2090,13 +2090,13 @@ export interface IStorage {
   // Subscriptions
   getAllSubscriptions(userId: number): Promise<Subscription[]>;
   createSubscription(data: InsertSubscription, userId: number): Promise<Subscription>;
-  updateSubscription(id: number, data: Partial<InsertSubscription>): Promise<Subscription | undefined>;
-  deleteSubscription(id: number): Promise<boolean>;
+  updateSubscription(id: number, data: Partial<InsertSubscription>, userId: number): Promise<Subscription | undefined>;
+  deleteSubscription(id: number, userId: number): Promise<boolean>;
   // Receipts
   getAllReceipts(userId: number): Promise<Receipt[]>;
   createReceiptRecord(data: InsertReceipt, userId: number): Promise<Receipt>;
-  updateReceiptRecord(id: number, data: Partial<InsertReceipt>): Promise<Receipt | undefined>;
-  deleteReceiptRecord(id: number): Promise<boolean>;
+  updateReceiptRecord(id: number, data: Partial<InsertReceipt>, userId: number): Promise<Receipt | undefined>;
+  deleteReceiptRecord(id: number, userId: number): Promise<boolean>;
   // Nav Prefs
   getNavPrefs(userId: number): Promise<NavPref[]>;
   saveNavPrefs(userId: number, prefs: NavPref[]): Promise<void>;
@@ -2242,8 +2242,8 @@ export interface IStorage {
   // Equipment
   getAllEquipment(userId: number): Promise<Equipment[]>;
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
-  updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment | undefined>;
-  deleteEquipment(id: number): Promise<boolean>;
+  updateEquipment(id: number, data: Partial<InsertEquipment>, userId: number): Promise<Equipment | undefined>;
+  deleteEquipment(id: number, userId: number): Promise<boolean>;
   // Hobbies
   getAllHobbies(userId: number): Promise<Hobby[]>;
   createHobby(data: InsertHobby, userId: number): Promise<Hobby>;
@@ -2306,8 +2306,8 @@ export interface IStorage {
   // Workout Plans
   getAllWorkoutPlans(userId: number): Promise<WorkoutPlan[]>;
   createWorkoutPlan(data: InsertWorkoutPlan, userId: number): Promise<WorkoutPlan>;
-  updateWorkoutPlan(id: number, data: Partial<InsertWorkoutPlan>): Promise<WorkoutPlan | null>;
-  deleteWorkoutPlan(id: number): Promise<boolean>;
+  updateWorkoutPlan(id: number, data: Partial<InsertWorkoutPlan>, userId: number): Promise<WorkoutPlan | null>;
+  deleteWorkoutPlan(id: number, userId: number): Promise<boolean>;
   // Body Composition Plans
   getBodyCompPlans(userId: number): Promise<BodyCompPlan[]>;
   createBodyCompPlan(data: InsertBodyCompPlan, userId: number): Promise<BodyCompPlan>;
@@ -2329,20 +2329,20 @@ export interface IStorage {
   // Faith & Spirituality (private — never exposed to friends/recommendations)
   getSacredTexts(userId: number): Promise<SacredText[]>;
   createSacredText(data: InsertSacredText): Promise<SacredText>;
-  updateSacredText(id: number, data: Partial<InsertSacredText>): Promise<SacredText | undefined>;
-  deleteSacredText(id: number): Promise<boolean>;
+  updateSacredText(id: number, data: Partial<InsertSacredText>, userId: number): Promise<SacredText | undefined>;
+  deleteSacredText(id: number, userId: number): Promise<boolean>;
   getFaithPractices(userId: number): Promise<FaithPractice[]>;
   createFaithPractice(data: InsertFaithPractice): Promise<FaithPractice>;
-  updateFaithPractice(id: number, data: Partial<InsertFaithPractice>): Promise<FaithPractice | undefined>;
-  deleteFaithPractice(id: number): Promise<boolean>;
+  updateFaithPractice(id: number, data: Partial<InsertFaithPractice>, userId: number): Promise<FaithPractice | undefined>;
+  deleteFaithPractice(id: number, userId: number): Promise<boolean>;
   getSermons(userId: number): Promise<Sermon[]>;
   createSermon(data: InsertSermon): Promise<Sermon>;
-  updateSermon(id: number, data: Partial<InsertSermon>): Promise<Sermon | undefined>;
-  deleteSermon(id: number): Promise<boolean>;
+  updateSermon(id: number, data: Partial<InsertSermon>, userId: number): Promise<Sermon | undefined>;
+  deleteSermon(id: number, userId: number): Promise<boolean>;
   getPrayerItems(userId: number): Promise<PrayerItem[]>;
   createPrayerItem(data: InsertPrayerItem): Promise<PrayerItem>;
-  updatePrayerItem(id: number, data: Partial<InsertPrayerItem>): Promise<PrayerItem | undefined>;
-  deletePrayerItem(id: number): Promise<boolean>;
+  updatePrayerItem(id: number, data: Partial<InsertPrayerItem>, userId: number): Promise<PrayerItem | undefined>;
+  deletePrayerItem(id: number, userId: number): Promise<boolean>;
 
   // Health
   getMedications(userId: number): Promise<import("@shared/schema").Medication[]>;
@@ -2351,17 +2351,17 @@ export interface IStorage {
   deleteMedication(id: number, userId: number): Promise<boolean>;
   getHealthMetrics(userId: number): Promise<import("@shared/schema").HealthMetric[]>;
   createHealthMetric(data: import("@shared/schema").InsertHealthMetric, userId: number): Promise<import("@shared/schema").HealthMetric>;
-  deleteHealthMetric(id: number): Promise<boolean>;
+  deleteHealthMetric(id: number, userId: number): Promise<boolean>;
   getSleepLogs(userId: number): Promise<import("@shared/schema").SleepLog[]>;
   createSleepLog(data: import("@shared/schema").InsertSleepLog, userId: number): Promise<import("@shared/schema").SleepLog>;
-  updateSleepLog(id: number, data: Partial<import("@shared/schema").InsertSleepLog>): Promise<import("@shared/schema").SleepLog | undefined>;
-  deleteSleepLog(id: number): Promise<boolean>;
+  updateSleepLog(id: number, data: Partial<import("@shared/schema").InsertSleepLog>, userId: number): Promise<import("@shared/schema").SleepLog | undefined>;
+  deleteSleepLog(id: number, userId: number): Promise<boolean>;
 
   // Care Team
   getCareProviders(userId: number): Promise<import("@shared/schema").CareProvider[]>;
   createCareProvider(data: import("@shared/schema").InsertCareProvider, userId: number): Promise<import("@shared/schema").CareProvider>;
-  updateCareProvider(id: number, data: Partial<import("@shared/schema").InsertCareProvider>): Promise<import("@shared/schema").CareProvider | undefined>;
-  deleteCareProvider(id: number): Promise<boolean>;
+  updateCareProvider(id: number, data: Partial<import("@shared/schema").InsertCareProvider>, userId: number): Promise<import("@shared/schema").CareProvider | undefined>;
+  deleteCareProvider(id: number, userId: number): Promise<boolean>;
   // Politics
   getPoliticalOfficials(userId: number): Promise<import("@shared/schema").PoliticalOfficial[]>;
   createPoliticalOfficial(data: import("@shared/schema").InsertPoliticalOfficial, userId: number): Promise<import("@shared/schema").PoliticalOfficial>;
@@ -2541,14 +2541,14 @@ export const storage: IStorage = {
     const result = await db.insert(workoutTemplates).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateWorkoutTemplate(id, data) {
-    const existing = await db.select().from(workoutTemplates).where(eq(workoutTemplates.id, id)).limit(1);
+  async updateWorkoutTemplate(id, data, userId) {
+    const existing = await db.select().from(workoutTemplates).where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(workoutTemplates).set(data).where(eq(workoutTemplates.id, id)).returning();
+    const result = await db.update(workoutTemplates).set(data).where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId))).returning();
     return result[0];
   },
-  async deleteWorkoutTemplate(id) {
-    const result = await db.delete(workoutTemplates).where(eq(workoutTemplates.id, id));
+  async deleteWorkoutTemplate(id, userId) {
+    const result = await db.delete(workoutTemplates).where(and(eq(workoutTemplates.id, id), eq(workoutTemplates.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2560,14 +2560,14 @@ export const storage: IStorage = {
     const result = await db.insert(workoutLogs).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateWorkoutLog(id, data) {
-    const existing = await db.select().from(workoutLogs).where(eq(workoutLogs.id, id)).limit(1);
+  async updateWorkoutLog(id, data, userId) {
+    const existing = await db.select().from(workoutLogs).where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(workoutLogs).set(data).where(eq(workoutLogs.id, id)).returning();
+    const result = await db.update(workoutLogs).set(data).where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId))).returning();
     return result[0];
   },
-  async deleteWorkoutLog(id) {
-    const result = await db.delete(workoutLogs).where(eq(workoutLogs.id, id));
+  async deleteWorkoutLog(id, userId) {
+    const result = await db.delete(workoutLogs).where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2994,14 +2994,14 @@ export const storage: IStorage = {
     const result = await db.insert(budgetCategories).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateBudgetCategory(id, data) {
-    const existing = await db.select().from(budgetCategories).where(eq(budgetCategories.id, id)).limit(1);
+  async updateBudgetCategory(id, data, userId) {
+    const existing = await db.select().from(budgetCategories).where(and(eq(budgetCategories.id, id), eq(budgetCategories.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(budgetCategories).set(data).where(eq(budgetCategories.id, id)).returning();
+    const result = await db.update(budgetCategories).set(data).where(and(eq(budgetCategories.id, id), eq(budgetCategories.userId, userId))).returning();
     return result[0];
   },
-  async deleteBudgetCategory(id) {
-    const result = await db.delete(budgetCategories).where(eq(budgetCategories.id, id));
+  async deleteBudgetCategory(id, userId) {
+    const result = await db.delete(budgetCategories).where(and(eq(budgetCategories.id, id), eq(budgetCategories.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3032,14 +3032,14 @@ export const storage: IStorage = {
     const result = await db.insert(subscriptions).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateSubscription(id, data) {
-    const existing = await db.select().from(subscriptions).where(eq(subscriptions.id, id)).limit(1);
+  async updateSubscription(id, data, userId) {
+    const existing = await db.select().from(subscriptions).where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(subscriptions).set(data).where(eq(subscriptions.id, id)).returning();
+    const result = await db.update(subscriptions).set(data).where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId))).returning();
     return result[0];
   },
-  async deleteSubscription(id) {
-    const result = await db.delete(subscriptions).where(eq(subscriptions.id, id));
+  async deleteSubscription(id, userId) {
+    const result = await db.delete(subscriptions).where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3051,14 +3051,14 @@ export const storage: IStorage = {
     const result = await db.insert(receipts).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateReceiptRecord(id, data) {
-    const existing = await db.select().from(receipts).where(eq(receipts.id, id)).limit(1);
+  async updateReceiptRecord(id, data, userId) {
+    const existing = await db.select().from(receipts).where(and(eq(receipts.id, id), eq(receipts.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(receipts).set(data).where(eq(receipts.id, id)).returning();
+    const result = await db.update(receipts).set(data).where(and(eq(receipts.id, id), eq(receipts.userId, userId))).returning();
     return result[0];
   },
-  async deleteReceiptRecord(id) {
-    const result = await db.delete(receipts).where(eq(receipts.id, id));
+  async deleteReceiptRecord(id, userId) {
+    const result = await db.delete(receipts).where(and(eq(receipts.id, id), eq(receipts.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -4014,14 +4014,14 @@ export const storage: IStorage = {
     const result = await db.insert(equipment).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateEquipment(id, data) {
-    const existing = await db.select().from(equipment).where(eq(equipment.id, id)).limit(1);
+  async updateEquipment(id, data, userId) {
+    const existing = await db.select().from(equipment).where(and(eq(equipment.id, id), eq(equipment.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(equipment).set(data).where(eq(equipment.id, id)).returning();
+    const result = await db.update(equipment).set(data).where(and(eq(equipment.id, id), eq(equipment.userId, userId))).returning();
     return result[0];
   },
-  async deleteEquipment(id) {
-    const result = await db.delete(equipment).where(eq(equipment.id, id));
+  async deleteEquipment(id, userId) {
+    const result = await db.delete(equipment).where(and(eq(equipment.id, id), eq(equipment.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -4866,12 +4866,12 @@ export const storage: IStorage = {
     const result = await db.insert(workoutPlans).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateWorkoutPlan(id, data) {
-    const result = await db.update(workoutPlans).set(data).where(eq(workoutPlans.id, id)).returning();
+  async updateWorkoutPlan(id, data, userId) {
+    const result = await db.update(workoutPlans).set(data).where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId))).returning();
     return result[0] ?? null;
   },
-  async deleteWorkoutPlan(id) {
-    const result = await db.delete(workoutPlans).where(eq(workoutPlans.id, id));
+  async deleteWorkoutPlan(id, userId) {
+    const result = await db.delete(workoutPlans).where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async setActivePlan(id: number, userId: number) {
@@ -5157,12 +5157,12 @@ export const storage: IStorage = {
     const result = await db.insert(sacredTexts).values(data).returning();
     return result[0];
   },
-  async updateSacredText(id, data) {
-    const result = await db.update(sacredTexts).set(data).where(eq(sacredTexts.id, id)).returning();
+  async updateSacredText(id, data, userId) {
+    const result = await db.update(sacredTexts).set(data).where(and(eq(sacredTexts.id, id), eq(sacredTexts.userId, userId))).returning();
     return result[0];
   },
-  async deleteSacredText(id) {
-    const result = await db.delete(sacredTexts).where(eq(sacredTexts.id, id));
+  async deleteSacredText(id, userId) {
+    const result = await db.delete(sacredTexts).where(and(eq(sacredTexts.id, id), eq(sacredTexts.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5173,12 +5173,12 @@ export const storage: IStorage = {
     const result = await db.insert(faithPractices).values(data).returning();
     return result[0];
   },
-  async updateFaithPractice(id, data) {
-    const result = await db.update(faithPractices).set(data).where(eq(faithPractices.id, id)).returning();
+  async updateFaithPractice(id, data, userId) {
+    const result = await db.update(faithPractices).set(data).where(and(eq(faithPractices.id, id), eq(faithPractices.userId, userId))).returning();
     return result[0];
   },
-  async deleteFaithPractice(id) {
-    const result = await db.delete(faithPractices).where(eq(faithPractices.id, id));
+  async deleteFaithPractice(id, userId) {
+    const result = await db.delete(faithPractices).where(and(eq(faithPractices.id, id), eq(faithPractices.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5189,12 +5189,12 @@ export const storage: IStorage = {
     const result = await db.insert(sermons).values(data).returning();
     return result[0];
   },
-  async updateSermon(id, data) {
-    const result = await db.update(sermons).set(data).where(eq(sermons.id, id)).returning();
+  async updateSermon(id, data, userId) {
+    const result = await db.update(sermons).set(data).where(and(eq(sermons.id, id), eq(sermons.userId, userId))).returning();
     return result[0];
   },
-  async deleteSermon(id) {
-    const result = await db.delete(sermons).where(eq(sermons.id, id));
+  async deleteSermon(id, userId) {
+    const result = await db.delete(sermons).where(and(eq(sermons.id, id), eq(sermons.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5205,12 +5205,12 @@ export const storage: IStorage = {
     const result = await db.insert(prayerItems).values(data).returning();
     return result[0];
   },
-  async updatePrayerItem(id, data) {
-    const result = await db.update(prayerItems).set(data).where(eq(prayerItems.id, id)).returning();
+  async updatePrayerItem(id, data, userId) {
+    const result = await db.update(prayerItems).set(data).where(and(eq(prayerItems.id, id), eq(prayerItems.userId, userId))).returning();
     return result[0];
   },
-  async deletePrayerItem(id) {
-    const result = await db.delete(prayerItems).where(eq(prayerItems.id, id));
+  async deletePrayerItem(id, userId) {
+    const result = await db.delete(prayerItems).where(and(eq(prayerItems.id, id), eq(prayerItems.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5239,8 +5239,8 @@ export const storage: IStorage = {
     const result = await db.insert(healthMetrics).values({ ...data, userId }).returning();
     return result[0];
   },
-  async deleteHealthMetric(id: number) {
-    const result = await db.delete(healthMetrics).where(eq(healthMetrics.id, id));
+  async deleteHealthMetric(id: number, userId: number) {
+    const result = await db.delete(healthMetrics).where(and(eq(healthMetrics.id, id), eq(healthMetrics.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getSleepLogs(userId: number) {
@@ -5250,12 +5250,12 @@ export const storage: IStorage = {
     const result = await db.insert(sleepLogs).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateSleepLog(id: number, data: any) {
-    const result = await db.update(sleepLogs).set(data).where(eq(sleepLogs.id, id)).returning();
+  async updateSleepLog(id: number, data: any, userId: number) {
+    const result = await db.update(sleepLogs).set(data).where(and(eq(sleepLogs.id, id), eq(sleepLogs.userId, userId))).returning();
     return result[0];
   },
-  async deleteSleepLog(id: number) {
-    const result = await db.delete(sleepLogs).where(eq(sleepLogs.id, id));
+  async deleteSleepLog(id: number, userId: number) {
+    const result = await db.delete(sleepLogs).where(and(eq(sleepLogs.id, id), eq(sleepLogs.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5267,12 +5267,12 @@ export const storage: IStorage = {
     const result = await db.insert(careProviders).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateCareProvider(id: number, data: any) {
-    const result = await db.update(careProviders).set(data).where(eq(careProviders.id, id)).returning();
+  async updateCareProvider(id: number, data: any, userId: number) {
+    const result = await db.update(careProviders).set(data).where(and(eq(careProviders.id, id), eq(careProviders.userId, userId))).returning();
     return result[0];
   },
-  async deleteCareProvider(id: number) {
-    const result = await db.delete(careProviders).where(eq(careProviders.id, id));
+  async deleteCareProvider(id: number, userId: number) {
+    const result = await db.delete(careProviders).where(and(eq(careProviders.id, id), eq(careProviders.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
