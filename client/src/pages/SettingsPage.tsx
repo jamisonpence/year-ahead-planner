@@ -511,14 +511,28 @@ function CollaborationSection() {
   const respondMut = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       apiRequest("PATCH", `/api/tab-collaborations/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/tab-collaborations"] }),
+    onSuccess: () => {
+      // Accepting a share changes which user's rows every endpoint on that tab
+      // returns, but the query cache is staleTime: Infinity with no refetch on
+      // focus — so anything already fetched keeps serving its pre-share result
+      // (usually empty) until something happens to invalidate it. That's why a
+      // shared Home could show projects but an empty chore list: the chores
+      // query had been cached empty and never refetched, and only reappeared
+      // once adding a chore invalidated that one key.
+      //
+      // Clearing the whole cache is the right hammer here — accepting a share is
+      // rare and it genuinely changes what the entire session can see.
+      qc.invalidateQueries();
+    },
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/tab-collaborations/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/tab-collaborations"] });
+      // Same reasoning in reverse: revoking a share must drop the owner's rows
+      // from this session's cache, or they linger until a manual reload.
+      qc.invalidateQueries();
       toast({ title: "Collaboration removed" });
     },
     onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
