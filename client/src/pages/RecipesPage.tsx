@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { splitRecipeSteps } from "@/lib/recipeSteps";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageShell from "@/components/PageShell";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -1247,7 +1248,16 @@ function RecipeDetail({ recipe, onClose, onAddToWeek }: {
           {recipe.instructions && (
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Instructions</p>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{recipe.instructions}</p>
+              <ol className="space-y-3">
+                {splitRecipeSteps(recipe.instructions).map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center tabular-nums">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-muted-foreground leading-relaxed pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
           <RecipeNutritionCard recipe={recipe} onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/recipes"] })} />
@@ -1476,7 +1486,16 @@ function SystemRecipeDetail({ recipe, onClose, onSaveToLibrary, onSaveAndPlan }:
           {recipe.instructions && (
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Instructions</p>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{recipe.instructions}</p>
+              <ol className="space-y-3">
+                {splitRecipeSteps(recipe.instructions).map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center tabular-nums">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-muted-foreground leading-relaxed pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
 
