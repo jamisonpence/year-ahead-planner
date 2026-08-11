@@ -370,7 +370,39 @@ function buildMcpServer() {
 // ── OAuth 2.0 endpoints (required by MCP spec for Cowork/Claude connectors) ──
 // Single-user app: authorize auto-approves and issues MCP_AUTH_TOKEN directly.
 
-const pendingCodes = new Map<string, string>(); // code → redirect_uri
+// code → { redirectUri, userId, expiresAt }. Codes are bound to the user who
+// authorized them so a code can never be minted by one party and redeemed for
+// another's access.
+const pendingCodes = new Map<string, { redirectUri: string; userId: number; expiresAt: number }>();
+
+/**
+ * Hosts allowed to receive an authorization code.
+ *
+ * The code is a bearer credential in a query string — whoever receives it can
+ * exchange it for the MCP token. Without this allowlist, anyone could pass
+ * `?redirect_uri=https://attacker.example` and have the server hand them a
+ * valid code directly.
+ *
+ * Override with MCP_ALLOWED_REDIRECT_HOSTS (comma-separated) if the connector's
+ * callback host ever changes, so this doesn't require a code edit to unblock.
+ */
+function redirectUriAllowed(raw: string): boolean {
+  let url: URL;
+  try { url = new URL(raw); } catch { return false; }
+
+  // Only https, except on loopback where local development has no certificate.
+  const isLoopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !isLoopback) return false;
+
+  const configured = (process.env.MCP_ALLOWED_REDIRECT_HOSTS ?? "")
+    .split(",").map(h => h.trim().toLowerCase()).filter(Boolean);
+  const allowed = configured.length ? configured : ["claude.ai", "anthropic.com", "localhost", "127.0.0.1"];
+
+  const host = url.hostname.toLowerCase();
+  // Match the host itself or any subdomain of it — never a suffix match on the
+  // raw string, which would let "notclaude.ai" through.
+  return allowed.some(a => host === a || host.endsWith(`.${a}`));
+}
 
 export function createOAuthRouter() {
   const router = Router();
@@ -406,14 +438,59 @@ export function createOAuthEndpoints() {
     });
   });
 
-  /** GET /oauth/authorize — auto-approve and redirect with code */
+  /**
+   * GET /oauth/authorize
+   *
+   * Issues an authorization code, but only to a signed-in browser session
+   * belonging to the account the MCP server actually serves.
+   *
+   * This previously auto-approved anyone. Because MCP_AUTH_TOKEN grants tool
+   * access as EXTERNAL_USER_ID — read and write on tasks, goals, chores and
+   * recipes, plus send_email — two unauthenticated requests were enough for a
+   * stranger to act as that user. Requiring a session, checking that the session
+   * belongs to the owner, and constraining where the code may be delivered are
+   * what make this endpoint safe to leave publicly routable.
+   */
   router.get("/authorize", (req: Request, res: Response) => {
     const { redirect_uri, state } = req.query as Record<string, string>;
     if (!redirect_uri) return res.status(400).send("Missing redirect_uri");
 
-    const code = `mlcode-${Math.random().toString(36).slice(2)}`;
-    pendingCodes.set(code, redirect_uri);
-    // Codes expire after 5 minutes
+    if (!redirectUriAllowed(redirect_uri)) {
+      console.warn(`[mcp-oauth] rejected redirect_uri: ${redirect_uri}`);
+      return res.status(400).send(
+        "redirect_uri is not an allowed destination. Set MCP_ALLOWED_REDIRECT_HOSTS if the connector's callback host has changed."
+      );
+    }
+
+    // Must be a signed-in session.
+    //
+    // Deliberately not redirecting to /login: that route ignores a return URL
+    // and lands on the dashboard, which would abandon the handshake half-done
+    // and look like the connector failed. Failing closed with an instruction is
+    // honest and recoverable — the connector opens this in a normal browser, so
+    // the owner is usually already signed in, and if not, one retry fixes it.
+    if (!req.isAuthenticated?.()) {
+      return res.status(401).send(
+        "Sign in to mylifos.com in this browser, then start the connection again."
+      );
+    }
+
+    // The token maps to one account, so only that account may authorize it.
+    // Without this, any signed-up user could complete the flow and receive a
+    // token that reads and writes the owner's data.
+    const sessionUserId = (req.user as { id?: number } | undefined)?.id;
+    const ownerId = getExternalUserId();
+    if (sessionUserId !== ownerId) {
+      console.warn(`[mcp-oauth] user ${sessionUserId} tried to authorize the connector owned by ${ownerId}`);
+      return res.status(403).send("This connector can only be authorized by the account that owns it.");
+    }
+
+    const code = `mlcode-${randomUUID()}`;
+    pendingCodes.set(code, {
+      redirectUri: redirect_uri,
+      userId: sessionUserId,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
     setTimeout(() => pendingCodes.delete(code), 5 * 60 * 1000);
 
     const url = new URL(redirect_uri);
@@ -422,16 +499,30 @@ export function createOAuthEndpoints() {
     res.redirect(url.toString());
   });
 
-  /** POST /oauth/token — exchange code for access token */
+  /** POST /oauth/token — exchange a code for the access token */
   router.post("/token", (req: Request, res: Response) => {
-    const { code, grant_type } = req.body ?? {};
+    const { code, grant_type, redirect_uri } = req.body ?? {};
     if (grant_type !== "authorization_code") {
       return res.status(400).json({ error: "unsupported_grant_type" });
     }
-    if (!code || !pendingCodes.has(code)) {
+
+    const entry = code ? pendingCodes.get(code) : undefined;
+    // Single use: consume it whatever the outcome, so a leaked code can't be
+    // retried against a different redirect_uri.
+    if (code) pendingCodes.delete(code);
+
+    if (!entry || entry.expiresAt < Date.now()) {
       return res.status(400).json({ error: "invalid_grant" });
     }
-    pendingCodes.delete(code);
+    // If the client sent a redirect_uri, it must match the one the code was
+    // issued for — standard OAuth code-injection defence.
+    if (redirect_uri && redirect_uri !== entry.redirectUri) {
+      console.warn("[mcp-oauth] redirect_uri mismatch on token exchange");
+      return res.status(400).json({ error: "invalid_grant" });
+    }
+    if (entry.userId !== getExternalUserId()) {
+      return res.status(403).json({ error: "invalid_grant" });
+    }
 
     const token = process.env.MCP_AUTH_TOKEN?.trim();
     if (!token) return res.status(503).json({ error: "MCP_AUTH_TOKEN not configured" });
