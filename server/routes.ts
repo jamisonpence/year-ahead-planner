@@ -4224,7 +4224,11 @@ Return exactly this structure:
   // ── Plants ────────────────────────────────────────────────────────────────────
   app.get("/api/plants", requireAuth, async (req, res) => {
     try {
-      res.json(await storage.getAllPlants((req.user as User).id));
+      // Plants belong to the Home tab, so reads resolve the shared owner the
+      // same way chores, house projects and appliances already do. Without this
+      // a collaborator saw their own (empty) plant list instead of the owner's.
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      res.json(await storage.getAllPlants(uid));
     } catch (e) { handleError(res, e); }
   });
 
@@ -4246,21 +4250,24 @@ Return exactly this structure:
         photoUrl: b.photoUrl ?? null,
       };
       if (!data.name) return res.status(400).json({ error: "name is required" });
-      const plant = await storage.createPlant(data, (req.user as User).id);
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const plant = await storage.createPlant(data, uid);
       res.status(201).json(plant);
     } catch (e) { handleError(res, e); }
   });
 
   app.patch("/api/plants/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePlant(+req.params.id, req.body, (req.user as User).id);
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      const updated = await storage.updatePlant(+req.params.id, req.body, uid);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
   app.delete("/api/plants/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePlant(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      const uid = await storage.getTabUserId((req.user as User).id, "housekeeping");
+      (await storage.deletePlant(+req.params.id, uid)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
