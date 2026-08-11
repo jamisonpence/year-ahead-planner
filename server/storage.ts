@@ -2070,8 +2070,8 @@ export interface IStorage {
   // People
   getAllPeople(userId: number): Promise<PersonWithSpouse[]>;
   createPerson(data: InsertPerson, userId: number): Promise<Person>;
-  updatePerson(id: number, data: Partial<InsertPerson>): Promise<Person | undefined>;
-  deletePerson(id: number): Promise<boolean>;
+  updatePerson(id: number, data: Partial<InsertPerson>, userId: number): Promise<Person | undefined>;
+  deletePerson(id: number, userId: number): Promise<boolean>;
   // Movies
   getAllMovies(userId: number): Promise<Movie[]>;
   createMovie(data: InsertMovie, userId: number): Promise<Movie>;
@@ -2085,8 +2085,8 @@ export interface IStorage {
   // Transactions
   getAllTransactions(userId: number): Promise<Transaction[]>;
   createTransaction(data: InsertTransaction, userId: number): Promise<Transaction>;
-  updateTransaction(id: number, data: Partial<InsertTransaction>): Promise<Transaction | undefined>;
-  deleteTransaction(id: number): Promise<boolean>;
+  updateTransaction(id: number, data: Partial<InsertTransaction>, userId: number): Promise<Transaction | undefined>;
+  deleteTransaction(id: number, userId: number): Promise<boolean>;
   // Subscriptions
   getAllSubscriptions(userId: number): Promise<Subscription[]>;
   createSubscription(data: InsertSubscription, userId: number): Promise<Subscription>;
@@ -2237,8 +2237,8 @@ export interface IStorage {
   // Journal
   getJournalEntries(userId: number): Promise<JournalEntry[]>;
   createJournalEntry(data: InsertJournalEntry, userId: number): Promise<JournalEntry>;
-  updateJournalEntry(id: number, data: Partial<InsertJournalEntry>): Promise<JournalEntry | null>;
-  deleteJournalEntry(id: number): Promise<boolean>;
+  updateJournalEntry(id: number, data: Partial<InsertJournalEntry>, userId: number): Promise<JournalEntry | null>;
+  deleteJournalEntry(id: number, userId: number): Promise<boolean>;
   // Equipment
   getAllEquipment(userId: number): Promise<Equipment[]>;
   createEquipment(data: InsertEquipment, userId: number): Promise<Equipment>;
@@ -2347,8 +2347,8 @@ export interface IStorage {
   // Health
   getMedications(userId: number): Promise<import("@shared/schema").Medication[]>;
   createMedication(data: import("@shared/schema").InsertMedication, userId: number): Promise<import("@shared/schema").Medication>;
-  updateMedication(id: number, data: Partial<import("@shared/schema").InsertMedication>): Promise<import("@shared/schema").Medication | undefined>;
-  deleteMedication(id: number): Promise<boolean>;
+  updateMedication(id: number, data: Partial<import("@shared/schema").InsertMedication>, userId: number): Promise<import("@shared/schema").Medication | undefined>;
+  deleteMedication(id: number, userId: number): Promise<boolean>;
   getHealthMetrics(userId: number): Promise<import("@shared/schema").HealthMetric[]>;
   createHealthMetric(data: import("@shared/schema").InsertHealthMetric, userId: number): Promise<import("@shared/schema").HealthMetric>;
   deleteHealthMetric(id: number): Promise<boolean>;
@@ -2813,21 +2813,28 @@ export const storage: IStorage = {
     const result = await db.insert(people).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePerson(id, data) {
-    const existing = await db.select().from(people).where(eq(people.id, id)).limit(1);
-    if (!existing[0]) return undefined;
-    const result = await db.update(people).set(data).where(eq(people.id, id)).returning();
+  async updatePerson(id, data, userId) {
+    const result = await db.update(people).set(data)
+      .where(and(eq(people.id, id), eq(people.userId, userId))).returning();
     return result[0];
   },
-  async deletePerson(id) {
-    await pool.query(`UPDATE people SET spouse_id = NULL WHERE spouse_id = $1`, [id]);
-    const p = await db.select().from(people).where(eq(people.id, id)).limit(1);
+  async deletePerson(id, userId) {
+    // Confirm ownership before the side effects — otherwise a non-owner could
+    // still null out a spouse link and delete a birthday event even though the
+    // final delete matched nothing.
+    const owned = await db.select().from(people)
+      .where(and(eq(people.id, id), eq(people.userId, userId))).limit(1);
+    if (!owned[0]) return false;
+
+    await pool.query(`UPDATE people SET spouse_id = NULL WHERE spouse_id = $1 AND user_id = $2`, [id, userId]);
+    const p = owned;
     if (p[0]?.birthdayEventId) {
       await pool.query(`DELETE FROM tasks WHERE event_id = $1`, [p[0].birthdayEventId]);
       await pool.query(`DELETE FROM events WHERE id = $1`, [p[0].birthdayEventId]);
     }
-    const result = await db.delete(people).where(eq(people.id, id));
-    return result.rowCount > 0;
+    const result = await db.delete(people)
+      .where(and(eq(people.id, id), eq(people.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Timeline Entries ─────────────────────────────────────────────────────────
@@ -3006,15 +3013,15 @@ export const storage: IStorage = {
     const result = await db.insert(transactions).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateTransaction(id, data) {
-    const existing = await db.select().from(transactions).where(eq(transactions.id, id)).limit(1);
-    if (!existing[0]) return undefined;
-    const result = await db.update(transactions).set(data).where(eq(transactions.id, id)).returning();
+  async updateTransaction(id, data, userId) {
+    const result = await db.update(transactions).set(data)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId))).returning();
     return result[0];
   },
-  async deleteTransaction(id) {
-    const result = await db.delete(transactions).where(eq(transactions.id, id));
-    return result.rowCount > 0;
+  async deleteTransaction(id, userId) {
+    const result = await db.delete(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Subscriptions ──────────────────────────────────────────────────────────────────
@@ -3988,15 +3995,15 @@ export const storage: IStorage = {
     const result = await db.insert(journalEntries).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateJournalEntry(id, data) {
-    const existing = await db.select().from(journalEntries).where(eq(journalEntries.id, id)).limit(1);
-    if (!existing[0]) return null;
-    const result = await db.update(journalEntries).set(data).where(eq(journalEntries.id, id)).returning();
-    return result[0];
+  async updateJournalEntry(id, data, userId) {
+    const result = await db.update(journalEntries).set(data)
+      .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId))).returning();
+    return result[0] ?? null;
   },
-  async deleteJournalEntry(id) {
-    const result = await db.delete(journalEntries).where(eq(journalEntries.id, id));
-    return result.rowCount > 0;
+  async deleteJournalEntry(id, userId) {
+    const result = await db.delete(journalEntries)
+      .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   },
 
   // ── Equipment ─────────────────────────────────────────────────────────────────
@@ -5215,12 +5222,14 @@ export const storage: IStorage = {
     const result = await db.insert(medications).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateMedication(id: number, data: any) {
-    const result = await db.update(medications).set(data).where(eq(medications.id, id)).returning();
+  async updateMedication(id: number, data: any, userId: number) {
+    const result = await db.update(medications).set(data)
+      .where(and(eq(medications.id, id), eq(medications.userId, userId))).returning();
     return result[0];
   },
-  async deleteMedication(id: number) {
-    const result = await db.delete(medications).where(eq(medications.id, id));
+  async deleteMedication(id: number, userId: number) {
+    const result = await db.delete(medications)
+      .where(and(eq(medications.id, id), eq(medications.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getHealthMetrics(userId: number) {
@@ -6093,12 +6102,14 @@ export const storage: IStorage = {
     const [r] = await db.insert(foodLogEntries).values(data).returning();
     return r;
   },
-  async deleteFoodLogEntry(id: number): Promise<boolean> {
-    const r = await db.delete(foodLogEntries).where(eq(foodLogEntries.id, id)).returning();
+  async deleteFoodLogEntry(id: number, userId: number): Promise<boolean> {
+    const r = await db.delete(foodLogEntries)
+      .where(and(eq(foodLogEntries.id, id), eq(foodLogEntries.userId, userId))).returning();
     return r.length > 0;
   },
-  async updateFoodLogEntry(id: number, data: Partial<InsertFoodLogEntry>): Promise<FoodLogEntry | null> {
-    const [r] = await db.update(foodLogEntries).set(data).where(eq(foodLogEntries.id, id)).returning();
+  async updateFoodLogEntry(id: number, data: Partial<InsertFoodLogEntry>, userId: number): Promise<FoodLogEntry | null> {
+    const [r] = await db.update(foodLogEntries).set(data)
+      .where(and(eq(foodLogEntries.id, id), eq(foodLogEntries.userId, userId))).returning();
     return r ?? null;
   },
   async getFoodLogForWeek(userId: number, dates: string[]): Promise<FoodLogEntry[]> {

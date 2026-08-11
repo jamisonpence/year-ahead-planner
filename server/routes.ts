@@ -2748,7 +2748,7 @@ Return exactly this structure:
           description: null,
           color: null,
         }, uid);
-        await storage.updatePerson(person.id, { birthdayEventId: event.id });
+        await storage.updatePerson(person.id, { birthdayEventId: event.id }, uid);
         person.birthdayEventId = event.id;
       }
       res.status(201).json(person);
@@ -2784,12 +2784,13 @@ Return exactly this structure:
         }
       }
 
-      const r = await storage.updatePerson(+req.params.id, data);
+      const r = await storage.updatePerson(+req.params.id, data, uid);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/people/:id", requireAuth, async (req, res) => {
-    (await storage.deletePerson(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    const uid = (req.user as User).id;
+    (await storage.deletePerson(+req.params.id, uid)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Timeline Entries ─────────────────────────────────────────────────────────
@@ -2844,16 +2845,16 @@ Return exactly this structure:
       if (!current) return res.status(404).json({ error: "Not found" });
 
       if (current.spouseId && current.spouseId !== spouseId) {
-        await storage.updatePerson(current.spouseId, { spouseId: null });
+        await storage.updatePerson(current.spouseId, { spouseId: null }, uid);
       }
 
-      await storage.updatePerson(id, { spouseId: spouseId ?? null });
+      await storage.updatePerson(id, { spouseId: spouseId ?? null }, uid);
       if (spouseId) {
         const newSpouse = all.find(p => p.id === spouseId);
         if (newSpouse?.spouseId && newSpouse.spouseId !== id) {
-          await storage.updatePerson(newSpouse.spouseId, { spouseId: null });
+          await storage.updatePerson(newSpouse.spouseId, { spouseId: null }, uid);
         }
-        await storage.updatePerson(spouseId, { spouseId: id });
+        await storage.updatePerson(spouseId, { spouseId: id }, uid);
       }
 
       res.json({ ok: true });
@@ -2876,7 +2877,7 @@ Return exactly this structure:
 
       // ── Case 1: link to a MyLifos user ─────────────────────────────────────
       if (linkUserId !== undefined) {
-        await storage.updatePerson(primaryId, { linkedUserId: linkUserId });
+        await storage.updatePerson(primaryId, { linkedUserId: linkUserId }, uid);
         return res.json({ ok: true });
       }
 
@@ -2901,24 +2902,24 @@ Return exactly this structure:
           merged[f] = pv ?? sv ?? null;
         }
       }
-      await storage.updatePerson(primaryId, merged);
+      await storage.updatePerson(primaryId, merged, uid);
 
       // Re-point anything that referenced secondaryId
       // Spouse: if anyone had secondary as their spouse, redirect to primary
       for (const p of all) {
         if (p.id === primaryId || p.id === mergePersonId) continue;
         if (p.spouseId === mergePersonId) {
-          await storage.updatePerson(p.id, { spouseId: primaryId });
+          await storage.updatePerson(p.id, { spouseId: primaryId }, uid);
         }
         const cids: number[] = (() => { try { return JSON.parse(p.childrenJson || "[]"); } catch { return []; } })();
         if (cids.includes(mergePersonId)) {
           const updated = cids.map(c => c === mergePersonId ? primaryId : c);
-          await storage.updatePerson(p.id, { childrenJson: JSON.stringify(updated) });
+          await storage.updatePerson(p.id, { childrenJson: JSON.stringify(updated) }, uid);
         }
       }
 
       // Delete the secondary record
-      await storage.deletePerson(mergePersonId);
+      await storage.deletePerson(mergePersonId, uid);
 
       res.json({ ok: true, primaryId });
     } catch (e) { handleError(res, e); }
@@ -3521,13 +3522,13 @@ Return exactly this structure:
   });
   app.patch("/api/nutrition/food-log/:id", requireAuth, async (req, res) => {
     try {
-      const entry = await storage.updateFoodLogEntry(+req.params.id, req.body);
+      const entry = await storage.updateFoodLogEntry(+req.params.id, req.body, (req.user as User).id);
       entry ? res.json(entry) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/nutrition/food-log/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteFoodLogEntry(+req.params.id))
+      (await storage.deleteFoodLogEntry(+req.params.id, (req.user as User).id))
         ? res.json({ ok: true })
         : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
@@ -3778,12 +3779,13 @@ Return exactly this structure:
   });
   app.patch("/api/transactions/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateTransaction(+req.params.id, req.body);
+      const updated = await storage.updateTransaction(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/transactions/:id", requireAuth, async (req, res) => {
-    (await storage.deleteTransaction(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    const uid = (req.user as User).id;
+    (await storage.deleteTransaction(+req.params.id, uid)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Subscriptions ────────────────────────────────────────────────────────────────
@@ -6281,12 +6283,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     res.json(entry);
   });
   app.patch("/api/journal/:id", requireAuth, async (req, res) => {
-    const entry = await storage.updateJournalEntry(Number(req.params.id), req.body);
+    const entry = await storage.updateJournalEntry(Number(req.params.id), req.body, req.user!.id);
     if (!entry) return res.status(404).json({ error: "Not found" });
     res.json(entry);
   });
   app.delete("/api/journal/:id", requireAuth, async (req, res) => {
-    await storage.deleteJournalEntry(Number(req.params.id));
+    const removed = await storage.deleteJournalEntry(Number(req.params.id), req.user!.id);
+    if (!removed) return res.status(404).json({ error: "Not found" });
     res.json({ ok: true });
   });
 
@@ -7685,13 +7688,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/health/medications/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateMedication(+req.params.id, req.body);
+      const updated = await storage.updateMedication(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/health/medications/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteMedication(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteMedication(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
