@@ -4159,7 +4159,16 @@ Return exactly this structure:
     },
   });
 
-  app.use("/uploads/receipts", express.static(UPLOADS_DIR));
+  // Serve behind auth — receipts are scanned financial documents. This was
+  // public while the near-identical attachments route above was already
+  // guarded, so it read as an oversight rather than a decision.
+  //
+  // Note this stops anonymous access but does not scope files per user: any
+  // signed-in caller who knows a filename can still fetch it. Filenames are
+  // timestamp + random so they aren't guessable, but genuine per-owner access
+  // needs these served through a route that checks ownership, alongside the
+  // wider update/delete ownership work.
+  app.use("/uploads/receipts", requireAuth, express.static(UPLOADS_DIR));
 
   app.get("/api/receipts", requireAuth, async (req, res) => {
     try {

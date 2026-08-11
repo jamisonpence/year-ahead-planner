@@ -30,14 +30,20 @@ async function externalUserId(res: Response): Promise<number | null> {
 }
 
 export function registerExternalApiRoutes(app: Express) {
-  /** GET /api/v1/health — unauthenticated, confirms env vars are present */
+  /**
+   * GET /api/v1/health — unauthenticated liveness probe.
+   *
+   * Reports only whether configuration is present, never anything derived from
+   * the key itself. This previously returned `keyLength` and `keyPrefix`
+   * (the first 8 characters), which handed an unauthenticated caller real key
+   * material plus the exact search space — a meaningful head start on guessing
+   * the rest. Booleans are enough to answer "is this deployment configured?",
+   * which is all a health check needs to do.
+   */
   app.get("/api/v1/health", (_req, res) => {
-    const k = process.env.EXTERNAL_API_KEY?.trim() ?? "";
     res.json({
       ok: true,
-      keyConfigured: !!k,
-      keyLength: k.length,
-      keyPrefix: k.slice(0, 8),
+      keyConfigured: !!process.env.EXTERNAL_API_KEY?.trim(),
       userIdConfigured: !!process.env.EXTERNAL_USER_ID,
     });
   });
