@@ -1995,7 +1995,7 @@ Return exactly this structure:
       if (enriched.propagationMethods) update.propagationMethods = enriched.propagationMethods;
       if (enriched.careDifficulty) update.careDifficulty = enriched.careDifficulty;
 
-      const updated = await storage.updatePlant(plantId, update);
+      const updated = await storage.updatePlant(plantId, update, (req.user as User).id);
       res.json(updated);
     } catch (e) {
       console.error("[Plant enrich] Unexpected error:", e);
@@ -4253,14 +4253,14 @@ Return exactly this structure:
 
   app.patch("/api/plants/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePlant(+req.params.id, req.body);
+      const updated = await storage.updatePlant(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
   app.delete("/api/plants/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePlant(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePlant(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4326,13 +4326,13 @@ Return exactly this structure:
   });
   app.patch("/api/chores/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateChore(+req.params.id, req.body);
+      const updated = await storage.updateChore(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/chores/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteChore(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteChore(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4352,13 +4352,13 @@ Return exactly this structure:
   });
   app.patch("/api/house-projects/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateHouseProject(+req.params.id, req.body);
+      const updated = await storage.updateHouseProject(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/house-projects/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteHouseProject(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteHouseProject(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4372,13 +4372,13 @@ Return exactly this structure:
   });
   app.patch("/api/house-project-tasks/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateHouseProjectTask(+req.params.id, req.body);
+      const updated = await storage.updateHouseProjectTask(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/house-project-tasks/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteHouseProjectTask(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteHouseProjectTask(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4398,13 +4398,13 @@ Return exactly this structure:
   });
   app.patch("/api/appliances/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateAppliance(+req.params.id, req.body);
+      const updated = await storage.updateAppliance(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/appliances/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteAppliance(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteAppliance(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -4602,13 +4602,13 @@ Return exactly this structure:
   });
   app.patch("/api/spots/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateSpot(+req.params.id, req.body);
+      const updated = await storage.updateSpot(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/spots/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteSpot(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteSpot(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6092,13 +6092,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/children/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateChild(+req.params.id, req.body);
+      const updated = await storage.updateChild(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/children/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteChild(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteChild(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6112,13 +6112,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/child-milestones/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateChildMilestone(+req.params.id, req.body);
+      const updated = await storage.updateChildMilestone(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/child-milestones/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteChildMilestone(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteChildMilestone(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -6132,13 +6132,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
   });
   app.patch("/api/child-memories/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateChildMemory(+req.params.id, req.body);
+      const updated = await storage.updateChildMemory(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/child-memories/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteChildMemory(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteChildMemory(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9779,7 +9779,7 @@ Rules:
   });
   app.delete("/api/politics/issues/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deletePoliticalIssue(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deletePoliticalIssue(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -9858,13 +9858,13 @@ Rules:
   });
   app.patch("/api/trips/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updateTrip(+req.params.id, req.body);
+      const updated = await storage.updateTrip(+req.params.id, req.body, (req.user as User).id);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/trips/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteTrip(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteTrip(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 

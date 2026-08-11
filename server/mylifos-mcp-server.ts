@@ -305,7 +305,7 @@ function buildMcpServer() {
       const chore = await storage.updateChore(id, {
         lastCompleted: lastCompleted ?? today,
         ...(nextDue ? { nextDue } : {}),
-      });
+      }, uid);
       if (!chore) {
         return { content: [{ type: "text", text: `Chore ${id} not found` }], isError: true };
       }

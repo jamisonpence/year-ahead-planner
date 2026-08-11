@@ -2150,8 +2150,8 @@ export interface IStorage {
   // Plants
   getAllPlants(userId: number): Promise<Plant[]>;
   createPlant(data: InsertPlant, userId: number): Promise<Plant>;
-  updatePlant(id: number, data: Partial<InsertPlant>): Promise<Plant | undefined>;
-  deletePlant(id: number): Promise<boolean>;
+  updatePlant(id: number, data: Partial<InsertPlant>, userId: number): Promise<Plant | undefined>;
+  deletePlant(id: number, userId: number): Promise<boolean>;
   // Music Artists
   getAllMusicArtistsWithSongs(userId: number): Promise<MusicArtistWithSongs[]>;
   createMusicArtist(data: InsertMusicArtist, userId: number): Promise<MusicArtist>;
@@ -2164,32 +2164,32 @@ export interface IStorage {
   // Chores
   getAllChores(userId: number): Promise<Chore[]>;
   createChore(data: InsertChore, userId: number): Promise<Chore>;
-  updateChore(id: number, data: Partial<InsertChore>): Promise<Chore | undefined>;
-  deleteChore(id: number): Promise<boolean>;
+  updateChore(id: number, data: Partial<InsertChore>, userId: number): Promise<Chore | undefined>;
+  deleteChore(id: number, userId: number): Promise<boolean>;
   // House Projects
   getAllHouseProjects(userId: number): Promise<HouseProjectWithTasks[]>;
   createHouseProject(data: InsertHouseProject, userId: number): Promise<HouseProject>;
-  updateHouseProject(id: number, data: Partial<InsertHouseProject>): Promise<HouseProject | undefined>;
-  deleteHouseProject(id: number): Promise<boolean>;
+  updateHouseProject(id: number, data: Partial<InsertHouseProject>, userId: number): Promise<HouseProject | undefined>;
+  deleteHouseProject(id: number, userId: number): Promise<boolean>;
   // House Project Tasks
   createHouseProjectTask(data: InsertHouseProjectTask, userId: number): Promise<HouseProjectTask>;
-  updateHouseProjectTask(id: number, data: Partial<InsertHouseProjectTask>): Promise<HouseProjectTask | undefined>;
-  deleteHouseProjectTask(id: number): Promise<boolean>;
+  updateHouseProjectTask(id: number, data: Partial<InsertHouseProjectTask>, userId: number): Promise<HouseProjectTask | undefined>;
+  deleteHouseProjectTask(id: number, userId: number): Promise<boolean>;
   // Appliances
   getAllAppliances(userId: number): Promise<Appliance[]>;
   createAppliance(data: InsertAppliance, userId: number): Promise<Appliance>;
-  updateAppliance(id: number, data: Partial<InsertAppliance>): Promise<Appliance | undefined>;
-  deleteAppliance(id: number): Promise<boolean>;
+  updateAppliance(id: number, data: Partial<InsertAppliance>, userId: number): Promise<Appliance | undefined>;
+  deleteAppliance(id: number, userId: number): Promise<boolean>;
   // Spots
   getAllSpots(userId: number): Promise<Spot[]>;
   createSpot(data: InsertSpot, userId: number): Promise<Spot>;
-  updateSpot(id: number, data: Partial<InsertSpot>): Promise<Spot | undefined>;
-  deleteSpot(id: number): Promise<boolean>;
+  updateSpot(id: number, data: Partial<InsertSpot>, userId: number): Promise<Spot | undefined>;
+  deleteSpot(id: number, userId: number): Promise<boolean>;
   // Trips
   getAllTrips(userId: number): Promise<Trip[]>;
   createTrip(data: InsertTrip, userId: number): Promise<Trip>;
-  updateTrip(id: number, data: Partial<InsertTrip>): Promise<Trip | undefined>;
-  deleteTrip(id: number): Promise<boolean>;
+  updateTrip(id: number, data: Partial<InsertTrip>, userId: number): Promise<Trip | undefined>;
+  deleteTrip(id: number, userId: number): Promise<boolean>;
   getTripItems(tripId: number): Promise<TripItem[]>;
   createTripItem(data: InsertTripItem, userId: number): Promise<TripItem>;
   updateTripItem(id: number, data: Partial<InsertTripItem>, userId: number): Promise<TripItem | undefined>;
@@ -2197,16 +2197,16 @@ export interface IStorage {
   // Children
   getAllChildrenWithDetails(userId: number): Promise<ChildWithDetails[]>;
   createChild(data: InsertChild, userId: number): Promise<Child>;
-  updateChild(id: number, data: Partial<InsertChild>): Promise<Child | undefined>;
-  deleteChild(id: number): Promise<boolean>;
+  updateChild(id: number, data: Partial<InsertChild>, userId: number): Promise<Child | undefined>;
+  deleteChild(id: number, userId: number): Promise<boolean>;
   // Child Milestones
   createChildMilestone(data: InsertChildMilestone, userId: number): Promise<ChildMilestone>;
-  updateChildMilestone(id: number, data: Partial<InsertChildMilestone>): Promise<ChildMilestone | undefined>;
-  deleteChildMilestone(id: number): Promise<boolean>;
+  updateChildMilestone(id: number, data: Partial<InsertChildMilestone>, userId: number): Promise<ChildMilestone | undefined>;
+  deleteChildMilestone(id: number, userId: number): Promise<boolean>;
   // Child Memories
   createChildMemory(data: InsertChildMemory, userId: number): Promise<ChildMemory>;
-  updateChildMemory(id: number, data: Partial<InsertChildMemory>): Promise<ChildMemory | undefined>;
-  deleteChildMemory(id: number): Promise<boolean>;
+  updateChildMemory(id: number, data: Partial<InsertChildMemory>, userId: number): Promise<ChildMemory | undefined>;
+  deleteChildMemory(id: number, userId: number): Promise<boolean>;
   // Child Prep Items
   createChildPrepItem(data: InsertChildPrepItem, userId: number): Promise<ChildPrepItem>;
   updateChildPrepItem(id: number, data: Partial<InsertChildPrepItem>, userId: number): Promise<ChildPrepItem | undefined>;
@@ -2370,7 +2370,7 @@ export interface IStorage {
   getPoliticalIssues(userId: number): Promise<import("@shared/schema").PoliticalIssue[]>;
   createPoliticalIssue(data: import("@shared/schema").InsertPoliticalIssue, userId: number): Promise<import("@shared/schema").PoliticalIssue>;
   updatePoliticalIssue(id: number, data: Partial<import("@shared/schema").InsertPoliticalIssue>): Promise<import("@shared/schema").PoliticalIssue | undefined>;
-  deletePoliticalIssue(id: number): Promise<boolean>;
+  deletePoliticalIssue(id: number, userId: number): Promise<boolean>;
   getPoliticalElections(userId: number): Promise<import("@shared/schema").PoliticalElection[]>;
   createPoliticalElection(data: import("@shared/schema").InsertPoliticalElection, userId: number): Promise<import("@shared/schema").PoliticalElection>;
   updatePoliticalElection(id: number, data: Partial<import("@shared/schema").InsertPoliticalElection>, userId: number): Promise<import("@shared/schema").PoliticalElection | undefined>;
@@ -3703,14 +3703,14 @@ export const storage: IStorage = {
     const result = await db.insert(plants).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePlant(id, data) {
-    const existing = await db.select().from(plants).where(eq(plants.id, id)).limit(1);
+  async updatePlant(id, data, userId) {
+    const existing = await db.select().from(plants).where(and(eq(plants.id, id), eq(plants.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(plants).set(data).where(eq(plants.id, id)).returning();
+    const result = await db.update(plants).set(data).where(and(eq(plants.id, id), eq(plants.userId, userId))).returning();
     return result[0];
   },
-  async deletePlant(id) {
-    const result = await db.delete(plants).where(eq(plants.id, id));
+  async deletePlant(id, userId) {
+    const result = await db.delete(plants).where(and(eq(plants.id, id), eq(plants.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3763,14 +3763,14 @@ export const storage: IStorage = {
     const result = await db.insert(chores).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateChore(id, data) {
-    const existing = await db.select().from(chores).where(eq(chores.id, id)).limit(1);
+  async updateChore(id, data, userId) {
+    const existing = await db.select().from(chores).where(and(eq(chores.id, id), eq(chores.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(chores).set(data).where(eq(chores.id, id)).returning();
+    const result = await db.update(chores).set(data).where(and(eq(chores.id, id), eq(chores.userId, userId))).returning();
     return result[0];
   },
-  async deleteChore(id) {
-    const result = await db.delete(chores).where(eq(chores.id, id));
+  async deleteChore(id, userId) {
+    const result = await db.delete(chores).where(and(eq(chores.id, id), eq(chores.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3784,15 +3784,20 @@ export const storage: IStorage = {
     const result = await db.insert(houseProjects).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateHouseProject(id, data) {
-    const existing = await db.select().from(houseProjects).where(eq(houseProjects.id, id)).limit(1);
+  async updateHouseProject(id, data, userId) {
+    const existing = await db.select().from(houseProjects).where(and(eq(houseProjects.id, id), eq(houseProjects.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(houseProjects).set(data).where(eq(houseProjects.id, id)).returning();
+    const result = await db.update(houseProjects).set(data).where(and(eq(houseProjects.id, id), eq(houseProjects.userId, userId))).returning();
     return result[0];
   },
-  async deleteHouseProject(id) {
+  async deleteHouseProject(id, userId) {
+    // Ownership (or accepted collaboration, since callers pass the id
+    // resolved by getTabUserId) gates the cascade before any child row goes.
+    const owned = await db.select({ id: houseProjects.id }).from(houseProjects)
+      .where(and(eq(houseProjects.id, id), eq(houseProjects.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await db.delete(houseProjectTasks).where(eq(houseProjectTasks.houseProjectId, id));
-    const result = await db.delete(houseProjects).where(eq(houseProjects.id, id));
+    const result = await db.delete(houseProjects).where(and(eq(houseProjects.id, id), eq(houseProjects.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3801,14 +3806,14 @@ export const storage: IStorage = {
     const result = await db.insert(houseProjectTasks).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateHouseProjectTask(id, data) {
-    const existing = await db.select().from(houseProjectTasks).where(eq(houseProjectTasks.id, id)).limit(1);
+  async updateHouseProjectTask(id, data, userId) {
+    const existing = await db.select().from(houseProjectTasks).where(and(eq(houseProjectTasks.id, id), eq(houseProjectTasks.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(houseProjectTasks).set(data).where(eq(houseProjectTasks.id, id)).returning();
+    const result = await db.update(houseProjectTasks).set(data).where(and(eq(houseProjectTasks.id, id), eq(houseProjectTasks.userId, userId))).returning();
     return result[0];
   },
-  async deleteHouseProjectTask(id) {
-    const result = await db.delete(houseProjectTasks).where(eq(houseProjectTasks.id, id));
+  async deleteHouseProjectTask(id, userId) {
+    const result = await db.delete(houseProjectTasks).where(and(eq(houseProjectTasks.id, id), eq(houseProjectTasks.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3820,14 +3825,14 @@ export const storage: IStorage = {
     const result = await db.insert(appliances).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateAppliance(id, data) {
-    const existing = await db.select().from(appliances).where(eq(appliances.id, id)).limit(1);
+  async updateAppliance(id, data, userId) {
+    const existing = await db.select().from(appliances).where(and(eq(appliances.id, id), eq(appliances.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(appliances).set(data).where(eq(appliances.id, id)).returning();
+    const result = await db.update(appliances).set(data).where(and(eq(appliances.id, id), eq(appliances.userId, userId))).returning();
     return result[0];
   },
-  async deleteAppliance(id) {
-    const result = await db.delete(appliances).where(eq(appliances.id, id));
+  async deleteAppliance(id, userId) {
+    const result = await db.delete(appliances).where(and(eq(appliances.id, id), eq(appliances.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3848,14 +3853,14 @@ export const storage: IStorage = {
     const result = await db.insert(spots).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateSpot(id, data) {
-    const existing = await db.select().from(spots).where(eq(spots.id, id)).limit(1);
+  async updateSpot(id, data, userId) {
+    const existing = await db.select().from(spots).where(and(eq(spots.id, id), eq(spots.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(spots).set(data).where(eq(spots.id, id)).returning();
+    const result = await db.update(spots).set(data).where(and(eq(spots.id, id), eq(spots.userId, userId))).returning();
     return result[0];
   },
-  async deleteSpot(id) {
-    const result = await db.delete(spots).where(eq(spots.id, id));
+  async deleteSpot(id, userId) {
+    const result = await db.delete(spots).where(and(eq(spots.id, id), eq(spots.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3876,17 +3881,22 @@ export const storage: IStorage = {
     const result = await db.insert(children).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateChild(id, data) {
-    const existing = await db.select().from(children).where(eq(children.id, id)).limit(1);
+  async updateChild(id, data, userId) {
+    const existing = await db.select().from(children).where(and(eq(children.id, id), eq(children.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(children).set(data).where(eq(children.id, id)).returning();
+    const result = await db.update(children).set(data).where(and(eq(children.id, id), eq(children.userId, userId))).returning();
     return result[0];
   },
-  async deleteChild(id) {
+  async deleteChild(id, userId) {
+    // Ownership (or accepted collaboration, since callers pass the id
+    // resolved by getTabUserId) gates the cascade before any child row goes.
+    const owned = await db.select({ id: children.id }).from(children)
+      .where(and(eq(children.id, id), eq(children.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await db.delete(childMilestones).where(eq(childMilestones.childId, id));
     await db.delete(childMemories).where(eq(childMemories.childId, id));
     await db.delete(childPrepItems).where(eq(childPrepItems.childId, id));
-    const result = await db.delete(children).where(eq(children.id, id));
+    const result = await db.delete(children).where(and(eq(children.id, id), eq(children.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3895,14 +3905,14 @@ export const storage: IStorage = {
     const result = await db.insert(childMilestones).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateChildMilestone(id, data) {
-    const existing = await db.select().from(childMilestones).where(eq(childMilestones.id, id)).limit(1);
+  async updateChildMilestone(id, data, userId) {
+    const existing = await db.select().from(childMilestones).where(and(eq(childMilestones.id, id), eq(childMilestones.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(childMilestones).set(data).where(eq(childMilestones.id, id)).returning();
+    const result = await db.update(childMilestones).set(data).where(and(eq(childMilestones.id, id), eq(childMilestones.userId, userId))).returning();
     return result[0];
   },
-  async deleteChildMilestone(id) {
-    const result = await db.delete(childMilestones).where(eq(childMilestones.id, id));
+  async deleteChildMilestone(id, userId) {
+    const result = await db.delete(childMilestones).where(and(eq(childMilestones.id, id), eq(childMilestones.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3911,14 +3921,14 @@ export const storage: IStorage = {
     const result = await db.insert(childMemories).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateChildMemory(id, data) {
-    const existing = await db.select().from(childMemories).where(eq(childMemories.id, id)).limit(1);
+  async updateChildMemory(id, data, userId) {
+    const existing = await db.select().from(childMemories).where(and(eq(childMemories.id, id), eq(childMemories.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(childMemories).set(data).where(eq(childMemories.id, id)).returning();
+    const result = await db.update(childMemories).set(data).where(and(eq(childMemories.id, id), eq(childMemories.userId, userId))).returning();
     return result[0];
   },
-  async deleteChildMemory(id) {
-    const result = await db.delete(childMemories).where(eq(childMemories.id, id));
+  async deleteChildMemory(id, userId) {
+    const result = await db.delete(childMemories).where(and(eq(childMemories.id, id), eq(childMemories.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -5344,12 +5354,12 @@ export const storage: IStorage = {
     const result = await db.insert(politicalIssues).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updatePoliticalIssue(id: number, data: any) {
-    const result = await db.update(politicalIssues).set(data).where(eq(politicalIssues.id, id)).returning();
+  async updatePoliticalIssue(id: number, data: any, userId: number) {
+    const result = await db.update(politicalIssues).set(data).where(and(eq(politicalIssues.id, id), eq(politicalIssues.userId, userId))).returning();
     return result[0];
   },
-  async deletePoliticalIssue(id: number) {
-    const result = await db.delete(politicalIssues).where(eq(politicalIssues.id, id));
+  async deletePoliticalIssue(id: number, userId: number) {
+    const result = await db.delete(politicalIssues).where(and(eq(politicalIssues.id, id), eq(politicalIssues.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getPoliticalElections(userId: number) {
@@ -5423,14 +5433,19 @@ export const storage: IStorage = {
     const result = await db.insert(politicalDebates).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateDebate(id: number, data: any) {
-    const result = await db.update(politicalDebates).set(data).where(eq(politicalDebates.id, id)).returning();
+  async updateDebate(id: number, data: any, userId: number) {
+    const result = await db.update(politicalDebates).set(data).where(and(eq(politicalDebates.id, id), eq(politicalDebates.userId, userId))).returning();
     return result[0];
   },
-  async deleteDebate(id: number) {
+  async deleteDebate(id: number, userId: number) {
+    // Ownership (or accepted collaboration, since callers pass the id
+    // resolved by getTabUserId) gates the cascade before any child row goes.
+    const owned = await db.select({ id: politicalDebates.id }).from(politicalDebates)
+      .where(and(eq(politicalDebates.id, id), eq(politicalDebates.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await db.delete(politicalDebatePosts).where(eq(politicalDebatePosts.debateId, id));
     await db.delete(politicalDebateMembers).where(eq(politicalDebateMembers.debateId, id));
-    const result = await db.delete(politicalDebates).where(eq(politicalDebates.id, id));
+    const result = await db.delete(politicalDebates).where(and(eq(politicalDebates.id, id), eq(politicalDebates.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async joinDebate(debateId: number, userId: number) {
@@ -5509,15 +5524,20 @@ export const storage: IStorage = {
     const result = await db.insert(trips).values({ ...data, userId }).returning();
     return result[0];
   },
-  async updateTrip(id: number, data: Partial<InsertTrip>) {
-    const existing = await db.select().from(trips).where(eq(trips.id, id)).limit(1);
+  async updateTrip(id: number, data: Partial<InsertTrip>, userId: number) {
+    const existing = await db.select().from(trips).where(and(eq(trips.id, id), eq(trips.userId, userId))).limit(1);
     if (!existing[0]) return undefined;
-    const result = await db.update(trips).set(data).where(eq(trips.id, id)).returning();
+    const result = await db.update(trips).set(data).where(and(eq(trips.id, id), eq(trips.userId, userId))).returning();
     return result[0];
   },
-  async deleteTrip(id: number) {
+  async deleteTrip(id: number, userId: number) {
+    // Ownership (or accepted collaboration, since callers pass the id
+    // resolved by getTabUserId) gates the cascade before any child row goes.
+    const owned = await db.select({ id: trips.id }).from(trips)
+      .where(and(eq(trips.id, id), eq(trips.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await db.delete(tripItems).where(eq(tripItems.tripId, id));
-    const result = await db.delete(trips).where(eq(trips.id, id));
+    const result = await db.delete(trips).where(and(eq(trips.id, id), eq(trips.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
   async getTripItems(tripId: number) {
