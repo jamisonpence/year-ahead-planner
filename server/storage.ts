@@ -1989,7 +1989,7 @@ export interface IStorage {
   getAllEventsWithTasks(userId: number): Promise<EventWithTasks[]>;
   createEvent(data: InsertEvent, userId: number): Promise<Event>;
   updateEvent(id: number, data: Partial<InsertEvent>, userId: number): Promise<Event | undefined>;
-  deleteEvent(id: number): Promise<boolean>;
+  deleteEvent(id: number, userId: number): Promise<boolean>;
   // Tasks
   createTask(data: InsertTask): Promise<Task>;
   updateTask(id: number, data: Partial<InsertTask>): Promise<Task | undefined>;
@@ -1999,7 +1999,7 @@ export interface IStorage {
   getAllBooksWithSessions(userId: number): Promise<BookWithSessions[]>;
   createBook(data: InsertBook, userId: number): Promise<Book>;
   updateBook(id: number, data: Partial<InsertBook>, userId: number): Promise<Book | undefined>;
-  deleteBook(id: number): Promise<boolean>;
+  deleteBook(id: number, userId: number): Promise<boolean>;
   // Reading Sessions
   getAllReadingSessions(): Promise<ReadingSession[]>;
   createReadingSession(data: InsertReadingSession): Promise<ReadingSession>;
@@ -2020,7 +2020,7 @@ export interface IStorage {
   getAllGoalsWithTasks(userId: number): Promise<GoalWithTasks[]>;
   createGoal(data: InsertGoal, userId: number): Promise<Goal>;
   updateGoal(id: number, data: Partial<InsertGoal>, userId: number): Promise<Goal | undefined>;
-  deleteGoal(id: number): Promise<boolean>;
+  deleteGoal(id: number, userId: number): Promise<boolean>;
   // Goal Tasks (legacy)
   createGoalTask(data: InsertGoalTask): Promise<GoalTask>;
   updateGoalTask(id: number, data: Partial<InsertGoalTask>): Promise<GoalTask | undefined>;
@@ -2030,7 +2030,7 @@ export interface IStorage {
   getStandaloneProjects(userId: number): Promise<ProjectWithTasks[]>;
   createProject(data: InsertProject, userId: number): Promise<Project>;
   updateProject(id: number, data: Partial<InsertProject>, userId: number): Promise<Project | undefined>;
-  deleteProject(id: number): Promise<boolean>;
+  deleteProject(id: number, userId: number): Promise<boolean>;
   // Project Tasks
   createProjectTask(data: InsertProjectTask): Promise<ProjectTask>;
   updateProjectTask(id: number, data: Partial<InsertProjectTask>): Promise<ProjectTask | undefined>;
@@ -2044,12 +2044,12 @@ export interface IStorage {
   getAllRecipes(userId: number): Promise<Recipe[]>;
   createRecipe(data: InsertRecipe, userId: number): Promise<Recipe>;
   updateRecipe(id: number, data: Partial<InsertRecipe>, userId: number): Promise<Recipe | undefined>;
-  deleteRecipe(id: number): Promise<boolean>;
+  deleteRecipe(id: number, userId: number): Promise<boolean>;
   // Meal Bundles
   getAllBundles(userId: number): Promise<MealBundle[]>;
   createBundle(data: InsertMealBundle, userId: number): Promise<MealBundle>;
   updateBundle(id: number, data: Partial<InsertMealBundle>, userId: number): Promise<MealBundle | undefined>;
-  deleteBundle(id: number): Promise<boolean>;
+  deleteBundle(id: number, userId: number): Promise<boolean>;
   // Week Plan
   getWeekPlan(weekStart: string, userId: number): Promise<WeekPlan[]>;
   assignToWeek(data: InsertWeekPlan, userId: number): Promise<WeekPlan>;
@@ -2066,7 +2066,7 @@ export interface IStorage {
   getAllGroups(userId: number): Promise<RelationshipGroup[]>;
   createGroup(data: InsertRelationshipGroup, userId: number): Promise<RelationshipGroup>;
   updateGroup(id: number, data: Partial<InsertRelationshipGroup>, userId: number): Promise<RelationshipGroup | undefined>;
-  deleteGroup(id: number): Promise<boolean>;
+  deleteGroup(id: number, userId: number): Promise<boolean>;
   // People
   getAllPeople(userId: number): Promise<PersonWithSpouse[]>;
   createPerson(data: InsertPerson, userId: number): Promise<Person>;
@@ -2156,7 +2156,7 @@ export interface IStorage {
   getAllMusicArtistsWithSongs(userId: number): Promise<MusicArtistWithSongs[]>;
   createMusicArtist(data: InsertMusicArtist, userId: number): Promise<MusicArtist>;
   updateMusicArtist(id: number, data: Partial<InsertMusicArtist>, userId: number): Promise<MusicArtist | undefined>;
-  deleteMusicArtist(id: number): Promise<boolean>;
+  deleteMusicArtist(id: number, userId: number): Promise<boolean>;
   // Music Songs
   createMusicSong(data: InsertMusicSong, userId: number): Promise<MusicSong>;
   updateMusicSong(id: number, data: Partial<InsertMusicSong>, userId: number): Promise<MusicSong | undefined>;
@@ -2253,7 +2253,7 @@ export interface IStorage {
   getAllCollections(userId: number): Promise<MusicCollectionWithItems[]>;
   createCollection(data: Partial<InsertMusicCollection>, userId: number): Promise<MusicCollection>;
   updateCollection(id: number, data: Partial<InsertMusicCollection>, userId: number): Promise<MusicCollection | undefined>;
-  deleteCollection(id: number): Promise<boolean>;
+  deleteCollection(id: number, userId: number): Promise<boolean>;
   addCollectionItem(collectionId: number, itemType: string, songId?: number | null, artistId?: number | null): Promise<MusicCollectionItem>;
   removeCollectionItem(itemId: number): Promise<boolean>;
   reorderCollectionItems(collectionId: number, itemIds: number[]): Promise<void>;
@@ -2467,9 +2467,14 @@ export const storage: IStorage = {
     const result = await db.update(events).set(data).where(and(eq(events.id, id), eq(events.userId, userId))).returning();
     return result[0];
   },
-  async deleteEvent(id) {
+  async deleteEvent(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: events.id }).from(events)
+      .where(and(eq(events.id, id), eq(events.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM tasks WHERE event_id = $1`, [id]);
-    const result = await db.delete(events).where(eq(events.id, id));
+    const result = await db.delete(events).where(and(eq(events.id, id), eq(events.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2508,9 +2513,14 @@ export const storage: IStorage = {
     const result = await db.update(books).set(data).where(and(eq(books.id, id), eq(books.userId, userId))).returning();
     return result[0];
   },
-  async deleteBook(id) {
+  async deleteBook(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: books.id }).from(books)
+      .where(and(eq(books.id, id), eq(books.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM reading_sessions WHERE book_id = $1`, [id]);
-    const result = await db.delete(books).where(eq(books.id, id));
+    const result = await db.delete(books).where(and(eq(books.id, id), eq(books.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2598,14 +2608,19 @@ export const storage: IStorage = {
     const result = await db.update(goals).set(data).where(and(eq(goals.id, id), eq(goals.userId, userId))).returning();
     return result[0];
   },
-  async deleteGoal(id) {
+  async deleteGoal(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: goals.id }).from(goals)
+      .where(and(eq(goals.id, id), eq(goals.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     const ps = await db.select().from(projects).where(eq(projects.goalId, id));
     for (const p of ps) {
       await pool.query(`DELETE FROM project_tasks WHERE project_id = $1`, [p.id]);
     }
     await pool.query(`DELETE FROM projects WHERE goal_id = $1`, [id]);
     await pool.query(`DELETE FROM goal_tasks WHERE goal_id = $1`, [id]);
-    const result = await db.delete(goals).where(eq(goals.id, id));
+    const result = await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2648,9 +2663,14 @@ export const storage: IStorage = {
     const result = await db.update(projects).set(data).where(and(eq(projects.id, id), eq(projects.userId, userId))).returning();
     return result[0];
   },
-  async deleteProject(id) {
+  async deleteProject(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM project_tasks WHERE project_id = $1`, [id]);
-    const result = await db.delete(projects).where(eq(projects.id, id));
+    const result = await db.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2705,9 +2725,14 @@ export const storage: IStorage = {
     const result = await db.update(recipes).set(data).where(and(eq(recipes.id, id), eq(recipes.userId, userId))).returning();
     return result[0];
   },
-  async deleteRecipe(id: number) {
+  async deleteRecipe(id: number, userId: number) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: recipes.id }).from(recipes)
+      .where(and(eq(recipes.id, id), eq(recipes.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM week_plan WHERE recipe_id = $1`, [id]);
-    const result = await db.delete(recipes).where(eq(recipes.id, id));
+    const result = await db.delete(recipes).where(and(eq(recipes.id, id), eq(recipes.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2725,9 +2750,14 @@ export const storage: IStorage = {
     const result = await db.update(mealBundles).set(data).where(and(eq(mealBundles.id, id), eq(mealBundles.userId, userId))).returning();
     return result[0];
   },
-  async deleteBundle(id: number) {
+  async deleteBundle(id: number, userId: number) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: mealBundles.id }).from(mealBundles)
+      .where(and(eq(mealBundles.id, id), eq(mealBundles.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM week_plan WHERE bundle_id = $1`, [id]);
-    const result = await db.delete(mealBundles).where(eq(mealBundles.id, id));
+    const result = await db.delete(mealBundles).where(and(eq(mealBundles.id, id), eq(mealBundles.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -2795,9 +2825,14 @@ export const storage: IStorage = {
     const result = await db.update(relationshipGroups).set(data).where(and(eq(relationshipGroups.id, id), eq(relationshipGroups.userId, userId))).returning();
     return result[0];
   },
-  async deleteGroup(id) {
+  async deleteGroup(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: relationshipGroups.id }).from(relationshipGroups)
+      .where(and(eq(relationshipGroups.id, id), eq(relationshipGroups.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`UPDATE people SET group_id = NULL WHERE group_id = $1`, [id]);
-    const result = await db.delete(relationshipGroups).where(eq(relationshipGroups.id, id));
+    const result = await db.delete(relationshipGroups).where(and(eq(relationshipGroups.id, id), eq(relationshipGroups.userId, userId)));
     return result.rowCount > 0;
   },
 
@@ -3695,9 +3730,14 @@ export const storage: IStorage = {
     const result = await db.update(musicArtists).set(data).where(and(eq(musicArtists.id, id), eq(musicArtists.userId, userId))).returning();
     return result[0];
   },
-  async deleteMusicArtist(id) {
+  async deleteMusicArtist(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: musicArtists.id }).from(musicArtists)
+      .where(and(eq(musicArtists.id, id), eq(musicArtists.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM music_songs WHERE artist_id = $1`, [id]);
-    const result = await db.delete(musicArtists).where(eq(musicArtists.id, id));
+    const result = await db.delete(musicArtists).where(and(eq(musicArtists.id, id), eq(musicArtists.userId, userId)));
     return result.rowCount > 0;
   },
   async createMusicSong(data, userId) {
@@ -5054,9 +5094,14 @@ export const storage: IStorage = {
     return result[0];
   },
 
-  async deleteCollection(id) {
+  async deleteCollection(id, userId) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: musicCollections.id }).from(musicCollections)
+      .where(and(eq(musicCollections.id, id), eq(musicCollections.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await pool.query(`DELETE FROM music_collection_items WHERE collection_id = $1`, [id]);
-    const result = await db.delete(musicCollections).where(eq(musicCollections.id, id));
+    const result = await db.delete(musicCollections).where(and(eq(musicCollections.id, id), eq(musicCollections.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 
@@ -5417,9 +5462,14 @@ export const storage: IStorage = {
     const result = await db.update(politicalDebatePosts).set(data).where(and(eq(politicalDebatePosts.id, id), eq(politicalDebatePosts.userId, userId))).returning();
     return result[0];
   },
-  async deleteDebatePost(id: number) {
+  async deleteDebatePost(id: number, userId: number) {
+    // Ownership gates the cascade: without this a non-owner's call still
+    // deleted the child rows before the parent delete matched nothing.
+    const owned = await db.select({ id: politicalDebatePosts.id }).from(politicalDebatePosts)
+      .where(and(eq(politicalDebatePosts.id, id), eq(politicalDebatePosts.userId, userId))).limit(1);
+    if (!owned[0]) return false;
     await db.delete(politicalDebateUpvotes).where(eq(politicalDebateUpvotes.postId, id));
-    const result = await db.delete(politicalDebatePosts).where(eq(politicalDebatePosts.id, id));
+    const result = await db.delete(politicalDebatePosts).where(and(eq(politicalDebatePosts.id, id), eq(politicalDebatePosts.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   },
 

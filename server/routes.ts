@@ -2050,7 +2050,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/events/:id", requireAuth, async (req, res) => {
-    (await storage.deleteEvent(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteEvent(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Tasks ────────────────────────────────────────────────────────────────────
@@ -2170,7 +2170,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/books/:id", requireAuth, async (req, res) => {
-    (await storage.deleteBook(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteBook(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Reading Sessions ──────────────────────────────────────────────────────────
@@ -2263,7 +2263,7 @@ Return exactly this structure:
       // Delete linked goal first
       const allGoals = await storage.getAllGoalsWithProjects(uid);
       const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
-      if (linked) await storage.deleteGoal(linked.id);
+      if (linked) await storage.deleteGoal(linked.id, uid);
       const ok = await storage.deleteWorkoutPlan(+req.params.id, uid);
       ok ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
@@ -2277,7 +2277,7 @@ Return exactly this structure:
       if (!updated.isActive) {
         const allGoals = await storage.getAllGoalsWithProjects(uid);
         const linked = allGoals.find((g: any) => g.linkedWorkoutPlanId === +req.params.id);
-        if (linked) await storage.deleteGoal(linked.id);
+        if (linked) await storage.deleteGoal(linked.id, uid);
       }
       res.json(updated);
     } catch (e) { handleError(res, e); }
@@ -2494,7 +2494,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/goals/:id", requireAuth, async (req, res) => {
-    (await storage.deleteGoal(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteGoal(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Goal Tasks (legacy) ──────────────────────────────────────────────────────
@@ -2527,7 +2527,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/projects/:id", requireAuth, async (req, res) => {
-    (await storage.deleteProject(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteProject(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Project Tasks ─────────────────────────────────────────────────────────────
@@ -2687,7 +2687,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/groups/:id", requireAuth, async (req, res) => {
-    (await storage.deleteGroup(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteGroup(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── People ────────────────────────────────────────────────────────────────────
@@ -3108,7 +3108,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
-    (await storage.deleteRecipe(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteRecipe(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // POST /api/recipes/apply-image-csv
@@ -3596,7 +3596,7 @@ Return exactly this structure:
     } catch (e) { handleError(res, e); }
   });
   app.delete("/api/meal-bundles/:id", requireAuth, async (req, res) => {
-    (await storage.deleteBundle(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+    (await storage.deleteBundle(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });
 
   // ── Week Plan ───────────────────────────────────────────────────────────────
@@ -4284,7 +4284,7 @@ Return exactly this structure:
   });
   app.delete("/api/music/artists/:id", requireAuth, async (req, res) => {
     try {
-      (await storage.deleteMusicArtist(+req.params.id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
+      (await storage.deleteMusicArtist(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
 
@@ -7174,7 +7174,7 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
 
   app.delete("/api/music/collections/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteCollection(Number(req.params.id));
+      await storage.deleteCollection(Number(req.params.id), (req.user as User).id);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
@@ -9635,7 +9635,7 @@ Rules:
       const post = posts.find(p => p.id === postId);
       if (!post) return res.status(404).json({ error: "Post not found" });
       if (post.userId !== user.id) return res.status(403).json({ error: "Not your post" });
-      await storage.deleteDebatePost(postId);
+      await storage.deleteDebatePost(postId, (req.user as User).id);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
