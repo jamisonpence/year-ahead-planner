@@ -1398,6 +1398,34 @@ Rules:
   // the 30-minute interval ever fires, which starved the chore sweep entirely.
   setTimeout(dailyTick, 15 * 1000);
 
+  /**
+   * Keep Google Calendar fresh for every connected user.
+   *
+   * Deliberately separate from dailyTick: that one returns early before
+   * DIGEST_HOUR, so folding calendar sync into it would leave the calendar stale
+   * for most of the day. Events should be current whenever someone looks.
+   *
+   * Failures are logged per user and never allowed to stop the loop — one
+   * revoked grant shouldn't block everyone else's sync.
+   */
+  const calendarTick = async () => {
+    try {
+      const connected = await pool.query<{ id: number }>(
+        `SELECT id FROM users WHERE gcal_refresh_token IS NOT NULL`
+      );
+      for (const { id } of connected.rows) {
+        try {
+          const n = await syncGcalForUser(id);
+          if (n !== null && n > 0) console.log(`[gcal] synced ${n} event(s) for user ${id}`);
+        } catch (e) {
+          console.error(`[gcal] sync failed for user ${id}:`, (e as Error).message);
+        }
+      }
+    } catch (e) { console.error("[gcal] tick error:", e); }
+  };
+  setInterval(calendarTick, 30 * 60 * 1000);
+  setTimeout(calendarTick, 20 * 1000);
+
   // ── Auth Routes ──────────────────────────────────────────────────────────────
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
@@ -1764,12 +1792,20 @@ Rules:
     res.redirect(url.toString());
   });
 
-  // POST /api/gcal/sync — fetch and upsert Google Calendar events
-  app.post("/api/gcal/sync", requireAuth, async (req, res) => {
-    try {
-      const userId = (req.user as User).id;
+  /**
+   * Pull Google Calendar into local events for one user.
+   *
+   * Extracted from the route so the scheduler can call it too. The sync itself
+   * always worked — it was simply never invoked. A manual button on the Calendar
+   * page was the only trigger, so a connected account could sit at
+   * lastSync: null indefinitely and the calendar stayed empty.
+   *
+   * Returns the number of events synced, or null when the user isn't connected.
+   * Throws on API failure so callers can decide whether to surface it.
+   */
+  async function syncGcalForUser(userId: number): Promise<number | null> {
       const accessToken = await getValidGcalToken(userId);
-      if (!accessToken) return res.status(401).json({ error: "Not connected to Google Calendar" });
+      if (!accessToken) return null;
 
       const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
       const timeMax = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year ahead
@@ -1781,8 +1817,10 @@ Rules:
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!gcalRes.ok) {
+        // A 401 means the grant was revoked — drop the tokens so the UI offers
+        // reconnect instead of silently retrying forever.
         if (gcalRes.status === 401) await storage.clearGcalTokens(userId);
-        return res.status(gcalRes.status).json({ error: "Google Calendar API error" });
+        throw new Error(`Google Calendar API ${gcalRes.status}`);
       }
       const data = await gcalRes.json() as any;
       const gcalItems = (data.items ?? []).filter((e: any) => e.status !== "cancelled");
@@ -1807,7 +1845,14 @@ Rules:
       // Remove events that no longer exist in Google Calendar
       await storage.deleteStaleGcalEvents(userId, syncedIds);
       await storage.updateGcalLastSync(userId, new Date().toISOString());
+      return synced;
+  }
 
+  // POST /api/gcal/sync — manual sync from the Calendar page
+  app.post("/api/gcal/sync", requireAuth, async (req, res) => {
+    try {
+      const synced = await syncGcalForUser((req.user as User).id);
+      if (synced === null) return res.status(401).json({ error: "Not connected to Google Calendar" });
       res.json({ synced });
     } catch (e) { handleError(res, e); }
   });

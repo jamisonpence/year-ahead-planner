@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -401,6 +401,23 @@ export default function CalendarPage() {
     },
     onError: () => toast({ title: "Sync failed", variant: "destructive" }),
   });
+
+  // Sync once when the page opens if the data is stale.
+  //
+  // The manual button was previously the ONLY trigger, so a connected account
+  // could sit at lastSync: null forever and the calendar simply looked empty.
+  // The server also syncs on a timer now; this covers the case where you open
+  // the page between ticks and want to see today's meetings immediately.
+  const autoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (autoSyncedRef.current) return;
+    if (!gcalStatus?.connected) return;
+    const stale = !gcalStatus.lastSync ||
+      Date.now() - new Date(gcalStatus.lastSync).getTime() > 15 * 60 * 1000;
+    if (!stale) return;
+    autoSyncedRef.current = true;   // once per mount, even if it fails
+    syncMut.mutate();
+  }, [gcalStatus?.connected, gcalStatus?.lastSync]);
 
   const disconnectMut = useMutation({
     mutationFn: () => apiRequest("DELETE", "/api/gcal/disconnect"),
