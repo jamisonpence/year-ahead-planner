@@ -7415,7 +7415,9 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       if (dryRun) {
         return res.json({
           dryRun: true,
-          excluded: [...except],
+          // Array.from rather than a spread: this project's tsconfig target makes
+          // spreading a Set a TS2802 error.
+          excluded: Array.from(except),
           matched: targets.length,
           wouldChange: willChange.length,
           alreadyFalse: targets.length - willChange.length,
