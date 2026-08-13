@@ -7376,6 +7376,65 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
     } catch (e) { handleError(res, e); }
   });
 
+  /**
+   * POST /api/admin/reset-onboarding
+   *
+   * Clears the onboarded flag so the selected users see the onboarding flow again
+   * on their next sign-in. Used to route existing accounts back through hub and
+   * sidebar setup.
+   *
+   * Only touches users.onboarded — no content is created or removed. Note that
+   * when a user then completes onboarding, saveNavPrefs replaces their sidebar
+   * configuration wholesale, so a customised sidebar will be replaced by whatever
+   * they pick. That is the intended effect here, but it is the reason this is a
+   * deliberate admin action rather than something automatic.
+   *
+   * Defaults to a dry run, and always excludes the caller so an admin can't lock
+   * themselves into the flow by accident.
+   */
+  app.post("/api/admin/reset-onboarding", requireAdmin, async (req, res) => {
+    try {
+      const actor = req.user as User;
+      const dryRun = req.body?.dryRun !== false;
+      const rawExcept: unknown = req.body?.exceptEmails;
+      const except = new Set<string>(
+        (Array.isArray(rawExcept) ? rawExcept : [])
+          .map(e => String(e).trim().toLowerCase())
+          .filter(Boolean)
+      );
+      // The caller is always spared, whatever the request says.
+      except.add(String(actor.email ?? "").toLowerCase());
+
+      const all = await pool.query<{ id: number; email: string; onboarded: boolean }>(
+        `SELECT id, email, onboarded FROM users ORDER BY id`
+      );
+      const targets = all.rows.filter(u => !except.has(String(u.email ?? "").toLowerCase()));
+      // Only rows that would actually change are worth reporting as affected.
+      const willChange = targets.filter(u => u.onboarded);
+
+      if (dryRun) {
+        return res.json({
+          dryRun: true,
+          excluded: [...except],
+          matched: targets.length,
+          wouldChange: willChange.length,
+          alreadyFalse: targets.length - willChange.length,
+          users: willChange.map(u => ({ id: u.id, email: u.email })),
+        });
+      }
+
+      const ids = targets.map(u => u.id);
+      if (!ids.length) return res.json({ dryRun: false, updated: 0, users: [] });
+
+      const upd = await pool.query(
+        `UPDATE users SET onboarded = false WHERE id = ANY($1::int[]) AND onboarded = true RETURNING id, email`,
+        [ids]
+      );
+      console.log(`[admin] ${actor.email} reset onboarding for ${upd.rowCount} user(s)`);
+      res.json({ dryRun: false, updated: upd.rowCount, users: upd.rows });
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── Admin: delete an account ───────────────────────────────────────────────
   // Every column that points at users.id, discovered from the live schema so new
   // tables are covered automatically. facebook_user_id is an external string ID,
