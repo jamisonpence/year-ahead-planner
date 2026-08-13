@@ -163,9 +163,11 @@ const ALL_TABS: { path: string; label: string; icon: React.ElementType; beta?: b
   { path: "/goals",         label: "Goals",                   icon: Target,         matchPaths: ["/calendar", "/tasks", "/habits", "/journal", "/review"] },
   { path: "/calendar",      label: "Calendar",                icon: Calendar,       defaultHidden: true },
   { path: "/tasks",         label: "Tasks",                   icon: ClipboardList,  defaultHidden: true },
-  { path: "/habits",        label: "Habits",                  icon: CalendarCheck,  defaultHidden: true },
   { path: "/journal",       label: "Journal",                 icon: PenLine,        defaultHidden: true },
-  { path: "/review",        label: "Weekly Review",           icon: History,        defaultHidden: true },
+  // Habits (/habits) and Weekly Review (/review) are now tabs inside Tasks rather
+  // than sidebar destinations. Five Plan entries for five near-empty pages was
+  // most of the section's surface problem. The routes still exist, so bookmarks
+  // and notification deep links keep working — they're just not listed here.
   // ── People ──
   { path: "/people",        label: "People",                  icon: Users,          matchPaths: ["/relationships", "/kids", "/discover"] },
   { path: "/messenger",     label: "Messages",                icon: MessageSquare   },

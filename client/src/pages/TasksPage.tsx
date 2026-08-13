@@ -3,6 +3,8 @@
 // Goals appear only as small linked badges on projects/tasks.
 
 import { useState, useMemo, useEffect } from "react";
+import HabitsPage from "@/pages/HabitsPage";
+import ReviewPage from "@/pages/ReviewPage";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, parseISO } from "date-fns";
@@ -977,7 +979,7 @@ function ChoreEditModal({ open, onClose, chore, onSave }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type ActiveView = "projects" | "tasks" | "recurring" | "completed" | "purchases";
+type ActiveView = "projects" | "tasks" | "habits" | "recurring" | "purchases" | "review" | "completed";
 
 export default function TasksPage() {
   const { toast } = useToast();
@@ -1384,8 +1386,10 @@ export default function TasksPage() {
           {([
             { value: "projects",  label: `Projects (${activeProjects.length})` },
             { value: "tasks",     label: `Tasks (${totalOpenTaskCount})` },
+            { value: "habits",    label: "Habits" },
             { value: "recurring", label: `Recurring (${activeChores.length})` },
             { value: "purchases", label: `Purchases (${purchaseItems.filter((p:any)=>!p.purchased).length})` },
+            { value: "review",    label: "Review" },
             { value: "completed", label: "Completed" },
           ] as { value: ActiveView; label: string }[]).map(tab => (
             <button
@@ -1404,6 +1408,16 @@ export default function TasksPage() {
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
+      {/* Habits and Review render their existing page components rather than
+          having their markup moved in. Same approach PeoplePage uses for its
+          sub-tabs: no behaviour changes, nothing to re-test, and TasksPage stays
+          readable instead of growing past 3,500 lines. Their own pages remain
+          routable, so a bookmark or push notification still lands somewhere. */}
+      {activeView === "habits" ? (
+        <div className="flex-1 overflow-y-auto"><HabitsPage /></div>
+      ) : activeView === "review" ? (
+        <div className="flex-1 overflow-y-auto"><ReviewPage /></div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-4 py-4">
 
         {/* ── Projects view ─────────────────────────────────────────── */}
@@ -1919,6 +1933,8 @@ export default function TasksPage() {
         )}
 
       </div>
+
+      )}
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
       <NewProjectModal
