@@ -266,6 +266,31 @@ export const goals = pgTable("goals", {
   buddyUserId: integer("buddy_user_id"),
   // JSON: [{ title: string, targetDate?: string, done: boolean }]
   milestonesJson: text("milestones_json").notNull().default("[]"),
+  // Opt-in OKR mode. Off by default so existing goals keep a single progress bar
+  // and nobody tracking "read 12 books" is handed a key-results editor.
+  isObjective: boolean("is_objective").notNull().default(false),
+  // Set when horizon is "quarter", e.g. "2026-Q3".
+  quarter: text("quarter"),
+});
+
+// ── GOAL KEY RESULTS (children of Goals, only used when isObjective) ──────────
+// A single progressCurrent/progressTarget can't express "10 clients, 80%
+// retention, $30k MRR" — that's three measures. Key results give an objective
+// 2–4 of them, each with its own baseline so progress reads as movement from a
+// starting point rather than an absolute number.
+export const goalKeyResults = pgTable("goal_key_results", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),
+  goalId: integer("goal_id").notNull(),
+  title: text("title").notNull(),
+  unit: text("unit"),                       // "clients", "MRR", "%", "lbs"
+  baseline: real("baseline").notNull().default(0),
+  current: real("current").notNull().default(0),
+  target: real("target").notNull().default(100),
+  // Lagging measures are the outcome (revenue); leading ones are what you can
+  // actually control this week (conversations, proposals sent).
+  kind: text("kind").notNull().default("lagging"),   // "leading" | "lagging"
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export type GoalMilestone = { title: string; targetDate?: string | null; done: boolean };
@@ -871,6 +896,30 @@ export type WorkoutShareWithUser = WorkoutShare & {
 export const insertGoalSchema = createInsertSchema(goals).omit({ id: true });
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
 export type Goal = typeof goals.$inferSelect;
+
+export const insertGoalKeyResultSchema = createInsertSchema(goalKeyResults).omit({ id: true, userId: true });
+export type InsertGoalKeyResult = z.infer<typeof insertGoalKeyResultSchema>;
+export type GoalKeyResult = typeof goalKeyResults.$inferSelect;
+
+/**
+ * Completion of a single key result, 0–1, measured from its baseline.
+ *
+ * Starting at 2 clients and targeting 10 means 4 clients is 25% of the way, not
+ * 40% — measuring from zero would flatter every objective that started with
+ * something already on the board. A zero-width range (baseline === target) is
+ * treated as done once reached, since there's no distance to travel.
+ */
+export function keyResultProgress(kr: Pick<GoalKeyResult, "baseline" | "current" | "target">): number {
+  const span = kr.target - kr.baseline;
+  if (span === 0) return kr.current >= kr.target ? 1 : 0;
+  return Math.max(0, Math.min(1, (kr.current - kr.baseline) / span));
+}
+
+/** An objective's progress is the mean of its key results. Simple goals never use this. */
+export function objectiveProgressPct(krs: Pick<GoalKeyResult, "baseline" | "current" | "target">[]): number {
+  if (!krs.length) return 0;
+  return Math.round((krs.reduce((sum, k) => sum + keyResultProgress(k), 0) / krs.length) * 100);
+}
 
 export const insertGoalTaskSchema = createInsertSchema(goalTasks).omit({ id: true });
 export type InsertGoalTask = z.infer<typeof insertGoalTaskSchema>;

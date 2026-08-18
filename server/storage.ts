@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals, habits, budBets } from "@shared/schema";
+import { events, tasks, recipes, mealBundles, weekPlan, groceryChecks, customGroceryItems, trips, tripItems, books, readingSessions, workoutTemplates, workoutLogs, workoutPlans, workoutShares, goals, goalKeyResults, goalTasks, projects, projectTasks, generalTasks, relationshipGroups, people, movies, movieLists, movieListMembers, budgetCategories, transactions, subscriptions, receipts, navPrefs, tabPrivacy, users, plants, musicArtists, musicSongs, chores, houseProjects, houseProjectTasks, appliances, spots, spotShares, children, childMilestones, childMemories, childPrepItems, pets, petVetVisits, quotes, quoteShares, mantras, artPieces, artShares, journalEntries, equipment, friendRequests, bookRecommendations, musicRecommendations, recipeShares, movieShares, hobbies, musicCollections, musicCollectionItems, tabCollaborations, sacredTexts, faithPractices, sermons, prayerItems, medications, healthMetrics, sleepLogs, careProviders, politicalOfficials, politicalIssues, politicalElections, civicActions, politicalNewsSources, politicalDebates, politicalDebatePosts, politicalDebateUpvotes, politicalDebateMembers, activityFeed, activityReactions, activityComments, foodLogEntries, waterLogs, nutritionGoals, bodyCompPlans, bodyCompCheckIns, readingGoals, habits, budBets } from "@shared/schema";
 import type {
   InsertEvent, Event, InsertTask, Task, EventWithTasks,
   InsertRecipe, Recipe, InsertMealBundle, MealBundle, InsertWeekPlan, WeekPlan, InsertGroceryCheck, GroceryCheck, InsertCustomGroceryItem, CustomGroceryItem, InsertTrip, Trip, InsertTripItem, TripItem,
@@ -700,6 +700,26 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_refresh_token TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_token_expiry TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
+
+  // Goals: opt-in OKR mode + quarterly horizon
+  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS is_objective BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS quarter TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS goal_key_results (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      goal_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      unit TEXT,
+      baseline REAL NOT NULL DEFAULT 0,
+      current REAL NOT NULL DEFAULT 0,
+      target REAL NOT NULL DEFAULT 100,
+      kind TEXT NOT NULL DEFAULT 'lagging',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_goal ON goal_key_results (goal_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_user ON goal_key_results (user_id)`);
 
   // Personal profile fields (birthday, location, relationship) + visibility
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT`);
@@ -2019,6 +2039,10 @@ export interface IStorage {
   getAllGoalsWithProjects(userId: number): Promise<GoalWithProjects[]>;
   getAllGoalsWithTasks(userId: number): Promise<GoalWithTasks[]>;
   createGoal(data: InsertGoal, userId: number): Promise<Goal>;
+  getKeyResults(goalId: number, userId: number): Promise<import("@shared/schema").GoalKeyResult[]>;
+  createKeyResult(data: import("@shared/schema").InsertGoalKeyResult, userId: number): Promise<import("@shared/schema").GoalKeyResult>;
+  updateKeyResult(id: number, data: Partial<import("@shared/schema").InsertGoalKeyResult>, userId: number): Promise<import("@shared/schema").GoalKeyResult | undefined>;
+  deleteKeyResult(id: number, userId: number): Promise<boolean>;
   updateGoal(id: number, data: Partial<InsertGoal>, userId: number): Promise<Goal | undefined>;
   deleteGoal(id: number, userId: number): Promise<boolean>;
   // Goal Tasks (legacy)
@@ -2586,12 +2610,39 @@ export const storage: IStorage = {
     const gs = await db.select().from(goals).where(eq(goals.userId, userId)).orderBy(asc(goals.title));
     const ps = await db.select().from(projects).where(eq(projects.userId, userId)).orderBy(asc(projects.sortOrder));
     const pts = await db.select().from(projectTasks).orderBy(asc(projectTasks.sortOrder));
+    // Key results come along on the same trip so the Goals page doesn't need a
+    // second round trip per objective.
+    const krs = await db.select().from(goalKeyResults)
+      .where(eq(goalKeyResults.userId, userId)).orderBy(asc(goalKeyResults.sortOrder));
     return gs.map((g) => ({
       ...g,
       projects: ps
         .filter((p) => p.goalId === g.id)
         .map((p) => ({ ...p, tasks: pts.filter((t) => t.projectId === p.id) })),
+      keyResults: krs.filter((k) => k.goalId === g.id),
     }));
+  },
+
+  // ── Goal key results ───────────────────────────────────────────────────────
+  // Scoped by userId on every path, same as every other update/delete.
+  async getKeyResults(goalId: number, userId: number) {
+    return db.select().from(goalKeyResults)
+      .where(and(eq(goalKeyResults.goalId, goalId), eq(goalKeyResults.userId, userId)))
+      .orderBy(asc(goalKeyResults.sortOrder));
+  },
+  async createKeyResult(data: any, userId: number) {
+    const result = await db.insert(goalKeyResults).values({ ...data, userId }).returning();
+    return result[0];
+  },
+  async updateKeyResult(id: number, data: any, userId: number) {
+    const result = await db.update(goalKeyResults).set(data)
+      .where(and(eq(goalKeyResults.id, id), eq(goalKeyResults.userId, userId))).returning();
+    return result[0];
+  },
+  async deleteKeyResult(id: number, userId: number) {
+    const result = await db.delete(goalKeyResults)
+      .where(and(eq(goalKeyResults.id, id), eq(goalKeyResults.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   },
   async getAllGoalsWithTasks(userId: number) {
     const gs = await db.select().from(goals).where(eq(goals.userId, userId)).orderBy(asc(goals.title));

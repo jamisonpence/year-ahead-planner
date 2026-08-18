@@ -14,7 +14,8 @@ import {
   insertEventSchema, insertTaskSchema,
   insertBookSchema, insertReadingSessionSchema,
   insertWorkoutTemplateSchema, insertWorkoutLogSchema,
-  insertGoalSchema, insertGoalTaskSchema,
+  insertGoalSchema,
+  insertGoalKeyResultSchema, insertGoalTaskSchema,
   insertProjectSchema, insertProjectTaskSchema,
   insertGeneralTaskSchema,
   insertRelationshipGroupSchema, insertPersonSchema,
@@ -2473,6 +2474,45 @@ Return exactly this structure:
     }
     catch (e) { handleError(res, e); }
   });
+  // ── Goal key results ───────────────────────────────────────────────────────
+  // Only meaningful when a goal is flagged isObjective; simple goals keep their
+  // single progress bar and never touch these.
+  app.get("/api/goals/:goalId/key-results", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getKeyResults(+req.params.goalId, (req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/goals/:goalId/key-results", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      const goalId = +req.params.goalId;
+      // Confirm the goal is yours before hanging a child off it — otherwise a
+      // key result could be attached to someone else's objective.
+      const owns = await pool.query(`SELECT 1 FROM goals WHERE id=$1 AND user_id=$2`, [goalId, uid]);
+      if (!owns.rows[0]) return res.status(404).json({ error: "Goal not found" });
+
+      const data = insertGoalKeyResultSchema.parse({ ...req.body, goalId });
+      res.status(201).json(await storage.createKeyResult(data, uid));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/key-results/:id", requireAuth, async (req, res) => {
+    try {
+      const data = insertGoalKeyResultSchema.partial().omit({ goalId: true }).parse(req.body);
+      const updated = await storage.updateKeyResult(+req.params.id, data, (req.user as User).id);
+      updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/key-results/:id", requireAuth, async (req, res) => {
+    try {
+      (await storage.deleteKeyResult(+req.params.id, (req.user as User).id))
+        ? res.json({ ok: true })
+        : res.status(404).json({ error: "Not found" });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.patch("/api/goals/:id", requireAuth, async (req, res) => {
     try {
       const parsed = insertGoalSchema.partial().parse(req.body);
