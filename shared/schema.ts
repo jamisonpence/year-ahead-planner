@@ -1612,7 +1612,9 @@ export type PublicUser = { id: number; name: string; email: string; avatarUrl: s
 export type EventWithTasks = Event & { tasks: Task[] };
 export type GoalWithTasks = Goal & { tasks: GoalTask[] }; // legacy
 export type ProjectWithTasks = Project & { tasks: ProjectTask[] };
-export type GoalWithProjects = Goal & { projects: ProjectWithTasks[] };
+// keyResults is always present but empty for a simple goal, so callers can read
+// .length without a null check.
+export type GoalWithProjects = Goal & { projects: ProjectWithTasks[]; keyResults: GoalKeyResult[] };
 export type BookWithSessions = Book & { sessions: ReadingSession[] };
 export type WorkoutTemplateWithLogs = WorkoutTemplate & { recentLogs: WorkoutLog[] };
 

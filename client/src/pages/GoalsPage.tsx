@@ -31,7 +31,8 @@ import type {
   InsertGoal,
   NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
-import { currentQuarter, quarterLabel } from "@shared/schema";
+import { currentQuarter, quarterLabel, objectiveProgressPct } from "@shared/schema";
+import KeyResultsPanel from "@/components/goals/KeyResultsPanel";
 import { Link, useLocation } from "wouter";
 
 /** "Q3 2026" — the label the quarter tab and its empty state both use. */
@@ -83,6 +84,10 @@ const PARENT_HORIZONS: Record<string, string[]> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function goalPct(g: GoalWithProjects): number {
+  // An objective is the mean of its key results — its own progress fields are
+  // never edited directly. Simple goals are untouched, and an objective with no
+  // key results yet falls through so it shows 0 rather than breaking.
+  if ((g as any).isObjective && g.keyResults?.length) return objectiveProgressPct(g.keyResults);
   if (g.progressType === "boolean") return g.progressCurrent >= g.progressTarget ? 100 : 0;
   return g.progressTarget > 0 ? Math.min(100, Math.round((g.progressCurrent / g.progressTarget) * 100)) : 0;
 }
@@ -340,16 +345,24 @@ function InlineGoalEditor({ goal, friends, onSave }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label className="text-xs">Current</Label>
-          <Input type="number" value={current} onChange={(e) => setCurrent(e.target.value)} step="0.1" className="h-8 text-xs" />
+      {/* An objective's number is derived from its key results, so editing it
+          here would be overwritten on the next roll-up. Say that instead. */}
+      {(goal as any).isObjective ? (
+        <p className="text-xs text-muted-foreground rounded-lg border border-dashed p-2">
+          Progress comes from this objective's key results — edit those to move it.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Current</Label>
+            <Input type="number" value={current} onChange={(e) => setCurrent(e.target.value)} step="0.1" className="h-8 text-xs" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Target</Label>
+            <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} step="0.1" className="h-8 text-xs" />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Target</Label>
-          <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} step="0.1" className="h-8 text-xs" />
-        </div>
-      </div>
+      )}
 
       {/* Milestones */}
       <div className="space-y-1">
@@ -1733,12 +1746,22 @@ export default function GoalsPage() {
                                 <span className="text-sm font-semibold shrink-0">{pct}%</span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {selectedGoal.progressCurrent} / {selectedGoal.progressTarget}
+                                {(selectedGoal as any).isObjective
+                                  ? "Rolled up from key results below"
+                                  : `${selectedGoal.progressCurrent} / ${selectedGoal.progressTarget}`}
                               </p>
                             </div>
                           </div>
                         </div>
                       </div>
+
+                      <KeyResultsPanel
+                        goalId={selectedGoal.id}
+                        isObjective={!!(selectedGoal as any).isObjective}
+                        onToggleObjective={(next) =>
+                          updateGoal.mutate({ id: selectedGoal.id, isObjective: next } as any)
+                        }
+                      />
 
                       <div className="rounded-xl border bg-card p-4">
                         <div className="flex items-start justify-between gap-3">
