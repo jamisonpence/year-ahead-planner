@@ -921,6 +921,34 @@ export function objectiveProgressPct(krs: Pick<GoalKeyResult, "baseline" | "curr
   return Math.round((krs.reduce((sum, k) => sum + keyResultProgress(k), 0) / krs.length) * 100);
 }
 
+/**
+ * Quarter helpers. Stored form is "2026-Q3" — sortable as a plain string, and
+ * unambiguous in a way that "Q3" alone is not once a goal outlives the year.
+ * Local time is deliberate: a quarter is a human planning unit, so it should
+ * turn over at the user's midnight rather than UTC's.
+ */
+export function currentQuarter(d: Date = new Date()): string {
+  return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+}
+
+/** "2026-Q3" → "Q3 2026". Falls back to the raw value rather than showing nothing. */
+export function quarterLabel(q: string | null | undefined): string {
+  const m = /^(\d{4})-Q([1-4])$/.exec(q ?? "");
+  return m ? `Q${m[2]} ${m[1]}` : (q || "");
+}
+
+/** The current quarter plus the next three — enough to plan ahead without a date picker. */
+export function upcomingQuarters(d: Date = new Date(), count = 4): string[] {
+  const out: string[] = [];
+  let year = d.getFullYear();
+  let q = Math.floor(d.getMonth() / 3) + 1;
+  for (let i = 0; i < count; i++) {
+    out.push(`${year}-Q${q}`);
+    if (++q > 4) { q = 1; year++; }
+  }
+  return out;
+}
+
 export const insertGoalTaskSchema = createInsertSchema(goalTasks).omit({ id: true });
 export type InsertGoalTask = z.infer<typeof insertGoalTaskSchema>;
 export type GoalTask = typeof goalTasks.$inferSelect;

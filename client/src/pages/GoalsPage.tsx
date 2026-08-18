@@ -31,7 +31,11 @@ import type {
   InsertGoal,
   NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
+import { currentQuarter, quarterLabel } from "@shared/schema";
 import { Link, useLocation } from "wouter";
+
+/** "Q3 2026" — the label the quarter tab and its empty state both use. */
+const currentQuarterLabel = () => quarterLabel(currentQuarter());
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_COLORS: Record<string, string> = {
@@ -57,6 +61,7 @@ const STATUS_PILL: Record<string, string> = {
 const INLINE_PRIORITIES = ["low", "medium", "high"] as const;
 
 const HORIZON_META: Record<string, { label: string; emoji: string; short: string; color: string }> = {
+  quarter:   { label: "This Quarter",    emoji: "🎯", short: "Quarter",   color: "text-orange-600 dark:text-orange-400" },
   this_year: { label: "This Year",       emoji: "📅", short: "This Year", color: "text-emerald-600 dark:text-emerald-400" },
   next_year: { label: "Next Year",       emoji: "📆", short: "Next Year", color: "text-blue-600 dark:text-blue-400" },
   "3_years": { label: "3-Year Goal",     emoji: "🗓️",  short: "3 Yrs",    color: "text-violet-600 dark:text-violet-400" },
@@ -64,8 +69,11 @@ const HORIZON_META: Record<string, { label: string; emoji: string; short: string
   someday:   { label: "Someday / Vision",emoji: "💭", short: "Vision",   color: "text-pink-600 dark:text-pink-400" },
 };
 
-// Horizons that can be a parent of a given horizon
+// Horizons that can be a parent of a given horizon.
+// A quarter is the shortest horizon, so it can hang off anything longer and can
+// never itself be a parent.
 const PARENT_HORIZONS: Record<string, string[]> = {
+  quarter:   ["this_year", "next_year", "3_years", "5_years", "someday"],
   this_year: ["next_year", "3_years", "5_years", "someday"],
   next_year:  ["3_years", "5_years", "someday"],
   "3_years":  ["5_years", "someday"],
@@ -938,8 +946,9 @@ export default function GoalsPage() {
   const [quickWinText, setQuickWinText] = useState("");
   const [logWinGoalId, setLogWinGoalId] = useState<number | null>(null);
   const [logWinText, setLogWinText] = useState("");
-  type HorizonTab = "this_year" | "long_term" | "vision";
-  const [horizonTab, setHorizonTab] = useState<HorizonTab>("this_year");
+  type HorizonTab = "quarter" | "this_year" | "long_term" | "vision";
+  // The quarter is where execution actually happens, so it opens first.
+  const [horizonTab, setHorizonTab] = useState<HorizonTab>("quarter");
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
@@ -957,6 +966,7 @@ export default function GoalsPage() {
 
   const filteredGoals = goals.filter(g => {
     const h = (g as any).horizon ?? "this_year";
+    if (horizonTab === "quarter") return h === "quarter";
     if (horizonTab === "this_year") return h === "this_year";
     if (horizonTab === "long_term") return h === "next_year" || h === "3_years" || h === "5_years";
     if (horizonTab === "vision") return h === "someday";
@@ -1172,6 +1182,7 @@ export default function GoalsPage() {
           {/* Horizon tabs */}
           <div className="flex overflow-x-auto border-b shrink-0 scrollbar-none">
             {([
+              ["quarter",   `🎯 ${currentQuarterLabel()}`],
               ["this_year", "📅 This Year"],
               ["long_term", "📆 Long-Term"],
               ["vision",    "💭 Vision"],
@@ -1196,10 +1207,14 @@ export default function GoalsPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <Target size={28} className="mx-auto mb-3 opacity-20" />
                 <p className="text-xs font-medium text-foreground">
-                  {horizonTab === "this_year" ? "No goals for this year yet" : horizonTab === "long_term" ? "No long-term goals yet" : "No vision goals yet"}
+                  {horizonTab === "quarter" ? `Nothing set for ${currentQuarterLabel()} yet`
+                    : horizonTab === "this_year" ? "No goals for this year yet"
+                    : horizonTab === "long_term" ? "No long-term goals yet" : "No vision goals yet"}
                 </p>
                 <p className="text-[10px] mt-1 opacity-70">
-                  {horizonTab === "vision" ? "Vision goals define where you want to be in 5–10 years." : "Goals turn intentions into progress you can track."}
+                  {horizonTab === "quarter" ? "A quarter is short enough to actually finish. Pull one yearly goal down into it."
+                    : horizonTab === "vision" ? "Vision goals define where you want to be in 5–10 years."
+                    : "Goals turn intentions into progress you can track."}
                 </p>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent("open-quick-add", { detail: { section: "goal" } }))}
@@ -1583,7 +1598,10 @@ export default function GoalsPage() {
               const parentGoal = parentId ? goals.find(g => g.id === parentId) : null;
               if (!parentGoal) return null;
               const ph = (parentGoal as any).horizon ?? "this_year";
-              const parentTab: HorizonTab = ph === "someday" ? "vision" : ph === "this_year" ? "this_year" : "long_term";
+              const parentTab: HorizonTab =
+                ph === "someday" ? "vision"
+                : ph === "quarter" ? "quarter"
+                : ph === "this_year" ? "this_year" : "long_term";
               return (
                 <button
                   onClick={() => { setSelectedGoalId(parentGoal.id); setHorizonTab(parentTab); }}

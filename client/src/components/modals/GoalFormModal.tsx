@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { GOAL_CATEGORIES, PROGRESS_TYPES, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
 import type { Goal, InsertGoal, BookWithSessions, WorkoutTemplate, PublicUser } from "@shared/schema";
+import { currentQuarter, quarterLabel, upcomingQuarters } from "@shared/schema";
 import { Users, X, Search } from "lucide-react";
 
 const PRIORITIES = ["low","medium","high"];
@@ -128,6 +129,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
   const [linkedTemplateId, setLinkedTemplateId] = useState("__none__");
   const [buddyUserId, setBuddyUserId] = useState<number | null>(null);
   const [horizon, setHorizon] = useState<string>("this_year");
+  const [quarter, setQuarter] = useState<string>(currentQuarter());
 
   useEffect(() => {
     if (open) {
@@ -142,6 +144,8 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
       setLinkedTemplateId(editGoal?.linkedTemplateId?.toString() ?? "__none__");
       setBuddyUserId(editGoal?.buddyUserId ?? null);
       setHorizon((editGoal as any)?.horizon ?? "this_year");
+      // An older quarterly goal keeps its own quarter; a new one defaults to now.
+      setQuarter((editGoal as any)?.quarter ?? currentQuarter());
     }
   }, [open, editGoal]);
 
@@ -162,7 +166,10 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
       linkedTemplateId: (linkedTemplateId && linkedTemplateId !== "__none__") ? parseInt(linkedTemplateId) : null,
       buddyUserId: buddyUserId ?? null,
       horizon,
-    };
+      // Only meaningful for a quarterly goal — cleared otherwise so a goal moved
+      // out to "this year" doesn't keep a stale quarter hanging off it.
+      quarter: horizon === "quarter" ? quarter : null,
+    } as InsertGoal;
     editGoal ? updateMut.mutate(p) : createMut.mutate(p);
   };
 
@@ -178,6 +185,7 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
             <Select value={horizon} onValueChange={setHorizon}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="quarter">🎯 This Quarter</SelectItem>
                 <SelectItem value="this_year">📅 This Year</SelectItem>
                 <SelectItem value="next_year">📆 Next Year</SelectItem>
                 <SelectItem value="3_years">🗓️ 3 Years</SelectItem>
@@ -186,6 +194,23 @@ export default function GoalFormModal({ open, onClose, editGoal }: {
               </SelectContent>
             </Select>
           </div>
+          {horizon === "quarter" && (
+            <div className="space-y-1.5">
+              <Label>Which quarter</Label>
+              <Select value={quarter} onValueChange={setQuarter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {upcomingQuarters().map((q) => (
+                    <SelectItem key={q} value={q}>{quarterLabel(q)}</SelectItem>
+                  ))}
+                  {/* An existing goal may sit in a quarter that has already passed. */}
+                  {quarter && !upcomingQuarters().includes(quarter) && (
+                    <SelectItem value={quarter}>{quarterLabel(quarter)}</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Category</Label>
               <Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{GOAL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</SelectItem>)}</SelectContent></Select>
