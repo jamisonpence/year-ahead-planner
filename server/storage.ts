@@ -3533,6 +3533,48 @@ export const storage = {
     const result = await db.insert(users).values({ googleId, email, name, avatarUrl, createdAt: new Date().toISOString() }).returning();
     return result[0];
   },
+  /**
+   * Find or create the account behind a Sign in with Apple identity.
+   *
+   * Lookup order matters. The Apple `sub` is the only stable identifier — Apple sends
+   * the name once, at first authorisation, and may send a private relay address instead
+   * of the real one. So:
+   *
+   *   1. by apple:<sub>  — the returning Apple user, always correct
+   *   2. by email        — someone who signed up with Google or a password and is now
+   *                        using Apple. Linking here stops them landing in a duplicate
+   *                        account with none of their data.
+   *   3. create          — genuinely new
+   *
+   * No schema change: the identity is stored in googleId using the same convention the
+   * codebase already uses for password accounts ("local:<email>").
+   */
+  async upsertAppleUser({ sub, email, name }: { sub: string; email: string | null; name?: string | null }) {
+    const key = `apple:${sub}`;
+
+    const byApple = await db.select().from(users).where(eq(users.googleId, key)).limit(1);
+    if (byApple[0]) {
+      // Only overwrite the name when Apple actually gave us one — it does so on the
+      // first authorisation only, and blanking a good name on every later sign-in
+      // would be worse than ignoring it.
+      if (name) await db.update(users).set({ name }).where(eq(users.id, byApple[0].id));
+      return (await db.select().from(users).where(eq(users.id, byApple[0].id)).limit(1))[0];
+    }
+
+    if (email) {
+      const byEmail = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (byEmail[0]) return byEmail[0];
+    }
+
+    const result = await db.insert(users).values({
+      googleId: key,
+      email: email ?? `${sub}@privaterelay.appleid.com`,
+      name: name || "MyLifos user",
+      avatarUrl: null,
+      createdAt: new Date().toISOString(),
+    }).returning();
+    return result[0];
+  },
   async getUserByEmail(email: string) {
     const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return result[0];

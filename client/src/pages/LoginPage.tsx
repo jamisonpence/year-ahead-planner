@@ -15,6 +15,14 @@ const GoogleIcon = () => (
   </svg>
 );
 
+// currentColor rather than a fixed black: the mark has to stay legible in dark mode,
+// and Apple's guidelines allow black or white depending on background.
+const AppleIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">
+    <path d="M16.365 1.43c0 1.14-.42 2.2-1.12 3.01-.85.98-2.23 1.74-3.38 1.65-.14-1.11.42-2.28 1.09-3.02.77-.86 2.2-1.55 3.41-1.64zM20.9 17.1c-.55 1.28-.82 1.85-1.53 2.98-.99 1.58-2.39 3.55-4.12 3.56-1.54.02-1.93-1-4.02-.99-2.09.01-2.52 1.01-4.06.99-1.73-.02-3.06-1.79-4.05-3.37C.3 16.86-.06 11.6 1.86 8.86c1.19-1.7 3.07-2.7 4.84-2.7 1.8 0 2.93 1 4.42 1 1.44 0 2.32-1 4.4-1 1.57 0 3.24.86 4.42 2.34-3.89 2.13-3.26 7.68 1.0 8.6z"/>
+  </svg>
+);
+
 export default function LoginPage() {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -83,6 +91,15 @@ export default function LoginPage() {
             <a href="/auth/google"
               className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm">
               <GoogleIcon /> Continue with Google
+            </a>
+
+            {/* Apple. Required alongside Google by App Review Guideline 4.8 — the
+                equivalent option must let users withhold their real email, which
+                email/password cannot. Apple's brand guidelines require it to be at
+                least as prominent as the other options, hence identical sizing. */}
+            <a href="/auth/apple"
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm">
+              <AppleIcon /> Continue with Apple
             </a>
 
             <div className="flex items-center gap-3">

@@ -4,6 +4,8 @@ import { createServer } from "http";
 import { storage, pool } from "./storage";
 import { passport } from "./auth";
 import { issueNativeToken } from "./nativeAuth";
+import { appleConfigured, authorizeUrl, exchangeCode } from "./appleAuth";
+import crypto from "crypto";
 import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
 import { fatSecretSearch, fatSecretGetFood, fatSecretConfigured } from "./fatsecret";
 import multer from "multer";
@@ -1429,6 +1431,69 @@ Rules:
   setTimeout(calendarTick, 20 * 1000);
 
   // ── Auth Routes ──────────────────────────────────────────────────────────────
+  // ── Sign in with Apple ─────────────────────────────────────────────────────
+  // Guideline 4.8 requires an equivalent login option alongside Google — one that
+  // limits collection to name and email and lets the user hide their address.
+  // Email/password doesn't qualify (it can't hide the address); this does.
+  const appleRedirectUri = () =>
+    process.env.APPLE_CALLBACK_URL || "https://www.mylifos.com/auth/apple/callback";
+
+  app.get("/auth/apple", authLimiter, (req, res) => {
+    if (!appleConfigured()) return res.redirect("/login?error=apple_unavailable");
+    // CSRF: a random state kept server-side in the session and compared on return.
+    const state = crypto.randomBytes(16).toString("hex");
+    (req.session as any).appleState = state;
+    (req.session as any).appleNative = req.query.native === "1";
+    res.redirect(authorizeUrl(state, appleRedirectUri()));
+  });
+
+  // Apple form-POSTs here because we request name/email scope. express.urlencoded
+  // is already mounted, so req.body is populated.
+  app.post("/auth/apple/callback", authLimiter, async (req, res) => {
+    try {
+      const { code, state, user: userJson, error } = req.body ?? {};
+      if (error) return res.redirect("/login?error=apple_denied");
+
+      const expected = (req.session as any).appleState;
+      delete (req.session as any).appleState;
+      const isNative = !!(req.session as any).appleNative;
+      delete (req.session as any).appleNative;
+      if (!state || !expected || state !== expected) {
+        return res.redirect("/login?error=apple_state");
+      }
+      if (!code) return res.redirect("/login?error=apple_nocode");
+
+      const identity = await exchangeCode(String(code), appleRedirectUri());
+
+      // Apple sends the name exactly once, as JSON in a form field, on the first
+      // authorisation only. Absent on every subsequent sign-in.
+      let name: string | null = null;
+      if (userJson) {
+        try {
+          const parsed = typeof userJson === "string" ? JSON.parse(userJson) : userJson;
+          const first = parsed?.name?.firstName ?? "";
+          const last = parsed?.name?.lastName ?? "";
+          name = `${first} ${last}`.trim() || null;
+        } catch { /* malformed name payload is not worth failing a login over */ }
+      }
+
+      const account = await storage.upsertAppleUser({ sub: identity.sub, email: identity.email, name });
+
+      req.logIn(account as any, (err) => {
+        if (err) return res.redirect("/login?error=apple_session");
+        // The iOS app can't use the cookie, so hand it a bearer token via the
+        // custom scheme instead of landing on the website.
+        if (isNative) {
+          return res.redirect(`mylifos://auth?token=${encodeURIComponent(issueNativeToken((account as any).id))}`);
+        }
+        res.redirect("/");
+      });
+    } catch (e) {
+      console.error("[apple-auth]", e);
+      res.redirect("/login?error=apple_failed");
+    }
+  });
+
   app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
   // Switch Google account (force account picker)
