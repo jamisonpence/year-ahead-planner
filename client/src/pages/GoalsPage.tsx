@@ -2021,20 +2021,16 @@ export default function GoalsPage() {
                   <LifeGraphPanel entityType="goal" entityId={selectedGoal.id} />
                 </div>
 
-                {/* Linked projects — read-only context */}
+                {/* Linked projects — read-only context. Renders only when there
+                    are projects: an empty section here said nothing the Execution
+                    zone hasn't already said, where "Add task" and "Manage
+                    projects" are the actual way in. */}
+                {selectedGoal.projects.length > 0 && (
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-2 px-1">
                     <span className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Folder size={14} className="text-primary" /> Linked Projects</span>
-                    {selectedGoal.projects.length > 0 && (
-                      <span className="text-xs text-muted-foreground">{selectedGoal.projects.length}</span>
-                    )}
+                    <span className="text-xs text-muted-foreground">{selectedGoal.projects.length}</span>
                   </div>
-                  {selectedGoal.projects.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground">
-                      <Folder size={24} className="mx-auto mb-2 opacity-20" />
-                      <p className="text-xs">No linked projects yet</p>
-                    </div>
-                  ) : (
                     <div className="space-y-1.5">
                       {selectedGoal.projects.map((p) => {
                         const pct = projectPct(p);
@@ -2067,13 +2063,13 @@ export default function GoalsPage() {
                         );
                       })}
                     </div>
-                  )}
                   <Link href="/tasks">
                     <a className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mt-2 px-1">
                       <ClipboardList size={11} /> Manage in Projects & Tasks →
                     </a>
                   </Link>
                 </div>
+                )}
                   </>
                   );
                 })()}
