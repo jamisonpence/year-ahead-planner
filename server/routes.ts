@@ -3,6 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { storage, pool } from "./storage";
 import { passport } from "./auth";
+import { issueNativeToken } from "./nativeAuth";
 import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
 import { fatSecretSearch, fatSecretGetFood, fatSecretConfigured } from "./fatsecret";
 import multer from "multer";
@@ -2219,6 +2220,26 @@ Return exactly this structure:
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
+  // ── Native app auth ────────────────────────────────────────────────────────
+  // The iOS app completes OAuth in a system browser, which leaves a normal
+  // cookie session on this origin. It then calls this once to trade that
+  // session for a bearer token, stores the token in the Keychain, and uses it
+  // for every subsequent request — because the app's own origin
+  // (capacitor://localhost) can never send the sameSite:"lax" session cookie.
+  app.post("/api/native/token", requireAuth, async (req, res) => {
+    try {
+      const uid = (req.user as User).id;
+      res.json({ token: issueNativeToken(uid), expiresInDays: 60 });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Lets the app check on launch that a stored token is still valid, rather
+  // than inferring it from a 401 on some unrelated request.
+  app.get("/api/native/session", requireAuth, async (req, res) => {
+    const u = req.user as User;
+    res.json({ ok: true, userId: u.id, name: u.name, email: u.email, via: (req as any).authVia ?? "session" });
+  });
+
   app.delete("/api/books/:id", requireAuth, async (req, res) => {
     (await storage.deleteBook(+req.params.id, (req.user as User).id)) ? res.json({ ok: true }) : res.status(404).json({ error: "Not found" });
   });

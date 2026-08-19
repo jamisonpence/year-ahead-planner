@@ -5,7 +5,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware, passport } from "./auth";
-import { initializeStorage, seedSystemRecipes, seedMealDBRecipes, seedRecipeImages, applyManualRecipeImages, runMigrations } from "./storage";
+import { bearerAuth } from "./nativeAuth";
+import { storage, initializeStorage, seedSystemRecipes, seedMealDBRecipes, seedRecipeImages, applyManualRecipeImages, runMigrations } from "./storage";
 import { createMcpRouter, createOAuthRouter, createOAuthEndpoints } from "./mylifos-mcp-server";
 
 const app = express();
@@ -47,6 +48,13 @@ app.set("trust proxy", 1);
 app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
+// The native iOS app can't use the session cookie — it loads from
+// capacitor://localhost, so requests to mylifos.com are cross-origin and a
+// sameSite:"lax" cookie is never sent. This accepts a bearer token instead and
+// populates req.user / req.isAuthenticated() identically, so every existing
+// route and requireAuth guard works unchanged. Mounted *after* passport.session()
+// so a cookie session always takes precedence and the website is unaffected.
+app.use(bearerAuth((id) => storage.getUserById(id)));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
