@@ -747,7 +747,45 @@ export async function initializeStorage() {
   await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
 
   // Goals: opt-in OKR mode + quarterly horizon
-  await safeDdl(`ALTER TABLE general_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT`);
+  // general_tasks is a VIEW, not a table — the unified_tasks migration folded
+  // general_tasks/tasks/project_tasks/goal_tasks into one table and left views
+  // behind under the old names. ALTER TABLE ... ADD COLUMN on it fails with
+  // 42809 "not supported for views" on every boot, which is what crash-looped
+  // the site. The column belongs on the base table, and the view has to be
+  // widened to expose it.
+  //
+  // CREATE OR REPLACE VIEW can only append columns to the end of the select
+  // list, which is exactly what this does — so it replaces cleanly rather than
+  // needing a DROP (a DROP would fail anyway while the app holds references).
+  // Two shapes exist and this runs against both, so it has to branch:
+  //
+  //   production — migrateUnifiedTasks() has already folded the four task
+  //     tables into unified_tasks and left VIEWS behind under the old names.
+  //     ALTER TABLE general_tasks then fails with 42809 "not supported for
+  //     views", which is exactly what crash-looped the site. The column belongs
+  //     on unified_tasks, and the view must be widened to expose it.
+  //
+  //   fresh install — general_tasks is still a real table at this point;
+  //     migrateUnifiedTasks() runs later, at the end of initializeStorage.
+  //     Here the plain ALTER is correct and unified_tasks does not exist yet.
+  //
+  // CREATE OR REPLACE VIEW only permits appending columns to the end of the
+  // select list, which is what this does, so it replaces in place — a DROP
+  // would fail while dependent objects reference the view.
+  await safeDdl(`
+    DO $$
+    BEGIN
+      IF to_regclass('unified_tasks') IS NOT NULL THEN
+        ALTER TABLE unified_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT;
+        CREATE OR REPLACE VIEW general_tasks AS
+          SELECT id, user_id, title, completed, due_date, priority, notes, sort_order, completed_at
+          FROM unified_tasks
+          WHERE event_id IS NULL AND project_id IS NULL AND goal_id IS NULL;
+      ELSE
+        ALTER TABLE general_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT;
+      END IF;
+    END $$;
+  `);
   await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS is_objective BOOLEAN NOT NULL DEFAULT false`);
   await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS quarter TEXT`);
   await pool.query(`
@@ -7207,12 +7245,15 @@ export async function migrateUnifiedTasks() {
       due_date TEXT,
       priority TEXT NOT NULL DEFAULT 'medium',
       notes TEXT,
-      sort_order INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      -- Carried through the merge so a fresh install keeps the column that
+      -- initializeStorage() just added to the legacy general_tasks table.
+      completed_at TEXT
     );
 
     -- General tasks first, ids preserved
-    INSERT INTO unified_tasks (id, user_id, title, completed, due_date, priority, notes, sort_order)
-      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order FROM general_tasks;
+    INSERT INTO unified_tasks (id, user_id, title, completed, due_date, priority, notes, sort_order, completed_at)
+      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order, completed_at FROM general_tasks;
 
     -- Bump the sequence past preserved ids before the others take fresh ones
     SELECT setval('unified_tasks_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM unified_tasks), 1));
@@ -7237,7 +7278,7 @@ export async function migrateUnifiedTasks() {
     ALTER TABLE goal_tasks RENAME TO goal_tasks_legacy;
 
     CREATE VIEW general_tasks AS
-      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order
+      SELECT id, user_id, title, completed, due_date, priority, notes, sort_order, completed_at
       FROM unified_tasks
       WHERE event_id IS NULL AND project_id IS NULL AND goal_id IS NULL;
     CREATE VIEW tasks AS
