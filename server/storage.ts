@@ -702,7 +702,6 @@ export async function initializeStorage() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
 
   // Goals: opt-in OKR mode + quarterly horizon
-  await pool.query(`ALTER TABLE general_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT`);
   await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS is_objective BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS quarter TEXT`);
   await pool.query(`

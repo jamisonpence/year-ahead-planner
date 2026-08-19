@@ -1249,9 +1249,7 @@ export default function TasksPage() {
 
   // Weekly wins — tasks completed since this Sunday midnight
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0, 0, 0, 0);
-  // No `as any`: completedAt is a real column now, so a future rename or
-  // removal fails the type check instead of silently reading undefined.
-  const completedThisWeek = completedTasks.filter(t => t.completedAt && new Date(t.completedAt) >= weekStart).length;
+  const completedThisWeek = completedTasks.filter(t => (t as any).completedAt && new Date((t as any).completedAt) >= weekStart).length;
 
   const choresDueSoon = useMemo(() =>
     chores.filter(c => c.isActive && c.nextDue && c.nextDue <= today),
@@ -1912,9 +1910,9 @@ export default function TasksPage() {
                       {/* Context row */}
                       <div className="flex items-center gap-2 pl-7 pb-1 flex-wrap">
                         <span className="text-[10px] text-muted-foreground/60 bg-secondary px-1.5 py-0.5 rounded">Task</span>
-                        {t.completedAt && (
+                        {(t as any).completedAt && (
                           <span className="text-[10px] text-muted-foreground/60">
-                            {format(parseISO(t.completedAt), "MMM d")}
+                            {format(parseISO((t as any).completedAt), "MMM d")}
                           </span>
                         )}
                       </div>
