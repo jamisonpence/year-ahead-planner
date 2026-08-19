@@ -2089,6 +2089,13 @@ export async function initializeStorage() {
 export interface IStorage {
   createDMShareMessage(fromUserId: number, toUserId: number, shareType: string, shareData: string, displayText: string): Promise<void>;
   createDMTextMessage(fromUserId: number, toUserId: number, text: string): Promise<void>;
+  // Declared because createDMShareMessage/createDMTextMessage call them via
+  // `this`, and inside the object literal `this` is typed as IStorage.
+  getOrCreateDM(userId1: number, userId2: number): Promise<any>;
+  createMessage(
+    conversationId: number, senderId: number, content: string,
+    opts?: { messageType?: string; shareType?: string; shareData?: string },
+  ): Promise<any>;
   // Events
   getAllEventsWithTasks(userId: number): Promise<EventWithTasks[]>;
   createEvent(data: InsertEvent, userId: number): Promise<Event>;
@@ -2558,7 +2565,13 @@ function computeHabitBestStreak(completions: { date: string }[]): number {
   return best;
 }
 
-export const storage: IStorage = {
+// `satisfies` rather than `: IStorage`. Annotating the variable with the
+// interface hides every method the implementation has but the interface has
+// not yet declared — callers then see TS2339/TS2551 'does not exist on type
+// IStorage' for methods that are right there and work fine. That noise is what
+// let a genuine missing-name crash sit unnoticed in the baseline. `satisfies`
+// still checks conformance to IStorage, but keeps the concrete type visible.
+export const storage = {
   // ── Events ──────────────────────────────────────────────────────────────────
   async getAllEventsWithTasks(userId: number) {
     const evs = await db.select().from(events).where(eq(events.userId, userId)).orderBy(asc(events.date));
@@ -7007,7 +7020,7 @@ export const storage: IStorage = {
     };
   },
 
-};
+} satisfies IStorage;
 
 // ── System Recipe Seeding ─────────────────────────────────────────────────────
 import { SYSTEM_RECIPES } from "./recipeData";

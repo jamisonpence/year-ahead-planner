@@ -8,6 +8,7 @@
     "build": "node --max-old-space-size=3072 node_modules/.bin/tsx script/build-client.ts && node --max-old-space-size=3072 node_modules/.bin/tsx script/build-server.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "check:crashers": "tsc --noEmit 2>&1 | grep -E 'error TS(2304|2551|2554)' && { echo '^ crash-class type errors: undefined name, misspelled property, or wrong argument count'; exit 1; } || echo 'no crash-class type errors'",
     "db:push": "drizzle-kit push",
     "build:ios": "tsx script/build-ios.ts",
     "cap:open": "npx cap open ios",

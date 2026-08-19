@@ -9737,7 +9737,7 @@ Rules:
       if (!debate) return res.status(404).json({ error: "Not found" });
       const uid = await storage.getTabUserId(user.id, "politics");
       if (debate.userId !== uid) return res.status(403).json({ error: "Not your debate" });
-      const updated = await storage.updateDebate(id, req.body);
+      const updated = await storage.updateDebate(id, req.body, uid);
       res.json(updated);
     } catch (e) { handleError(res, e); }
   });
@@ -9751,7 +9751,8 @@ Rules:
       if (!debate) return res.status(404).json({ error: "Not found" });
       const uid = await storage.getTabUserId(user.id, "politics");
       if (debate.userId !== uid) return res.status(403).json({ error: "Not your debate" });
-      await storage.deleteDebate(id);
+      const removed = await storage.deleteDebate(id, uid);
+      if (!removed) return res.status(404).json({ error: "Not found" });
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });
@@ -9937,7 +9938,8 @@ Rules:
   });
   app.patch("/api/politics/issues/:id", requireAuth, async (req, res) => {
     try {
-      const updated = await storage.updatePoliticalIssue(+req.params.id, req.body);
+      const uid = await storage.getTabUserId((req.user as User).id, "politics");
+      const updated = await storage.updatePoliticalIssue(+req.params.id, req.body, uid);
       updated ? res.json(updated) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
