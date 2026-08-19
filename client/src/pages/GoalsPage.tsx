@@ -1473,7 +1473,8 @@ export default function GoalsPage() {
                 deliberately ignore the horizon tabs. Without this divider the
                 column showed "Goals 0" above four visible rows, because the
                 count only ever described the filtered goals. */}
-            {(nutritionGoal || workoutPlans.some(p => p.isActive)) && (
+            {(nutritionGoal || workoutPlans.some(p => p.isActive) || readingGoal
+              || activeHobbyPlans.length > 0 || activeHobbyGoals.length > 0) && (
               <div className="flex items-center gap-2 pt-4 pb-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">
                   Trackers &amp; Plans
