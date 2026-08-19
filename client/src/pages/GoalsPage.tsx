@@ -982,6 +982,7 @@ export default function GoalsPage() {
     return false;
   };
   const filteredGoals = goals.filter(g => inTab(g, horizonTab));
+  const quarterGoalCount = goals.filter(g => inTab(g, "quarter")).length;
 
   // Open on the first tab that actually has something in it. The quarter is
   // where execution happens so it still wins when populated, but defaulting
@@ -1185,14 +1186,23 @@ export default function GoalsPage() {
 
   return (
     <div className="h-[calc(100vh-0px)] flex flex-col">
-      {/* Header */}
+      {/* Header. The subtitle used to read "Long-term outcomes and progress",
+          which was filler under a heading that already says Goals; it now
+          reports actual state. */}
       <PageHeader
         title="Goals"
-        subtitle="Long-term outcomes and progress"
+        subtitle={
+          goals.length === 0
+            ? "Long-term outcomes, broken down into what you can do this quarter"
+            : `${goals.length} goal${goals.length === 1 ? "" : "s"}` +
+              (quarterGoalCount > 0 ? ` · ${quarterGoalCount} this quarter` : "")
+        }
         action={
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setBrowseModal(true)} className="gap-1.5">
-              <Sparkles size={13} /> Browse Goals & Plans
+          <div className="flex items-center gap-1">
+            {/* Browse is discovery, "+ Goal" is the thing you came to do. Two
+                buttons of near-equal weight made neither of them the answer. */}
+            <Button size="sm" variant="ghost" onClick={() => setBrowseModal(true)} className="gap-1.5 text-muted-foreground hover:text-foreground">
+              <Sparkles size={13} /> Browse
             </Button>
             <Button size="sm" onClick={() => { setEditGoal(null); setGoalModal(true); }} className="gap-1.5">
               <Plus size={13} /><Target size={13} />Goal
@@ -1487,7 +1497,7 @@ export default function GoalsPage() {
             {nutritionGoal && (
               <div
                 onClick={() => { setSelectedGoalId(selectedGoalId === NUTRITION_ID ? null : NUTRITION_ID); if (selectedGoalId !== NUTRITION_ID) setMobileView("detail"); }}
-                className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${selectedGoalId === NUTRITION_ID ? "border-rose-400 bg-rose-50 dark:bg-rose-950/20" : "bg-card border-dashed hover:border-rose-300"}`}
+                className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${selectedGoalId === NUTRITION_ID ? "border-rose-400 bg-rose-50 dark:bg-rose-950/20" : "bg-card hover:border-rose-300"}`}
               >
                 <div className="flex items-center gap-2">
                   <Apple size={15} className="text-rose-500 shrink-0" />
@@ -1553,7 +1563,7 @@ export default function GoalsPage() {
               return (
                 <div
                   onClick={() => { setSelectedGoalId(selectedGoalId === READING_GOAL_ID ? null : READING_GOAL_ID); if (selectedGoalId !== READING_GOAL_ID) setMobileView("detail"); }}
-                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${selectedGoalId === READING_GOAL_ID ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "bg-card border-dashed hover:border-amber-300"}`}
+                  className={`group rounded-xl border p-3 cursor-pointer transition-all hover:shadow-sm mt-1 ${selectedGoalId === READING_GOAL_ID ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "bg-card hover:border-amber-300"}`}
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <BookOpen size={15} className="text-amber-500 shrink-0" />
