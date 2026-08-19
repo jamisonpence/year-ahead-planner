@@ -44,6 +44,12 @@ async function buildServer() {
     bundle: true,
     format: "cjs",
     outfile: "dist/index.cjs",
+    // This list must not grow casually. esbuild's `define` REPLACES the
+    // expression at build time, so a key that is absent from the *build*
+    // environment is baked as "" and permanently overrides whatever Railway
+    // provides at runtime. Anything omitted here stays a normal runtime lookup,
+    // which is the safer default. SEATGEEK_CLIENT_ID/SECRET are deliberately
+    // absent for that reason — they resolve at runtime today and work.
     define: {
       "process.env.NODE_ENV": '"production"',
       "process.env.TMDB_API_KEY": JSON.stringify(process.env.TMDB_API_KEY ?? ""),
@@ -51,9 +57,8 @@ async function buildServer() {
       "process.env.LASTFM_API_KEY": JSON.stringify(process.env.LASTFM_API_KEY ?? ""),
       "process.env.PERENUAL_API_KEY": JSON.stringify(process.env.PERENUAL_API_KEY ?? ""),
       "process.env.ENCRYPTION_KEY": JSON.stringify(process.env.ENCRYPTION_KEY ?? ""),
+      "process.env.EVENTBRITE_API_KEY": JSON.stringify(process.env.EVENTBRITE_API_KEY ?? ""),
       "process.env.TICKETMASTER_API_KEY": JSON.stringify(process.env.TICKETMASTER_API_KEY ?? ""),
-      "process.env.SEATGEEK_CLIENT_ID": JSON.stringify(process.env.SEATGEEK_CLIENT_ID ?? ""),
-      "process.env.SEATGEEK_CLIENT_SECRET": JSON.stringify(process.env.SEATGEEK_CLIENT_SECRET ?? ""),
       "process.env.KLIPY_API_KEY": JSON.stringify(process.env.KLIPY_API_KEY ?? ""),
     },
     minify: true,
