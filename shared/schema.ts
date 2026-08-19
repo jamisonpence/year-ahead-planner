@@ -477,6 +477,12 @@ export const generalTasks = pgTable("general_tasks", {
   userId: integer("user_id"),
   title: text("title").notNull(),
   completed: boolean("completed").notNull().default(false),
+  // When the task was ticked. The Completed tab counts "this week" from this,
+  // and the row renders the date — both read it via `as any`, which is how a
+  // missing column went unnoticed: the cast silences the type error, the value
+  // is always undefined, and the tab reads "Nothing completed yet this week"
+  // however much you finish.
+  completedAt: text("completed_at"),
   dueDate: text("due_date"),
   priority: text("priority").notNull().default("medium"),
   notes: text("notes"),
