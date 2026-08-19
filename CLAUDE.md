@@ -63,21 +63,29 @@ Railway detects the push and runs the build itself. `dist/` is gitignored precis
 because of this. (Older notes described copying a local Vite build into a separate
 deploy repo — that is obsolete and will not work.)
 
-**Unresolved config conflict — worth cleaning up.** Two build configs disagree:
+**`nixpacks.toml` is the single source of truth for the build.** Its build phase runs
+`script/build-client.ts` then `script/build-server.ts` as two separate processes, each
+with `--max-old-space-size=3072`. `railway.json` carries only what nixpacks can't express
+— the builder choice and the deploy/restart policy — and deliberately has **no
+`buildCommand`**: setting one overrides the nixpacks build phase entirely, which is how
+the split-for-memory arrangement previously ended up as dead config while every deploy
+quietly ran a single-process build on a default heap.
 
-- `railway.json` → `buildCommand: "npm install --legacy-peer-deps && npm run build"`
-- `nixpacks.toml` → build phase runs `script/build-client.ts` then `script/build-server.ts`
-  as two separate processes, each with `--max-old-space-size=3072`
+`package.json`'s `build` script runs the same two commands, so a local build exercises
+the production path rather than a second one. `script/build.ts` and `build-server.mjs`
+were near-duplicates and are gone.
 
-The split-with-more-memory version in `nixpacks.toml` looks like a fix for a build OOM.
-`railway.json`'s `buildCommand` may be overriding it and silently reverting that fix.
-If builds start failing on memory, this is the first place to look. Pick one and delete
-the other.
+**Be careful adding to the esbuild `define` block in `script/build-server.ts`.** `define`
+*replaces* `process.env.X` at build time, so a key absent from the **build** environment
+is baked as `""` and permanently overrides whatever Railway provides at runtime. Anything
+left out stays a normal runtime lookup, which is the safer default — `SEATGEEK_CLIENT_ID`
+and `SEATGEEK_CLIENT_SECRET` are omitted for exactly that reason and work fine. Adding a
+key to that list is a behaviour change, not a tidy-up.
 
-Note `script/build.ts` and `build-server.mjs` are near-duplicates of the `script/build-*.ts`
-pair, and their env-var `define` lists have drifted apart (`build.ts` defines
-`PERENUAL_API_KEY` and `EVENTBRITE_API_KEY`; `build-server.ts` defines `SEATGEEK_*`
-instead of Eventbrite). Whichever build path runs determines which keys get inlined.
+Still worth doing one day: `define` is the wrong mechanism for values Railway already
+injects at runtime, and any key currently in the list that's missing from the build
+environment is silently `""`. Removing the block is the real cleanup, but it changes
+behaviour and deserves its own deploy.
 
 ## Gotchas that have actually bitten
 
