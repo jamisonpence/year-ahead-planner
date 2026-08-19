@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { registerAuthDeepLink } from "./lib/nativeAuth";
 
 if (!window.location.hash) {
   window.location.hash = "#/";
@@ -13,6 +14,16 @@ window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   (window as any).__pwaInstallPrompt = e;
   window.dispatchEvent(new Event("pwaInstallReady"));
+});
+
+// Native app only: catch mylifos://auth?token=… when the system browser hands control
+// back after OAuth. Registered before React mounts, because the deep link can arrive
+// while the app is still starting and the event does not replay.
+registerAuthDeepLink(() => {
+  // The token is stored by the time this runs; reload so every query refetches with
+  // the Authorization header rather than leaving a half-signed-in UI.
+  window.location.hash = "#/";
+  window.location.reload();
 });
 
 createRoot(document.getElementById("root")!).render(<App />);

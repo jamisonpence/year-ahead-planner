@@ -1489,7 +1489,13 @@ Rules:
     }
   });
 
-  app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+  app.get("/auth/google", (req, res, next) => {
+    // Google's callback is a GET, so the sameSite:"lax" session cookie *is* sent and
+    // the session can carry the native flag. (Apple's is a cross-site POST, which is
+    // why that flow signs the flag into the state instead.)
+    if (req.query.native === "1") (req.session as any).nativeAuth = true;
+    next();
+  }, passport.authenticate("google", { scope: ["profile", "email"] }));
 
   // Switch Google account (force account picker)
   app.get("/auth/google/switch", passport.authenticate("google", {
@@ -1626,6 +1632,13 @@ Rules:
   }, passport.authenticate("google", { failureRedirect: "/", keepSessionInfo: true }),
   (req, res) => {
     if (req.user) applyPendingInvite(req, (req.user as User).id).catch(() => {});
+    // Native app: hand back a bearer token via the custom scheme instead of landing
+    // on the website, since the app's origin can't use the session cookie.
+    if ((req.session as any).nativeAuth) {
+      delete (req.session as any).nativeAuth;
+      const token = issueNativeToken((req.user as User).id);
+      return res.redirect(`mylifos://auth?token=${encodeURIComponent(token)}`);
+    }
     // After login, honour any pending OAuth connect redirect (e.g. LinkedIn, Facebook)
     const dest = (req.session as any).postLoginRedirect;
     if (dest) {

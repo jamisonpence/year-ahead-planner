@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { authHeaders } from "./nativeAuth";
 
 // In web production: API calls are relative (same origin as the server).
 // In Capacitor native builds: VITE_API_URL must be set to the Railway backend URL
@@ -17,9 +18,16 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // authHeaders() is {} on the web, where the session cookie does the work. In the
+  // native app it carries the bearer token, because capacitor://localhost can never
+  // send a sameSite:"lax" cookie to mylifos.com.
   const res = await fetch(`${API_BASE}${url}`, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...(data ? { "Content-Type": "application/json" } : {}),
+      ...authHeaders(),
+    },
+    credentials: "include",
     body: data ? JSON.stringify(data) : undefined,
   });
 
@@ -33,7 +41,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(`${API_BASE}${queryKey.join("/")}`);
+    const res = await fetch(`${API_BASE}${queryKey.join("/")}`, {
+      headers: { ...authHeaders() },
+      credentials: "include",
+    });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

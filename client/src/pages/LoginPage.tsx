@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isNativeApp, startNativeSignIn } from "@/lib/nativeAuth";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
@@ -88,8 +89,9 @@ export default function LoginPage() {
         {mode === "choose" && (
           <div className="flex flex-col gap-3">
             {/* Google */}
-            <a href="/auth/google"
-              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm">
+            <a href={isNativeApp() ? undefined : "/auth/google"}
+              onClick={isNativeApp() ? (e) => { e.preventDefault(); startNativeSignIn("google"); } : undefined}
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm cursor-pointer">
               <GoogleIcon /> Continue with Google
             </a>
 
@@ -97,8 +99,9 @@ export default function LoginPage() {
                 equivalent option must let users withhold their real email, which
                 email/password cannot. Apple's brand guidelines require it to be at
                 least as prominent as the other options, hence identical sizing. */}
-            <a href="/auth/apple"
-              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm">
+            <a href={isNativeApp() ? undefined : "/auth/apple"}
+              onClick={isNativeApp() ? (e) => { e.preventDefault(); startNativeSignIn("apple"); } : undefined}
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors text-sm font-medium shadow-sm cursor-pointer">
               <AppleIcon /> Continue with Apple
             </a>
 
