@@ -131,6 +131,27 @@ with.
 cost two extra deploy cycles to bisect. One migration, one deploy, verified before
 anything else rides along.
 
+**Read type errors by kind, not by count.** `npm run check` reports a few hundred errors,
+almost all missing `@types` packages (TS7016) — genuinely harmless. But three codes are
+runtime crashes hiding in that noise:
+
+| code | meaning | consequence |
+|---|---|---|
+| TS2304 | name not found | `ReferenceError` the moment the line runs |
+| TS2551 | misspelled property | `undefined is not a function` |
+| TS2554 | wrong argument count | a parameter silently `undefined` |
+
+`npm run check:crashers` fails if any appear. **Run it before pushing** — it is fast and
+its count is 0, so any output is a real finding. An undeclared `uid` in a route handler
+500'd every book status change for weeks while sitting in plain sight in the build output.
+
+**`storage` uses `satisfies IStorage`, not `: IStorage`.** Annotating the variable with
+the interface hides every method the implementation has but the interface has not yet
+declared — callers get TS2339/TS2551 for methods that exist and work, which was 130 of
+the old baseline. `satisfies` still checks conformance while keeping the concrete type
+visible, so a genuine arity or name error is not buried. Adding a method to `storage`
+does not require touching `IStorage` unless it is called via `this`.
+
 **esbuild does not type-check.** It strips types and bundles. A dangling reference to a
 variable you deleted compiles cleanly and crashes at runtime in the browser or on boot.
 Always `npm run check` before pushing. This has caused live breakage more than once.
