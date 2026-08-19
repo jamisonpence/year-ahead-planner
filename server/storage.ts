@@ -108,6 +108,51 @@ function decToken(value: string | null | undefined): string | null {
 }
 
 // ── DDL ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run one DDL statement so that it can never take the site down.
+ *
+ * Boot migrations used to be plain `pool.query()` calls, which gave them two
+ * ways to cause an outage:
+ *
+ *   1. ALTER TABLE takes an ACCESS EXCLUSIVE lock. During a rolling deploy the
+ *      old container is still holding connections, so a *new* ADD COLUMN — the
+ *      only kind with real work to do — can sit waiting on that lock. Boot
+ *      stalls, the healthcheck times out, the container is killed, and the
+ *      result is a crash loop and a 502. This is what took mylifos.com down
+ *      when general_tasks.completed_at was added.
+ *   2. Any throw in here aborts initializeStorage(), which aborts boot. One bad
+ *      statement meant no server at all.
+ *
+ * So: bound the wait, and never let a migration be fatal. SET LOCAL scopes the
+ * timeout to this transaction, so the 5s limit cannot leak back into the pool
+ * and start failing ordinary application queries.
+ *
+ * The trade is deliberate. If a migration really can't apply, queries touching
+ * that column will error — but the site stays up and the reason is loud in the
+ * logs, which beats a total outage where nothing is readable at all.
+ */
+async function safeDdl(sql: string): Promise<void> {
+  const client = await pool.connect();
+  const label = sql.trim().replace(/\s+/g, " ").slice(0, 90);
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query(sql);
+    await client.query("COMMIT");
+  } catch (err: any) {
+    try { await client.query("ROLLBACK"); } catch { /* connection already unusable */ }
+    // 55P03 lock_not_available, 57014 query_canceled — the lock-contention cases.
+    if (err?.code === "55P03" || err?.code === "57014") {
+      console.warn(`[migration] lock busy, skipped this boot (will retry next start): ${label}`);
+    } else {
+      console.error(`[migration] failed, continuing boot: ${label} — ${err?.message ?? err}`);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 export async function initializeStorage() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -258,12 +303,12 @@ export async function initializeStorage() {
     )
   `);
   // Migrations for recipes table
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS component_type TEXT`);
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS nutrition_data TEXT`);
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER`);
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS tags TEXT`);
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS description TEXT`);
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS source TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS component_type TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS nutrition_data TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS tags TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS description TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS source TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS meal_bundles (
@@ -286,9 +331,9 @@ export async function initializeStorage() {
     )
   `);
   // Migrations for week_plan table
-  await pool.query(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS bundle_id INTEGER`);
-  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS linked_workout_plan_id INTEGER`);
-  await pool.query(`ALTER TABLE week_plan ALTER COLUMN recipe_id DROP NOT NULL`).catch(() => {});
+  await safeDdl(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS bundle_id INTEGER`);
+  await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS linked_workout_plan_id INTEGER`);
+  await safeDdl(`ALTER TABLE week_plan ALTER COLUMN recipe_id DROP NOT NULL`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS grocery_checks (
@@ -338,9 +383,9 @@ export async function initializeStorage() {
       linked_user_id INTEGER
     )
   `);
-  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS linked_user_id INTEGER`);
-  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS keep_in_touch_frequency TEXT`);
-  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS last_contacted_at TEXT`);
+  await safeDdl(`ALTER TABLE people ADD COLUMN IF NOT EXISTS linked_user_id INTEGER`);
+  await safeDdl(`ALTER TABLE people ADD COLUMN IF NOT EXISTS keep_in_touch_frequency TEXT`);
+  await safeDdl(`ALTER TABLE people ADD COLUMN IF NOT EXISTS last_contacted_at TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS timeline_entries (
@@ -415,9 +460,9 @@ export async function initializeStorage() {
     )
   `);
   // Migrate existing rows: add new columns if they don't exist yet
-  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'movie'`);
-  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS total_seasons INTEGER`);
-  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS current_season INTEGER`);
+  await safeDdl(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'movie'`);
+  await safeDdl(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS total_seasons INTEGER`);
+  await safeDdl(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS current_season INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS movie_lists (
@@ -429,7 +474,7 @@ export async function initializeStorage() {
       created_at TEXT NOT NULL
     )
   `);
-  await pool.query(`ALTER TABLE movie_lists ADD COLUMN IF NOT EXISTS movies_json TEXT DEFAULT '[]'`);
+  await safeDdl(`ALTER TABLE movie_lists ADD COLUMN IF NOT EXISTS movies_json TEXT DEFAULT '[]'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS movie_list_members (
       id SERIAL PRIMARY KEY,
@@ -636,75 +681,75 @@ export async function initializeStorage() {
   `);
 
   // Video URL migration for movies
-  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS video_url TEXT`);
+  await safeDdl(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS video_url TEXT`);
 
   // Poster URL from TMDB
-  await pool.query(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS poster_url TEXT`);
+  await safeDdl(`ALTER TABLE movies ADD COLUMN IF NOT EXISTS poster_url TEXT`);
 
   // Cover URL from Google Books
-  await pool.query(`ALTER TABLE books ADD COLUMN IF NOT EXISTS cover_url TEXT`);
+  await safeDdl(`ALTER TABLE books ADD COLUMN IF NOT EXISTS cover_url TEXT`);
 
   // Image URL for recipes
-  await pool.query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
+  await safeDdl(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
   // Meal slot for week plan (breakfast / lunch / dinner)
-  await pool.query(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS slot TEXT NOT NULL DEFAULT 'dinner'`);
+  await safeDdl(`ALTER TABLE week_plan ADD COLUMN IF NOT EXISTS slot TEXT NOT NULL DEFAULT 'dinner'`);
 
   // Photo URL for plants (from Perenual API)
-  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS photo_url TEXT`);
+  await safeDdl(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS photo_url TEXT`);
 
   // AI enrichment fields for plants
-  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS toxicity_notes TEXT`);
-  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS propagation_methods TEXT`);
-  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS care_difficulty TEXT`);
-  await pool.query(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS ai_enriched BOOLEAN NOT NULL DEFAULT false`);
+  await safeDdl(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS toxicity_notes TEXT`);
+  await safeDdl(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS propagation_methods TEXT`);
+  await safeDdl(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS care_difficulty TEXT`);
+  await safeDdl(`ALTER TABLE plants ADD COLUMN IF NOT EXISTS ai_enriched BOOLEAN NOT NULL DEFAULT false`);
 
   // Encrypted Anthropic API key on users
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT`);
 
   // Onboarding flag — false until user completes welcome flow
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false`);
 
   // Google Calendar integration tokens
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_access_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_refresh_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expiry TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_last_sync TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_access_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_refresh_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expiry TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_last_sync TEXT`);
 
   // Strava integration tokens
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_access_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_refresh_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_token_expiry TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_athlete_id TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_access_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_refresh_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_token_expiry TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_athlete_id TEXT`);
 
   // LinkedIn integration
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_access_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_profile_id TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_name TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_headline TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_avatar_url TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_email TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_access_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_profile_id TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_name TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_headline TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_avatar_url TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_email TEXT`);
 
   // Facebook integration
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_access_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_user_id TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_name TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_email TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_avatar_url TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_birthday TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_location TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_last_sync TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_access_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_user_id TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_name TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_email TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_avatar_url TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_birthday TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_location TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_last_sync TEXT`);
 
   // Google Contacts columns
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_access_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_refresh_token TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_token_expiry TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_access_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_refresh_token TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_token_expiry TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_contacts_last_sync TEXT`);
 
   // Goals: opt-in OKR mode + quarterly horizon
-  await pool.query(`ALTER TABLE general_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT`);
-  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS is_objective BOOLEAN NOT NULL DEFAULT false`);
-  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS quarter TEXT`);
+  await safeDdl(`ALTER TABLE general_tasks ADD COLUMN IF NOT EXISTS completed_at TEXT`);
+  await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS is_objective BOOLEAN NOT NULL DEFAULT false`);
+  await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS quarter TEXT`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS goal_key_results (
       id SERIAL PRIMARY KEY,
@@ -719,18 +764,18 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_goal ON goal_key_results (goal_id)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_user ON goal_key_results (user_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_goal ON goal_key_results (goal_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_goal_key_results_user ON goal_key_results (user_id)`);
 
   // Personal profile fields (birthday, location, relationship) + visibility
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_city TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_region TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_country TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS relationship_status TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_visibility_json TEXT NOT NULL DEFAULT '{}'`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_city TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_region TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_country TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS relationship_status TEXT`);
+  await safeDdl(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_visibility_json TEXT NOT NULL DEFAULT '{}'`);
   // Grouping friends by city is a listing query, so index the lowered value.
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_location_city ON users (LOWER(location_city))`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_users_location_city ON users (LOWER(location_city))`);
 
   // Family / partner links between accounts
   await pool.query(`
@@ -745,8 +790,8 @@ export async function initializeStorage() {
       created_at TEXT NOT NULL
     )
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_relations_user ON user_relations (user_id)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_relations_related ON user_relations (related_user_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_user_relations_user ON user_relations (user_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_user_relations_related ON user_relations (related_user_id)`);
   // One link per pair per relation type — stops duplicate pending requests.
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_user_relations_pair
@@ -802,7 +847,7 @@ export async function initializeStorage() {
   `);
 
   // Google Calendar event ID on events table
-  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS gcal_event_id TEXT`);
+  await safeDdl(`ALTER TABLE events ADD COLUMN IF NOT EXISTS gcal_event_id TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS events_gcal_event_id_idx ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL`);
 
   await pool.query(`
@@ -931,7 +976,7 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
-  await pool.query(`ALTER TABLE art_pieces ADD COLUMN IF NOT EXISTS rating INTEGER`);
+  await safeDdl(`ALTER TABLE art_pieces ADD COLUMN IF NOT EXISTS rating INTEGER`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spots (
@@ -954,8 +999,8 @@ export async function initializeStorage() {
     )
   `);
 
-  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lat REAL`);
-  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lon REAL`);
+  await safeDdl(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lat REAL`);
+  await safeDdl(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS lon REAL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journal_entries (
@@ -1216,11 +1261,11 @@ export async function initializeStorage() {
   `);
 
   // Migrate: add goal-oriented columns to workout_plans
-  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'general'`);
-  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_metric_json TEXT`);
-  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS start_date TEXT`);
-  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT false`);
-  await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
+  await safeDdl(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'general'`);
+  await safeDdl(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS goal_metric_json TEXT`);
+  await safeDdl(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS start_date TEXT`);
+  await safeDdl(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT false`);
+  await safeDdl(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workout_shares (
@@ -1517,7 +1562,7 @@ export async function initializeStorage() {
   `);
 
   // Add sides column to political_debates if it doesn't exist yet
-  await pool.query(`ALTER TABLE political_debates ADD COLUMN IF NOT EXISTS sides TEXT`);
+  await safeDdl(`ALTER TABLE political_debates ADD COLUMN IF NOT EXISTS sides TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS saved_events (
@@ -1564,7 +1609,7 @@ export async function initializeStorage() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
-  await pool.query(`ALTER TABLE food_log_entries ADD COLUMN IF NOT EXISTS ingredients_json TEXT`);
+  await safeDdl(`ALTER TABLE food_log_entries ADD COLUMN IF NOT EXISTS ingredients_json TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS water_logs (
@@ -1694,7 +1739,7 @@ export async function initializeStorage() {
     }
   }
   // Trip prep: projects can be linked to a trip
-  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS trip_id INTEGER`);
+  await safeDdl(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS trip_id INTEGER`);
   // Purchase list
   await pool.query(`
     CREATE TABLE IF NOT EXISTS purchase_items (
@@ -1721,7 +1766,7 @@ export async function initializeStorage() {
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
-  await pool.query(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS folder_id INTEGER`);
+  await safeDdl(`ALTER TABLE spots ADD COLUMN IF NOT EXISTS folder_id INTEGER`);
   // Multi-folder: junction table replaces single folder_id
   await pool.query(`
     CREATE TABLE IF NOT EXISTS spot_folder_members (
@@ -1786,24 +1831,24 @@ export async function initializeStorage() {
   `);
 
   // Parent-child links on family_members
-  await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent1_id INTEGER`);
-  await pool.query(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent2_id INTEGER`);
+  await safeDdl(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent1_id INTEGER`);
+  await safeDdl(`ALTER TABLE family_members ADD COLUMN IF NOT EXISTS parent2_id INTEGER`);
 
   // Share messages in the messenger
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_type TEXT`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_data TEXT`);
+  await safeDdl(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`);
+  await safeDdl(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_type TEXT`);
+  await safeDdl(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS share_data TEXT`);
 
   // Link chores to appliances
-  await pool.query(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
+  await safeDdl(`ALTER TABLE chores ADD COLUMN IF NOT EXISTS appliance_id INTEGER`);
 
   // Goal milestones
-  await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
+  await safeDdl(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS milestones_json TEXT NOT NULL DEFAULT '[]'`);
 
   // Time-blocking: events can carry a time of day and link back to a task
-  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS time TEXT`);
-  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_id INTEGER`);
-  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_type TEXT`);
+  await safeDdl(`ALTER TABLE events ADD COLUMN IF NOT EXISTS time TEXT`);
+  await safeDdl(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_id INTEGER`);
+  await safeDdl(`ALTER TABLE events ADD COLUMN IF NOT EXISTS linked_task_type TEXT`);
 
   // Weekly reviews
   await pool.query(`
@@ -1836,8 +1881,8 @@ export async function initializeStorage() {
       UNIQUE (user_id, source_type, source_id, target_type, target_id, relation)
     )
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_life_graph_source ON life_graph_links (user_id, source_type, source_id)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_life_graph_target ON life_graph_links (user_id, target_type, target_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_life_graph_source ON life_graph_links (user_id, source_type, source_id)`);
+  await safeDdl(`CREATE INDEX IF NOT EXISTS idx_life_graph_target ON life_graph_links (user_id, target_type, target_id)`);
 
   // Invite links (one permanent code per user; auto-friends on signup)
   await pool.query(`
@@ -1991,7 +2036,7 @@ export async function initializeStorage() {
   for (const [table, cols] of indexes) {
     const name = `idx_${table}_${cols.replace(/[^a-z_]/g, "_").replace(/__+/g, "_")}`;
     try {
-      await pool.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${cols})`);
+      await safeDdl(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${cols})`);
     } catch (e) {
       console.warn(`Index skipped: ${name} — ${String(e).slice(0, 120)}`);
     }
