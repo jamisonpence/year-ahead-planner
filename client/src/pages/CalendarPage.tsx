@@ -134,7 +134,7 @@ function useAllData() {
   const { data: events = [] } = useQuery<EventWithTasks[]>({ queryKey: ["/api/events"] });
   const { data: books = [] }  = useQuery<BookWithSessions[]>({ queryKey: ["/api/books"] });
   const { data: wLogs = [] }  = useQuery<WorkoutLog[]>({ queryKey: ["/api/workout-logs"] });
-  const { data: goals = [] }  = useQuery<GoalWithTasks[]>({ queryKey: ["/api/goals"] });
+  const { data: goals = [] }  = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
   const { data: trips = [] }  = useQuery<Trip[]>({
     queryKey: ["/api/trips"],
     queryFn: () => apiRequest("GET", "/api/trips").then(r => r.json()),
@@ -151,7 +151,7 @@ function buildItems(
   events: EventWithTasks[],
   books: BookWithSessions[],
   wLogs: WorkoutLog[],
-  goals: GoalWithTasks[],
+  goals: GoalWithProjects[],
   trips: Trip[],
   wPlans: WorkoutPlan[],
   listView = false,

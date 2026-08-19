@@ -27,7 +27,10 @@ export default function HobbyPlanDetailPage() {
 
   const hobby = hobbies.find(h => h.id === hobbyId) ?? null;
   const plans = hobby ? parsePlans(hobby.extraJson ?? "{}") : [];
-  const goals = hobby ? parseGoals(hobby.extraJson ?? "{}") : [];
+  // A `goals` line lived here calling parseGoals(), which was never imported.
+  // It threw ReferenceError the moment a hobby loaded, and nothing read the
+  // result — so it was dead code that crashed the page. Removed rather than
+  // imported.
   const plan = plans.find(p => p.id === planId) ?? null;
 
   const updateMut = useMutation({

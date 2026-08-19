@@ -2340,8 +2340,8 @@ function generateRunningSteps(
     funRunCount?: string;
     trailRuns?: string;
   }
-): PlanStep[] {
-  const g = (text: string): PlanStep => ({ id: genId(), text, done: false });
+): GoalStep[] {
+  const g = (text: string): GoalStep => ({ id: genId(), text, done: false });
   switch (goalType) {
     case "consistency": {
       const freq = opts.runsPerWeek?.trim() || "3";
@@ -2444,8 +2444,8 @@ function generateSurfingSteps(
     newBreakTarget?: string;
     swellTarget?: string;
   }
-): PlanStep[] {
-  const g = (text: string): PlanStep => ({ id: genId(), text, done: false });
+): GoalStep[] {
+  const g = (text: string): GoalStep => ({ id: genId(), text, done: false });
   switch (goalType) {
     case "consistency": {
       const target = opts.sessionTarget?.trim() || "30";
@@ -10149,7 +10149,10 @@ function HobbyActivePlanSection({
   function deletePlan(hobby: Hobby, planId: string) {
     const plans = parsePlans(hobby.extraJson ?? "{}").filter(p => p.id !== planId);
     onUpdateHobby(hobby.id, setPlansInExtra(hobby.extraJson ?? "{}", plans));
-    setDeleteConfirmId(null);
+    // A setDeleteConfirmId(null) call sat here, left over from a confirm dialog
+    // that no longer exists — no such state is declared anywhere in this file.
+    // "Delete plan" saved the deletion and then threw ReferenceError on the
+    // very next line. The identical sibling deletePlan below never had it.
   }
 
   function toggleTaskCompletion(hobby: Hobby, plan: HobbyPlan, taskKey: string) {
