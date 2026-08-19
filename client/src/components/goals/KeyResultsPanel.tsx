@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { GoalKeyResult } from "@shared/schema";
-import { keyResultProgress, objectiveProgressPct } from "@shared/schema";
+import { keyResultProgress, objectiveProgressPct } from "@shared/goalMath";
 
 /** A key result reads as a journey, not a percentage: "2 → 10 clients". */
 function krRange(kr: GoalKeyResult): string {

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { GOAL_CATEGORIES, PROGRESS_TYPES, RECURRENCE_OPTIONS } from "@/lib/plannerUtils";
 import type { Goal, InsertGoal, BookWithSessions, WorkoutTemplate, PublicUser } from "@shared/schema";
-import { currentQuarter, quarterLabel, upcomingQuarters } from "@shared/schema";
+import { currentQuarter, quarterLabel, upcomingQuarters } from "@shared/goalMath";
 import { Users, X, Search } from "lucide-react";
 
 const PRIORITIES = ["low","medium","high"];

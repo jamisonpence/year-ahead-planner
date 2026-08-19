@@ -901,53 +901,13 @@ export const insertGoalKeyResultSchema = createInsertSchema(goalKeyResults).omit
 export type InsertGoalKeyResult = z.infer<typeof insertGoalKeyResultSchema>;
 export type GoalKeyResult = typeof goalKeyResults.$inferSelect;
 
-/**
- * Completion of a single key result, 0–1, measured from its baseline.
- *
- * Starting at 2 clients and targeting 10 means 4 clients is 25% of the way, not
- * 40% — measuring from zero would flatter every objective that started with
- * something already on the board. A zero-width range (baseline === target) is
- * treated as done once reached, since there's no distance to travel.
- */
-export function keyResultProgress(kr: Pick<GoalKeyResult, "baseline" | "current" | "target">): number {
-  const span = kr.target - kr.baseline;
-  if (span === 0) return kr.current >= kr.target ? 1 : 0;
-  return Math.max(0, Math.min(1, (kr.current - kr.baseline) / span));
-}
-
-/** An objective's progress is the mean of its key results. Simple goals never use this. */
-export function objectiveProgressPct(krs: Pick<GoalKeyResult, "baseline" | "current" | "target">[]): number {
-  if (!krs.length) return 0;
-  return Math.round((krs.reduce((sum, k) => sum + keyResultProgress(k), 0) / krs.length) * 100);
-}
-
-/**
- * Quarter helpers. Stored form is "2026-Q3" — sortable as a plain string, and
- * unambiguous in a way that "Q3" alone is not once a goal outlives the year.
- * Local time is deliberate: a quarter is a human planning unit, so it should
- * turn over at the user's midnight rather than UTC's.
- */
-export function currentQuarter(d: Date = new Date()): string {
-  return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
-}
-
-/** "2026-Q3" → "Q3 2026". Falls back to the raw value rather than showing nothing. */
-export function quarterLabel(q: string | null | undefined): string {
-  const m = /^(\d{4})-Q([1-4])$/.exec(q ?? "");
-  return m ? `Q${m[2]} ${m[1]}` : (q || "");
-}
-
-/** The current quarter plus the next three — enough to plan ahead without a date picker. */
-export function upcomingQuarters(d: Date = new Date(), count = 4): string[] {
-  const out: string[] = [];
-  let year = d.getFullYear();
-  let q = Math.floor(d.getMonth() / 3) + 1;
-  for (let i = 0; i < count; i++) {
-    out.push(`${year}-Q${q}`);
-    if (++q > 4) { q = 1; year++; }
-  }
-  return out;
-}
+// Goal/OKR maths lives in goalMath.ts so the client can import it without
+// pulling drizzle and every table name into the browser bundle. Re-exported
+// here because server code already imports from schema.ts.
+export {
+  keyResultProgress, objectiveProgressPct,
+  currentQuarter, quarterLabel, upcomingQuarters,
+} from "./goalMath";
 
 export const insertGoalTaskSchema = createInsertSchema(goalTasks).omit({ id: true });
 export type InsertGoalTask = z.infer<typeof insertGoalTaskSchema>;

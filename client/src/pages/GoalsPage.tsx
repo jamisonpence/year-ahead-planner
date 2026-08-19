@@ -31,7 +31,9 @@ import type {
   InsertGoal,
   NutritionGoal, WorkoutPlan, ReadingGoal, BookWithSessions, Hobby, PublicUser,
 } from "@shared/schema";
-import { currentQuarter, quarterLabel, objectiveProgressPct } from "@shared/schema";
+// From goalMath, not schema: importing a value from schema.ts pulls drizzle and
+// every table name into the browser bundle.
+import { currentQuarter, quarterLabel, objectiveProgressPct } from "@shared/goalMath";
 import KeyResultsPanel from "@/components/goals/KeyResultsPanel";
 import { Link, useLocation } from "wouter";
 
