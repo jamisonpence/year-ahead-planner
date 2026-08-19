@@ -275,6 +275,10 @@ function InlineGoalEditor({ goal, friends, onSave }: {
           <div className="flex-1 min-w-0">
             <p className="text-base font-semibold leading-tight truncate">{goal.title}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-muted-foreground capitalize">
+              {(() => {
+                const m = HORIZON_META[(goal as any).horizon ?? "this_year"];
+                return m ? <span className={`font-medium ${m.color}`}>{m.short}</span> : null;
+              })()}
               <span>{goal.category}</span>
               <span className={PRIORITY_COLORS[goal.priority]}>{goal.priority}</span>
               {goal.targetDate && <span>Due {format(parseISO(goal.targetDate), "MMM d")}</span>}
@@ -962,31 +966,49 @@ export default function GoalsPage() {
   const [logWinGoalId, setLogWinGoalId] = useState<number | null>(null);
   const [logWinText, setLogWinText] = useState("");
   type HorizonTab = "quarter" | "this_year" | "long_term" | "vision";
-  // The quarter is where execution actually happens, so it opens first.
+  const HORIZON_TABS: HorizonTab[] = ["quarter", "this_year", "long_term", "vision"];
   const [horizonTab, setHorizonTab] = useState<HorizonTab>("quarter");
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: goals = [] } = useQuery<GoalWithProjects[]>({ queryKey: ["/api/goals"] });
 
-  // Desktop: auto-select the first goal once so the detail pane isn't a blank
-  // two-thirds of the screen. Runs only on first load; never fights the user.
-  const [didAutoSelect, setDidAutoSelect] = useState(false);
-  useEffect(() => {
-    if (didAutoSelect || selectedGoalId !== null || goals.length === 0) return;
-    if (window.matchMedia("(min-width: 1024px)").matches) {
-      setSelectedGoalId(goals[0].id);
-    }
-    setDidAutoSelect(true);
-  }, [goals, selectedGoalId, didAutoSelect]);
-
-  const filteredGoals = goals.filter(g => {
+  const inTab = (g: GoalWithProjects, tab: HorizonTab) => {
     const h = (g as any).horizon ?? "this_year";
-    if (horizonTab === "quarter") return h === "quarter";
-    if (horizonTab === "this_year") return h === "this_year";
-    if (horizonTab === "long_term") return h === "next_year" || h === "3_years" || h === "5_years";
-    if (horizonTab === "vision") return h === "someday";
+    if (tab === "quarter") return h === "quarter";
+    if (tab === "this_year") return h === "this_year";
+    if (tab === "long_term") return h === "next_year" || h === "3_years" || h === "5_years";
+    if (tab === "vision") return h === "someday";
     return false;
-  });
+  };
+  const filteredGoals = goals.filter(g => inTab(g, horizonTab));
+
+  // Open on the first tab that actually has something in it. The quarter is
+  // where execution happens so it still wins when populated, but defaulting
+  // there unconditionally meant a brand-new account — and any account that
+  // hasn't set quarterly goals — landed on an empty column with goals sitting
+  // one tab over.
+  const [didPickTab, setDidPickTab] = useState(false);
+  useEffect(() => {
+    if (didPickTab || goals.length === 0) return;
+    const first = HORIZON_TABS.find(t => goals.some(g => inTab(g, t)));
+    if (first) setHorizonTab(first);
+    setDidPickTab(true);
+  }, [goals, didPickTab]);
+
+  // Desktop: auto-select the first goal so the detail pane isn't a blank
+  // two-thirds of the screen. Selects from the *filtered* list — picking from
+  // every goal regardless of tab meant the detail pane routinely showed a goal
+  // the list wasn't displaying. Runs once per tab, so it never fights a user
+  // who has deliberately chosen a different goal.
+  const [autoSelectedFor, setAutoSelectedFor] = useState<HorizonTab | null>(null);
+  useEffect(() => {
+    if (autoSelectedFor === horizonTab || !didPickTab) return;
+    if (filteredGoals.length > 0 && window.matchMedia("(min-width: 1024px)").matches) {
+      setSelectedGoalId(filteredGoals[0].id);
+    }
+    setAutoSelectedFor(horizonTab);
+  }, [filteredGoals, horizonTab, autoSelectedFor, didPickTab]);
   const { data: habitsData = [] } = useQuery<any[]>({ queryKey: ["/api/habits"] });
   const { data: nutritionGoal } = useQuery<NutritionGoal | null>({ queryKey: ["/api/nutrition/goals"] });
   const { data: workoutPlans = [] } = useQuery<WorkoutPlan[]>({ queryKey: ["/api/workout-plans"] });
@@ -1196,16 +1218,19 @@ export default function GoalsPage() {
         <div className={`shrink-0 flex flex-col min-h-0 w-full md:w-72 ${mobileView !== "goals" ? "hidden md:flex" : "flex"}`}>
           {/* Horizon tabs */}
           <div className="flex overflow-x-auto border-b shrink-0 scrollbar-none">
+            {/* No emoji, tight padding: four tabs have to fit a 288px column and
+                the quarter label is the longest of them. With emoji and px-3,
+                "Vision" was clipped off the right edge. */}
             {([
-              ["quarter",   `🎯 ${currentQuarterLabel()}`],
-              ["this_year", "📅 This Year"],
-              ["long_term", "📆 Long-Term"],
-              ["vision",    "💭 Vision"],
+              ["quarter",   currentQuarterLabel()],
+              ["this_year", "This Year"],
+              ["long_term", "Long-Term"],
+              ["vision",    "Vision"],
             ] as [HorizonTab, string][]).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => { setHorizonTab(key); setSelectedGoalId(null); }}
-                className={`shrink-0 px-3 py-2 text-[11px] font-medium whitespace-nowrap transition-colors ${
+                className={`shrink-0 px-2.5 py-2 text-[11px] font-medium whitespace-nowrap transition-colors ${
                   horizonTab === key ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -1442,7 +1467,20 @@ export default function GoalsPage() {
               );
             })}
 
-            {/* ── Domain goal cards ──────────────────────────────────────── */}
+            {/* ── Trackers & plans ───────────────────────────────────────────
+                These are a different kind of object from the goals above —
+                a macro target, the active workout plan, hobby plans — and they
+                deliberately ignore the horizon tabs. Without this divider the
+                column showed "Goals 0" above four visible rows, because the
+                count only ever described the filtered goals. */}
+            {(nutritionGoal || workoutPlans.some(p => p.isActive)) && (
+              <div className="flex items-center gap-2 pt-4 pb-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">
+                  Trackers &amp; Plans
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
 
             {/* Nutrition Goals */}
             {nutritionGoal && (
@@ -1647,27 +1685,15 @@ export default function GoalsPage() {
                   const buddy = friends.find((f) => f.id === ((selectedGoal as any).buddyUserId ?? null)) ?? null;
                   return (
                     <div className="space-y-3 mb-4">
-                      <div className="rounded-xl border bg-card p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Why it matters</p>
-                            {selectedGoal.description?.trim() ? (
-                              <p className="text-sm text-foreground/85 leading-relaxed mt-1.5">{selectedGoal.description.trim()}</p>
-                            ) : (
-                              <p className="text-sm text-muted-foreground mt-1.5">Add a short why so this goal stays meaningful when the work gets busy.</p>
-                            )}
-                          </div>
-                          {!selectedGoal.description?.trim() && (
-                            <button
-                              type="button"
-                              onClick={() => { setEditGoal(selectedGoal); setGoalModal(true); }}
-                              className="text-xs text-primary hover:underline shrink-0"
-                            >
-                              Add why
-                            </button>
-                          )}
+                      {/* The "why" only earns space once it exists. As an empty
+                          prompt it was the first thing on the page, which made
+                          every goal open on a chore rather than on its state. */}
+                      {selectedGoal.description?.trim() && (
+                        <div className="rounded-xl border bg-card p-4">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Why it matters</p>
+                          <p className="text-sm text-foreground/85 leading-relaxed mt-1.5">{selectedGoal.description.trim()}</p>
                         </div>
-                      </div>
+                      )}
 
                       <div className="rounded-xl border bg-card p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">
@@ -1741,30 +1767,69 @@ export default function GoalsPage() {
                                 <p className="text-sm text-muted-foreground mt-1">No project linked yet.</p>
                               )}
                             </div>
-                            <div className="border-t pt-3">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Goal progress</p>
-                              <div className="flex items-center gap-2 mt-2">
-                                <Progress value={pct} className="h-2 flex-1" />
-                                <span className="text-sm font-semibold shrink-0">{pct}%</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {(selectedGoal as any).isObjective
-                                  ? "Rolled up from key results below"
-                                  : `${selectedGoal.progressCurrent} / ${selectedGoal.progressTarget}`}
-                              </p>
-                            </div>
                           </div>
+                          {/* Goal progress used to be repeated here. It already
+                              renders at the top of the pane next to the title,
+                              and three copies of one number on a single screen
+                              left none of them obviously authoritative. */}
                         </div>
                       </div>
 
-                      <KeyResultsPanel
-                        goalId={selectedGoal.id}
-                        isObjective={!!(selectedGoal as any).isObjective}
-                        onToggleObjective={(next) =>
-                          updateGoal.mutate({ id: selectedGoal.id, isObjective: next } as any)
-                        }
-                      />
+                      {/* Only occupies the main column once it is actually
+                          measuring something. The "turn this into an objective"
+                          invitation lives under Details, with the other setup. */}
+                      {(selectedGoal as any).isObjective && (
+                        <KeyResultsPanel
+                          goalId={selectedGoal.id}
+                          isObjective
+                          onToggleObjective={(next) =>
+                            updateGoal.mutate({ id: selectedGoal.id, isObjective: next } as any)
+                          }
+                        />
+                      )}
 
+                    </div>
+                  );
+                })()}
+
+                <GoalMilestones
+                  goal={selectedGoal}
+                  onSave={(milestonesJson) => updateGoal.mutate({ id: selectedGoal.id, milestonesJson } as any)}
+                />
+
+                {/* ── Details & connections ────────────────────────────────
+                    Everything below is context rather than status: it matters
+                    while setting a goal up or reviewing it, not while checking
+                    where it stands. Collapsed by default — as always-visible
+                    cards these were eight simultaneous requests to go and
+                    configure something, which made every goal open on a list of
+                    chores instead of on its own progress. */}
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen(o => !o)}
+                  className="mt-4 w-full flex items-center justify-between rounded-xl border bg-card/50 px-4 py-2.5 text-left hover:bg-card transition-colors"
+                >
+                  <span className="text-sm font-semibold text-foreground">Details &amp; connections</span>
+                  <ChevronRight size={14} className={`text-muted-foreground transition-transform ${detailsOpen ? "rotate-90" : ""}`} />
+                </button>
+
+                {detailsOpen && (() => {
+                  const buddy = friends.find((f) => f.id === ((selectedGoal as any).buddyUserId ?? null)) ?? null;
+                  return (
+                  <>
+                    {!(selectedGoal as any).isObjective && (
+                      <div className="mt-3">
+                        <KeyResultsPanel
+                          goalId={selectedGoal.id}
+                          isObjective={false}
+                          onToggleObjective={(next) =>
+                            updateGoal.mutate({ id: selectedGoal.id, isObjective: next } as any)
+                          }
+                        />
+                      </div>
+                    )}
+
+                    <div className="mt-3">
                       <div className="rounded-xl border bg-card p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -1809,13 +1874,6 @@ export default function GoalsPage() {
                         </div>
                       </div>
                     </div>
-                  );
-                })()}
-
-                <GoalMilestones
-                  goal={selectedGoal}
-                  onSave={(milestonesJson) => updateGoal.mutate({ id: selectedGoal.id, milestonesJson } as any)}
-                />
 
                 {/* ── Horizon & parent goal ──────────────────────────── */}
                 {(() => {
@@ -1828,10 +1886,10 @@ export default function GoalsPage() {
                   const childGoals = goals.filter(g => (g as any).parentGoalId === selectedGoal.id);
                   return (
                     <div className="mt-4 space-y-3">
-                      {/* Horizon badge */}
-                      <div className="flex items-center gap-2 px-1">
-                        <span className={`text-xs font-semibold ${meta.color}`}>{meta.emoji} {meta.label}</span>
-                      </div>
+                      {/* The horizon badge used to sit here, outside any card and
+                          aligned to nothing, which read as a rendering fault. It
+                          now appears as a chip beside the goal's other metadata,
+                          where the eye already goes for category and priority. */}
 
                       {/* Parent goal selector */}
                       {parentHorizons.length > 0 && (
@@ -2015,6 +2073,9 @@ export default function GoalsPage() {
                     </a>
                   </Link>
                 </div>
+                  </>
+                  );
+                })()}
               </>
             )}
 
