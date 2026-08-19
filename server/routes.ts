@@ -2181,16 +2181,20 @@ Return exactly this structure:
   });
   app.patch("/api/books/:id", requireAuth, async (req, res) => {
     try {
+      // Declared once for the whole handler. It used to be declared inside the
+      // "finished" branch only, while the fall-through update below also used
+      // it — so every non-finished change (notably Up Next → Reading) threw
+      // ReferenceError and 500'd instead of saving.
+      const uid = (req.user as User).id;
       const body = insertBookSchema.partial().parse(req.body);
       // Check if we're transitioning to 'finished'
       if (body.status === "finished") {
-        const existing = await storage.getAllBooks((req.user as User).id);
+        const existing = await storage.getAllBooks(uid);
         const book = existing.find((b) => b.id === +req.params.id);
         if (book && book.status !== "finished") {
-          const r = await storage.updateBook(+req.params.id, body, (req.user as User).id);
+          const r = await storage.updateBook(+req.params.id, body, uid);
           if (r) {
             // Buddy visibility: finished book pings the reading-goal buddy
-            const uid = (req.user as User).id;
             pool.query(
               `SELECT rg.buddy_user_id, u.name AS owner_name FROM reading_goals rg
                JOIN users u ON u.id = rg.user_id
