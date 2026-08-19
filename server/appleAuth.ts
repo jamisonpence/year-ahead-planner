@@ -84,6 +84,57 @@ export function authorizeUrl(state: string, redirectUri: string): string {
   return `${APPLE_AUTHZ_URL}?${params}`;
 }
 
+/**
+ * CSRF state, signed rather than stored in the session.
+ *
+ * The obvious implementation — stash a random value in req.session and compare it on
+ * return — does not work here, and fails in a way that looks like a config error rather
+ * than a cookie problem. Apple uses response_mode=form_post, so the callback arrives as a
+ * cross-site POST, and the session cookie is sameSite:"lax". Lax cookies are sent on
+ * top-level GET navigations only, never on cross-site POSTs, so the callback sees a fresh
+ * empty session and the stored state is always missing. (Google's callback is a GET,
+ * which is why that flow is unaffected.)
+ *
+ * So the state carries its own integrity: an HMAC over a nonce, the native flag and a
+ * timestamp. Nothing needs to persist between the two requests, which also means the
+ * flow survives a server restart or a request landing on a different instance.
+ */
+const STATE_TTL_MS = 10 * 60 * 1000;
+
+function stateSecret(): string {
+  return process.env.SESSION_SECRET || "dev-secret-please-change";
+}
+
+export function signState(native: boolean): string {
+  const payload = b64url(JSON.stringify({
+    n: crypto.randomBytes(8).toString("hex"),
+    native,
+    t: Date.now(),
+  }));
+  const sig = crypto.createHmac("sha256", stateSecret()).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+/** Returns { native } when the state is authentic and fresh, otherwise null. */
+export function verifyState(state: unknown): { native: boolean } | null {
+  if (typeof state !== "string" || !state.includes(".")) return null;
+  const [payload, sig] = state.split(".", 2);
+  if (!payload || !sig) return null;
+
+  const expected = crypto.createHmac("sha256", stateSecret()).update(payload).digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  try {
+    const { native, t } = JSON.parse(Buffer.from(payload, "base64url").toString());
+    if (typeof t !== "number" || Date.now() - t > STATE_TTL_MS) return null;
+    return { native: native === true };
+  } catch {
+    return null;
+  }
+}
+
 export type AppleIdentity = { sub: string; email: string | null; emailVerified: boolean };
 
 /** Decode a JWT payload without verifying. Only safe for tokens received over TLS

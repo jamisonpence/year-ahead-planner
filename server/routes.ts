@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { storage, pool } from "./storage";
 import { passport } from "./auth";
 import { issueNativeToken } from "./nativeAuth";
-import { appleConfigured, authorizeUrl, exchangeCode } from "./appleAuth";
+import { appleConfigured, authorizeUrl, exchangeCode, signState, verifyState } from "./appleAuth";
 import crypto from "crypto";
 import { encrypt, decrypt, hasEncryptionKey } from "./encryption";
 import { fatSecretSearch, fatSecretGetFood, fatSecretConfigured } from "./fatsecret";
@@ -1440,11 +1440,10 @@ Rules:
 
   app.get("/auth/apple", authLimiter, (req, res) => {
     if (!appleConfigured()) return res.redirect("/login?error=apple_unavailable");
-    // CSRF: a random state kept server-side in the session and compared on return.
-    const state = crypto.randomBytes(16).toString("hex");
-    (req.session as any).appleState = state;
-    (req.session as any).appleNative = req.query.native === "1";
-    res.redirect(authorizeUrl(state, appleRedirectUri()));
+    // The state is signed rather than kept in the session: Apple's callback is a
+    // cross-site POST, and the sameSite:"lax" session cookie is not sent on those,
+    // so anything stashed in the session here is invisible on return.
+    res.redirect(authorizeUrl(signState(req.query.native === "1"), appleRedirectUri()));
   });
 
   // Apple form-POSTs here because we request name/email scope. express.urlencoded
@@ -1454,13 +1453,9 @@ Rules:
       const { code, state, user: userJson, error } = req.body ?? {};
       if (error) return res.redirect("/login?error=apple_denied");
 
-      const expected = (req.session as any).appleState;
-      delete (req.session as any).appleState;
-      const isNative = !!(req.session as any).appleNative;
-      delete (req.session as any).appleNative;
-      if (!state || !expected || state !== expected) {
-        return res.redirect("/login?error=apple_state");
-      }
+      const verified = verifyState(state);
+      if (!verified) return res.redirect("/login?error=apple_state");
+      const isNative = verified.native;
       if (!code) return res.redirect("/login?error=apple_nocode");
 
       const identity = await exchangeCode(String(code), appleRedirectUri());
