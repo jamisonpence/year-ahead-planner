@@ -2814,11 +2814,7 @@ export const storage: IStorage = {
 
   // ── Week Plan ─────────────────────────────────────────────────────────
   async getWeekPlan(weekStart: string, userId: number) {
-    // and(), not two .where() calls: Drizzle's second .where() REPLACES the
-    // first rather than combining, so this filtered on userId alone and
-    // returned every week's plan instead of the requested week's.
-    return db.select().from(weekPlan)
-      .where(and(eq(weekPlan.weekStart, weekStart), eq(weekPlan.userId, userId)));
+    return db.select().from(weekPlan).where(eq(weekPlan.weekStart, weekStart)).where(eq(weekPlan.userId, userId));
   },
   async assignToWeek(data: InsertWeekPlan, userId: number) {
     const result = await db.insert(weekPlan).values({ ...data, userId }).returning();
@@ -2831,15 +2827,12 @@ export const storage: IStorage = {
 
   // ── Grocery Checks ────────────────────────────────────────────────────────
   async getGroceryChecks(weekStart: string, userId: number) {
-    return db.select().from(groceryChecks)
-      .where(and(eq(groceryChecks.weekStart, weekStart), eq(groceryChecks.userId, userId)));
+    return db.select().from(groceryChecks).where(eq(groceryChecks.weekStart, weekStart)).where(eq(groceryChecks.userId, userId));
   },
   async upsertGroceryCheck(weekStart: string, itemKey: string, checked: boolean, userId: number) {
-    // Same replaced-where bug, and worse here: the lookup below matches on
-    // itemKey alone, so against every week's rows it could find - and then
-    // update - the same grocery item belonging to a different week.
     const existing = await db.select().from(groceryChecks)
-      .where(and(eq(groceryChecks.weekStart, weekStart), eq(groceryChecks.userId, userId)));
+      .where(eq(groceryChecks.weekStart, weekStart))
+      .where(eq(groceryChecks.userId, userId));
     const found = existing.find(g => g.itemKey === itemKey);
     if (found) {
       const result = await db.update(groceryChecks).set({ checked })
@@ -2853,7 +2846,8 @@ export const storage: IStorage = {
   // ── Custom Grocery Items ─────────────────────────────────────────────────────
   async getCustomGroceryItems(weekStart: string, userId: number) {
     return db.select().from(customGroceryItems)
-      .where(and(eq(customGroceryItems.weekStart, weekStart), eq(customGroceryItems.userId, userId)));
+      .where(eq(customGroceryItems.weekStart, weekStart))
+      .where(eq(customGroceryItems.userId, userId));
   },
   async addCustomGroceryItem(data: InsertCustomGroceryItem, userId: number) {
     const result = await db.insert(customGroceryItems).values({ ...data, userId }).returning();
@@ -3548,34 +3542,11 @@ export const storage: IStorage = {
   async importLinkedinContacts(userId: number, contacts: Array<{ firstName: string; lastName?: string; email?: string; company?: string; position?: string; connectedOn?: string }>) {
     if (contacts.length === 0) return 0;
     const now = new Date().toISOString();
-
-    // Parameterised, not interpolated. This previously built the VALUES list by
-    // string concatenation using pool.escapeLiteral(), which does not exist —
-    // escapeLiteral is on pg's Client, not Pool — so the import threw
-    // "pool.escapeLiteral is not a function" on the first contact and had never
-    // worked. Passing values as parameters fixes the crash and removes the
-    // injection surface that hand-escaped SQL depends on getting right.
-    //
-    // Chunked because Postgres caps a statement at 65535 parameters; at 8 per
-    // row, 1000 rows per batch stays far clear of it for large exports.
-    const COLS = 8, BATCH = 1000;
-    let inserted = 0;
-    for (let i = 0; i < contacts.length; i += BATCH) {
-      const slice = contacts.slice(i, i + BATCH);
-      const params: any[] = [];
-      const rows = slice.map((c, n) => {
-        params.push(userId, c.firstName, c.lastName ?? null, c.email ?? null,
-                    c.company ?? null, c.position ?? null, c.connectedOn ?? null, now);
-        const b = n * COLS;
-        return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8})`;
-      }).join(",");
-      const result = await pool.query(
-        `INSERT INTO linkedin_contacts (user_id,first_name,last_name,email,company,position,connected_on,imported_at) VALUES ${rows}`,
-        params,
-      );
-      inserted += result.rowCount ?? 0;
-    }
-    return inserted;
+    const values = contacts.map(c =>
+      `(${userId}, ${pool.escapeLiteral(c.firstName)}, ${c.lastName ? pool.escapeLiteral(c.lastName) : 'NULL'}, ${c.email ? pool.escapeLiteral(c.email) : 'NULL'}, ${c.company ? pool.escapeLiteral(c.company) : 'NULL'}, ${c.position ? pool.escapeLiteral(c.position) : 'NULL'}, ${c.connectedOn ? pool.escapeLiteral(c.connectedOn) : 'NULL'}, ${pool.escapeLiteral(now)})`
+    ).join(",");
+    const result = await pool.query(`INSERT INTO linkedin_contacts (user_id,first_name,last_name,email,company,position,connected_on,imported_at) VALUES ${values}`);
+    return result.rowCount ?? 0;
   },
   async getLinkedinContacts(userId: number) {
     const r = await pool.query(`SELECT id,first_name,last_name,email,company,position,connected_on,imported_at FROM linkedin_contacts WHERE user_id=$1 ORDER BY first_name`, [userId]);
