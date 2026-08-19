@@ -2747,7 +2747,14 @@ Return exactly this structure:
   });
   app.patch("/api/general-tasks/:id", requireAuth, async (req, res) => {
     try {
-      const r = await storage.updateGeneralTask(+req.params.id, insertGeneralTaskSchema.partial().parse(req.body), (req.user as User).id);
+      const body = insertGeneralTaskSchema.partial().parse(req.body);
+      // Stamp the completion time server-side, so "completed this week" and the
+      // date on the row have something to read. Clearing `completed` clears it
+      // again, otherwise a task un-ticked and re-ticked would keep its original
+      // date and land in the wrong week.
+      if (body.completed === true && !body.completedAt) body.completedAt = new Date().toISOString();
+      if (body.completed === false) body.completedAt = null;
+      const r = await storage.updateGeneralTask(+req.params.id, body, (req.user as User).id);
       r ? res.json(r) : res.status(404).json({ error: "Not found" });
     } catch (e) { handleError(res, e); }
   });
