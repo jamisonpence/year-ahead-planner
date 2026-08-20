@@ -3,66 +3,145 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Privacy Policy — mylifos</title>
+<title>Privacy Policy — MyLifos</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 40px 24px; color: #1a1a2e; line-height: 1.7; }
   h1 { font-size: 28px; margin-bottom: 4px; }
   h2 { font-size: 18px; margin-top: 36px; margin-bottom: 8px; }
+  h3 { font-size: 15px; margin-top: 20px; margin-bottom: 4px; }
   p, li { font-size: 15px; color: #444; }
   ul { padding-left: 20px; }
   .date { color: #888; font-size: 14px; margin-bottom: 32px; }
   a { color: #4F46E5; }
+  .summary { background: #f5f5fa; border-left: 3px solid #4F46E5; padding: 16px 20px; border-radius: 6px; margin: 24px 0 32px; }
+  .summary p { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e5ef; font-size: 14px; vertical-align: top; }
+  th { color: #1a1a2e; font-weight: 600; }
+  td { color: #444; }
 </style>
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p class="date">Last updated: May 2026</p>
+<p class="date">Last updated: 20 August 2026</p>
 
-<p>mylifos ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our app.</p>
+<div class="summary">
+  <p><strong>The short version.</strong> MyLifos stores what you put into it. That includes some genuinely
+  sensitive things — health metrics, medications, food logs, journal entries, finances, faith practices,
+  political views, and notes about your family.</p>
+  <p>We do not sell your data, we do not use it for advertising, and we do not use it to train AI models.
+  Nothing you write is visible to another person unless you explicitly share it. You can export everything
+  or delete your account, permanently, from Settings at any time.</p>
+</div>
 
-<h2>Information We Collect</h2>
-<p>We collect the following information when you use mylifos:</p>
+<p>This policy explains what MyLifos ("we", "us") collects, why, and what happens to it. It applies to the
+website at mylifos.com and to the MyLifos iOS app.</p>
+
+<h2>Information you give us</h2>
+
+<h3>Account</h3>
+<p>Your name, email address, and profile picture, from Sign in with Apple, Google Sign-In, or an email and
+password you choose. If you use Sign in with Apple and select "Hide My Email", we only ever receive Apple's
+relay address. We never see your Apple or Google password.</p>
+
+<h3>What you track</h3>
+<p>MyLifos is a personal life-management app, so most of what it holds is content you typed in. Being
+specific about it matters more than a general phrase like "life tracking data":</p>
+
+<table>
+  <tr><th>Category</th><th>Examples</th></tr>
+  <tr><td>Planning</td><td>Goals, key results, projects, tasks, habits, calendar events, journal entries, weekly reviews</td></tr>
+  <tr><td>Health and fitness</td><td>Workouts, body-composition check-ins, weight and other health metrics, sleep logs, water intake, food logs and nutrition goals, medications including dosage and prescriber, care providers</td></tr>
+  <tr><td>Finances</td><td>Budget categories, transactions, receipts, subscriptions, planned purchases</td></tr>
+  <tr><td>Home and family</td><td>Household chores and projects, appliances, pets and vet visits, and — if you use the Kids section — your children's names, birthdays, milestones and memories</td></tr>
+  <tr><td>Beliefs and civic life</td><td>Faith practices, prayer lists, sermon and sacred-text notes, political positions and debate posts</td></tr>
+  <tr><td>Places</td><td>Saved spots and their addresses, trips, cities visited</td></tr>
+  <tr><td>Interests</td><td>Books, films and shows, music, art, hobbies, recipes and meal plans</td></tr>
+  <tr><td>People</td><td>Contacts you add or import, relationships, and direct messages you send within MyLifos</td></tr>
+</table>
+
+<h3>Sensitive categories</h3>
+<p>Some of the above is treated as sensitive personal data under laws including the GDPR and UK GDPR:
+health and medication information, religious beliefs and practices, political opinions, and information
+about children. We hold it only because you chose to record it, we process it solely to provide the
+features you are using, and you can delete any of it at any time. If you would rather not store a
+particular category, simply do not use that section — no feature depends on another.</p>
+
+<h2>Information collected automatically</h2>
 <ul>
-  <li><strong>Account information:</strong> Your name, email address, and profile picture provided via Google Sign-In.</li>
-  <li><strong>App content:</strong> Personal data you choose to enter into the app, such as goals, calendar events, workouts, reading lists, recipes, budget entries, and other life tracking data.</li>
-  <li><strong>Usage data:</strong> Basic information about how you interact with the app to help us improve the service.</li>
+  <li><strong>Session and authentication data</strong> — a login cookie on the web, or a signed access token on the iOS app.</li>
+  <li><strong>Last-active timestamp</strong> — so we can tell how many people actively use MyLifos.</li>
+  <li><strong>Push notification tokens</strong> — an identifier from Apple, only if you turn notifications on. It identifies the device, not you, and is deleted when you disable notifications or delete the app.</li>
+  <li><strong>Server logs</strong> — request method, path, status and timing. We deliberately do not log response bodies, because those contain your personal content.</li>
+</ul>
+<p>MyLifos contains no advertising, no analytics SDKs, and no third-party trackers.</p>
+
+<h2>AI features</h2>
+<p>Some optional features — meal and trip suggestions, weekly planning — use Anthropic's Claude API.
+These work only if you supply <strong>your own Anthropic API key</strong> in Settings; we do not provide one,
+and no AI feature runs without it. Your key is encrypted before storage.</p>
+<p>When you use one of those features, the relevant content is sent to Anthropic under your own API account
+and is governed by your agreement with Anthropic. We do not send your data to Anthropic for any other
+purpose, and neither we nor Anthropic use it to train models.</p>
+
+<h2>Sharing</h2>
+<p><strong>We do not sell, rent or trade your personal information, and we do not share it for advertising.</strong>
+It leaves your account only in these cases:</p>
+<ul>
+  <li><strong>People you choose.</strong> Sharing is off by default and set per section. Some things are never
+  shareable regardless of settings — your prayer list is one.</li>
+  <li><strong>Service providers</strong> who run MyLifos on our behalf: our hosting and database provider,
+  our image storage provider, and our transactional email provider. They process data only to provide those
+  services.</li>
+  <li><strong>Content lookups.</strong> When you search for a film, book, album, recipe, plant, sports event or
+  scripture passage, we pass your search terms to the relevant provider (for example TMDB, Google Books,
+  Last.fm, Ticketmaster or a scripture API) to fetch the result. We send the search terms only — never your
+  name, account or any other personal data.</li>
+  <li><strong>Legal requirements</strong>, or to protect our rights or someone's safety.</li>
 </ul>
 
-<h2>How We Use Your Information</h2>
+<h2>Optional integrations</h2>
+<p>Each of these is off until you connect it, and each can be disconnected from Settings:</p>
 <ul>
-  <li>To provide and maintain the mylifos service</li>
-  <li>To authenticate your account via Google Sign-In</li>
-  <li>To store and sync your personal data across devices</li>
-  <li>To enable collaboration features when you choose to share data with friends</li>
+  <li><strong>Google Calendar</strong> — we store OAuth tokens to read and display your events. We never modify or delete anything in your Google Calendar. Disconnecting deletes the tokens and the synced events.</li>
+  <li><strong>Google Contacts, LinkedIn and Facebook</strong> — if you import contacts, we store the details you import, which may include other people's names, email addresses, phone numbers and birthdays. Please only import contacts where you are comfortable doing so. Disconnecting removes the imported data.</li>
 </ul>
 
-<h2>Data Storage and Security</h2>
-<p>Your data is stored securely on our servers. We use industry-standard encryption to protect sensitive information. API keys and credentials are encrypted using AES-256 encryption before storage.</p>
+<h2>Storage, security and location</h2>
+<p>Your data is stored in a PostgreSQL database hosted in the United States, and uploaded images are held in
+object storage. Traffic is encrypted in transit with TLS. Passwords are hashed, never stored in readable
+form, and stored API keys are encrypted with AES-256. If you use MyLifos from outside the United States,
+your data is transferred to and processed there.</p>
+<p>No service can promise perfect security, and we will not pretend otherwise. What we can say is that we
+minimise what we collect, we do not log your content, and we do not share it for commercial purposes.</p>
 
-<h2>Sharing of Information</h2>
-<p>We do not sell, trade, or rent your personal information to third parties. Your data is only shared in the following circumstances:</p>
+<h2>Retention, export and deletion</h2>
+<p>We keep your data for as long as your account exists. From Settings you can:</p>
 <ul>
-  <li>With other users you explicitly choose to connect and share data with</li>
-  <li>When required by law or to protect our legal rights</li>
+  <li><strong>Export everything</strong> as a single JSON file — goals, tasks, health, journal, and every other section.</li>
+  <li><strong>Delete your account</strong>, which permanently removes your personal data from our systems. This cannot be undone. Content you shared with another person may remain visible to them where it has become part of their own records.</li>
 </ul>
 
-<h2>Google Sign-In</h2>
-<p>We use Google Sign-In for authentication. When you sign in with Google, we receive your name, email address, and profile picture. We do not receive your Google password. Your use of Google Sign-In is also subject to <a href="https://policies.google.com/privacy" target="_blank">Google's Privacy Policy</a>.</p>
+<h2>Your rights</h2>
+<p>Depending on where you live, you may have the right to access, correct, export, or delete your personal
+data, to object to or restrict its processing, and to withdraw consent. The export and delete tools in
+Settings cover most of this immediately; for anything else, contact us at the address below. If you are in
+the UK or EU you also have the right to complain to your data protection authority.</p>
 
-<h2>Optional Google Calendar Integration</h2>
-<p>If you choose to connect Google Calendar, we store OAuth tokens to read and display your calendar events. You can disconnect this integration at any time from the app's Settings page. We do not modify or delete your Google Calendar data.</p>
+<h2>Children</h2>
+<p>MyLifos is not directed at children under 13, and we do not knowingly allow anyone under 13 to create an
+account. The Kids section is a tool for a parent or guardian to record information about their own children;
+that information is entered by the adult account holder, is visible only to them unless they share it, and
+is deleted along with the account. If you believe a child has created an account, contact us and we will
+remove it.</p>
 
-<h2>Data Retention and Deletion</h2>
-<p>You can delete your account and all associated data at any time from the Settings page within the app. Upon account deletion, all your personal data is permanently removed from our servers.</p>
+<h2>Changes to this policy</h2>
+<p>If we change this policy we will update the date at the top of this page, and for significant changes we
+will notify you in the app.</p>
 
-<h2>Children's Privacy</h2>
-<p>mylifos is not directed at children under 13. We do not knowingly collect personal information from children under 13.</p>
-
-<h2>Changes to This Policy</h2>
-<p>We may update this Privacy Policy from time to time. We will notify you of any changes by updating the date at the top of this page.</p>
-
-<h2>Contact Us</h2>
-<p>If you have any questions about this Privacy Policy, please contact us at: <a href="mailto:jamisonpence@gmail.com">jamisonpence@gmail.com</a></p>
+<h2>Contact</h2>
+<p>Questions, requests, or anything you think this page gets wrong:
+<a href="mailto:jamisonpence@gmail.com">jamisonpence@gmail.com</a></p>
 
 </body>
 </html>
