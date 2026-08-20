@@ -85,7 +85,14 @@ export function registerAuthDeepLink(onAuthenticated?: () => void): () => void {
       // mylifos://auth?token=… — URL can't parse a custom scheme reliably across
       // platforms, so read the query string directly.
       if (!url.startsWith("mylifos://auth")) return;
-      const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+
+      // Strip the fragment first. iOS hands the URL over with a bare "#" appended —
+      // the server never sends one — and URLSearchParams does not treat "#" as a
+      // delimiter, so it ends up inside the token value. The signature then fails to
+      // verify, /api/me returns 401, and the app drops straight back to the login
+      // screen looking exactly like the sign-in itself failed.
+      const withoutFragment = url.split("#")[0];
+      const query = withoutFragment.includes("?") ? withoutFragment.slice(withoutFragment.indexOf("?") + 1) : "";
       const token = new URLSearchParams(query).get("token");
       if (!token) return;
 
