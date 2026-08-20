@@ -33,6 +33,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
 
+    // MARK: - Remote notifications
+    //
+    // iOS hands the APNs device token to the app delegate, and Capacitor's push plugin
+    // listens on NotificationCenter — but nothing connects the two unless these two methods
+    // forward it. `npx cap sync` does not add them; the plugin's README lists it as a manual
+    // step, and it is the single easiest part of push setup to miss.
+    //
+    // Without them the failure is completely silent: PushNotifications.register() succeeds,
+    // iOS calls a delegate method that does not exist, and neither the `registration` nor
+    // the `registrationError` listener ever fires. No token, no error, nothing in the log.
+    // That silence cost four debugging rounds here and sent me chasing the Mac's hardware
+    // and a listener race before I looked at the delegate.
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call
