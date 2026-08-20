@@ -1022,8 +1022,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-[70] bg-card border-b h-14 flex items-center justify-between px-4">
+      {/* Mobile header.
+          The viewport is `viewport-fit=cover`, so the web view extends under the status
+          bar and Dynamic Island. Without the inset the logo and icons sit underneath the
+          Island and the page title is clipped behind them. Grows the bar rather than just
+          padding it, so the 3.5rem of usable height survives. env() is 0 in a browser, so
+          this is a no-op on the web. */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-[70] bg-card border-b h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <svg aria-label="Planner" viewBox="0 0 32 32" width="22" height="22" fill="none">
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
@@ -1081,7 +1086,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-card border-t">
-        <div className="flex items-end justify-around px-1 pt-2 pb-3">
+        {/* Bottom inset keeps the tab labels clear of the home indicator. */}
+        <div className="flex items-end justify-around px-1 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           {/* Today */}
           <Link href="/dashboard">
             <button className="flex flex-col items-center gap-0.5 min-w-[56px] py-1">
@@ -1234,7 +1240,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Page content */}
-      <main className="flex-1 min-w-0 lg:pt-0 pt-14 lg:pb-0 pb-36">
+      {/* pt must track the mobile header's height, which now includes the status-bar inset. */}
+      <main className="flex-1 min-w-0 lg:pt-0 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pb-0 pb-36">
         <PrivacyBanner path={location} />
         {children}
       </main>

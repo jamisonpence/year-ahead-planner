@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isNativeApp } from "@/lib/nativeAuth";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -15,6 +16,12 @@ export default function InstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    // Never inside the native app. It is already installed, there is no home screen to add
+    // it to, and the iOS branch below keys off the user agent — which in a WKWebView still
+    // says iPhone, so the banner appeared over the tab bar telling users to install an app
+    // they had already installed.
+    if (isNativeApp()) return;
+
     // Don't show if already dismissed this session
     if (sessionStorage.getItem("pwa-install-dismissed")) return;
 
