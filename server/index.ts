@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
+import cors from "cors";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -25,6 +26,41 @@ app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginResourcePolicy: false,
+  }),
+);
+
+// CORS for the native app only.
+//
+// The iOS app serves its web assets from capacitor://localhost, so every call to
+// mylifos.com is cross-origin and WKWebView drops the response unless the server
+// says otherwise. Bearer tokens fixed *authentication* for the app; they do nothing
+// about this, which is a separate browser-level check — without it the app hangs on
+// its loading screen because /api/me never resolves.
+//
+// The allowlist is explicit rather than a wildcard: `credentials: true` with
+// Access-Control-Allow-Origin: * is rejected by browsers anyway, and reflecting
+// arbitrary origins would let any website make authenticated requests on a signed-in
+// user's behalf.
+const NATIVE_ORIGINS = new Set([
+  "capacitor://localhost", // iOS
+  "ionic://localhost",     // older iOS shells
+  "http://localhost",      // Android and local dev
+  "https://localhost",
+]);
+app.use(
+  cors({
+    origin(origin, cb) {
+      // No Origin header: same-origin navigations, curl, server-to-server. Not a
+      // cross-site request, so nothing to authorise.
+      if (!origin) return cb(null, true);
+      if (NATIVE_ORIGINS.has(origin)) return cb(null, true);
+      if (/^https:\/\/([a-z0-9-]+\.)?mylifos\.com$/.test(origin)) return cb(null, true);
+      // Deny by omitting the header rather than throwing — a throw would turn a
+      // disallowed origin into a 500 and bury the real cause.
+      return cb(null, false);
+    },
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 
