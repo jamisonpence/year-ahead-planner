@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } from "@/lib/push";
+import { clearToken } from "@/lib/nativeAuth";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -957,6 +958,11 @@ function DeleteAccountSection() {
   const deleteMut = useMutation({
     mutationFn: () => apiRequest("DELETE", "/api/me"),
     onSuccess: () => {
+      // Same reason as sign-out: the native bearer token is stateless and outlives the
+      // server session. The account is gone so it can no longer authenticate, but leaving
+      // a credential for a deleted account in device storage is not a good look for the
+      // App Store 5.1.1(v) deletion flow.
+      clearToken();
       qc.clear();
       // Hard redirect to landing — session is gone
       window.location.href = "/";

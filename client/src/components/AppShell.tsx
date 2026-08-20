@@ -9,6 +9,7 @@ import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal, { type SectionKey } from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
+import { clearToken } from "@/lib/nativeAuth";
 import {
   LayoutDashboard, Calendar, Target, Library, Dumbbell,
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Music2, Home, MapPin, Plane,
@@ -737,7 +738,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     if (!window.confirm("Sign out of MyLifos?")) return;
-    await fetch("/api/logout", { method: "POST" });
+    try {
+      // Must run while the token is still present, or the request is unauthenticated.
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      // The native app's bearer token is stateless — destroying the server session does
+      // not invalidate it. Without this the token stays in localStorage, the reload below
+      // re-authenticates with it, and "Sign out" silently does nothing. Cleared in a
+      // `finally` so a failed request can never strand a signed-in session on the device.
+      clearToken();
+    }
     qc.clear();
     window.location.href = "/";
   }
