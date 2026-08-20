@@ -4,6 +4,12 @@ import "./index.css";
 import { registerAuthDeepLink } from "./lib/nativeAuth";
 import { installNativeApiFetch } from "./lib/nativeFetch";
 import { API_BASE } from "./lib/queryClient";
+import { isNativeApp } from "./lib/nativeAuth";
+
+// Marks the native app so index.css can zero the safe-area insets. Capacitor already
+// insets the web view below the status bar; padding by env() on top of that leaves a band
+// of empty space above the header. Set before React mounts so nothing renders unpadded.
+if (isNativeApp()) document.documentElement.classList.add("native");
 
 // Native app only: send relative /api and /auth calls to the real server with the bearer
 // token attached. Must run before React mounts, since components fetch on their first

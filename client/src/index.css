@@ -8,6 +8,22 @@
     --background: 220 18% 97%;
     --foreground: 222 30% 12%;
 
+    /* Safe-area insets, indirected through variables because the two iOS surfaces
+       disagree about who applies them.
+
+       As an iOS home-screen PWA the page really does run under the status bar and home
+       indicator, so env() is non-zero and the app shell must pad for it or the header
+       ends up beneath the Dynamic Island.
+
+       In the Capacitor app the native view is already inset below the status bar — that
+       is the coloured strip above the header — so padding by env() again produces a band
+       of dead space. `html.native` (set in main.tsx) zeroes them there.
+
+       Reading env() through a variable means one switch controls the shell instead of
+       each call site guessing which surface it is on. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+
     --card: 0 0% 100%;
     --card-foreground: 222 30% 12%;
 
@@ -41,6 +57,14 @@
     --cat-project: 262 52% 52%;
     --cat-goal: 142 68% 36%;
     --cat-other: 220 9% 52%;
+  }
+
+  /* Capacitor already insets the web view below the status bar and home indicator, so the
+     shell must not add the inset a second time. Set on <html> in main.tsx, which runs
+     before React mounts — the header would otherwise render once with the wrong padding. */
+  html.native {
+    --safe-top: 0px;
+    --safe-bottom: 0px;
   }
 
   .dark {
