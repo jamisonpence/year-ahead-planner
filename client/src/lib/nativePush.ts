@@ -118,6 +118,14 @@ export async function enableNativePush(): Promise<{ ok: boolean; reason?: string
     if (!registered) {
       registered = true;
 
+      // Every addListener call is awaited before register() below.
+      //
+      // These return Promises: the JS call is queued over the bridge and the native side
+      // attaches the handler when it arrives. register() dispatched before that attachment
+      // completes means APNs can deliver the token to a listener that does not exist yet,
+      // and the event is simply lost — no token, no error, nothing. Which is exactly the
+      // silence this produced on a Mac that turned out to be perfectly capable of push.
+      const handles = [
       PushNotifications.addListener("registration", async (token: Token) => {
         const env = environment();
         console.log(`[push] APNs token registered (${env})`);
@@ -130,14 +138,14 @@ export async function enableNativePush(): Promise<{ ok: boolean; reason?: string
         } catch (e) {
           update({ lastError: `register request failed: ${String(e)}` });
         }
-      });
+      }),
 
       PushNotifications.addListener("registrationError", (err) => {
         // Almost always one of: Push Notifications capability missing from the target, the
         // App ID not entitled for push, or a provisioning profile predating either.
         console.error("[push] APNs registration failed:", err);
         update({ tokenReceived: false, lastError: String((err as any)?.error ?? err) });
-      });
+      }),
 
       PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         // The server puts the destination in `href` alongside the aps payload.
@@ -145,10 +153,22 @@ export async function enableNativePush(): Promise<{ ok: boolean; reason?: string
         if (typeof href === "string" && href.startsWith("/")) {
           window.location.hash = href;
         }
-      });
+      }),
+      ];
+      await Promise.all(handles);
     }
 
     await PushNotifications.register();
+
+    // If neither callback has fired by now, something is wrong that produces no error of
+    // its own. Say so, rather than leaving the diagnostics panel on "waiting…" forever and
+    // making the caller guess whether it is slow or broken.
+    setTimeout(() => {
+      if (diagnostics.tokenReceived === null) {
+        update({ lastError: "No token from Apple after 15s — registration returned nothing and raised no error." });
+      }
+    }, 15_000);
+
     return { ok: true };
   } catch (e) {
     console.error("[push] enableNativePush failed:", e);
