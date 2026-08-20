@@ -9,7 +9,7 @@ import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal, { type SectionKey } from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
-import { clearToken } from "@/lib/nativeAuth";
+import { signOut } from "@/lib/signOut";
 import {
   LayoutDashboard, Calendar, Target, Library, Dumbbell,
   Users, ChefHat, UtensilsCrossed, Sun, Moon, X, Film, Wallet, Music2, Home, MapPin, Plane,
@@ -476,7 +476,12 @@ function MyLifosSheet({
   const handle = user?.email ? "@" + user.email.split("@")[0] : "";
 
   return (
-    <div className="lg:hidden fixed inset-0 z-[60] bg-background/90 backdrop-blur-sm" onClick={onClose}>
+    // z-sheet clears z-nav (the mobile header and bottom tab bar) and
+    // z-nav-float (the Quick Add button). It previously sat below the tab bar, which
+    // covered the sheet's footer — which is the only place to sign out on a phone, so the
+    // control was unreachable rather than merely hidden. Still below the dialog layer
+    // (z-dialog and up) so modals opened from inside the sheet stay on top.
+    <div className="lg:hidden fixed inset-0 z-sheet bg-background/90 backdrop-blur-sm" onClick={onClose}>
       <div
         className="absolute bottom-0 left-0 right-0 bg-card rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
@@ -599,7 +604,9 @@ function MyLifosSheet({
         </div>
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
-        <div className="px-5 py-4 border-t flex gap-2 bg-card">
+        {/* Now that the sheet sits above the tab bar, this footer is the bottom-most thing
+            on screen, so it has to clear the home indicator itself. */}
+        <div className="px-5 pt-4 pb-[calc(1rem+var(--safe-bottom))] border-t flex gap-2 bg-card">
           <button onClick={onToggleTheme} className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm text-muted-foreground hover:bg-secondary transition-colors shrink-0">
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
             {theme === "dark" ? "Light" : "Dark"}
@@ -738,16 +745,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     if (!window.confirm("Sign out of MyLifos?")) return;
-    try {
-      // Must run while the token is still present, or the request is unauthenticated.
-      await fetch("/api/logout", { method: "POST" });
-    } finally {
-      // The native app's bearer token is stateless — destroying the server session does
-      // not invalidate it. Without this the token stays in localStorage, the reload below
-      // re-authenticates with it, and "Sign out" silently does nothing. Cleared in a
-      // `finally` so a failed request can never strand a signed-in session on the device.
-      clearToken();
-    }
+    await signOut();
     qc.clear();
     window.location.href = "/";
   }
@@ -1028,7 +1026,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           Island and the page title is clipped behind them. Grows the bar rather than just
           padding it, so the 3.5rem of usable height survives. env() is 0 in a browser, so
           this is a no-op on the web. */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-[70] bg-card border-b h-[calc(3.5rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-4">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-nav bg-card border-b h-[calc(3.5rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <svg aria-label="Planner" viewBox="0 0 32 32" width="22" height="22" fill="none">
             <rect x="2" y="6" width="28" height="24" rx="4" stroke="currentColor" strokeWidth="2" />
@@ -1076,7 +1074,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           onClick={() => openQuickAddMobile()}
-          className="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-[71] flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/25 active:scale-95 transition-transform"
+          className="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-nav-float flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/25 active:scale-95 transition-transform"
           aria-label="Quick Add"
         >
           <Plus size={18} />
@@ -1085,7 +1083,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── Mobile 5-tab bottom nav bar ──────────────────────────────────────── */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-card border-t">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-nav bg-card border-t">
         {/* Bottom inset keeps the tab labels clear of the home indicator. */}
         <div className="flex items-end justify-around px-1 pt-2 pb-[calc(0.75rem+var(--safe-bottom))]">
           {/* Today */}

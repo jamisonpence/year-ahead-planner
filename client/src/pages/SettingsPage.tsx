@@ -10,12 +10,14 @@ import {
   ChefHat, Film, Wallet, Music2, Home, MapPin, Baby, Palette, Plane, Globe,
   Link2, Check, X, UserCheck, Send, Flame, Landmark, AlertTriangle,
   Smartphone, Download,
+  LogOut,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@shared/schema";
 import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } from "@/lib/push";
 import { clearToken } from "@/lib/nativeAuth";
+import { signOut } from "@/lib/signOut";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -947,6 +949,50 @@ function ExportDataSection() {
   );
 }
 
+// ── Account Section ───────────────────────────────────────────────────────────
+
+/**
+ * Sign out.
+ *
+ * Settings previously offered account *deletion* but no way to sign out, and the only
+ * sign-out in the app was the MyLifos sheet footer — which the bottom tab bar was
+ * painting over, so on a phone there was effectively no way out of the app at all.
+ * Settings is where people look for this, so it belongs here regardless.
+ *
+ * Deliberately its own section above Danger Zone rather than a button inside it: signing
+ * out is routine and reversible, and sitting it next to "Delete account" invites a misclick
+ * on exactly the one action that isn't.
+ */
+function SignOutSection() {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  async function handle() {
+    if (!window.confirm("Sign out of MyLifos?")) return;
+    setBusy(true);
+    try {
+      await signOut();
+      qc.clear();
+      window.location.href = "/";
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-3">
+      <h2 className="font-semibold text-base">Account</h2>
+      <p className="text-sm text-muted-foreground">
+        Sign out on this device. Your data stays exactly as it is.
+      </p>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={handle} disabled={busy}>
+        <LogOut size={14} />
+        {busy ? "Signing out…" : "Sign out"}
+      </Button>
+    </section>
+  );
+}
+
 // ── Delete Account Section ────────────────────────────────────────────────────
 
 function DeleteAccountSection() {
@@ -1315,6 +1361,7 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <PushNotificationsSection />
       <ExportDataSection />
+      <SignOutSection />
       <DeleteAccountSection />
     </div>
   );

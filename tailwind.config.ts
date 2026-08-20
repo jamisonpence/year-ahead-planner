@@ -5,6 +5,46 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      /**
+       * The stacking order, named once.
+       *
+       * Ad-hoc z-[n] values are how Sign out ended up unreachable: the MyLifos sheet was
+       * z-[60] and the bottom tab bar z-[70], so the nav painted over the sheet's footer.
+       * Nothing about "60" and "70" says which is meant to win, so the collision was
+       * invisible in review. Names make the intent checkable.
+       *
+       * Read top to bottom — later entries cover earlier ones:
+       *
+       *   nav          the mobile header and bottom tab bar
+       *   nav-float    the floating Quick Add button, above the bar it overlaps
+       *   sheet        the MyLifos sheet — must clear the nav or its footer is buried
+       *   overlay      full-screen page overlays: onboarding, wizards
+       *   palette      the command palette, above any overlay it is invoked from
+       *   dialog       Radix dialog/alert-dialog backdrop
+       *   dialog-content
+       *   dialog-sticky  sticky headers and footers inside a scrolling dialog
+       *   menu         dropdown, select, popover, context menu, tooltip, hover card.
+       *                Above dialog-content on purpose: a select inside a dialog used to
+       *                render behind it, which is a bug this project has already had.
+       *   toast        always last, nothing may cover a toast
+       *
+       * The 1000+ values were already consistent across components/ui and are named here
+       * rather than renumbered — the point is to stop new invented values, not to churn
+       * working ones. Anything below `nav` is ordinary in-page layering and stays a plain
+       * Tailwind z-10/z-20/z-50.
+       */
+      zIndex: {
+        nav: "70",
+        "nav-float": "71",
+        sheet: "72",
+        overlay: "80",
+        palette: "100",
+        dialog: "1000",
+        "dialog-content": "1001",
+        "dialog-sticky": "1002",
+        menu: "1100",
+        toast: "1200",
+      },
       borderRadius: {
         lg: ".5625rem", /* 9px */
         md: ".375rem", /* 6px */
