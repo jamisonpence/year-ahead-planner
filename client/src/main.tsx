@@ -2,6 +2,13 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { registerAuthDeepLink } from "./lib/nativeAuth";
+import { installNativeApiFetch } from "./lib/nativeFetch";
+import { API_BASE } from "./lib/queryClient";
+
+// Native app only: send relative /api and /auth calls to the real server with the bearer
+// token attached. Must run before React mounts, since components fetch on their first
+// render. No-op in the browser.
+installNativeApiFetch(API_BASE);
 
 if (!window.location.hash) {
   window.location.hash = "#/";
