@@ -9,6 +9,7 @@ import GetStartedWidget from "@/components/GetStartedWidget";
 import QuickAddModal, { type SectionKey } from "@/components/QuickAddModal";
 import CommandPalette from "@/components/CommandPalette";
 import { syncPushSubscription } from "@/lib/push";
+import { enableNativePush } from "@/lib/nativePush";
 import { signOut } from "@/lib/signOut";
 import {
   LayoutDashboard, Calendar, Target, Library, Dumbbell,
@@ -719,6 +720,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Keep this device's push subscription registered with the server
   useEffect(() => { syncPushSubscription(); }, []);
+
+  // Re-register this device's APNs token on every launch. Tokens are not stable — they
+  // rotate on reinstall or restore-from-backup — and a stale one fails silently, so the
+  // first symptom is notifications quietly stopping. No-op on the web, and never prompts:
+  // enableNativePush only asks when permission is still "prompt", and iOS returns the
+  // existing token without a dialog once granted.
+  useEffect(() => { void enableNativePush(); }, []);
 
   // Global search palette (Cmd/Ctrl+K)
   const [searchOpen, setSearchOpen] = useState(false);

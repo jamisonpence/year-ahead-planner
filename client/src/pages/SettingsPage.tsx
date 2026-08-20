@@ -18,6 +18,7 @@ import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@s
 import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } from "@/lib/push";
 import { clearToken } from "@/lib/nativeAuth";
 import { signOut } from "@/lib/signOut";
+import { nativePushSupported, enableNativePush, disableNativePush } from "@/lib/nativePush";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -884,17 +885,31 @@ function PushNotificationsSection() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
-  const supported = pushSupported();
+  // In the iOS app the Web Push path below is inert — WKWebView doesn't implement it — so
+  // this one control drives APNs instead. One toggle either way; the user should not have
+  // to know which mechanism their device uses.
+  const native = nativePushSupported();
+  const supported = native || pushSupported();
 
-  useEffect(() => { isPushEnabled().then(setEnabled); }, []);
+  useEffect(() => { if (!native) isPushEnabled().then(setEnabled); }, [native]);
 
   async function toggle() {
     setBusy(true);
     try {
       if (enabled) {
-        await unsubscribeFromPush();
+        if (native) await disableNativePush(); else await unsubscribeFromPush();
         setEnabled(false);
         toast({ title: "Push notifications disabled" });
+      } else if (native) {
+        const { ok, reason } = await enableNativePush();
+        setEnabled(ok);
+        toast(ok
+          ? { title: "Push notifications enabled!", description: "You'll get your daily digest and social updates on this device." }
+          // iOS only prompts once. After a denial the toggle can't reopen it, so point at
+          // the only place that can rather than letting the button look broken.
+          : reason === "denied"
+            ? { title: "Notifications are turned off", description: "Enable them in iOS Settings › MyLifos › Notifications.", variant: "destructive" }
+            : { title: "Couldn't enable push", description: "Registration with Apple failed. Check the console for details.", variant: "destructive" });
       } else {
         const ok = await subscribeToPush();
         setEnabled(ok);

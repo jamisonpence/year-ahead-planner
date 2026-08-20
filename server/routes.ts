@@ -100,6 +100,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 import { initWebPush, getVapidPublicKey, saveSubscription, removeSubscription, sendPushToUser } from "./push";
+import { initApns, saveApnsDevice, removeApnsDevice } from "./apns";
 
 /** Fire-and-forget notification creator — never throws or blocks the main request.
  *  Persists an in-app notification AND pushes it to the user's devices. */
@@ -208,6 +209,38 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       const { endpoint } = req.body ?? {};
       if (!endpoint) return res.status(400).json({ error: "endpoint required" });
       await removeSubscription((req.user as User).id, endpoint);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── APNs (native iOS) ────────────────────────────────────────────────────────
+  // WKWebView has no Web Push, so the routes above can never serve the iOS app. These
+  // take a device token instead; sendPushToUser fans out to both.
+  initApns().catch((e) => console.error("initApns:", e));
+
+  app.post("/api/push/apns/register", requireAuth, async (req, res) => {
+    try {
+      const { token, environment } = req.body ?? {};
+      if (typeof token !== "string" || !/^[0-9a-fA-F]{64,200}$/.test(token)) {
+        return res.status(400).json({ error: "valid hex device token required" });
+      }
+      // Trusted from the client because only the client knows how the build was signed:
+      // a debug build gets a sandbox token, a TestFlight/App Store build a production one.
+      // Worst case a wrong value makes this device's pushes fail and the row is pruned on
+      // the first BadDeviceToken, so it cannot affect any other user.
+      if (environment !== "sandbox" && environment !== "production") {
+        return res.status(400).json({ error: "environment must be sandbox or production" });
+      }
+      await saveApnsDevice((req.user as User).id, token, environment);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/push/apns/unregister", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body ?? {};
+      if (!token) return res.status(400).json({ error: "token required" });
+      await removeApnsDevice((req.user as User).id, token);
       res.json({ ok: true });
     } catch (e) { handleError(res, e); }
   });

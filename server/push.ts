@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { pool } from "./storage";
+import { sendApnsToUser } from "./apns";
 
 // ── Web Push (VAPID) ─────────────────────────────────────────────────────────
 // Keys come from VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY env vars when set;
@@ -83,6 +84,20 @@ export async function sendPushToUser(
     tag?: string;
   }
 ) {
+  // iOS first, and outside the `configured` guard below: that flag is about VAPID, and APNs
+  // must still deliver on a deploy where Web Push failed to initialise. Not awaited — this
+  // whole function is fire-and-forget and a slow APNs round trip should not delay the
+  // browser subscriptions.
+  void sendApnsToUser(userId, {
+    title: payload.title,
+    body: payload.body,
+    href: payload.href,
+    // Web Push carries its buttons in the payload; APNs looks them up by category, which
+    // the app registers at startup. Same two actions, different delivery mechanism.
+    category: payload.actions?.length ? payload.tag ?? "default" : undefined,
+    tag: payload.tag,
+  });
+
   if (!configured) return;
   try {
     const subs = await pool.query(`SELECT id, endpoint, keys_json FROM push_subscriptions WHERE user_id = $1`, [userId]);
