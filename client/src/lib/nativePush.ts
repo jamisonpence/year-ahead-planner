@@ -35,13 +35,57 @@ function environment(): "sandbox" | "production" {
   return declared === "production" ? "production" : "sandbox";
 }
 
-async function postJson(path: string, body: unknown): Promise<void> {
-  await fetch(`${API_BASE}${path}`, {
+async function postJson(path: string, body: unknown): Promise<number> {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify(body),
   });
+  return res.status;
+}
+
+/**
+ * What happened the last time this device tried to register.
+ *
+ * Registration is asynchronous and, on a device, invisible: TestFlight has no console, so
+ * "did Apple give us a token, and did the server accept it" was unanswerable from the app.
+ * Every branch below writes here so Settings can show the answer.
+ */
+export type PushDiagnostics = {
+  supported: boolean;
+  permission: "unknown" | "granted" | "denied" | "prompt";
+  /** Apple returned a token. Null while pending, false if registration errored. */
+  tokenReceived: boolean | null;
+  tokenTail?: string;
+  environment?: "sandbox" | "production";
+  /** HTTP status from our own register endpoint, so a 401 is distinguishable from a 500. */
+  serverStatus?: number;
+  lastError?: string;
+  at?: string;
+};
+
+let diagnostics: PushDiagnostics = {
+  supported: false,
+  permission: "unknown",
+  tokenReceived: null,
+};
+
+const listeners = new Set<(d: PushDiagnostics) => void>();
+
+function update(patch: Partial<PushDiagnostics>) {
+  diagnostics = { ...diagnostics, ...patch, at: new Date().toISOString() };
+  listeners.forEach(fn => fn(diagnostics));
+}
+
+export function getPushDiagnostics(): PushDiagnostics {
+  return diagnostics;
+}
+
+/** Subscribe to diagnostics changes. The token arrives well after the UI first renders. */
+export function onPushDiagnostics(fn: (d: PushDiagnostics) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 let registered = false;
@@ -58,12 +102,14 @@ let registered = false;
  */
 export async function enableNativePush(): Promise<{ ok: boolean; reason?: string }> {
   if (!isNativeApp()) return { ok: false, reason: "not-native" };
+  update({ supported: true });
 
   try {
     let perm = await PushNotifications.checkPermissions();
     if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
       perm = await PushNotifications.requestPermissions();
     }
+    update({ permission: perm.receive === "granted" ? "granted" : perm.receive === "denied" ? "denied" : "prompt" });
     if (perm.receive !== "granted") {
       // Denied is sticky: iOS will not prompt again, the user has to go to Settings.
       return { ok: false, reason: "denied" };
@@ -72,16 +118,25 @@ export async function enableNativePush(): Promise<{ ok: boolean; reason?: string
     if (!registered) {
       registered = true;
 
-      PushNotifications.addListener("registration", (token: Token) => {
+      PushNotifications.addListener("registration", async (token: Token) => {
         const env = environment();
         console.log(`[push] APNs token registered (${env})`);
-        void postJson("/api/push/apns/register", { token: token.value, environment: env });
+        update({ tokenReceived: true, tokenTail: token.value.slice(-6), environment: env });
+        try {
+          // The server's answer matters as much as Apple's: a token Apple issued but our
+          // API rejected (expired session, 500) looks identical from the device otherwise.
+          const status = await postJson("/api/push/apns/register", { token: token.value, environment: env });
+          update({ serverStatus: status, lastError: status === 200 ? undefined : `register returned ${status}` });
+        } catch (e) {
+          update({ lastError: `register request failed: ${String(e)}` });
+        }
       });
 
       PushNotifications.addListener("registrationError", (err) => {
         // Almost always one of: Push Notifications capability missing from the target, the
         // App ID not entitled for push, or a provisioning profile predating either.
         console.error("[push] APNs registration failed:", err);
+        update({ tokenReceived: false, lastError: String((err as any)?.error ?? err) });
       });
 
       PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
@@ -115,4 +170,32 @@ export async function disableNativePush(): Promise<void> {
 /** True when this build can use native push at all — lets Settings show the right control. */
 export function nativePushSupported(): boolean {
   return isNativeApp();
+}
+
+/** Ask the server to push to this account's devices, and report Apple's verdict. */
+export async function sendTestPush(): Promise<{ sent: number; results: unknown[] } | { error: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/push/apns/test`, {
+      method: "POST",
+      headers: { ...authHeaders() },
+      credentials: "include",
+    });
+    if (!res.ok) return { error: `server returned ${res.status}` };
+    return await res.json();
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+/** What the server currently knows about this account's registered devices. */
+export async function fetchPushStatus(): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/push/apns/status`, {
+      headers: { ...authHeaders() },
+      credentials: "include",
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
 }

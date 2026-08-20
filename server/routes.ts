@@ -100,7 +100,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 import { initWebPush, getVapidPublicKey, saveSubscription, removeSubscription, sendPushToUser } from "./push";
-import { initApns, saveApnsDevice, removeApnsDevice } from "./apns";
+import { initApns, saveApnsDevice, removeApnsDevice, sendApnsDiagnostic, apnsConfigured } from "./apns";
 
 /** Fire-and-forget notification creator — never throws or blocks the main request.
  *  Persists an in-app notification AND pushes it to the user's devices. */
@@ -242,6 +242,46 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
       if (!token) return res.status(400).json({ error: "token required" });
       await removeApnsDevice((req.user as User).id, token);
       res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // What the server thinks this user's push setup looks like.
+  //
+  // Exists because TestFlight gives no console: without this, a failed install is
+  // indistinguishable from a working one until a notification doesn't arrive. Returns only
+  // the last 6 characters of each token — enough to match against the device, useless to
+  // anyone who intercepts it.
+  app.get("/api/push/apns/status", requireAuth, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, environment, created_at, last_seen_at, RIGHT(device_token, 6) AS token_tail
+         FROM apns_devices WHERE user_id = $1 ORDER BY id`,
+        [(req.user as User).id],
+      );
+      res.json({
+        serverConfigured: apnsConfigured(),
+        environments: {
+          sandbox: apnsConfigured("sandbox"),
+          production: apnsConfigured("production"),
+        },
+        devices: r.rows,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Send a test push to the caller's own devices and report Apple's verdict per device.
+  //
+  // requireAuth, not requireAdmin: it can only ever target the caller's own rows, so there
+  // is nothing to escalate, and every tester needs it — not just the owner.
+  app.post("/api/push/apns/test", requireAuth, async (req, res) => {
+    try {
+      const results = await sendApnsDiagnostic((req.user as User).id, {
+        title: "MyLifos test",
+        body: "If you can see this, push notifications are working.",
+        href: "/settings",
+        tag: "test",
+      });
+      res.json({ sent: results.length, results });
     } catch (e) { handleError(res, e); }
   });
 

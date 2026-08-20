@@ -178,25 +178,60 @@ function post(env: ApnsEnvironment, deviceToken: string, body: string): Promise<
  * digest, the evening close-out, habit actions, in-app notifications — reaches iOS with no
  * change at the call site.
  */
-export async function sendApnsToUser(
-  userId: number,
-  payload: {
-    title: string;
-    body?: string | null;
-    href?: string | null;
-    /** Maps to an APNs category; the app registers matching action buttons. */
-    category?: string;
-    /** Collapse id — a later push with the same value replaces an unread earlier one. */
-    tag?: string;
-  },
-): Promise<void> {
-  if (!apnsConfigured()) return;
+export type ApnsPayload = {
+  title: string;
+  body?: string | null;
+  href?: string | null;
+  /** Maps to an APNs category; the app registers matching action buttons. */
+  category?: string;
+  /** Collapse id — a later push with the same value replaces an unread earlier one. */
+  tag?: string;
+};
+
+/** Per-device outcome. Returned by the diagnostic path; discarded by the normal one. */
+export type ApnsResult = {
+  deviceId: number;
+  tokenTail: string;
+  environment: ApnsEnvironment;
+  status: number;
+  reason?: string;
+  /** Set when the device was registered under the wrong environment and we fixed it. */
+  correctedTo?: ApnsEnvironment;
+  deleted?: boolean;
+};
+
+/**
+ * Fire-and-forget push to a user's iOS devices. Prunes tokens Apple reports as dead.
+ *
+ * Called from sendPushToUser alongside Web Push, so every existing caller — the daily
+ * digest, the evening close-out, habit actions, in-app notifications — reaches iOS with no
+ * change at the call site.
+ */
+export async function sendApnsToUser(userId: number, payload: ApnsPayload): Promise<void> {
+  await deliver(userId, payload);
+}
+
+/**
+ * Same delivery, but returns what happened per device.
+ *
+ * Exists because on TestFlight there is no Xcode console: an install either works or fails
+ * silently, and "silently" was the whole problem with this subsystem. Apple's `reason`
+ * string is the only real diagnostic they give, so it is surfaced to the user rather than
+ * left in a server log they cannot read.
+ */
+export async function sendApnsDiagnostic(userId: number, payload: ApnsPayload): Promise<ApnsResult[]> {
+  return deliver(userId, payload);
+}
+
+async function deliver(userId: number, payload: ApnsPayload): Promise<ApnsResult[]> {
+  const results: ApnsResult[] = [];
+  if (!apnsConfigured()) return results;
   try {
     const devices = await pool.query(
       `SELECT id, device_token, environment FROM apns_devices WHERE user_id = $1`,
       [userId],
     );
-    if (devices.rowCount === 0) return;
+    if (devices.rowCount === 0) return results;
 
     const body = JSON.stringify({
       aps: {
@@ -210,8 +245,14 @@ export async function sendApnsToUser(
     });
 
     await Promise.all(devices.rows.map(async (d: any) => {
-      const env = d.environment === "production" ? "production" : "sandbox";
-      if (!apnsConfigured(env)) return;
+      const env: ApnsEnvironment = d.environment === "production" ? "production" : "sandbox";
+      const tokenTail = String(d.device_token).slice(-6);
+      if (!apnsConfigured(env)) {
+        // The device registered under an environment whose key is not set. Reported rather
+        // than skipped silently — this is exactly the case that looks like "push is broken".
+        results.push({ deviceId: d.id, tokenTail, environment: env, status: 0, reason: "EnvironmentNotConfigured" });
+        return;
+      }
 
       let { status, reason } = await post(env, d.device_token, body);
 
@@ -231,6 +272,7 @@ export async function sendApnsToUser(
               [other, d.id],
             ).catch(() => {});
             console.log(`[apns] device ${d.id} corrected to ${other}`);
+            results.push({ deviceId: d.id, tokenTail, environment: other, status: 200, correctedTo: other });
             return;
           }
           ({ status, reason } = retry);
@@ -241,6 +283,7 @@ export async function sendApnsToUser(
       // means it is genuinely malformed. Either way the row will never deliver again.
       if (status === 410 || reason === "Unregistered" || reason === "BadDeviceToken") {
         await pool.query(`DELETE FROM apns_devices WHERE id = $1`, [d.id]).catch(() => {});
+        results.push({ deviceId: d.id, tokenTail, environment: env, status, reason, deleted: true });
         return;
       }
       if (status !== 200) {
@@ -248,8 +291,10 @@ export async function sendApnsToUser(
         // string is Apple's own and is the only useful diagnostic they give.
         console.error(`[apns] ${env} device ${d.id} failed: ${status} ${reason ?? ""}`.trim());
       }
+      results.push({ deviceId: d.id, tokenTail, environment: env, status, reason });
     }));
   } catch (e) {
     console.error("[apns] send failed:", e);
   }
+  return results;
 }

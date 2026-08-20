@@ -18,7 +18,11 @@ import type { TabPrivacySetting, TabCollaborationWithUser, PublicUser } from "@s
 import { pushSupported, subscribeToPush, unsubscribeFromPush, isPushEnabled } from "@/lib/push";
 import { clearToken } from "@/lib/nativeAuth";
 import { signOut } from "@/lib/signOut";
-import { nativePushSupported, enableNativePush, disableNativePush } from "@/lib/nativePush";
+import {
+  nativePushSupported, enableNativePush, disableNativePush,
+  getPushDiagnostics, onPushDiagnostics, sendTestPush, fetchPushStatus,
+  type PushDiagnostics,
+} from "@/lib/nativePush";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -964,6 +968,97 @@ function ExportDataSection() {
   );
 }
 
+// ── Push diagnostics (native only) ────────────────────────────────────────────
+
+/**
+ * Why this exists: on TestFlight there is no Xcode console, so a push that never arrives is
+ * indistinguishable from one that arrived and was ignored. Every stage of the chain —
+ * permission, Apple's token, our server accepting it, and Apple's verdict on an actual
+ * send — reports here, so a failure can be localised without a cable.
+ *
+ * Native builds only. On the web it renders nothing.
+ */
+function PushDiagnosticsSection() {
+  const [diag, setDiag] = useState<PushDiagnostics>(getPushDiagnostics());
+  const [server, setServer] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  // The token arrives asynchronously, well after this first renders.
+  useEffect(() => onPushDiagnostics(setDiag), []);
+  useEffect(() => { void fetchPushStatus().then(setServer); }, []);
+
+  if (!nativePushSupported()) return null;
+
+  const row = (label: string, value: string, ok?: boolean) => (
+    <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={`text-xs font-mono ${ok === true ? "text-green-600 dark:text-green-400" : ok === false ? "text-destructive" : ""}`}>
+        {value}
+      </span>
+    </div>
+  );
+
+  async function runTest() {
+    setTesting(true);
+    setResult(null);
+    try {
+      const r = await sendTestPush();
+      if ("error" in r) { setResult(`Failed: ${r.error}`); return; }
+      if (r.sent === 0) { setResult("No devices registered — this device hasn't sent a token yet."); return; }
+      // Apple's `reason` is the only real diagnostic they give, so show it verbatim.
+      setResult(r.results.map((x: any) =>
+        x.status === 200
+          ? `…${x.tokenTail} (${x.environment}): delivered${x.correctedTo ? ` — corrected to ${x.correctedTo}` : ""}`
+          : `…${x.tokenTail} (${x.environment}): ${x.status} ${x.reason ?? ""}${x.deleted ? " — removed" : ""}`
+      ).join("\n"));
+      void fetchPushStatus().then(setServer);
+    } finally { setTesting(false); }
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-3">
+      <h2 className="font-semibold text-base">Push diagnostics</h2>
+      <p className="text-sm text-muted-foreground">
+        Where notifications are in the chain from this device to Apple and back.
+      </p>
+
+      <div className="rounded-lg border bg-background px-3 py-1">
+        {row("Permission", diag.permission, diag.permission === "granted" ? true : diag.permission === "denied" ? false : undefined)}
+        {row(
+          "Token from Apple",
+          diag.tokenReceived === true ? `yes …${diag.tokenTail}` : diag.tokenReceived === false ? "registration failed" : "waiting…",
+          diag.tokenReceived ?? undefined,
+        )}
+        {row("Environment", diag.environment ?? "—")}
+        {row(
+          "Server accepted",
+          diag.serverStatus === undefined ? "—" : String(diag.serverStatus),
+          diag.serverStatus === undefined ? undefined : diag.serverStatus === 200,
+        )}
+        {row("Devices on server", server ? String(server.devices?.length ?? 0) : "…")}
+        {row(
+          "Server keys",
+          server ? [server.environments?.sandbox && "sandbox", server.environments?.production && "production"].filter(Boolean).join(" + ") || "none" : "…",
+          server ? Boolean(server.serverConfigured) : undefined,
+        )}
+      </div>
+
+      {diag.lastError && (
+        <p className="text-xs text-destructive break-words">{diag.lastError}</p>
+      )}
+
+      <Button variant="outline" size="sm" onClick={runTest} disabled={testing} className="gap-1.5">
+        {testing ? "Sending…" : "Send test notification"}
+      </Button>
+
+      {result && (
+        <pre className="text-xs whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono">{result}</pre>
+      )}
+    </section>
+  );
+}
+
 // ── Account Section ───────────────────────────────────────────────────────────
 
 /**
@@ -1376,6 +1471,7 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <PushNotificationsSection />
       <ExportDataSection />
+      <PushDiagnosticsSection />
       <SignOutSection />
       <DeleteAccountSection />
     </div>
