@@ -31,7 +31,13 @@ if (!apiUrl) {
 console.log(`Building frontend with VITE_API_URL=${apiUrl}`);
 
 // Build the Vite frontend with the API URL baked in
-execSync(`VITE_API_URL=${apiUrl} npx vite build`, { stdio: "inherit" });
+// APNs environment follows the *signing profile*, which the web bundle can't see. Local
+// builds are development-signed, so sandbox is the right default; a TestFlight or App
+// Store build must set VITE_APNS_ENV=production or its tokens are labelled wrong.
+// The server corrects a wrong value on the first BadDeviceToken, so this is a hint.
+const apnsEnv = process.env.VITE_APNS_ENV ?? "sandbox";
+console.log(`APNs environment: ${apnsEnv}${apnsEnv === "sandbox" ? " (set VITE_APNS_ENV=production for TestFlight/App Store)" : ""}`);
+execSync(`VITE_API_URL=${apiUrl} VITE_APNS_ENV=${apnsEnv} npx vite build`, { stdio: "inherit" });
 
 console.log("Syncing to iOS...");
 execSync("npx cap sync ios", { stdio: "inherit" });

@@ -14,19 +14,25 @@ import { isNativeApp, authHeaders } from "./nativeAuth";
 import { API_BASE } from "./queryClient";
 
 /**
- * Which APNs environment this build's tokens belong to.
+ * Which APNs environment this build's tokens belong to — a hint, not a fact.
  *
- * A build signed with a development profile — Xcode, the simulator — gets a sandbox token;
- * TestFlight and App Store builds get a production one. Presenting a token to the wrong
- * host fails with BadDeviceToken, and the two are indistinguishable by inspection, so the
- * client is the only place that knows. import.meta.env.DEV is true for `vite` dev builds
- * and false for the production bundle that `npm run build:ios` produces.
+ * What actually decides it is the *code-signing profile*: a development-signed build gets a
+ * sandbox token, TestFlight and App Store builds get production ones. The web bundle cannot
+ * see the signing profile at all.
  *
- * This is the one value most likely to be wrong in a TestFlight build, so it is reported to
- * the console at registration rather than left silent.
+ * `import.meta.env.DEV` looked like the answer and is wrong: it reports the Vite build
+ * mode, and `npm run build:ios` produces a production Vite bundle that is normally
+ * development-signed. Using it would have labelled every local build "production", sent its
+ * sandbox token to the production host, and had the row deleted on BadDeviceToken — push
+ * silently never working, with nothing in the logs pointing here.
+ *
+ * So: VITE_APNS_ENV when set, otherwise sandbox, because the un-set case is a developer
+ * building locally. The server treats this as a starting guess and corrects itself if APNs
+ * disagrees, which is what makes a wrong answer here recoverable rather than fatal.
  */
 function environment(): "sandbox" | "production" {
-  return import.meta.env.DEV ? "sandbox" : "production";
+  const declared = import.meta.env.VITE_APNS_ENV;
+  return declared === "production" ? "production" : "sandbox";
 }
 
 async function postJson(path: string, body: unknown): Promise<void> {

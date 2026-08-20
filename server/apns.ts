@@ -213,10 +213,32 @@ export async function sendApnsToUser(
       const env = d.environment === "production" ? "production" : "sandbox";
       if (!apnsConfigured(env)) return;
 
-      const { status, reason } = await post(env, d.device_token, body);
+      let { status, reason } = await post(env, d.device_token, body);
 
-      // 410 Unregistered: the app was deleted. 400 BadDeviceToken: the token belongs to the
-      // other environment, or is malformed. Both mean this row will never deliver again.
+      // BadDeviceToken most often means the token is valid but belongs to the *other*
+      // environment. The client cannot reliably tell which it is — a Vite production
+      // bundle can be signed with a development profile, which is exactly what a local
+      // `npm run build:ios` produces — so its answer is a hint, not a fact. Retry the
+      // other environment once and persist whichever works, rather than deleting a token
+      // that would have delivered fine.
+      if (reason === "BadDeviceToken") {
+        const other: ApnsEnvironment = env === "production" ? "sandbox" : "production";
+        if (apnsConfigured(other)) {
+          const retry = await post(other, d.device_token, body);
+          if (retry.status === 200) {
+            await pool.query(
+              `UPDATE apns_devices SET environment = $1 WHERE id = $2`,
+              [other, d.id],
+            ).catch(() => {});
+            console.log(`[apns] device ${d.id} corrected to ${other}`);
+            return;
+          }
+          ({ status, reason } = retry);
+        }
+      }
+
+      // 410 Unregistered: the app was deleted. BadDeviceToken surviving the retry above
+      // means it is genuinely malformed. Either way the row will never deliver again.
       if (status === 410 || reason === "Unregistered" || reason === "BadDeviceToken") {
         await pool.query(`DELETE FROM apns_devices WHERE id = $1`, [d.id]).catch(() => {});
         return;
