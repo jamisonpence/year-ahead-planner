@@ -213,6 +213,99 @@ export async function registerRoutes(_httpServer: ReturnType<typeof createServer
     } catch (e) { handleError(res, e); }
   });
 
+  /**
+   * True when the sender has blocked, or been blocked by, anyone else in the conversation.
+   *
+   * Checks every other participant rather than assuming a pair, because group threads exist
+   * and a block should hold there too — a one-to-one assumption would let someone reach a
+   * person who blocked them simply by adding a third participant.
+   */
+  async function conversationHasBlock(conversationId: number, senderId: number): Promise<boolean> {
+    const others = await pool.query(
+      `SELECT user_id FROM conversation_participants WHERE conversation_id = $1 AND user_id <> $2`,
+      [conversationId, senderId],
+    );
+    for (const row of others.rows) {
+      if (await storage.isBlockedBetween(senderId, row.user_id)) return true;
+    }
+    return false;
+  }
+
+  // ── Safety: blocking and reporting ───────────────────────────────────────────
+  // App Store Guideline 1.2 requires these of any app with user-generated content.
+  // MyLifos has a feed, direct messages and political debates, so all of it applies.
+
+  app.get("/api/blocks", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getBlockedUsers((req.user as User).id));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/blocks", requireAuth, async (req, res) => {
+    try {
+      const blockedId = Number(req.body?.userId);
+      if (!Number.isInteger(blockedId) || blockedId <= 0) {
+        return res.status(400).json({ error: "userId required" });
+      }
+      const me = (req.user as User).id;
+      if (blockedId === me) return res.status(400).json({ error: "You can't block yourself" });
+      await storage.blockUser(me, blockedId);
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/blocks/:userId", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.userId);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: "invalid userId" });
+      const ok = await storage.unblockUser((req.user as User).id, id);
+      if (!ok) return res.status(404).json({ error: "Not blocked" });
+      res.json({ ok: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  const REPORT_REASONS = new Set(["harassment", "spam", "hate", "sexual", "violence", "other"]);
+  const REPORT_TARGETS = new Set(["feed_post", "feed_comment", "message", "debate_post", "user"]);
+
+  app.post("/api/reports", requireAuth, async (req, res) => {
+    try {
+      const { targetType, targetId, targetUserId, reason, details } = req.body ?? {};
+      if (!REPORT_TARGETS.has(targetType)) return res.status(400).json({ error: "invalid targetType" });
+      if (!REPORT_REASONS.has(reason)) return res.status(400).json({ error: "invalid reason" });
+      if (!Number.isInteger(Number(targetId))) return res.status(400).json({ error: "targetId required" });
+      const report = await storage.createReport({
+        reporterId: (req.user as User).id,
+        targetType, targetId: Number(targetId),
+        targetUserId: targetUserId != null ? Number(targetUserId) : null,
+        reason,
+        // Bounded: a free-text field that reaches an admin screen should not be unbounded.
+        details: typeof details === "string" ? details.slice(0, 2000) : null,
+      });
+      res.json({ ok: true, id: report.id });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Admin queue — the "act on reports" half of 1.2. A report nobody can read is not a
+  // moderation mechanism.
+  app.get("/api/admin/reports", requireAdmin, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      res.json(await storage.listReports(status));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/admin/reports/:id", requireAdmin, async (req, res) => {
+    try {
+      const status = req.body?.status;
+      if (status !== "actioned" && status !== "dismissed") {
+        return res.status(400).json({ error: "status must be actioned or dismissed" });
+      }
+      const updated = await storage.resolveReport(Number(req.params.id), status, (req.user as User).id);
+      if (!updated) return res.status(404).json({ error: "Report not found" });
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
   // ── APNs (native iOS) ────────────────────────────────────────────────────────
   // WKWebView has no Web Push, so the routes above can never serve the iOS app. These
   // take a device token instead; sendPushToUser fans out to both.
@@ -5877,6 +5970,13 @@ Fill in ${maxDays} day entries in dayByDay. Group each day geographically — cl
       if (!toUserId) return res.status(400).json({ error: "toUserId required" });
       const fromUserId = (req.user as User).id;
       if (fromUserId === toUserId) return res.status(400).json({ error: "Cannot friend yourself" });
+      // A block has to refuse writes, not merely hide reads — otherwise someone you
+      // blocked can still put a friend request and its notification in front of you.
+      // Deliberately vague: confirming "they blocked you" tells the blocker's story to
+      // the person they blocked.
+      if (await storage.isBlockedBetween(fromUserId, Number(toUserId))) {
+        return res.status(403).json({ error: "Can't send a request to this user" });
+      }
       const req_ = await storage.sendFriendRequest(fromUserId, Number(toUserId));
       notify({
         userId: Number(toUserId), type: "friend_request", actorId: fromUserId,
@@ -10623,6 +10723,12 @@ Rules:
       const convId = +req.params.id;
       const { content } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "content required" });
+      // Refuse the write. Hiding a blocked user's messages on the read side would still
+      // let them send, and a "delivered" message that silently goes nowhere is worse for
+      // both people than a refusal.
+      if (await conversationHasBlock(convId, userId)) {
+        return res.status(403).json({ error: "You can't message this conversation" });
+      }
       const msg = await storage.createMessage(convId, userId, content.trim());
       res.status(201).json(msg);
     } catch (e) { handleError(res, e); }

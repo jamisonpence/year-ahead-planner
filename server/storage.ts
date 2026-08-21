@@ -4366,6 +4366,14 @@ export const storage = {
       )
       WHERE (fr.from_user_id = $1 OR fr.to_user_id = $1)
         AND fr.status = 'accepted'
+        -- Blocking is symmetric: whoever pressed the button, neither party sees the
+        -- other again. A one-way block would leave the blocked user still able to see
+        -- and message the person who blocked them, which is not what anyone means by it.
+        AND NOT EXISTS (
+          SELECT 1 FROM blocked_users b
+          WHERE (b.blocker_id = $1 AND b.blocked_id = u.id)
+             OR (b.blocker_id = u.id AND b.blocked_id = $1)
+        )
       ORDER BY u.name ASC
     `, [userId]);
     return rows.rows as PublicUser[];
@@ -5926,6 +5934,13 @@ export const storage = {
       SELECT CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END as friend_id
       FROM friend_requests
       WHERE status = 'accepted' AND (from_user_id = $1 OR to_user_id = $1)
+        -- The feed derives its own friend set rather than calling getFriends, so the
+        -- block filter has to be repeated here or blocked users' posts keep appearing.
+        AND NOT EXISTS (
+          SELECT 1 FROM blocked_users b
+          WHERE (b.blocker_id = $1 AND b.blocked_id = CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END)
+             OR (b.blocked_id = $1 AND b.blocker_id = CASE WHEN from_user_id = $1 THEN to_user_id ELSE from_user_id END)
+        )
     `, [userId]);
     const friendIds: number[] = friendsResult.rows.map((r: any) => r.friend_id);
     // Include own activity in the feed
@@ -6526,6 +6541,117 @@ export const storage = {
         UNIQUE (message_id, user_id, emoji)
       );
     `);
+
+    // Safety tables — App Store Guideline 1.2 requires a report and block mechanism for
+    // any app carrying user-generated content. Plain pool.query rather than safeDdl:
+    // nothing references these yet, so there is nothing to contend with for a lock.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        id SERIAL PRIMARY KEY,
+        blocker_id INTEGER NOT NULL,
+        blocked_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (blocker_id, blocked_id)
+      );
+      CREATE TABLE IF NOT EXISTS content_reports (
+        id SERIAL PRIMARY KEY,
+        reporter_id INTEGER NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id INTEGER NOT NULL,
+        target_user_id INTEGER,
+        reason TEXT NOT NULL,
+        details TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL,
+        reviewed_at TEXT,
+        reviewed_by INTEGER
+      );
+    `);
+    await safeDdl(`CREATE INDEX IF NOT EXISTS idx_blocked_users_blocker ON blocked_users (blocker_id)`);
+    await safeDdl(`CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked ON blocked_users (blocked_id)`);
+    await safeDdl(`CREATE INDEX IF NOT EXISTS idx_content_reports_status ON content_reports (status)`);
+  },
+
+  // ── Blocking ───────────────────────────────────────────────────────────────
+
+  async blockUser(blockerId: number, blockedId: number) {
+    if (blockerId === blockedId) return false;   // blocking yourself would hide your own feed
+    await pool.query(
+      `INSERT INTO blocked_users (blocker_id, blocked_id, created_at)
+       VALUES ($1,$2,$3) ON CONFLICT (blocker_id, blocked_id) DO NOTHING`,
+      [blockerId, blockedId, new Date().toISOString()],
+    );
+    // Blocking implies unfriending. Leaving the friendship in place would keep the pair
+    // connected everywhere the block filter does not reach — shares, collaborations,
+    // recommendations — and "blocked but still my friend" is not a state anyone expects.
+    await pool.query(
+      `DELETE FROM friend_requests
+       WHERE (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)`,
+      [blockerId, blockedId],
+    );
+    return true;
+  },
+
+  async unblockUser(blockerId: number, blockedId: number) {
+    const r = await pool.query(
+      `DELETE FROM blocked_users WHERE blocker_id = $1 AND blocked_id = $2`,
+      [blockerId, blockedId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  },
+
+  async getBlockedUsers(userId: number) {
+    const r = await pool.query(`
+      SELECT b.blocked_id AS "id", u.name, u.avatar_url AS "avatarUrl", b.created_at AS "createdAt"
+      FROM blocked_users b JOIN users u ON u.id = b.blocked_id
+      WHERE b.blocker_id = $1 ORDER BY b.created_at DESC
+    `, [userId]);
+    return r.rows;
+  },
+
+  /** True if either has blocked the other. Used to refuse writes, not just hide reads. */
+  async isBlockedBetween(a: number, b: number): Promise<boolean> {
+    const r = await pool.query(
+      `SELECT 1 FROM blocked_users
+       WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
+       LIMIT 1`,
+      [a, b],
+    );
+    return (r.rowCount ?? 0) > 0;
+  },
+
+  // ── Reporting ──────────────────────────────────────────────────────────────
+
+  async createReport(r: {
+    reporterId: number; targetType: string; targetId: number;
+    targetUserId?: number | null; reason: string; details?: string | null;
+  }) {
+    const row = await pool.query(
+      `INSERT INTO content_reports (reporter_id, target_type, target_id, target_user_id, reason, details, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [r.reporterId, r.targetType, r.targetId, r.targetUserId ?? null, r.reason, r.details ?? null, new Date().toISOString()],
+    );
+    return row.rows[0];
+  },
+
+  async listReports(status?: string) {
+    const r = await pool.query(`
+      SELECT cr.*, ru.name AS "reporterName", tu.name AS "targetUserName"
+      FROM content_reports cr
+      LEFT JOIN users ru ON ru.id = cr.reporter_id
+      LEFT JOIN users tu ON tu.id = cr.target_user_id
+      ${status ? "WHERE cr.status = $1" : ""}
+      ORDER BY cr.created_at DESC LIMIT 200
+    `, status ? [status] : []);
+    return r.rows;
+  },
+
+  async resolveReport(id: number, status: "actioned" | "dismissed", reviewerId: number) {
+    const r = await pool.query(
+      `UPDATE content_reports SET status = $2, reviewed_at = $3, reviewed_by = $4 WHERE id = $1 RETURNING *`,
+      [id, status, new Date().toISOString(), reviewerId],
+    );
+    return r.rows[0] ?? null;
   },
 
   async getConversationsForUser(userId: number): Promise<any[]> {

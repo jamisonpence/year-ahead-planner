@@ -16,6 +16,7 @@ import {
 import { BudBetsSection } from "@/components/BudBetsSection";
 import { DebatesSection } from "@/components/DebatesSection";
 import type { ConversationWithDetails, MessageWithSender, PublicUser, ReactionSummary, SharePayload } from "@shared/schema";
+import ReportOrBlock from "@/components/ReportOrBlock";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -882,6 +883,17 @@ function MessageBubble({ msg, isOwn, myId, showAvatar, onDelete, onReact }: {
 
           {/* Action buttons: react + delete — visible on hover */}
           <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+            {/* Report/block, on other people's messages only. Direct messages are the
+                surface where harassment actually lands, so this has to be here and not
+                only in Settings. */}
+            {!isOwn && (
+              <ReportOrBlock
+                targetType="message"
+                targetId={msg.id}
+                targetUserId={msg.senderId}
+                targetUserName={(msg as any).senderName?.split(" ")[0]}
+              />
+            )}
             {/* Emoji react button */}
             <div className="relative">
               <button

@@ -1059,6 +1059,68 @@ function PushDiagnosticsSection() {
   );
 }
 
+// ── Blocked users ─────────────────────────────────────────────────────────────
+
+/**
+ * The other half of blocking. Apple requires the ability to block; a product that lets you
+ * block but never unblock is a trap, and people do change their minds.
+ *
+ * Renders nothing when the list is empty rather than showing an empty card, since most
+ * people will never block anyone.
+ */
+function BlockedUsersSection() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: blocked = [] } = useQuery<{ id: number; name: string; avatarUrl: string | null }[]>({
+    queryKey: ["/api/blocks"],
+    queryFn: () => apiRequest("GET", "/api/blocks").then(r => r.json()),
+  });
+
+  const unblock = useMutation({
+    mutationFn: (userId: number) => apiRequest("DELETE", `/api/blocks/${userId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/blocks"] });
+      // The feed and friend list are filtered by the block, so both are stale now.
+      qc.invalidateQueries({ queryKey: ["/api/feed"] });
+      qc.invalidateQueries({ queryKey: ["/api/friends"] });
+      toast({ title: "Unblocked" });
+    },
+    onError: () => toast({ title: "Couldn't unblock", variant: "destructive" }),
+  });
+
+  if (blocked.length === 0) return null;
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-6 space-y-3">
+      <h2 className="font-semibold text-base">Blocked users</h2>
+      <p className="text-sm text-muted-foreground">
+        You won't see each other's posts or messages. Unblocking doesn't restore the
+        friendship — you'd need to add each other again.
+      </p>
+      <div className="divide-y">
+        {blocked.map(u => (
+          <div key={u.id} className="flex items-center justify-between gap-3 py-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {u.avatarUrl
+                ? <img src={u.avatarUrl} alt="" className="w-7 h-7 rounded-full shrink-0" />
+                : <div className="w-7 h-7 rounded-full bg-secondary shrink-0" />}
+              <span className="text-sm truncate">{u.name}</span>
+            </div>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => unblock.mutate(u.id)}
+              disabled={unblock.isPending}
+            >
+              Unblock
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Account Section ───────────────────────────────────────────────────────────
 
 /**
@@ -1471,6 +1533,7 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <PushNotificationsSection />
       <ExportDataSection />
+      <BlockedUsersSection />
       <PushDiagnosticsSection />
       <SignOutSection />
       <DeleteAccountSection />

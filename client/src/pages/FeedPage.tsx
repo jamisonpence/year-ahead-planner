@@ -12,6 +12,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import ReportOrBlock from "@/components/ReportOrBlock";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,7 @@ function CommentSection({ itemId, comments, currentUserId }: {
 // ── Feed card ─────────────────────────────────────────────────────────────────
 
 function FeedCard({ item, currentUserId }: { item: any; currentUserId: number }) {
+  const qc = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const isRec = item.activityType === "recommendation_received";
   const Icon = ITEM_TYPE_ICONS[item.itemType] ?? Sparkles;
@@ -303,6 +305,17 @@ function FeedCard({ item, currentUserId }: { item: any; currentUserId: number })
             <MessageCircle size={13} />
             <span>{item.comments.length > 0 ? item.comments.length : "Comment"}</span>
           </button>
+          {/* Reachable from the content itself, per Guideline 1.2. Hidden on your own
+              posts — reporting yourself is noise in the moderation queue. */}
+          {item.userId !== currentUserId && (
+            <ReportOrBlock
+              targetType="feed_post"
+              targetId={item.id}
+              targetUserId={item.userId}
+              targetUserName={item.userName?.split(" ")[0]}
+              onBlocked={() => qc.invalidateQueries({ queryKey: ["/api/feed"] })}
+            />
+          )}
         </div>
 
         {/* Add to collection button for recommendations */}

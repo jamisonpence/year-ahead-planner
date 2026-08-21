@@ -2203,3 +2203,44 @@ export const budBets = pgTable("bud_bets", {
 export const insertBudBetSchema = createInsertSchema(budBets).omit({ id: true });
 export type BudBet = typeof budBets.$inferSelect;
 export type InsertBudBet = z.infer<typeof insertBudBetSchema>;
+
+// ── Safety: blocking and reporting ───────────────────────────────────────────
+// Required by App Store Guideline 1.2 for any app with user-generated content:
+// a way to report objectionable content, a way to block abusive users, and a
+// means of acting on reports. MyLifos has a feed, direct messages and political
+// debates, so all three apply.
+
+export const blockedUsers = pgTable("blocked_users", {
+  id:        serial("id").primaryKey(),
+  blockerId: integer("blocker_id").notNull(),
+  blockedId: integer("blocked_id").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertBlockedUserSchema = createInsertSchema(blockedUsers).omit({ id: true });
+export type BlockedUser = typeof blockedUsers.$inferSelect;
+export type InsertBlockedUser = z.infer<typeof insertBlockedUserSchema>;
+
+/** What a report can point at. Kept as a union so the admin queue can link back. */
+export type ReportTargetType =
+  | "feed_post" | "feed_comment" | "message" | "debate_post" | "user";
+
+export const contentReports = pgTable("content_reports", {
+  id:          serial("id").primaryKey(),
+  reporterId:  integer("reporter_id").notNull(),
+  targetType:  text("target_type").notNull(),
+  targetId:    integer("target_id").notNull(),
+  // The user who created the reported content, captured at report time so the
+  // queue still makes sense if the content is later deleted.
+  targetUserId: integer("target_user_id"),
+  reason:      text("reason").notNull(),   // harassment | spam | hate | sexual | violence | other
+  details:     text("details"),
+  status:      text("status").notNull().default("open"), // open | actioned | dismissed
+  createdAt:   text("created_at").notNull(),
+  reviewedAt:  text("reviewed_at"),
+  reviewedBy:  integer("reviewed_by"),
+});
+
+export const insertContentReportSchema = createInsertSchema(contentReports).omit({ id: true });
+export type ContentReport = typeof contentReports.$inferSelect;
+export type InsertContentReport = z.infer<typeof insertContentReportSchema>;
