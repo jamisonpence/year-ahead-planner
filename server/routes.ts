@@ -1851,6 +1851,11 @@ Rules:
   app.get("/terms", (req, res) => {
     res.sendFile(path.resolve(process.cwd(), "terms.html"));
   });
+  // App Review checks the Support URL resolves to somewhere a user can actually get help.
+  // The landing page is marketing, not support, so it needs its own route.
+  app.get("/support", (req, res) => {
+    res.sendFile(path.resolve(process.cwd(), "support.html"));
+  });
 
   // ── Digital Asset Links (required for TWA Android packaging) ─────────────
   // PWABuilder generates the SHA-256 fingerprint; store it in assetlinks.json at the project root.
