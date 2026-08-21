@@ -736,7 +736,7 @@ function MusicRecommendModal({ open, onClose, type, artistName, songTitle }: {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
             <textarea
-              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              className="w-full text-base md:text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={2}
               placeholder="Why you'd recommend it…"
               value={note}
@@ -1171,7 +1171,7 @@ function LastFmTab({ initialArtistName, allArtists }: { initialArtistName?: stri
       {/* Search */}
       <div className="flex gap-2">
         <input
-          className="flex-1 text-sm border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex-1 text-base md:text-sm border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="Search for an artist, song, or album…"
           value={query}
           onChange={e => setQuery(e.target.value)}
@@ -1228,7 +1228,7 @@ function LastFmTab({ initialArtistName, allArtists }: { initialArtistName?: stri
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Artist</label>
               <input
-                className="w-full text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full text-base md:text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                 value={songArtistInput}
                 onChange={e => setSongArtistInput(e.target.value)}
               />
@@ -1236,7 +1236,7 @@ function LastFmTab({ initialArtistName, allArtists }: { initialArtistName?: stri
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Song Title</label>
               <input
-                className="w-full text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full text-base md:text-sm border rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                 value={songTitleInput}
                 onChange={e => setSongTitleInput(e.target.value)}
               />

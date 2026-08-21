@@ -410,10 +410,10 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 ${props.className ?? ""}`} />;
+  return <input {...props} className={`w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 ${props.className ?? ""}`} />;
 }
 function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} rows={3} className={`w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none ${props.className ?? ""}`} />;
+  return <textarea {...props} rows={3} className={`w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none ${props.className ?? ""}`} />;
 }
 function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (

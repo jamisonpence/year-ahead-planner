@@ -3135,7 +3135,7 @@ function TripsTab({ spots, initialFilter = "upcoming" }: { spots: Spot[]; initia
           {/* Add task input */}
           <div className="flex gap-2">
             <input
-              className="flex-1 h-8 px-3 text-sm border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              className="flex-1 h-8 px-3 text-base md:text-sm border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="Add a prep task…"
               value={prepTaskInput}
               onChange={e => setPrepTaskInput(e.target.value)}

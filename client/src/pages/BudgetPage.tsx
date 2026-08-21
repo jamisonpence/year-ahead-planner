@@ -1020,7 +1020,7 @@ function CISliderInput({ label, value, onChange, min, max, step, format, inputSu
         <Label className="text-sm font-medium">{label}</Label>
         <div className="flex items-center gap-1">
           <input
-            className="w-28 h-7 text-sm text-right tabular-nums font-semibold text-primary px-2 border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-28 h-7 text-base md:text-sm text-right tabular-nums font-semibold text-primary px-2 border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
             value={raw !== null ? raw : value}
             onChange={(e) => {
               setRaw(e.target.value);

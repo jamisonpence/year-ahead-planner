@@ -2002,7 +2002,7 @@ function AppliancesTab() {
                       value={suggSearch}
                       onChange={e => setSuggSearch(e.target.value)}
                       placeholder="Search appliances…"
-                      className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                      className="w-full text-base md:text-sm bg-transparent outline-none placeholder:text-muted-foreground"
                     />
                   </div>
                   <div className="max-h-80 overflow-y-auto">

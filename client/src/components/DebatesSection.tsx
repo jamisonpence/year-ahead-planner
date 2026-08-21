@@ -19,7 +19,7 @@ import type {
 } from "@shared/schema";
 
 function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} rows={3} className={`w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none ${props.className ?? ""}`} />;
+  return <textarea {...props} rows={3} className={`w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none ${props.className ?? ""}`} />;
 }
 
 function Badge({ className, children }: { className?: string; children: React.ReactNode }) {

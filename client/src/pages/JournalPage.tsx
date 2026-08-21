@@ -597,7 +597,7 @@ function NotesSection() {
               <button onClick={() => setFolderModal(null)}><X size={16} className="text-muted-foreground" /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
-              <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              <input className="w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="Folder name" value={folderName} onChange={e => setFolderName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && saveFolder()} autoFocus />
               <div className="flex gap-2 flex-wrap">
@@ -627,9 +627,9 @@ function NotesSection() {
               <button onClick={() => setNoteModal(null)}><X size={16} className="text-muted-foreground" /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
-              <input className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+              <input className="w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                 placeholder="Note title" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} autoFocus />
-              <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              <textarea className="w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
                 placeholder="Write your note…" rows={8} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
             </div>
             <div className="flex gap-2 px-5 py-4 border-t shrink-0">

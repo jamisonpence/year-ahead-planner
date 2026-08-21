@@ -142,7 +142,7 @@ function RecommendModal({ open, onClose, book }: {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
             <textarea
-              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              className="w-full text-base md:text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={3}
               placeholder="Why you'd recommend it…"
               value={note}

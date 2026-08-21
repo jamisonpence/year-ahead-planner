@@ -617,7 +617,7 @@ function RecipesForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="flex gap-2">
           <input
-            className="min-w-0 flex-1 px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
+            className="min-w-0 flex-1 px-3 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
             value={recipeUrl}
             onChange={e => { setRecipeUrl(e.target.value); setImportError(""); }}
             placeholder="https://example.com/recipe"

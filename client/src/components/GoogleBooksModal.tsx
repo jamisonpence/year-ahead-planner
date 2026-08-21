@@ -135,7 +135,7 @@ export default function GoogleBooksModal({
             <div className="relative flex-1">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
-                className="w-full pl-8 pr-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full pl-8 pr-3 py-2 text-base md:text-sm rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                 placeholder="Search by title, author, or ISBN…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

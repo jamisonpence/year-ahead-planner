@@ -747,7 +747,7 @@ function RecipeShareModal({ open, onClose, recipe }: {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Note (optional)</label>
             <textarea
-              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              className="w-full text-base md:text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={2}
               placeholder="Why you're sharing this…"
               value={note}
@@ -2579,7 +2579,7 @@ async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
               value={browseSearch}
               onChange={e => setBrowseSearch(e.target.value)}
               placeholder="Search recipes, tags, categories…"
-              className="w-full pl-9 pr-3 py-2 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full pl-9 pr-3 py-2 text-base md:text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 

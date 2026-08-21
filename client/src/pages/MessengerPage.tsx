@@ -714,7 +714,7 @@ function SharePicker({ onShare, onClose, onGif }: {
         <div className="px-3 py-2 space-y-2">
           <div className="flex gap-2">
             <input
-              className="flex-1 px-2 py-1.5 rounded-lg border bg-secondary/60 text-xs outline-none"
+              className="flex-1 px-2 py-1.5 rounded-lg border bg-secondary/60 text-base md:text-xs outline-none"
               placeholder="Search GIFs…"
               value={gifQ}
               onChange={e => setGifQ(e.target.value)}

@@ -65,7 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 ${props.className ?? ""}`} />;
+  return <input {...props} className={`w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 ${props.className ?? ""}`} />;
 }
 
 function Select({ value, onChange, children, className }: { value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
@@ -81,7 +81,7 @@ function Select({ value, onChange, children, className }: { value: string; onCha
 }
 
 function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" rows={2} />;
+  return <textarea {...props} className="w-full border rounded-lg px-3 py-2 text-base md:text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" rows={2} />;
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -4468,7 +4468,7 @@ export function NutritionTab({
                           <div className="px-3 py-3 space-y-3">
                             <div className="flex items-center gap-2">
                               <input
-                                className="flex-1 text-sm font-medium border rounded-md px-2 py-1.5 bg-background"
+                                className="flex-1 text-base md:text-sm font-medium border rounded-md px-2 py-1.5 bg-background"
                                 value={editForm.foodName}
                                 onChange={ev => setEditForm(f => ({ ...f, foodName: ev.target.value }))}
                                 placeholder="Food name"
@@ -4578,7 +4578,7 @@ export function NutritionTab({
                               {!editIngPending && (
                                 <div className="flex items-center gap-1.5 px-3 py-2 border-t bg-secondary/10">
                                   <input
-                                    className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background"
+                                    className="flex-1 text-base md:text-xs border rounded-md px-2 py-1.5 bg-background"
                                     placeholder="+ Search to add ingredient (USDA)…"
                                     value={editIngQuery}
                                     onChange={ev => { setEditIngQuery(ev.target.value); setEditIngResults([]); }}
@@ -4613,7 +4613,7 @@ export function NutritionTab({
                                     <label className="text-[10px] text-muted-foreground font-medium">{field === "calories" ? "kcal" : field}</label>
                                     <input
                                       type="number" min="0" step="1"
-                                      className="w-full text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
+                                      className="w-full text-base md:text-sm border rounded-md px-2 py-1 bg-background mt-0.5"
                                       value={editForm[field]}
                                       onChange={ev => setEditForm(f => ({ ...f, [field]: ev.target.value }))}
                                     />
@@ -4625,7 +4625,7 @@ export function NutritionTab({
                               <label className="text-xs text-muted-foreground shrink-0">Servings logged:</label>
                               <input
                                 type="number" min="0.1" step="0.1"
-                                className="w-20 text-sm border rounded-md px-2 py-1 bg-background"
+                                className="w-20 text-base md:text-sm border rounded-md px-2 py-1 bg-background"
                                 value={editForm.quantity}
                                 onChange={ev => setEditForm(f => ({ ...f, quantity: ev.target.value }))}
                               />

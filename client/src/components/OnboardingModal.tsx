@@ -261,7 +261,7 @@ function FieldInput({ label, value, onChange, placeholder, required }: {
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       <input
-        className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+        className="w-full px-3 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
@@ -277,7 +277,7 @@ function FieldTextarea({ label, value, onChange, placeholder }: {
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
       <textarea
-        className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all resize-none"
+        className="w-full px-3 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all resize-none"
         rows={2}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -998,7 +998,7 @@ function BookSearchForm({ onDone }: { onDone: (label: string, href?: string) => 
         <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
         <input
           autoFocus
-          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
           placeholder="Search by title or author…"
           value={query}
           onChange={e => handleSearch(e.target.value)}
@@ -1118,7 +1118,7 @@ function MovieShowForm({ onDone }: { onDone: (label: string, href?: string) => v
         <Search size={15} className="absolute left-3 top-3 text-muted-foreground" />
         <input
           autoFocus
-          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+          className="w-full pl-9 pr-9 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
           placeholder={`Search ${mediaType === "movie" ? "movies" : "TV shows"}…`}
           value={query}
           onChange={e => handleSearch(e.target.value)}
@@ -1260,7 +1260,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
           <div className="relative">
             <Search size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
             <input
-              className="w-full pl-9 pr-3 py-2 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
               placeholder="Search by name…"
               value={search}
               onChange={e => { setSearch(e.target.value); if (e.target.value) setCatFilter("All"); }}
@@ -1297,7 +1297,7 @@ function RecipeDiscoverForm({ onDone }: { onDone: (label: string, href?: string)
         <div className="space-y-3">
           <input
             autoFocus
-            className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+            className="w-full px-3 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
             placeholder="https://example.com/recipe"
             value={url}
             onChange={e => setUrl(e.target.value)}
@@ -1415,7 +1415,7 @@ function GoalPickerForm({ onDone }: { onDone: (label: string, href?: string, met
         <div className="flex gap-2">
           <input
             autoFocus
-            className="flex-1 px-3 py-2.5 rounded-xl border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+            className="flex-1 px-3 py-2.5 rounded-xl border bg-background text-base md:text-sm outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
             placeholder="e.g. Write a book, Launch a project…"
             value={customTitle}
             onChange={e => setCustomTitle(e.target.value)}

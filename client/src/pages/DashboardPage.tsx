@@ -2103,7 +2103,7 @@ function FeedCard({ item, currentUserId }: { item: FeedItem; currentUserId?: num
         <div className="flex items-center gap-1 pl-10">
           <input
             autoFocus
-            className="flex-1 text-xs border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            className="flex-1 text-base md:text-xs border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="Add a comment..."
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
