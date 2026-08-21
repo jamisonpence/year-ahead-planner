@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { WorkoutPlan, BodyCompCheckIn } from "@shared/schema";
+import HealthDisclaimer from "@/components/HealthDisclaimer";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -530,6 +531,9 @@ function Step2({ s, set }: { s: WizardState; set: (p: Partial<WizardState>) => v
         <label className="text-xs font-medium text-muted-foreground">Maintenance calories (TDEE)</label>
         <Input type="number" value={s.maintenanceCalories} onChange={e => set({ maintenanceCalories: e.target.value })} placeholder="2400" className="h-9" />
         <p className="text-[11px] text-muted-foreground">Your estimated daily calorie burn. Use the calculator below to find yours.</p>
+        {/* This is the point where the app stops recording and starts recommending — a
+            calorie target derived from the user's own body metrics. */}
+        <HealthDisclaimer variant="nutrition" className="pt-1" />
       </div>
 
       {/* TDEE Calculator */}

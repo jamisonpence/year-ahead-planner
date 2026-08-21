@@ -36,6 +36,7 @@ import type {
 import { currentQuarter, quarterLabel, objectiveProgressPct } from "@shared/goalMath";
 import KeyResultsPanel from "@/components/goals/KeyResultsPanel";
 import { Link, useLocation } from "wouter";
+import HealthDisclaimer from "@/components/HealthDisclaimer";
 
 /** "Q3 2026" — the label the quarter tab and its empty state both use. */
 const currentQuarterLabel = () => quarterLabel(currentQuarter());
@@ -2888,6 +2889,9 @@ function BrowseGoalsModal({ open, onClose, onOpenMealPlan, onOpenHobbyForm }: { 
               <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-3">
                 <p className="text-xs text-green-700 dark:text-green-300">🥗 These targets will appear in your Nutrition page and Today.</p>
               </div>
+              {/* The Cut/Bulk presets prescribe a deficit or surplus, so this screen
+                  recommends rather than records. */}
+              <HealthDisclaimer variant="nutrition" />
             </div>
           )}
 
